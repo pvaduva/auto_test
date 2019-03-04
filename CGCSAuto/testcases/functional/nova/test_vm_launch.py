@@ -23,10 +23,9 @@ def hosts_per_backing(add_admin_role_module):
 @mark.parametrize('boot_from', [
     'volume',
     'local_image',
-    'local_lvm',
     'remote'
 ])
-def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from):
+def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_backing, boot_from):
     """
     KPI test  - vm startup time.
     Args:
@@ -56,8 +55,7 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
 
         LOG.tc_step("Create a flavor with 2 vcpus, dedicated cpu policy, and {} storage".format(storage_backing))
         boot_source = 'image'
-        flavor = nova_helper.create_flavor(name=boot_from, vcpus=2, storage_backing=storage_backing,
-                                           check_storage_backing=False)[1]
+        flavor = nova_helper.create_flavor(name=boot_from, vcpus=2, storage_backing=storage_backing)[1]
     else:
         target_host = None
         boot_source = 'volume'
@@ -74,9 +72,10 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'virtio'},
-            {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+    nics = [{'net-id': mgmt_net_id},
+            {'net-id': tenant_net_id},
+            {'net-id': internal_net_id}]
+
     vm_id = vm_helper.boot_vm(boot_from, flavor=flavor, source=boot_source, nics=nics, cleanup='function')[1]
 
     code_boot, out_boot = \
@@ -93,9 +92,9 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
 
         mgmt_net_observer = network_helper.get_mgmt_net_id(auth_info=Tenant.get_secondary())
         tenant_net_observer = network_helper.get_tenant_net_id(auth_info=Tenant.get_secondary())
-        nics_observer = [{'net-id': mgmt_net_observer, 'vif-model': 'virtio'},
-                         {'net-id': tenant_net_observer, 'vif-model': 'virtio'},
-                         {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+        nics_observer = [{'net-id': mgmt_net_observer},
+                         {'net-id': tenant_net_observer},
+                         {'net-id': internal_net_id}]
         vm_observer = vm_helper.boot_vm('observer', flavor=flavor, source=boot_source,
                                         nics=nics_observer, cleanup='function', auth_info=Tenant.get_secondary())[1]
 
@@ -112,7 +111,8 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
                 code, msg = vm_helper.live_migrate_vm(vm_id=vm_id_)
                 assert 0 == code, msg
                 vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
-                vm_helper.ping_between_routed_vms(vm_id, vm_observer)
+                # kernel routing
+                vm_helper.ping_between_routed_vms(vm_id, vm_observer, vshell=False)
 
             time.sleep(30)
             duration = vm_helper.get_traffic_loss_duration_on_operation(vm_id, vm_observer, operation_live, vm_id)
@@ -130,7 +130,7 @@ def test_kpi_vm_launch_migrate_rebuild(collect_kpi, hosts_per_backing, boot_from
             code, msg = vm_helper.cold_migrate_vm(vm_id=vm_id_)
             assert 0 == code, msg
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id_)
-            vm_helper.ping_between_routed_vms(vm_id, vm_observer)
+            vm_helper.ping_between_routed_vms(vm_id, vm_observer, vshell=False)
 
         time.sleep(30)
         duration = vm_helper.get_traffic_loss_duration_on_operation(vm_id, vm_observer, operation_cold, vm_id)
@@ -194,8 +194,9 @@ def get_initial_pool_space(host_ssh, excluded_vm):
 
 
 # TC5080
-@mark.parametrize('storage', ['local_lvm'])
-def test_check_vm_disk_on_compute(storage, hosts_per_backing):
+# DO NOT RUN - DOES NOT APPLY ANYMORE
+# @mark.parametrize('storage', ['local_lvm'])
+def _test_check_vm_disk_on_compute(storage, hosts_per_backing):
 
     """
         Tests that existence of volumes are properly reported for lvm-backed vms.
@@ -224,7 +225,7 @@ def test_check_vm_disk_on_compute(storage, hosts_per_backing):
         skip(SkipStorageBacking.NO_HOST_WITH_BACKING.format(storage))
 
     LOG.tc_step("Create flavor and boot vm")
-    flavor = nova_helper.create_flavor(storage_backing=storage, check_storage_backing=False)[1]
+    flavor = nova_helper.create_flavor(storage_backing=storage)[1]
     ResourceCleanup.add('flavor', flavor, scope='function')
     vm = vm_helper.boot_vm(source='image', flavor=flavor, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm)

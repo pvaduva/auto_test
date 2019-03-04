@@ -1372,6 +1372,7 @@ def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, port_login=False, n
         log.info("Open Telnet connection to: {} {}".format(ip_addr, port))
         conn = Telnet(ip_addr, port, timeout, negotiate, vt100query, logfile)
         if port_login:
+            log.info("Initial terminal login  to: {} {}".format(ip_addr, port))
             conn.login(TELNET_CONSOLE_USERNAME, TELNET_CONSOLE_PASSWORD)
 
         if debug:

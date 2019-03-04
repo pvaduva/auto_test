@@ -33,7 +33,10 @@ INTERVAL_BETWEEN_SWACT = 300 + 10
 
 IS_SIMPLEX = system_helper.is_simplex()
 
-SKIP_PROCESS_LIST = ('postgres', 'open-ldap', 'lighttpd', 'ceph-rest-api', 'horizon', 'patch-alarm-manager', 'ntpd')
+SKIP_PROCESS_LIST = ['postgres', 'open-ldap', 'lighttpd', 'ceph-rest-api', 'horizon', 'patch-alarm-manager', 'ntpd']
+
+if IS_SIMPLEX:
+    SKIP_PROCESS_LIST.append('haproxy')
 
 PROCESSES = {
     'sm': {
@@ -1035,7 +1038,7 @@ class MonitoredProcess:
     mark.p1('sysinv-inv'),    # sysinv-inv in SM
     mark.p1('sysinv-conductor'),
     mark.p1('mtc-agent'),
-    mark.p1('hbs-agent'),
+    # mark.p1('hbs-agent'),     # obsoleted
     mark.p1('hw-mon'),
     mark.p1('dnsmasq'),
     mark.p1('fm-mgr'),

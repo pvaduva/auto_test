@@ -154,4 +154,4 @@ def test_host_cpus():
 
 
 def test_get_hosts():
-    system_helper.get_hosts_by_personality()
+    system_helper.get_hostnames_per_personality()

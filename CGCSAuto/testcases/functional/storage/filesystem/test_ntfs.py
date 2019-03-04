@@ -32,7 +32,7 @@ def locate_usb(host_type="controller", min_size=13):
     """
 
     LOG.tc_step("Check all hosts of type {} for USB devices".format(host_type))
-    hosts = host_helper.get_hosts(personality=host_type)
+    hosts = system_helper.get_hostnames(personality=host_type)
     for host in hosts:
         with host_helper.ssh_to_host(host) as host_ssh:
             cmd = "ls --color=none -ltrd /dev/disk/by-id/usb*"
@@ -211,7 +211,7 @@ def test_ntfs(host_type="controller"):
     if not host:
         skip("No USB hardware found on {} host type".format(host_type))
 
-    hosts_with_image_backing = host_helper.get_hosts_in_aggregate('image')
+    hosts_with_image_backing = host_helper.get_hosts_in_storage_backing(storage_backing='image')
     if len(hosts_with_image_backing) == 0:
         skip("No hosts with image backing present")
 

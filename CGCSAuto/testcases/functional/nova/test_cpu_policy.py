@@ -34,8 +34,7 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
     if img_pol is not None:
         image_meta = {ImageMetadata.CPU_POLICY: img_pol}
         LOG.tc_step("Create image with following metadata: {}".format(image_meta))
-        image_id = glance_helper.create_image(name='cpu_pol_{}'.format(img_pol), **image_meta)[1]
-        ResourceCleanup.add('image', image_id)
+        image_id = glance_helper.create_image(name='cpu_pol_{}'.format(img_pol), cleanup='function', **image_meta)[1]
     else:
         image_id = glance_helper.get_image_id_from_name(GuestImages.DEFAULT_GUEST, strict=True)
 
@@ -96,9 +95,8 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
         else:
             image_meta = {ImageMetadata.CPU_POLICY: cpu_pol}
             LOG.tc_step("Create image with following metadata: {}".format(image_meta))
-            image_id = glance_helper.create_image(name='cpu_pol_{}'.format(cpu_pol), **image_meta)[1]
-            ResourceCleanup.add('image', image_id)
-
+            image_id = glance_helper.create_image(name='cpu_pol_{}'.format(cpu_pol), cleanup='function',
+                                                  **image_meta)[1]
     if boot_source == 'volume':
         LOG.tc_step("Create a volume from image")
         source_id = cinder_helper.create_volume(name='cpu_pol'.format(cpu_pol), image_id=image_id)[1]
@@ -151,6 +149,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
                                       prev_total_cpus=prev_cpus[vm_host])
 
 
+# Deprecated
 @mark.usefixtures('add_admin_role_module')
 @mark.parametrize(('vcpus_dedicated', 'vcpus_shared', 'pol_source', 'boot_source'), [
     mark.p1((2, 1, 'flavor', 'image')),
@@ -158,7 +157,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
     mark.p1((2, 4, 'image', 'volume')),
     mark.priorities('nightly', 'sx_nightly')((3, 2, 'flavor', 'volume')),
 ])
-def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_source, boot_source):
+def _test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_source, boot_source):
     """
     Test two vms coexisting on the same host, one with the dedicated cpu property, and one with the shared cpu property.
 
@@ -197,8 +196,6 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
     storage_backing = host_helper.get_host_instance_backing(host=target_host)
     if 'image' in storage_backing:
         storage_backing = 'local_image'
-    elif 'lvm' in storage_backing:
-        storage_backing = 'local_lvm'
     elif 'remote' in storage_backing:
         storage_backing = 'remote'
 
@@ -215,8 +212,7 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
         else:
             vcpus = vcpus_shared
         LOG.tc_step("Create {} flavor with {} vcpus".format(x, vcpus))
-        flavor_id = nova_helper.create_flavor(name=x, vcpus=vcpus, storage_backing=storage_backing,
-                                              check_storage_backing=False)[1]
+        flavor_id = nova_helper.create_flavor(name=x, vcpus=vcpus, storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor_id)
 
         if pol_source == 'flavor':
@@ -226,8 +222,7 @@ def test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_so
         else:
             LOG.tc_step("Create image with CPU_POLICY: {}".format(x))
             image_meta = {ImageMetadata.CPU_POLICY: x}
-            image_id = glance_helper.create_image(name='cpu_pol_{}'.format(x), **image_meta)[1]
-            ResourceCleanup.add('image', image_id)
+            image_id = glance_helper.create_image(name='cpu_pol_{}'.format(x), cleanup='function', **image_meta)[1]
 
         if boot_source == 'volume':
             LOG.tc_step("Create volume from image")

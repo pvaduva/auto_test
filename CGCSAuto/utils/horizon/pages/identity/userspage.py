@@ -73,6 +73,7 @@ class UsersPage(basepage.BasePage):
             create_user_form.email.text = email
         create_user_form.password.text = password
         create_user_form.confirm_password.text = password
+        create_user_form.src_elem.click()   # Workaround for firefox insecure warning msg
         create_user_form.project.text = project
         create_user_form.role_id.text = role
         create_user_form.submit()

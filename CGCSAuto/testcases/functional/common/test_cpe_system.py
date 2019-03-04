@@ -2,7 +2,7 @@ from pytest import mark, skip
 
 from utils import table_parser
 from utils.tis_log import LOG
-from keywords import system_helper, nova_helper
+from keywords import system_helper, nova_helper, kube_helper
 
 
 @mark.cpe_sanity
@@ -29,3 +29,6 @@ def test_cpe_services_and_functions():
     binaries = table_parser.get_column(services_tab, 'Binary')
     assert set(check_params) <= set(binaries), "Not all binaries from {} exist in 'nova service-list'".\
         format(check_params)
+
+    LOG.tc_step("Check all nodes are ready in kubectl get nodes")
+    kube_helper.wait_for_nodes_ready(timeout=3)

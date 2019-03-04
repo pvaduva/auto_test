@@ -3,6 +3,7 @@
 ##########################################################################
 
 import re
+import time
 
 from pytest import fixture, mark, skip
 
@@ -17,8 +18,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 @fixture(scope='module')
 def flavor_2g(add_1g_and_4k_pages):
     hosts, storage_backing = add_1g_and_4k_pages
-    flavor = nova_helper.create_flavor(name='flavor-2g', ram=2048, check_storage_backing=False,
-                                       storage_backing=storage_backing)[1]
+    flavor = nova_helper.create_flavor(name='flavor-2g', ram=2048, storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', resource_id=flavor, scope='module')
 
     return flavor, hosts, storage_backing
@@ -135,7 +135,7 @@ def print_hosts_memories(add_1g_and_4k_pages):
 
 @fixture(scope='module')
 def add_hosts_to_zone(request, skip_for_one_proc, add_cgcsauto_zone, add_admin_role_module):
-    storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, target_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
 
     if len(target_hosts) < 2:
         skip("Less than two up hosts have same storage backing")
@@ -151,6 +151,8 @@ def add_hosts_to_zone(request, skip_for_one_proc, add_cgcsauto_zone, add_admin_r
 
 
 testdata = [None, 'any', 'large', 'small', '2048', '1048576']
+
+
 @fixture(params=testdata)
 def flavor_mem_page_size(request, flavor_2g):
     flavor_id = flavor_2g[0]
@@ -370,77 +372,108 @@ def test_compute_mempage_vars(hosts=None):
 
     LOG.info("---Collect host memory info via system host-memory-list cmd")
     for host in hosts:
+
+        LOG.info("---Check {} memory info in system host-memory-list is the same as vm-topology tool".format(host))
         headers = ['vs_hp_size(MiB)', 'vs_hp_total', 'vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G',
                    'vm_hp_avail_2M', 'vm_hp_avail_1G']
         host_helper.wait_for_mempage_update(host)
-        expt_compute_extend = {
-            'vswitch_2M_pages': [],
-            'vswitch_1G_pages': [],
-            'vm_4K_pages': [],
-            'vm_2M_pages': [],
-            'vm_1G_pages': []
-        }
+        cli_vars = check_meminfo_via_sysinv_nova_cli(host=host, headers=headers)
+        check_memconfs_on_host(host=host, cli_vars=cli_vars)
 
-        expt_sys_hp = {
-            '2048kB': {'nr': [], 'free': []},
-            '1048576kB': {'nr': [], 'free': []}
-        }
 
-        LOG.info("---Check {} memory info in nova hypervisor-show is the same as system host-memory-list".format(host))
-        vals = host_helper.get_hypervisor_info(hosts=host, rtn_val=('memory_mb_node', 'memory_mb_used_node'))[host]
-        hypervisor_total, hypervisor_used = vals
+def check_meminfo_via_sysinv_nova_cli(host, headers):
+    end_time = time.time() + 306
+    err = None
+    while time.time() < end_time:
+        compute_table = system_helper.get_vm_topology_tables('computes')[0]
+        host_values = {}
+        for field in ('node', 'A:mem_2M', 'A:mem_1G'):
+            values = table_parser.get_values(table_=compute_table, target_header=field, host=host)[0]
+            if isinstance(values, str):
+                # in case of only 1 processor.
+                values = [values]
+            host_values[field] = values
 
-        host_mems = system_helper.get_host_mem_values(host, headers, rtn_dict=False)
-        for proc in range(len(host_mems)):
-            hypervisor_proc_total = hypervisor_total[str(proc)]
-            hypervisor_proc_used = hypervisor_used[str(proc)]
-            hypervisor_mems = []
-            for memsize in ('2M', '1G', '4K'):
-                mem_mib_total = hypervisor_proc_total[memsize]
-                mem_mib_avail = mem_mib_total - hypervisor_proc_used[memsize]
-                hypervisor_mems += [mem_mib_total, mem_mib_avail]
-            hypervisor_mems = hypervisor_mems[:-1]
-            LOG.info("{} memories in MiB via nova hypervisor-show: {}".format(host, hypervisor_mems))
+        procs = host_values.pop('node')
+        sysinv_mems = system_helper.get_host_mem_values(host, headers, rtn_dict=False)
+        proc_vars = []
+        for proc in range(len(sysinv_mems)):
+            vm_topology_hp_mibs = []
+            vm_topology_index = procs.index(str(proc))
+            for header in ('A:mem_2M', 'A:mem_1G'):
+                value = int(host_values[header][vm_topology_index])
+                vm_topology_hp_mibs.append(value)
 
-            proc_mems = host_mems[proc]
+            LOG.info("{} proc{} memories in MiB via vm-topogy: {}".format(host, proc, vm_topology_hp_mibs))
+            proc_mems = sysinv_mems[proc]
             vs_size, vs_page, vm_4k, vm_2m, vm_1g, vm_avail_2m, vm_avail_1g = proc_mems
-            syinv_mems = [vm_2m*2, vm_avail_2m*2, vm_1g*1024, vm_avail_1g*1024, int(vm_4k*4/1024)]
-            assert hypervisor_mems == syinv_mems, "nova hypervisor show is different than system host memory list"
+            syinv_hp_avails = [vm_avail_2m*2, vm_avail_1g*1024]
+            if vm_topology_hp_mibs != syinv_hp_avails:
+                err = "{} proc{} mem info in system host-memory-list is different than vm-topology".\
+                    format(host, proc)
+                LOG.info(err)
+                time.sleep(5)
+                break
 
-            if vs_size == 1024:
-                vs_1g = vs_page
-                vs_2m = 0
-            else:
-                vs_1g = 0
-                vs_2m = vs_page
+            proc_vars.append((vs_size, vs_page, vm_4k, vm_2m, vm_1g, vm_avail_2m, vm_avail_1g))
 
-            expt_compute_extend['vswitch_2M_pages'].append(str(vs_2m))
-            expt_compute_extend['vswitch_1G_pages'].append(str(vs_1g))
-            expt_compute_extend['vm_4K_pages'].append(str(vm_4k))
-            expt_compute_extend['vm_2M_pages'].append(str(vm_2m))
-            expt_compute_extend['vm_1G_pages'].append(str(vm_1g))
+        else:
+            LOG.info("{} mempage info in system host-memory-list is in-sync with nova hypervisor-show".format(host))
+            return proc_vars
 
-            expt_sys_hp['2048kB']['nr'].append(vm_2m+vs_2m)
-            expt_sys_hp['1048576kB']['nr'].append(vm_1g+vs_1g)
-            expt_sys_hp['2048kB']['free'].append(vm_avail_2m)
-            expt_sys_hp['1048576kB']['free'].append(vm_avail_1g)
+    assert 0, err
 
-        with host_helper.ssh_to_host(hostname=host) as host_ssh:
-            comp_extend = CompConfPath.COMP_EXTEND
-            LOG.info("---Check mempage values in {} on {}".format(comp_extend, host))
-            output = host_ssh.exec_cmd('cat {}'.format(comp_extend), fail_ok=False)[1]
-            for key, expt_val in expt_compute_extend.items():
-                expt_val = ','.join(expt_val)
-                actual_val = re.findall('{}=(.*)'.format(key), output)[0].strip()
-                assert expt_val == actual_val, "{} in host-memory-list {}: {}; in {}: {}".\
-                    format(key, host, expt_val, comp_extend, actual_val)
 
-            LOG.info("---Check {} hugepages via /sys/devices/system/node/node*/hugepages/".format(host))
-            for pagesize in expt_sys_hp:
-                for mem_status in expt_sys_hp[pagesize]:
-                    file_path = '/sys/devices/system/node/node*/hugepages/hugepages-{}/{}_hugepages'.\
-                        format(pagesize, mem_status)
-                    output = host_ssh.exec_cmd('cat {}'.format(file_path), fail_ok=False)[1]
-                    actual_res = [int(val) for val in output.splitlines()]
-                    assert expt_sys_hp[pagesize][mem_status] == actual_res, \
-                        "{}: system host-memory-list and {} mismatch".format(host, file_path)
+def check_memconfs_on_host(host, cli_vars):
+    # compose expected vars for compute_extend.conf
+    expt_compute_extend = {
+        'vswitch_2M_pages': [],
+        'vswitch_1G_pages': [],
+        'vm_4K_pages': [],
+        'vm_2M_pages': [],
+        'vm_1G_pages': []
+    }
+
+    expt_sys_hp = {
+        '2048kB': {'nr': [], 'free': []},
+        '1048576kB': {'nr': [], 'free': []}
+    }
+    for proc_var in cli_vars:
+        vs_size, vs_page, vm_4k, vm_2m, vm_1g, vm_avail_2m, vm_avail_1g = proc_var
+        if vs_size == 1024:
+            vs_1g = vs_page
+            vs_2m = 0
+        else:
+            vs_1g = 0
+            vs_2m = vs_page
+
+        expt_compute_extend['vswitch_2M_pages'].append(str(vs_2m))
+        expt_compute_extend['vswitch_1G_pages'].append(str(vs_1g))
+        expt_compute_extend['vm_4K_pages'].append(str(vm_4k))
+        expt_compute_extend['vm_2M_pages'].append(str(vm_2m))
+        expt_compute_extend['vm_1G_pages'].append(str(vm_1g))
+
+        expt_sys_hp['2048kB']['nr'].append(vm_2m + vs_2m)
+        expt_sys_hp['1048576kB']['nr'].append(vm_1g + vs_1g)
+        expt_sys_hp['2048kB']['free'].append(vm_avail_2m)
+        expt_sys_hp['1048576kB']['free'].append(vm_avail_1g)
+
+    with host_helper.ssh_to_host(hostname=host) as host_ssh:
+        comp_extend = CompConfPath.COMP_EXTEND
+        LOG.info("---Check mempage values in {} on {}".format(comp_extend, host))
+        output = host_ssh.exec_cmd('cat {}'.format(comp_extend), fail_ok=False)[1]
+        for key, expt_val in expt_compute_extend.items():
+            expt_val = ','.join(expt_val)
+            actual_val = re.findall('{}=(.*)'.format(key), output)[0].strip()
+            assert expt_val == actual_val, "{} in host-memory-list {}: {}; in {}: {}". \
+                format(key, host, expt_val, comp_extend, actual_val)
+
+        LOG.info("---Check {} hugepages via /sys/devices/system/node/node*/hugepages/".format(host))
+        for pagesize in expt_sys_hp:
+            for mem_status in expt_sys_hp[pagesize]:
+                file_path = '/sys/devices/system/node/node*/hugepages/hugepages-{}/{}_hugepages'. \
+                    format(pagesize, mem_status)
+                output = host_ssh.exec_cmd('cat {}'.format(file_path), fail_ok=False)[1]
+                actual_res = [int(val) for val in output.splitlines()]
+                assert expt_sys_hp[pagesize][mem_status] == actual_res, \
+                    "{}: system host-memory-list and {} mismatch".format(host, file_path)

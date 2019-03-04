@@ -1,3 +1,4 @@
+import copy
 import time
 from pytest import fixture, mark, skip
 
@@ -86,7 +87,7 @@ def create_partition(host, device_node, size_gib, fail_ok=False, wait=True, time
     return 0, uuid
 
 
-def modify_partition(host, uuid, size_gib, fail_ok=False, timeout=MP_TIMEOUT):
+def modify_partition(host, uuid, size_gib, fail_ok=False, timeout=MP_TIMEOUT, final_status=[PartitionStatus.READY]):
     """
     This test modifies the size of a partition.
 
@@ -106,7 +107,7 @@ def modify_partition(host, uuid, size_gib, fail_ok=False, timeout=MP_TIMEOUT):
         return 1, out
 
     uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
-    wait_for_partition_status(host=host, uuid=uuid, timeout=timeout, interim_status=PartitionStatus.MODIFYING)
+    wait_for_partition_status(host=host, uuid=uuid, timeout=timeout, interim_status=PartitionStatus.MODIFYING, final_status=final_status)
     return 0, "Partition successfully modified"
 
 
@@ -144,11 +145,11 @@ def get_partition_info(host, uuid, param=None):
     return param_value
 
 
-def wait_for_partition_status(host, uuid, final_status=PartitionStatus.READY, interim_status='Creating', timeout=120,
+def wait_for_partition_status(host, uuid, final_status=[PartitionStatus.READY], interim_status=PartitionStatus.CREATING, timeout=120,
                               fail_ok=False):
-    final_status = None if not final_status else final_status
-    valid_status = [final_status]
-
+    
+    final_status = [None] if not final_status else final_status
+    valid_status = copy.deepcopy(final_status)
     if isinstance(interim_status, str):
         interim_status = (interim_status,)
     for status_ in interim_status:
@@ -160,7 +161,7 @@ def wait_for_partition_status(host, uuid, final_status=PartitionStatus.READY, in
         status = get_partition_info(host, uuid, "status")
         assert status in valid_status, "Partition has unexpected state {}".format(status)
 
-        if status == final_status:
+        if status in final_status:
             LOG.info("Partition {} on host {} has reached state: {}".format(uuid, host, status))
             return True
         elif status != prev_status:

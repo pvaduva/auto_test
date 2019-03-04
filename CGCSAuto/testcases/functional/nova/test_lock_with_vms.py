@@ -24,44 +24,39 @@ def _boot_migrable_vms(storage_backing):
     Create vms with specific storage backing that can be live migrated
 
     Args:
-        storage_backing: 'local_image', 'local_lvm' or 'remote'
+        storage_backing: 'local_image' or 'remote'
 
     Returns: (vms_info (list), flavors_created (list))
         vms_info : [(vm_id1, block_mig1), (vm_id2, block_mig2), ...]
 
     """
-    storage_spec = {'aggregate_instance_extra_specs:storage': storage_backing}
     vms_to_test = []
     flavors_created = []
-    flavor_no_localdisk = nova_helper.create_flavor(ephemeral=0, swap=0, check_storage_backing=False)[1]
+    flavor_no_localdisk = nova_helper.create_flavor(ephemeral=0, swap=0, storage_backing=storage_backing)[1]
     flavors_created.append(flavor_no_localdisk)
-    nova_helper.set_flavor_extra_specs(flavor=flavor_no_localdisk, **storage_spec)
 
     vm_1 = vm_helper.boot_vm(flavor=flavor_no_localdisk, source='volume')[1]
 
     block_mig_1 = False
     vms_to_test.append((vm_1, block_mig_1))
 
-    if storage_backing != 'local_lvm':
-        LOG.info("Boot a VM from image if host storage backing is local_image or remote...")
-        vm_2 = vm_helper.boot_vm(flavor=flavor_no_localdisk, source='image')[1]
-        block_mig_2 = True
-        vms_to_test.append((vm_2, block_mig_2))
-        if storage_backing == 'remote':
-            LOG.info("Boot a VM from volume with local disks if storage backing is remote...")
-            ephemeral_swap = random.choice([[0, 512], [1, 512], [1, 0]])
-            flavor_with_localdisk = nova_helper.create_flavor(ephemeral=ephemeral_swap[0], swap=ephemeral_swap[1],
-                                                              check_storage_backing=False)[1]
-            flavors_created.append(flavor_with_localdisk)
-            nova_helper.set_flavor_extra_specs(flavor=flavor_with_localdisk, **storage_spec)
-            vm_3 = vm_helper.boot_vm(flavor=flavor_with_localdisk, source='volume')[1]
-            block_mig_3 = False
-            vms_to_test.append((vm_3, block_mig_3))
-            LOG.info("Boot a VM from image with volume attached if storage backing is remote...")
-            vm_4 = vm_helper.boot_vm(flavor=flavor_no_localdisk, source='image')[1]
-            vm_helper.attach_vol_to_vm(vm_id=vm_4)
-            block_mig_4 = False
-            vms_to_test.append((vm_4, block_mig_4))
+    LOG.info("Boot a VM from image if host storage backing is local_image or remote...")
+    vm_2 = vm_helper.boot_vm(flavor=flavor_no_localdisk, source='image')[1]
+    block_mig_2 = True
+    vms_to_test.append((vm_2, block_mig_2))
+    if storage_backing == 'remote':
+        LOG.info("Boot a VM from volume with local disks if storage backing is remote...")
+        ephemeral_swap = random.choice([[0, 512], [1, 512], [1, 0]])
+        flavor_with_localdisk = nova_helper.create_flavor(ephemeral=ephemeral_swap[0], swap=ephemeral_swap[1])[1]
+        flavors_created.append(flavor_with_localdisk)
+        vm_3 = vm_helper.boot_vm(flavor=flavor_with_localdisk, source='volume')[1]
+        block_mig_3 = False
+        vms_to_test.append((vm_3, block_mig_3))
+        LOG.info("Boot a VM from image with volume attached if storage backing is remote...")
+        vm_4 = vm_helper.boot_vm(flavor=flavor_no_localdisk, source='image')[1]
+        vm_helper.attach_vol_to_vm(vm_id=vm_4)
+        block_mig_4 = False
+        vms_to_test.append((vm_4, block_mig_4))
 
     return vms_to_test, flavors_created
 
@@ -75,7 +70,7 @@ class TestLockWithVMs:
         to target host before test start.
         """
 
-        storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, target_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         if len(target_hosts) < 2:
             skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 
@@ -182,8 +177,9 @@ class TestLockWithVMsNegative:
         self.hosts_locked = []
 
         storages_to_test = []
-        for storage_backing in ['local_image', 'local_lvm', 'remote']:
-            hosts = host_helper.get_hosts_in_storage_aggregate(storage_backing=storage_backing)
+        hosts_per_backing = host_helper.get_hosts_per_storage_backing()
+        for storage_backing in ['local_image', 'remote']:
+            hosts = hosts_per_backing[storage_backing]
             if len(hosts) == 1:
                 storages_to_test.append(storage_backing)
 

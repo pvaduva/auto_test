@@ -21,6 +21,20 @@ def id_gen(val):
     mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')(('tis-centos-guest', 'dedicated', ['suspend', 'resume'])),
 ], ids=id_gen)
 def test_nova_actions(guest_os, cpu_pol, actions):
+    """
+
+    Args:
+        guest_os:
+        cpu_pol:
+        actions:
+
+    Test Steps:
+        - Create a glance image from given guest type
+        - Create a vm from cinder volume using above image with specified cpu policy
+        - Perform given nova actions on vm
+        - Ensure nova operation succeeded and vm still in good state (active and reachable from NatBox)
+
+    """
     if guest_os == 'opensuse_12':
         if not cinder_helper.is_volumes_pool_sufficient(min_size=40):
             skip(SkipStorageSpace.SMALL_CINDER_VOLUMES_POOL)

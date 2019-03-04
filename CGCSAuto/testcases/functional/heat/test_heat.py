@@ -64,7 +64,7 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
         resource_found = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
 
     elif to_verify is 'nova_flavor':
-        resource_found = nova_helper.get_flavor_id(name='sample-flavor')
+        resource_found = nova_helper.get_flavor(name='sample-flavor')
 
     elif to_verify is 'neutron_net':
         resource_found = network_helper.get_tenant_net_id(net_name='sample-net')
@@ -272,7 +272,7 @@ def revert_quota(request):
 
 @mark.usefixtures('check_alarms')
 @mark.parametrize('template_name', [
-    mark.sanity('WR_Neutron_ProviderNetRange.yaml'),
+    # mark.sanity('WR_Neutron_ProviderNetRange.yaml'),  Need update due to datanetwork change
     mark.priorities('nightly', 'sx_nightly')('WR_Neutron_ProviderNet.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Cinder_Volume.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Glance_Image.yaml'),
@@ -291,7 +291,7 @@ def revert_quota(request):
     # mark.priorities('nightly', 'sx_nightly')('WR_Neutron_QoSPolicy.yaml'),    CGTS-10095
     mark.priorities('nightly', 'sx_nightly')('OS_Heat_Stack.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Cinder_VolumeAttachment.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Nova_Server.yaml'),
+    mark.priorities('sx_sanity', 'sanity', 'cpe_sanity')('OS_Nova_Server.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Heat_AccessPolicy.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Heat_AutoScalingGroup.yaml'),
     ])
@@ -311,7 +311,7 @@ def test_heat_template(template_name, revert_quota):
 
     Test Steps:
         - Create a heat stack with the given template
-        - Verify heat stack is created sucessfully
+        - Verify heat stack is created successfully
         - Verify heat resources are created
         - Delete Heat stack and verify resource deletion
 
@@ -330,8 +330,7 @@ def test_heat_template(template_name, revert_quota):
     elif template_name == 'OS_Nova_Server.yaml':
         # create new image to do update later
         LOG.tc_step("Creating an Image to be used for heat update later")
-        image_id = glance_helper.create_image(name='tis-centos2')[1]
-        ResourceCleanup.add('image', image_id)
+        glance_helper.create_image(name='tis-centos2', cleanup='function')
 
     # add test step
     verify_basic_template(template_name)

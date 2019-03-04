@@ -20,6 +20,12 @@ def update_quotas(add_admin_role_module):
         cinder_helper.update_quotas(volumes=20)
 
 
+@fixture(scope='module')
+def hosts_per_backing():
+    hosts_per_backend = host_helper.get_hosts_per_storage_backing()
+    return hosts_per_backend
+
+
 def touch_files_under_vm_disks(vm_id, ephemeral, swap, vm_type, disks):
 
     expt_len = 1 + int(bool(ephemeral)) + int(bool(swap)) + (1 if 'with_vol' in vm_type else 0)
@@ -78,10 +84,9 @@ class TestDefaultGuest:
 
     @mark.parametrize('storage_backing', [
         'local_image',
-        'local_lvm',
         'remote',
     ])
-    def test_evacuate_vms_with_inst_backing(self, storage_backing):
+    def test_evacuate_vms_with_inst_backing(self, hosts_per_backing, storage_backing):
         """
         Test evacuate vms with various vm storage configs and host instance backing configs
 
@@ -112,20 +117,18 @@ class TestDefaultGuest:
             - Remove admin role from primary tenant (module)
 
         """
-        hosts = host_helper.get_hosts_in_storage_aggregate(storage_backing=storage_backing)
+        hosts = hosts_per_backing[storage_backing]
         if len(hosts) < 2:
             skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 
         target_host = hosts[0]
 
         LOG.tc_step("Create a flavor without ephemeral or swap disks")
-        flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing,
-                                             check_storage_backing=False)[1]
+        flavor_1 = nova_helper.create_flavor('flv_rootdisk', storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor_1, scope='function')
 
         LOG.tc_step("Create another flavor with ephemeral and swap disks")
-        flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, storage_backing=storage_backing,
-                                             check_storage_backing=False)[1]
+        flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512, storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor_2, scope='function')
 
         LOG.tc_step("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
@@ -210,7 +213,7 @@ class TestDefaultGuest:
 
     @fixture(scope='function')
     def check_hosts(self):
-        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         if len(hosts) < 2:
             skip("at least two hosts with the same storage backing are required")
 
@@ -227,8 +230,9 @@ class TestDefaultGuest:
         target_host = acceptable_hosts[0]
         return target_host
 
+    # numa pinning is deprecated.
     # TC6500
-    def test_evacuate_numa_setting(self, check_hosts):
+    def _test_evacuate_numa_setting(self, check_hosts):
         """
             Test evacuate vms with various vm numa node settings
 
@@ -324,7 +328,7 @@ class TestOneHostAvail:
             return zone
 
         zone = 'cgcsauto'
-        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         host = hosts[0]
         LOG.fixture_step('Select host {} with backing {}'.format(host, storage_backing))
         nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=[host])
@@ -336,6 +340,26 @@ class TestOneHostAvail:
 
     @mark.sx_sanity
     def test_reboot_only_host(self, get_zone):
+        """
+        Test reboot only hypervisor on the system
+
+        Args:
+            get_zone: fixture to create cgcsauto aggregate, to ensure vms can only on one host
+
+        Setups:
+            - If more than 1 hypervisor: Create cgcsauto aggregate and add one host to the aggregate
+
+        Test Steps:
+            - Launch various vms on target host
+                - vm booted from cinder volume,
+                - vm booted from glance image,
+                - vm booted from glance image, and have an extra cinder volume attached after launch,
+                - vm booed from cinder volume with ephemeral and swap disks
+            - sudo reboot -f only host
+            - Check host is recovered
+            - Check vms are recovered and reachable from NatBox
+
+        """
         zone = get_zone
 
         LOG.tc_step("Launch 5 vms in {} zone".format(zone))

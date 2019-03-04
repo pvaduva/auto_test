@@ -3,6 +3,7 @@ import re
 import time
 import random
 import configparser
+import pexpect.exceptions
 
 from pytest import fixture, skip
 
@@ -43,7 +44,9 @@ def collect_logs(msg):
         LOG.info('collecting logs: ' + msg)
         active_controller = ControllerClient.get_active_controller()
         collect_tis_logs(active_controller)
-    except:
+    except pexpect.exceptions.TIMEOUT:
+        active_controller.flush()
+        active_controller.exec_cmd('cat /etc/buid.info')
         pass
 
 
@@ -59,8 +62,6 @@ def pre_system_backup():
 
     Returns:
     """
-
-    LOG.tc_func_start("BACKUP_TEST")
     lab = InstallVars.get_install_var('LAB')
 
     LOG.info("Preparing lab for system backup....")
@@ -84,7 +85,7 @@ def pre_system_backup():
             active_controller_name = system_helper.get_active_controller_name()
             assert active_controller_name == 'controller-0', msg
 
-        LOG.tc_step("Checking if  a USB flash drive is plugged in controller-0 node... ")
+        LOG.fixture_step("Checking if  a USB flash drive is plugged in controller-0 node... ")
         usb_device = install_helper.get_usb_device_name()
         assert usb_device, "No USB found in controller-0"
         parts_info = install_helper.get_usb_device_partition_info(usb_device=usb_device)
@@ -285,9 +286,16 @@ def test_backup(pre_system_backup):
 
     backup_info = pre_system_backup
     LOG.info('Before backup, perform configuration changes and launch VMs')
+
     con_ssh = ControllerClient.get_active_controller()
-    pre_backup_test(backup_info, con_ssh)
     backup_info['con_ssh'] = con_ssh
+
+    is_ceph = backup_info.get('is_storage_lab', False)
+    LOG.debug('This is a {} lab'.format('Storage/Ceph' if is_ceph else 'Non-Storage/Ceph'))
+
+    if is_ceph:
+        con_ssh.exec_sudo_cmd('touch /etc/ceph/ceph.client.None.keyring')
+        pre_backup_test(backup_info, con_ssh)
 
     lab = InstallVars.get_install_var('LAB')
     LOG.tc_step("System backup: lab={}; backup dest = {} backup destination path = {} ..."
@@ -305,25 +313,28 @@ def test_backup(pre_system_backup):
             elif k[-1:] == '2':
                 usb_part2 = k
         copy_to_usb = usb_part2
+
     backup_info['copy_to_usb'] = copy_to_usb
     backup_info['backup_file_prefix'] = get_backup_file_name_prefix(backup_info)
     backup_info['cinder_backup'] = BackupVars.get_backup_var('cinder_backup')
+    reinstall_storage = BackupVars.get_backup_var('reinstall_storage')
 
-    if not backup_info['cinder_backup']:
+    if reinstall_storage:
+        if is_ceph:
+            backup_cinder_volumes(backup_info)
+
         backup_sysconfig_images(backup_info)
-
-        if backup_info.get('is_storage_lab', False):
-            backup_cinder_volumes(backup_info)
     else:
-        if backup_info.get('is_storage_lab', False):
-            backup_cinder_volumes(backup_info)
+        # if is_ceph:
+        #     backup_cinder_volumes(backup_info)
 
         backup_sysconfig_images(backup_info)
 
     collect_logs('after_backup')
 
-    # Copying system backup ISO file for future restore
-    assert backup_load_iso_image(backup_info)
+    if system_helper.is_avs(con_ssh=con_ssh):
+        # Copying system backup ISO file for future restore
+        assert backup_load_iso_image(backup_info)
 
 
 def backup_load_iso_image(backup_info):
@@ -356,10 +367,17 @@ def backup_load_iso_image(backup_info):
             format(build_id, build_server, load_path)
 
         iso_file_path = os.path.join(load_path, "export", install_helper.UPGRADE_LOAD_ISO_FILE)
+
+        if not build_server_conn.exec_cmd("test -e " + iso_file_path):
+            LOG.warn("No ISO found on path:{}".format(iso_file_path))
+            return True
+
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
         # build_server_conn.rsync("-L " + iso_file_path, lab['controller-0 ip'],
         build_server_conn.rsync("-L " + iso_file_path, html_helper.get_ip_addr(),
-                                os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts)
+                                os.path.join(WRSROOT_HOME, "bootimage.iso"),
+                                pre_opts=pre_opts,
+                                timeout=360)
 
     if backup_dest == 'usb':
         usb_part1 = None
@@ -516,7 +534,6 @@ def pb_create_volumes(con_ssh, volume_names=None, volume_sizes=None, backup_info
     Return:
         a dictionary of information for created volumes, including id, name, and size of volumes
     """
-
     LOG.info('Create VOLUMEs')
 
     if not volume_names:
@@ -688,13 +705,11 @@ def pre_backup_setup(backup_info, con_ssh):
     Return:
          information of created VMs, Volumes, and Images
     """
-
     tenant = Tenant.TENANT1
     backup_info['tenant'] = tenant
 
     tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant['user'], con_ssh=con_ssh)[0]
     LOG.info('Using tenant:{} in the pre-backup test, details:{}'.format(tenant_id, tenant))
-
     LOG.info('Deleting VMs for pre-backup system-wide test')
     vm_helper.delete_vms()
 
@@ -814,7 +829,6 @@ def lock_unlock_host(backup_info, con_ssh, vms):
                                      administrative='unlocked',
                                      availability='available',
                                      vim_progress_status='services-enabled')
-
     for tried in range(5):
         pingable, message = vm_helper.ping_vms_from_natbox(target_vm, fail_ok=(tried < 4))
         if pingable:

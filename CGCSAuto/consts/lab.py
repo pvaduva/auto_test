@@ -222,7 +222,7 @@ class Labs:
         'tpm_installed': True,
         'ixia_ports': [{'port': (2, 7), 'range': (3002, 3151)}],
     }
-    
+
     R430_3_4 = {
         'short_name': 'r430_3_4',
         'name': 'yow-cgcs-r430-3_4',
@@ -482,6 +482,10 @@ class Labs:
         'controller_nodes': [23318, 23319],
         'compute_nodes': [23320, 23321, 23322],
         'ixia_ports': [{'port': (7, 11), 'range': (3602, 3651)}, {'port': (7, 12), 'range': (3702, 3751)}],
+        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0500',
+                              'compute-0': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01',
+                              'compute-1': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01',
+                              'compute-2': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01'},
     }
 
     WCP_82_83 = {
@@ -491,6 +495,7 @@ class Labs:
         'controller-0 ip': '128.224.151.96',
         'controller-1 ip': '128.224.151.97',
         'controller_nodes': [23320, 23321],
+        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0400'},
     }
 
     WCP_84 = {
@@ -499,6 +504,7 @@ class Labs:
         'floating ip': '128.224.151.4',
         'controller-0 ip': '128.224.151.4',
         'controller_nodes': [23322],
+        'boot_device_dict' : {'controller-0': '0300'},
     }
 
     WCP_85_89 = {
@@ -519,6 +525,7 @@ class Labs:
         'controller-0 ip': '128.224.150.244',
         'controller-1 ip': '128.224.150.202',
         'controller_nodes': [23323, 23324],
+        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0500'},
     }
 
     WCP_87_88 = {
@@ -528,6 +535,7 @@ class Labs:
         'controller-0 ip': '128.224.151.86',
         'controller-1 ip': '128.224.151.229',
         'controller_nodes': [23325, 23326],
+        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0500'},
     }
 
     WCP_89 = {
@@ -536,6 +544,7 @@ class Labs:
         'floating ip': '128.224.151.2',
         'controller-0 ip': '128.224.151.2',
         'controller_nodes': [23327],
+        'boot_device_dict' : {'controller-0': '0300'}
     }
 
     WCP_90_91 = {
@@ -549,6 +558,7 @@ class Labs:
         'system_mode': 'duplex',
         'tpm_installed': True,
         'ixia_ports': [{'port': (7, 15), 'range': (301, 350)}, {'port': (7, 16), 'range': (401, 450)}],
+        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '8100'},
     }
 
     WCP_92_98 = {
@@ -558,9 +568,9 @@ class Labs:
         'controller-0 ip': '128.224.151.111',
         'controller-1 ip': '128.224.151.205',
         'controller_nodes': [23299, 23300],
-        'compute_nodes': [23303, 23304, 23305],
-        'storage_nodes': [23301, 23302],
-        'ixia_ports': [{'port': (6, 5), 'range': (3302, 3351)}, {'port': (6, 6), 'range': (3402, 3451)}],
+        'compute_nodes': [23303, 23301, 23302],
+        'storage_nodes': [23304, 23305],
+        'ixia_ports': [{'port': (6, 5), 'range': (3301, 3351)}, {'port': (6, 6), 'range': (3402, 3451)}],
     }
 
     WCP_99_103 = {
@@ -589,7 +599,7 @@ class Labs:
     WCP_106 = {
         'short_name': 'wcp_106',
         'name': 'yow-cgcs-wildcat-106',
-        'floating ip': '128.224.150.95',
+        'floating ip': '128.224.150.94',
         'controller-0 ip': '128.224.150.94',
         'controller_nodes': [23601],
         'system_type': 'CPE',
@@ -628,7 +638,17 @@ class Labs:
         'system_mode': 'simplex',
     }
 
-    WP_01_02 = {
+    ML350_G10 = {
+        'short_name': 'ml350_g10',
+        'name': 'yow-cgcs-ml350-g10-1',
+        'floating ip': '128.224.151.181',
+        'controller-0 ip': '128.224.151.181',
+        'controller_nodes': [55836],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    WP_1_2 = {
         'short_name': 'wp_1_2',
         'name': 'yow-cgcs-wolfpass-01_02',
         'floating ip': '128.224.150.254',
@@ -640,7 +660,7 @@ class Labs:
         'ixia_ports': [{'port': (8, 7), 'range': (1700, 1799)}, {'port': (8, 8), 'range': (1800, 1849)}],
     }
 
-    WP_03_07 = {
+    WP_3_7 = {
         'short_name': 'wp_3_7',
         'name': 'yow-cgcs-wolfpass-03_07',
         'floating ip': '128.224.151.165',
@@ -650,7 +670,8 @@ class Labs:
         'compute_nodes': [94867, 18658, 40810],
     }
 
-    WP_08_12 = {
+    WP_8_12 = {
+
         'short_name': 'wp_8_12',
         'name': 'yow-cgcs-wolfpass-08_12',
         'floating ip': '128.224.150.149',
@@ -749,18 +770,22 @@ class Labs:
         'controller-0 ip': ''
     }
 
-    UNKNOWN = {
-        'short_name': 'unknown',
-        'name': 'unknown',
-        'floating ip': 'unknow_fip',
-        'controller-0 ip': 'unknown_con0_ip',
-        'controller-1 ip': 'unknown_con1_ip',
+    # Lab to select for auto install a custom system
+    CUSTOM = {
+        'short_name': 'custom',
+        'name': 'custom',
+        'floating ip': '',
+        'controller-0 ip': '',
+        'controller-1 ip': '',
+        'controller_nodes': [],
+        'compute_nodes': [],
+        'storage_nodes': []
     }
 
     # Distributed Cloud
     WCP_80_91 = {
         'short_name': 'wcp_80_91',
-        'name': 'distributed cloud',
+        'name': 'yow-cgcs-distributed_cloud-1',
         'floating ip': WCP_90_91['floating ip'],
         'central_region': WCP_90_91,
         'subcloud-1': WCP_80_84,     # wcp80-81(84)
@@ -786,7 +811,8 @@ def update_lab(lab_dict_name=None, lab_name=None, floating_ip=None, **kwargs):
     Returns (dict): updated lab dict
 
     """
-    if not lab_dict_name or not lab_name:
+
+    if not lab_name and not lab_dict_name:
         from consts.proj_vars import ProjVar
         lab_name = ProjVar.get_var('LAB').get('short_name', None)
         if not lab_name:
@@ -914,3 +940,4 @@ class NatBoxes:
                     }
         setattr(NatBoxes, 'NAT_NEW', nat_dict)
         return nat_dict
+

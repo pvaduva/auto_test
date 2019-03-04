@@ -108,13 +108,6 @@ class TestResizeSameHost:
         ('remote',      (4, 0, 0), (1, 1, 512), 'volume'),
         ('remote',      (4, 1, 512), (8, 2, 1024), 'volume'),
         ('remote',      (4, 1, 512), (0, 1, 0), 'volume'),
-        ('local_lvm',   (4, 0, 0), (5, 1, 512), 'image'),
-        ('local_lvm',   (4, 1, 512), (5, 2, 1024), 'image'),
-        ('local_lvm',   (4, 1, 512), (4, 1, 0), 'image'),
-        ('local_lvm',   (4, 0, 0), (2, 1, 512), 'volume'),
-        ('local_lvm',   (4, 1, 512), (0, 1, 0), 'volume'),
-        ('local_lvm', (4, 0, 512), (4, 0, 1024), 'volume'),
-        ('local_lvm', (4, 1, 0), (4, 2, 0), 'volume'),
         ('local_image', (4, 0, 0), (5, 1, 512), 'image'),
         mark.priorities('nightly', 'sx_nightly')(('local_image', (4, 1, 512), (5, 2, 1024), 'image')),
         ('local_image', (5, 1, 512), (5, 1, 0), 'image'),
@@ -195,11 +188,12 @@ class TestResizeSameHost:
         LOG.tc_step("Check files after resize revert")
         if storage_backing == 'remote' and swap and dest_flavor[2]:
             swap_size = dest_flavor[2]
+
+        time.sleep(30)
+        prev_host = nova_helper.get_vm_host(vm_id)
         check_helper.check_vm_files(vm_id=vm_id, storage_backing=storage_backing, root=root, ephemeral=ephemeral,
                                     swap=swap_size, vm_type=boot_source, vm_action=None, file_paths=file_paths,
                                     content=content, disks=vm_disks, check_volume_root=True)
-
-        prev_host = nova_helper.get_vm_host(vm_id)
 
         # Check for TC5155 blocked by JIRA: CGTS-8299
         # if expect_to_check:
@@ -232,10 +226,6 @@ class TestResizeSameHost:
         ('remote',      (5, 2, 512), (5, 1, 512), 'image'),     # check ephemeral disk cannot be smaller than origin
         # ('remote',      (1, 0, 0), (0, 0, 0), 'volume'),   This should not fail, root disk size from volume not flavor
         ('remote',      (1, 1, 512), (1, 0, 512), 'volume'),     # check ephemeral disk cannot be smaller than origin
-        ('local_lvm',   (5, 0, 0), (0, 0, 0), 'image'),     # Root disk can be resized, but cannot be 0
-        ('local_lvm',   (5, 2, 512), (5, 1, 512), 'image'),
-        # ('local_lvm',   (1, 0, 0), (0, 0, 0), 'volume'),      root disk size from volume not flavor
-        ('local_lvm',   (1, 2, 512), (1, 1, 512), 'volume'),
         ('local_image', (5, 0, 0), (0, 0, 0), 'image'),      # Root disk can be resized, but cannot be 0
         ('local_image', (5, 2, 512), (5, 1, 512), 'image'),
         ('local_image', (5, 1, 512), (4, 1, 512), 'image'),
@@ -344,33 +334,33 @@ class TestResizeDiffHost:
     # TC5155
     @mark.parametrize('storage_backing', [
         'local_image',
-        'local_lvm',
+        'remote',
         ])
     def test_resize_different_comp_node(self, storage_backing, get_hosts_per_backing):
         """
-            Test resizing disks of a larger vm onto a different compute node and check hypervisor statistics to
-            make sure difference in disk usage of both nodes involved is correctly reflected
+        Test resizing disks of a larger vm onto a different compute node and check hypervisor statistics to
+        make sure difference in disk usage of both nodes involved is correctly reflected
 
-            Args:
-                storage_backing: The host storage backing required
-            Skip Conditions:
-                - 2 hosts must exist with required storage backing.
-            Test setup:
-                - For each of the two backings tested, the setup will return the number of nodes for each backing,
-                the vm host that the vm will initially be created on and the number of hosts for that backing.
-            Test Steps:
-                - Create a flavor with a root disk size that is slightly larger than the default image used to boot up
-                the VM
-                - Create a VM with the aforementioned flavor
-                - Create a flavor will enough cpus to occupy the rest of the cpus on the same host as the first VM
-                - Create another VM on the same host as the first VM
-                - Create a similar flavor to the first one, except that it has one more vcpu
-                - Resize the first VM and confirm that it is on a different host
-                - Check hypervisor-show on both computes to make sure that disk usage goes down on the original host and
-                  goes up on the new host
-            Test Teardown:
-                - Delete created VMs
-                - Delete created flavors
+        Args:
+            storage_backing: The host storage backing required
+        Skip Conditions:
+            - 2 hosts must exist with required storage backing.
+        Test setup:
+            - For each of the two backings tested, the setup will return the number of nodes for each backing,
+            the vm host that the vm will initially be created on and the number of hosts for that backing.
+        Test Steps:
+            - Create a flavor with a root disk size that is slightly larger than the default image used to boot up
+            the VM
+            - Create a VM with the aforementioned flavor
+            - Create a flavor will enough cpus to occupy the rest of the cpus on the same host as the first VM
+            - Create another VM on the same host as the first VM
+            - Create a similar flavor to the first one, except that it has one more vcpu
+            - Resize the first VM and confirm that it is on a different host
+            - Check hypervisor-show on both computes to make sure that disk usage goes down on the original host and
+              goes up on the new host
+        Test Teardown:
+            - Delete created VMs
+            - Delete created flavors
 
         """
         hosts_with_backing = get_hosts_per_backing.get(storage_backing, [])
@@ -421,7 +411,11 @@ class TestResizeDiffHost:
         new_host = nova_helper.get_vm_host(vm_to_resize)
         assert new_host != origin_host, "vm did not change hosts following resize"
 
-        LOG.tc_step('Check disk usage after resize')
+        LOG.tc_step('Check disk usage on computes after resize')
+        if storage_backing == 'remote':
+            LOG.info("Compute disk usage change should be minimal for remote storage backing")
+            root_disk_size = 0
+
         check_correct_post_resize_value(prev_val_origin_host, root_disk_size, origin_host)
 
         prev_val_new_host = compute_space_dict[new_host]

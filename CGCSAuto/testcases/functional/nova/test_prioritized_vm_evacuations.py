@@ -5,8 +5,8 @@ from datetime import datetime
 
 from pytest import mark, fixture, skip
 
-from consts.cgcs import VMStatus, VMMetaData
-from keywords import vm_helper, host_helper, nova_helper, patching_helper
+from consts.cgcs import VMMetaData
+from keywords import vm_helper, nova_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from utils.tis_log import LOG
 
@@ -66,7 +66,7 @@ class TestPrioritizedVMEvacuation:
     def setup_quota_and_hosts(self, request, add_admin_role_class, add_cgcsauto_zone):
         vm_helper.ensure_vms_quotas(vms_num=10, cores_num=50, vols_num=20)
 
-        storage_backing, target_hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, target_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         if len(target_hosts) < 2:
             skip("Less than two up hosts have same storage backing")
 
@@ -160,7 +160,7 @@ class TestPrioritizedVMEvacuation:
         LOG.tc_step('Triggering evacuation on host: {} via action:{}'.format(self.current_host, self.operation))
         action = self.operation.lower()
 
-        self.start_time = patching_helper.lab_time_now()[1]
+        self.start_time = common.lab_time_now()[1]
         vms = [vm_dict['vm_id'] for vm_dict in self.vms_info.values()]
 
         if action in VALID_OPERATIONS:
@@ -279,7 +279,6 @@ class TestPrioritizedVMEvacuation:
                 'root_disk': self.root_disk[sn],
                 'is_public': True,
                 'storage_backing': self.storage_backing,
-                'check_storage_backing': False,
             }
             if self.swap_disk:
                 options['swap'] = self.swap_disk[sn]

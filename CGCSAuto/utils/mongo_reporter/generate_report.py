@@ -303,17 +303,17 @@ def mark_status_on_build_server(status, build_server, build_id=None, builds_dir=
                 print("Build path {} does not exist".format(build_path))
                 continue
 
-            status_file = '{}/{}'.format(build_path, status)
-            bld_srv_ssh.exec_cmd('touch {}'.format(status_file), fail_ok=False)
-            if not bld_srv_ssh.file_exists(file_path=status_file):
-                raise FileNotFoundError("Touched file {} does not exist!".format(status_file))
-
-            print("{} is successfully touched on {}".format(status_file, build_server))
-
             if status == 'GREEN':
                 green_path = '{}/latest_green_build'.format(os.path.dirname(os.path.abspath(build_path)))
                 bld_srv_ssh.exec_cmd('rm -f {}'.format(green_path))
                 bld_srv_ssh.exec_cmd('ln -s {} {}'.format(build_path, green_path), fail_ok=False)
+                print("latest_green_build symlink is successfully updated to {}:{}".format(build_server, build_path))
+
+            status_file = '{}/{}'.format(build_path, status)
+            bld_srv_ssh.exec_cmd('touch {}'.format(status_file), fail_ok=False)
+            if not bld_srv_ssh.file_exists(file_path=status_file):
+                raise FileNotFoundError("Touched file {} does not exist!".format(status_file))
+            print("{} is successfully touched on {}".format(status_file, build_server))
             break
         else:
             raise ValueError('Build path not found on {}: {}'.format(build_server, build_paths))

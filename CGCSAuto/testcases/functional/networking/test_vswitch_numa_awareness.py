@@ -1,6 +1,7 @@
 import re
 from pytest import mark, fixture, skip
 
+from utils import table_parser
 from utils.tis_log import LOG
 from consts.cli_errs import CpuAssignment, NumaErr   # Do not remove this. Used in eval()
 from consts.cgcs import FlavorSpec
@@ -46,7 +47,7 @@ def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
     if len(nova_hosts) < 1:
         skip("No nova compute host available in the system, no host to lock and reconfigure.")
 
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
     host = hosts[0]
     host_other = hosts[1] if len(hosts) > 1 else None
 
@@ -80,8 +81,11 @@ def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
     ht_enabled = system_helper.is_hyperthreading_enabled(host)
     is_small_system = system_helper.is_small_footprint()
 
+    host_cpu_table = system_helper.get_host_cpu_list_table(host=host)
+    proc_ids = sorted(list(set(table_parser.get_column(host_cpu_table, 'processor'))))
+
     LOG.info("{} is selected. Hyper-threading is {}enabled".format(host, "not " if ht_enabled else ""))
-    return host, ht_enabled, is_small_system, host_other, storage_backing
+    return host, proc_ids, ht_enabled, is_small_system, host_other, storage_backing
 
 
 def id_params_cores(val):
@@ -108,8 +112,7 @@ class TestVSwitchCPUReconfig:
     @fixture(scope='class')
     def flavor_(self, host_to_config):
         storage_backing = host_to_config[-1]
-        flavor = nova_helper.create_flavor(name='flv_{}'.format(storage_backing), storage_backing=storage_backing,
-                                           check_storage_backing=False)[1]
+        flavor = nova_helper.create_flavor(name='flv_{}'.format(storage_backing), storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor, scope='class')
 
         return flavor
@@ -121,6 +124,7 @@ class TestVSwitchCPUReconfig:
         ((2, 0), (1, 1), None, 'AIO'),       # CPE only
         ((1, 2), (3, 2), None, None),
         ((1, 2), (2, 2), None, None),
+        ((2, 0), (0, 0), None, None),       # Shared vswitch core feature, which allows 0 dedicated vswitch core
         ((1, 0), (1, 0), 'nonHT', 'nonAIO'),     # Standard lab only
         ((2, 0), (1, 0), 'nonHT', 'AIO'),      # CPE only
         # ((2, 0), (2, 0), None, True),       # CPE only    # remove - covered by other test
@@ -155,7 +159,7 @@ class TestVSwitchCPUReconfig:
             - Revert host platform and vswitch cpu configs      (module)
 
         """
-        host, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
+        host, proc_ids, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
         HostsToRecover.add(host, scope='class')
 
         ht_required, cpe_required = _convert_ht_cpe_req(ht_required, cpe_required)
@@ -168,8 +172,8 @@ class TestVSwitchCPUReconfig:
         if platform is not None or vswitch is not None:
             LOG.tc_step("Reconfigure host cpus. Platform: {}, vSwitch: {}".format(platform, vswitch))
             platform_args = {}
-            for i in range(len(platform)):
-                if i is not None:
+            for i in range(len(proc_ids)):
+                if platform[i] is not None:
                     platform_args['p'+str(i)] = platform[i]
 
             vswitch_args = {}
@@ -209,7 +213,7 @@ class TestVSwitchCPUReconfig:
         mark.p3(((5, 5), (5, 4), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES")),
         mark.p1(((5, 5), (6, 5), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),  # Assume total<=10core/proc&thread
         mark.p3(((1, 1), (8, 10), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES")),  # Assume total <= 10 cores/per proc&thread
-        mark.p3(((2, 0), (0, 0), None, None, "CpuAssignment.VSWITCH_INSUFFICIENT_CORES")),
+        # mark.p3(((2, 0), (0, 0), None, None, "CpuAssignment.VSWITCH_INSUFFICIENT_CORES")), shared vswitch core feature
     ], ids=id_params_cores)
     def test_vswitch_cpu_reconfig_negative(self, host_to_config, platform, vswitch, ht_required, cpe_required,
                                            expt_err):
@@ -235,7 +239,10 @@ class TestVSwitchCPUReconfig:
             - Revert host platform and vswitch cpu configs      (module)
 
         """
-        host, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
+        host, proc_ids, ht_enabled, is_cpe, host_other, storage_backing = host_to_config
+
+        if len(proc_ids) < 2:
+            skip('Two processors are required for this test')
 
         HostsToRecover.add(host, scope='class')
 
@@ -250,7 +257,7 @@ class TestVSwitchCPUReconfig:
         # FIXME
         # total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1))
         total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1),
-                                                             functions=['VMs', 'vSwitch', 'Platform'])
+                                                             functions=['Applications', 'vSwitch', 'Platform'])
 
         # convert test params if host to config has more than 10 cores per proc & threaad
         if 'NO_VM_CORE' in expt_err:
@@ -320,7 +327,7 @@ def _get_vms_cores_nums(host, vswitch_cores_dict):
     """
     #  vswitch and non-vswitch nodes should be one each when this is called
 
-    vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='VMs')
+    vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='Applications')
 
     vswitch_procs = [proc for proc in vms_cores_dict if vswitch_cores_dict[proc]]
     nonvswitch_procs = [proc for proc in vms_cores_dict if not vswitch_cores_dict[proc]]
@@ -356,7 +363,7 @@ def _create_flavor(vcpus, storage_backing, vswitch_numa_affinity=None, numa_0=No
 def get_hosts(host_to_config):
     host0, ht_enabled, is_cpe, host1, storage_backing = host_to_config
     if not host1:
-        storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         if len(hosts) < 2:
             skip("Less than two up hypervisors support same storage backing")
         else:
@@ -440,6 +447,7 @@ class TestNovaSchedulerAVS:
 
         return final_hosts_configured, storage_backing, ht_enabled
 
+    # Deprecated - numa pinning. vswitch affinity is covered by test_vswitch_numa_affinity_sched_vms_two_hosts_avail
     @mark.parametrize(('vswitch_numa_affinity', 'numa_0', 'numa_nodes', 'expt_err'), [
         ('strict', 0, None, "NumaErr.NUMA_VSWITCH_MISMATCH"),  # This error message has inconsistent formatting
         ('prefer', 0, None, None),
@@ -447,8 +455,8 @@ class TestNovaSchedulerAVS:
         ('prefer', None, None, None),
         ('strict', None, 2, 'NumaErr.TWO_NUMA_ONE_VSWITCH')  # This error message is confusing
     ])
-    def test_vswitch_numa_affinity_boot_vm(self, hosts_configured, vswitch_numa_affinity, numa_0,
-                                           numa_nodes, expt_err):
+    def _test_vswitch_numa_affinity_boot_vm(self, hosts_configured, vswitch_numa_affinity, numa_0,
+                                            numa_nodes, expt_err):
         """
 
         Args:
@@ -510,7 +518,7 @@ class TestNovaSchedulerAVS:
             hosts_configured[1]: 0,
         }
         for host in hosts_configured:
-            vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='VMs')
+            vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='Applications')
             vswitch_vm_cores = len(vms_cores_dict[hosts_vswitch_proc[host]])
             if system_helper.is_hyperthreading_enabled(host):
                 vswitch_vm_cores *= 2
@@ -607,8 +615,7 @@ class TestNovaSchedulerAVS:
             total_cpus[vm_host] += flavor_vcpu_num
             expt_total = total_cpus[vm_host]
             LOG.tc_step("Check total allocated vcpus is {} from nova-compute.log on {}".format(expt_total, other_host))
-            with host_helper.ssh_to_host(vm_host) as host_ssh:
-                host_helper.wait_for_total_allocated_vcpus_update_in_log(host_ssh, expt_cpus=expt_total, fail_ok=False)
+            host_helper.wait_for_total_allocated_vcpus_update_in_log(vm_host, expt_cpus=expt_total, fail_ok=False)
 
         # Now vswitch nodes on both hosts are full. Attempt to boot another VM
         extra_str = 'rejected' if vswitch_numa_affinity == 'strict' else ' booted on non-vSwitch node - proc_0'
@@ -638,8 +645,7 @@ class TestNovaSchedulerAVS:
             vms_to_del = nova_helper.get_vms_on_hypervisor(other_host)
             vm_helper.delete_vms(vms_to_del)
             LOG.tc_step("Check total allocated vcpus is 0 from nova-compute.log on {}".format(other_host))
-            with host_helper.ssh_to_host(other_host) as host_ssh:
-                host_helper.wait_for_total_allocated_vcpus_update_in_log(host_ssh, expt_cpus=0, fail_ok=False)
+            host_helper.wait_for_total_allocated_vcpus_update_in_log(other_host, expt_cpus=0, fail_ok=False)
 
             vswitch_vm_num = len(final_host_vms) if vswitch_numa_affinity == 'strict' else (len(final_host_vms) - 1)
 
@@ -678,7 +684,7 @@ class TestNovaSchedulerAVS:
         LOG.fixture_step("(class) Determine host to boot vms on and calculate the vcpus for flavor")
 
         initial_host, other_host = hosts_configured
-        vms_cores_dict = host_helper.get_host_cpu_cores_for_function(initial_host, func='VMs')
+        vms_cores_dict = host_helper.get_host_cpu_cores_for_function(initial_host, func='Applications')
         p1_vm_cores = len(vms_cores_dict[1])
         # p0_vm_cores = len(vms_cores_dict[0])
         if system_helper.is_hyperthreading_enabled(initial_host):
@@ -693,7 +699,8 @@ class TestNovaSchedulerAVS:
 
         return initial_host, other_host, flavor_vcpu_num, storage_backing, vm_count
 
-    def test_vswitch_numa_affinity_sched_vms_one_host_avail(self, cal_vm_cores_one_host):
+    # Deprecated. virtual numa pinning + vswitch affinity restricted the vm to be on one host. numa pinning is removed.
+    def _test_vswitch_numa_affinity_sched_vms_one_host_avail(self, cal_vm_cores_one_host):
         """
         Test vswitch numa affinity strict when numa_0.0 = 1 which limits the vm host to only 1 host
 
@@ -876,7 +883,8 @@ class TestNovaSchedulerAVS:
                 assert vswitch_proc != post_numa_nodes[0], "VM did not move to non-vSwitch numa node"
 
 
-class TestSpanNumaNodes:
+# Deprecated. numa pinning is removed. VM cannot be on two numa nodes.
+class _TestSpanNumaNodes:
     @fixture(scope='class')
     def span_numa_hosts(self, skip_for_ovs, get_hosts, config_host_class):
         host0, host1, storage_backing, ht_enabled = get_hosts
@@ -919,8 +927,7 @@ class TestSpanNumaNodes:
 
         LOG.tc_step("Create a 1024ram flavor with specified vcpus")
         name = 'vswitch_affinity_{}_1G_{}cpu'.format(vswitch_affinity, vcpus)
-        flv_id = nova_helper.create_flavor(name=name, vcpus=vcpus, ram=1024, storage_backing=storage_backing,
-                                           check_storage_backing=False)[1]
+        flv_id = nova_helper.create_flavor(name=name, vcpus=vcpus, ram=1024, storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flv_id)
 
         specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_NODES: 2,
@@ -946,7 +953,7 @@ class TestSpanNumaNodes:
         host_span, host_other, storage_backing, ht_enabled = span_numa_hosts
         LOG.fixture_step("(class) Create a 1024ram flavor with specified vcpus")
         flv_id = nova_helper.create_flavor(name='vswitch_affinity_strict_2vcpu', vcpus=4, ram=1024,
-                                           storage_backing=storage_backing, check_storage_backing=False)[1]
+                                           storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flv_id, scope='class')
 
         specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_NODES: 2,
@@ -977,15 +984,15 @@ class TestSpanNumaNodes:
 
         return vcpu_on_numa
 
-    @mark.parametrize(
-        ('vcpus', 'vswitch_affinity', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus', 'numa1_mem'),[
+    @mark.parametrize((
+            'vcpus', 'vswitch_affinity', 'numa0', 'numa0_cpus', 'numa0_mem', 'numa1', 'numa1_cpus', 'numa1_mem'), [
         (3, 'strict', 0, 0, 512, 1, '1,2', 512),
         (2, 'strict', None, 0, 512, None, 1, 512),
         # (2, 'prefer', None, None, None, None, None, None),
         # (3, 'prefer', 0, None, None, 1, None, None, 'NumaErr.UNDEVISIBLE')
     ])
-    def test_vm_actions_vswitch_span_numa_nodes(self, span_numa_hosts, vcpus, vswitch_affinity, numa0, numa0_cpus,
-                                                numa0_mem, numa1, numa1_cpus, numa1_mem, base_flavor_span_numa):
+    def _test_vm_actions_vswitch_span_numa_nodes(self, span_numa_hosts, vcpus, vswitch_affinity, numa0, numa0_cpus,
+                                                 numa0_mem, numa1, numa1_cpus, numa1_mem, base_flavor_span_numa):
         """
         Test nova actions on 2 numa nodes vm with vswitch numa affinity set
 
@@ -1123,7 +1130,7 @@ def test_compute_cpu_kernel_boot_args(hosts=None):
             file = '/proc/cmdline'     # do not check /etc/default/grub since it's only the default
             output = host_ssh.exec_cmd('cat {}'.format(file), fail_ok=False)[1]
             for k, expt_v in expt_dict.items():
-                actual_v = re.findall('{}=([\d\-,]+)(\s|$)'.format(k), output)
+                actual_v = re.findall(r'{}=([\d\-,]+)(\s|$)'.format(k), output)
                 assert actual_v, "{} match not found in {} on {}".format(k, file, host)
                 actual_v = common.parse_cpus_list(cpus=actual_v[0][0])
                 assert sorted(expt_v) == actual_v, \

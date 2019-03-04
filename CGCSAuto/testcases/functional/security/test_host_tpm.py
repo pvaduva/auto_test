@@ -129,7 +129,7 @@ def fetch_cert_file(ssh_client, search_path=None):
     ssh_to_server.connect(retry=5)
 
     if search_path is None:
-        search_path = os.path.join(BuildServerPath.DEFAULT_HOST_BUILD_PATH, BuildServerPath.CONFIG_LAB_REL_PATH)
+        search_path = os.path.join(BuildServerPath.DEFAULT_HOST_BUILD_PATH, BuildServerPath.LAB_CONF_DIR_PREV)
 
     search_cmd = "\\find {} -maxdepth 5 -type f -name '*.pem'".format(search_path)
     code, output = ssh_to_server.exec_cmd(search_cmd, fail_ok=True)

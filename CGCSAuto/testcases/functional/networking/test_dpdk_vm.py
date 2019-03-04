@@ -2,7 +2,7 @@ from pytest import mark, skip, fixture
 
 from consts.cgcs import FlavorSpec
 from consts.reasons import SkipHypervisor
-from keywords import vm_helper, network_helper, nova_helper, glance_helper, cinder_helper, system_helper
+from keywords import vm_helper, network_helper, nova_helper, glance_helper, cinder_helper, system_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils.tis_log import LOG
 
@@ -28,8 +28,7 @@ def _get_dpdk_user_data(con_ssh=None):
 
 
 def image_with_vif_multiq():
-    img_id = glance_helper.create_image(name='vif_multq')[1]
-    ResourceCleanup.add('image', img_id)
+    img_id = glance_helper.create_image(name='vif_multq', cleanup='function')[1]
     glance_helper.set_image(image=img_id, properties={'hw_vif_multiqueue_enabled': True})
     return img_id
 
@@ -50,16 +49,16 @@ def launch_vm(vm_type, num_vcpu, host=None):
                    FlavorSpec.MEM_PAGE_SIZE: '2048'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
-    mgmt_net_id = network_helper.get_mgmt_net_id()
-    tenant_net_id = network_helper.get_tenant_net_id()
-    internal_net_id = network_helper.get_internal_net_id()
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': vif_model},
-            {'net-id': internal_net_id, 'vif-model': vif_model}]
-    vol = cinder_helper.create_volume(image_id=img_id, cleanup='function')[1]
+    nic1 = {'net-id': network_helper.get_mgmt_net_id()}
+    nic2 = {'net-id': network_helper.get_tenant_net_id()}
+    nic3 = {'net-id': network_helper.get_internal_net_id()}
+    if vif_model != 'virtio':
+        nic2['vif-model'] = vif_model
+        nic3['vif-model'] = vif_model
 
+    vol = cinder_helper.create_volume(image_id=img_id, cleanup='function')[1]
     host_info = {'avail_zone': 'nova', 'vm_host': host} if host else {}
-    vm_id = vm_helper.boot_vm(name='dpdk-vm', nics=nics, flavor=flavor_id, user_data=_get_dpdk_user_data(),
+    vm_id = vm_helper.boot_vm(name='dpdk-vm', nics=[nic1, nic2, nic3], flavor=flavor_id, user_data=_get_dpdk_user_data(),
                               source='volume', source_id=vol, cleanup='function', **host_info)[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
@@ -128,7 +127,7 @@ def test_evacuate_dpdk_and_vhost_vms(add_admin_role_func):
         - Wait for failed host to recover
         - Delete created vms
     """
-    storage, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    hosts = host_helper.get_up_hypervisors()
     if len(hosts) < 2:
         skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 

@@ -5,14 +5,14 @@ import time
 
 from pytest import fixture, skip, mark
 
-from consts.cgcs import EventLogID, HostAvailState
-from keywords import host_helper, system_helper, filesystem_helper, common, storage_helper
+from consts.cgcs import EventLogID, HostAvailState, PartitionStatus
+from keywords import host_helper, system_helper, filesystem_helper, common, storage_helper, partition_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
-DRBDFS = ['backup', 'glance', 'database', 'img-conversions', 'scratch', 'extension']
+DRBDFS = ['backup', 'glance', 'database', 'img-conversions', 'scratch', 'extension', 'gnocchi']
 DRBDFS_CEPH = ['backup', 'database', 'img-conversions', 'scratch', 'extension']
 
 
@@ -316,9 +316,15 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
     drbdfs_val[fs] = int(drbdfs_val[fs]) + 1
     filesystem_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)
 
+    # Appearance of sync alarm is delayed so wait for it to appear and then
+    # clear
+    if not system_helper.is_simplex():
+        system_helper.wait_for_alarm(alarm_id=EventLogID.CON_DRBD_SYNC, timeout=300)
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, timeout=300)
+
 
 # Fails due to product issue
-def _test_modify_drdb():
+def test_modify_drdb_swact_then_reboot():
     """ 
     This test modifies the size of the drbd based filesystems, does and
     immediate swact and then reboots the active controller.
@@ -338,7 +344,7 @@ def _test_modify_drdb():
 
     """
 
-    drbdfs = ['backup', 'glance', 'database', 'img-conversions']
+    drbdfs = DRBDFS
     con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step("Determine the available free space on the system")
@@ -347,7 +353,7 @@ def _test_modify_drdb():
     free_space = out.rstrip()
     free_space = out.lstrip()
     LOG.info("Available free space on the system is: {}".format(free_space))
-    if float(free_space) <= 2:
+    if float(free_space) <= 10:
         skip("Not enough free space to complete test.")
 
     drbdfs_val = {} 
@@ -358,22 +364,20 @@ def _test_modify_drdb():
 
     LOG.info("Current fs values are: {}".format(drbdfs_val))
 
-    LOG.tc_step("Increase the size of the backup and glance filesystem")
+    LOG.tc_step("Increase the size of the backup and img-conversions filesystem")
     partition_name = "backup"
     partition_value = drbdfs_val[partition_name]
-    if float(free_space) > 10:
-        backup_freespace = math.trunc(float(free_space) / 10)
-    else:
-        backup_freespace = 1
+    backup_freespace = math.trunc(float(free_space) / 10)
     new_partition_value = backup_freespace + int(partition_value)
-    cmd = "system controllerfs-modify {}={}".format(partition_name, new_partition_value)
-    rc, out = con_ssh.exec_cmd(cmd)
-    partition_name = "glance"
+    cmd = "controllerfs-modify {}={}".format(partition_name, new_partition_value)
+    cli.system(cmd)
+
+    partition_name = "img-conversions"
     partition_value = drbdfs_val[partition_name]
-    cgcs_free_space = math.trunc(backup_freespace / 2)
-    new_partition_value = backup_freespace + int(partition_value)
-    cmd = "system controllerfs-modify {}={}".format(partition_name, new_partition_value)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
+    cgcs_freespace = math.trunc(backup_freespace / 2)
+    new_partition_value = cgcs_freespace + int(partition_value)
+    cmd = "controllerfs-modify {}={}".format(partition_name, new_partition_value)
+    cli.system(cmd)
 
     hosts = system_helper.get_controllers()
     for host in hosts:
@@ -387,68 +391,90 @@ def _test_modify_drdb():
     act_cont = system_helper.get_active_controller_name()
     host_helper.reboot_hosts(act_cont)
 
+    time.sleep(5)
 
-@mark.usefixtures("lvm_precheck")
-def _test_increase_cinder():
+    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.HOST_RECOVERY_IN_PROGRESS,
+                                          entity_id="host={}".format(act_cont),
+                                          timeout=600)
+
+
+def test_increase_cinder():
     """
-    Increase the size of the cinder filesystem.  Note, host reinstall is no
-    longer required.
-
-    This test does not apply to AIO-SX systems since cinder will default to max
-    size.  This also doesn't apply to storage systems since cinder is stored
-    in the rbd backend.
-
-    LEAVE DISABLED until in-service cinder feature is submitted.
+    Increase the size of the cinder filesystem.
 
     Test steps:
     1.  Query the size of cinder
     2.  Determine the available space on the disk hosting cinder
     3.  Increase the size of the cinder filesystem
-    4.  Wait for config out-of-date to raise and clear
     5.  Check cinder to see if the filesystem is increased
 
     Enhancement:
     1.  Check on the physical filesystem rather than depending on TiS reporting
     """
 
-    table_ = table_parser.table(cli.system("host-disk-list controller-0 --nowrap"))
-    cont0_dev_node = table_parser.get_values(table_, "device_node", **{"device_path": cont0_devpath})
-    cont0_total_gib = table_parser.get_values(table_, "size_gib", **{"device_path": cont0_devpath})
-    cont0_avail_gib = table_parser.get_values(table_, "available_gib", **{"device_path": cont0_devpath})
-
-    if cont0_total_gib[0] == cont0_avail_gib[0]:
-        skip("Insufficient disk space to execute test")
-
-    LOG.info("The cinder device node for controller-0 is: {}".format(cont0_dev_node))
-    LOG.info("Total disk space in MiB is: {}".format(cont0_total_gib[0]))
-    LOG.info("Available free space in MiB is: {}".format(cont0_avail_gib[0]))
-
-    cont0_total_gib = math.trunc(int(cont0_total_gib[0]))
-    cont0_avail_gib = math.trunc(int(cont0_avail_gib[0]))
-    LOG.info("Total disk space in GiB is: {}".format(cont0_total_gib))
-    LOG.info("Available free space in GiB is: {}".format(cont0_avail_gib))
-
-    LOG.tc_step("Increase the size of the cinder filesystem")
-    new_cinder_val = math.trunc(int(cont0_avail_gib) / 10) + int(cinder_gib)
-    cmd = "system controllerfs-modify cinder={}".format(new_cinder_val)
-    rc, out = con_ssh.exec_cmd(cmd)
-
-    LOG.tc_step("Wait for config out-of-date alarms to raise")
+    active, standby = system_helper.get_active_standby_controllers()
     hosts = system_helper.get_controllers()
-    for host in hosts:
-        system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                     entity_id="host={}".format(host))
+    if len(hosts) > 1:
+        hosts = [standby, active]
+    else:
+        hosts = [active]
 
-    LOG.tc_step("Wait for config out-of-date alarms to clear")
-    hosts = system_helper.get_controllers()
-    for host in hosts:
-        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                          entity_id="host={}".format(host))
+    LOG.tc_step("Determine location of cinder")
+    table_ = table_parser.table(cli.system("host-pv-list {} --nowrap".format(hosts[0])))
+    pv_type = table_parser.get_values(table_, "pv_type", **{"lvm_vg_name": "cinder-volumes"})
+    if not pv_type:
+        skip("Cinder disk or partition is not present in lab")
+    elif pv_type == "disk":
+        skip("Code not present for this scenario")
+    else:
+        for host in hosts:
+            print("This is hosts: {}".format(hosts))
+            if host == active and len(hosts) > 1:
+                host_helper.swact_host()
+            LOG.tc_step("Check if disk hosting the partition has space available for resize")
+            table_ = table_parser.table(cli.system("host-pv-list {} --nowrap".format(host)))
+            device_node = table_parser.get_values(table_, "disk_or_part_device_node", **{"lvm_vg_name": "cinder-volumes"})[0]
+            device_path = table_parser.get_values(table_, 'disk_or_part_device_path', **{"lvm_vg_name": "cinder-volumes"})[0]
+            if "nvme" in device_node:
+                device_node = re.sub(r"p\d+$", "", device_node)
+            else:
+                device_node = re.sub(r"\d+$", "", device_node)
+            table_ = table_parser.table(cli.system("host-disk-show {} {}".format(host, device_node)))
+            available_gib = table_parser.get_value_two_col_table(table_, 'available_gib')
+            disk_uuid = table_parser.get_value_two_col_table(table_, 'uuid')
+            LOG.info("Disk {} has {} available".format(device_node, available_gib))
+            if float(available_gib) < 10:
+                skip("Insufficient disk space available for test")
 
-    LOG.tc_step("Validate cinder size is increased")
-    cinder_gib2 = storage_helper.get_storage_backend_show_vals(backend='lvm', fields='cinder_gib')
-    LOG.info("cinder is currently {}".format(cinder_gib2))
-    assert int(cinder_gib2) == int(new_cinder_val), "Cinder size did not increase"
+            LOG.tc_step("Modify the cinder partition to a larger size for host {}".format(host))
+            table_ = table_parser.table(cli.system("host-disk-partition-show {} {}".format(host, device_path)))
+            partition_uuid = table_parser.get_value_two_col_table(table_, "uuid")
+            partition_size_mib = table_parser.get_value_two_col_table(table_, "size_mib")
+            partition_size_gib = float(partition_size_mib) / 1024
+            LOG.info("Current partition size is {}".format(partition_size_gib))
+            final_status = [PartitionStatus.READY, PartitionStatus.IN_USE]
+            partition_helper.modify_partition(host, partition_uuid, str(int(partition_size_gib) + 10), final_status=final_status)
+            system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                              entity_id="host={}".format(host))
+            system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC,
+                                              timeout=300)
+
+    # Need to swact again for cinder-volumes to be updated on both controllers
+    if len(hosts) > 1:
+        host_helper.swact_host()
+
+    LOG.tc_step("Confirm partition size of cinder is increased")
+    host_helper.wait_for_hosts_ready(hosts)
+    table_ = table_parser.table(cli.system("host-disk-partition-show {} {}".format(hosts[0], device_path)))
+    partition_uuid = table_parser.get_value_two_col_table(table_, "uuid")
+    partition_size_mib = table_parser.get_value_two_col_table(table_, "size_mib")
+    new_partition_size_gib = float(partition_size_mib) / 1024
+    LOG.info("Partition size was {} and is now {}".format(partition_size_gib, new_partition_size_gib))
+    assert new_partition_size_gib > partition_size_gib, "Partition size did not increase"
+
+    LOG.tc_step("Reboot active controller")
+    active, standby = system_helper.get_active_standby_controllers()
+    host_helper.reboot_hosts(active)
 
 
 @mark.usefixtures("freespace_check")

@@ -525,14 +525,14 @@ def _test_cold_migrate_vms_with_large_volume_stress(image_id, backing, vol_size)
     if backing == 'image':
         backing = 'local_image'
 
-    flav_id = nova_helper.get_flavor_id(name=backing, strict=False)
+    flav_id = nova_helper.get_flavor(name=backing, strict=False)
     if not flav_id:
-        flav_id = nova_helper.create_flavor(name=backing, storage_backing=backing, check_storage_backing=False)[1]
+        flav_id = nova_helper.create_flavor(name=backing, storage_backing=backing)[1]
 
     while time.time() < end_time:
         i += 1
         LOG.tc_step("Iteration number: {}".format(i))
-        hosts = host_helper.get_hosts_in_storage_aggregate(backing)
+        hosts = host_helper.get_hosts_in_storage_backing(backing)
         vm_host = random.choice(hosts)
 
         if vol_size == 'small':
@@ -628,9 +628,9 @@ def _test_4911_other_stress_tests(action, backing, image, size):
         backing = 'local_image'
     i = 0
 
-    flav_id = nova_helper.get_flavor_id(name=backing, strict=False)
+    flav_id = nova_helper.get_flavor(name=backing, strict=False)
     if not flav_id:
-        flav_id = nova_helper.create_flavor(name=backing, storage_backing=backing, check_storage_backing=False)[1]
+        flav_id = nova_helper.create_flavor(name=backing, storage_backing=backing)[1]
 
     while time.time() < end_time:
         i += 1
@@ -665,7 +665,7 @@ def _test_4911_other_stress_tests(action, backing, image, size):
             vm_helper.delete_vms(vm_id, stop_first=False)
 
         elif action == 'livemigrate':
-            vm_hosts = host_helper.get_hosts_in_storage_aggregate(backing)
+            vm_hosts = host_helper.get_hosts_in_storage_backing(backing)
             vm_host = random.choice(vm_hosts)
 
             if size == 'small':
@@ -693,7 +693,7 @@ def _test_4911_other_stress_tests(action, backing, image, size):
 
 
             for j in range(2):
-                vm_hosts = host_helper.get_hosts_in_storage_aggregate(backing)
+                vm_hosts = host_helper.get_hosts_in_storage_backing(backing)
                 vm_hosts.remove(nova_helper.get_vm_host(vm_1))
                 vm_host = random.choice(vm_hosts)
                 LOG.info("\n----------------- Live migration iteration: {}.{}".format(i, j + 1))

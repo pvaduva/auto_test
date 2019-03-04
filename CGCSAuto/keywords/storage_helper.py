@@ -9,7 +9,10 @@ import time
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from consts.cgcs import EventLogID, BackendState, BackendTask, MULTI_REGION_MAP
+from consts.timeout import HostTimeout
+
 from keywords import system_helper, host_helper, keystone_helper
+
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient, get_cli_client
 from utils.tis_log import LOG
@@ -63,6 +66,8 @@ def get_num_osds(con_ssh=None):
 
     Returns (numeric): Return the number of OSDs on the system,
     """
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
 
     cmd = 'ceph -s'
 
@@ -507,8 +512,10 @@ def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_inte
 
 
 def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.get('admin')):
-    # valid_backends = ['ceph-store', 'lvm-store', 'file-store']
-    if 'ceph' in backend:
+    # valid_backends = ['ceph-store', 'lvm-store', 'file-store', 'ceph-external']
+    if 'external' in backend:
+        backend = 'ceph-external'
+    elif 'ceph' in backend:
         backend = 'ceph-store'
     elif 'lvm' in backend:
         backend = 'lvm-store'
@@ -694,6 +701,132 @@ def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ce
         return rc, output
 
 
+def add_ceph_mon(host, ceph_mon_gib='20', ceph_mon_dev=None, con_ssh=None, fail_ok=False):
+    """
+
+    Args:
+        host:
+        ceph_mon_gib:
+        ceph_mon_dev:
+        con_ssh:
+        fail_ok:
+
+    Returns:
+
+    """
+
+    valid_ceph_mon_hosts = ['controller-0', 'controller-1', 'storage-0', 'compute-0']
+    if host not in valid_ceph_mon_hosts:
+        msg = "Invalid host {} specified. Valid choices are {}".format(host, valid_ceph_mon_hosts)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.CLIRejected(msg)
+
+    if not con_ssh:
+        con_ssh =  ControllerClient.get_active_controller()
+
+    existing_ceph_mons = get_ceph_mon_values(con_ssh=con_ssh)
+    if host in existing_ceph_mons:
+        state = get_ceph_mon_state(host, con_ssh=con_ssh)
+        LOG.warning("Host {} is already added as ceph-mon and is in state: {}".format(host, state))
+        if state == 'configuring':
+            wait_for_ceph_mon_configured(host, con_ssh=con_ssh, fail_ok=True)
+            state = get_ceph_mon_state(host, con_ssh=con_ssh)
+        if state == 'configured' or state == 'configuring':
+            return 0, None
+        else:
+            msg = "The existing ceph-mon is in state {}".format(state)
+            if fail_ok:
+                return 1, msg
+            else:
+                raise exceptions.HostError(msg)
+
+    if not host_helper.is_host_locked(host, con_ssh=con_ssh):
+        rc, output =  host_helper.lock_host(host, con_ssh=con_ssh)
+        if rc != 0:
+            msg = "Cannot add ceph-mon to host {} because the host fail to lock: {}".format(output)
+            if fail_ok:
+                return rc, msg
+            else:
+                raise exceptions.HostError(msg)
+
+    cmd = 'ceph-mon-add'.format(host)
+
+    rc, output = cli.system(cmd, host, ssh_client=con_ssh, rtn_list=True, fail_ok=fail_ok)
+    if rc != 0:
+        msg = "CLI command {} failed to add ceph mon in host {}: {}".format(cmd, host, output)
+        LOG.warning(msg)
+        if fail_ok:
+            return rc, msg
+        else:
+            raise exceptions.StorageError(msg)
+    rc, state, output = wait_for_ceph_mon_configured(host, con_ssh=con_ssh, fail_ok=True)
+    if state == 'configured':
+        return 0, None
+    elif state == 'configuring':
+        return 1, "The ceph mon in host {} is in state {}".format(host, state)
+    else:
+        return 2, "The ceph mon in host {} failed: state = {}; msg = {}".format(host, state, output)
+
+
+def wait_for_ceph_mon_configured(host, state=None, timeout=HostTimeout.CEPH_MON_ADD_CONFIG_TIMEOUT, con_ssh=None,
+                                 fail_ok=False,  check_interval=5):
+
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        state = get_ceph_mon_state(host,  con_ssh=con_ssh)
+        if state == 'configured':
+           return True, state, None
+
+        time.sleep(check_interval)
+
+    msg = "The added ceph-mon on host {} did not reach configured state within {} seconds. Last state = {}"\
+        .format(host, timeout, state)
+    if fail_ok:
+        LOG.warning(msg)
+        return False, state, msg
+    else:
+        raise exceptions.StorageError(msg)
+
+
+def get_ceph_mon_values(rtn_val='hostname', hostname=None, uuid=None, state=None, task=None, con_ssh=None):
+    """
+
+    Args:
+        rtn_val:
+        hostname:
+        uuid:
+        state:
+        task:
+        con_ssh:
+
+    Returns:
+
+    """
+    ceph_mons = []
+    table_ = table_parser.table(cli.system('ceph-mon-list', ssh_client=con_ssh), combine_multiline_entry=True)
+
+    filters = {}
+    if table_:
+        if hostname:
+            filters['hostname'] = hostname
+        if uuid:
+            filters['uuid'] = uuid
+        if state:
+            filters['state'] = state
+        if task:
+            filters['task'] = task
+
+        table_ = table_parser.filter_table(table_, **filters)
+        ceph_mons = table_parser.get_column(table_, rtn_val)
+    return ceph_mons
+
+
+def get_ceph_mon_state(hostname, con_ssh=None):
+    return get_ceph_mon_values(rtn_val='state', hostname=hostname, con_ssh=con_ssh)[0]
+
+
 def get_controllerfs_value(fs_name, rtn_val='Size in GiB', con_ssh=None, auth_info=Tenant.get('admin'), **filters):
     table_ = table_parser.table(cli.system('controllerfs-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
 
@@ -866,3 +999,138 @@ def modify_swift(enable=True, check_first=True, fail_ok=False, apply=True, con_s
         msg = 'Swift is {}d successfully'.format(extra_str)
 
     return code, msg
+
+
+def get_qemu_image_info(image_filename, ssh_client, fail_ok=False):
+    """
+    Provides information about the disk image filename, like file format, virtual size and disk size
+    Args:
+        image_filename (str); the disk image file name
+        ssh_client:
+        fail_ok:
+
+    Returns:
+        0, dict { image: <image name>, format: <format>, virtual size: <size>, disk size: <size}
+        1, error msg
+
+    """
+    img_info = {}
+    cmd = 'qemu-img info {}'.format(image_filename)
+    rc, output = ssh_client.exec_cmd(cmd, fail_ok=True)
+    if rc == 0:
+        lines = output.split('\n')
+        for line in lines:
+            key = line.split(':')[0].strip()
+            value = line.split(':')[1].strip()
+            img_info[key] = value
+
+        return 0, img_info
+    else:
+        msg = "qemu-img info failed: {}".format(output)
+        LOG.warning(msg)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.CommonError(msg)
+
+
+def convert_image_format(src_image_filename, dest_image_filename, dest_format, ssh_client, source_format=None,
+                         fail_ok=False):
+    """
+    Converts the src_image_filename to  dest_image_filename using format dest_format
+    Args:
+       src_image_filename (str):  the source disk image filename to be converted
+       dest_image_filename (str): the destination disk image filename
+       dest_format (str): image format to convert to. Valid formats are: qcow2, qed, raw, vdi, vpc, vmdk
+       source_format(str): optional - source image file format
+       ssh_client:
+       fail_ok:
+
+    Returns:
+
+    """
+
+    args_ = ''
+    if source_format:
+        args_ = ' -f {}'.format(source_format)
+
+    cmd = 'qemu-img convert {} {} {}'.format(args_, src_image_filename, dest_image_filename)
+    rc, output = ssh_client.exec_cmd(cmd, fail_ok=True)
+    if rc == 0:
+        return 0, "Disk image {} converted to {} format successfully".format(dest_image_filename, dest_format)
+    else:
+        msg = "qemu-img convert failed: {}".format(output)
+        LOG.warning(msg)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.CommonError(msg)
+
+
+def get_storage_tier_values(cluster, rtn_val='uuid', con_ssh=None, auth_info=Tenant.get('admin'), **filters):
+    """
+
+    Args:
+        cluster:
+        rtn_val:
+        con_ssh:
+        auth_info:
+        **filters:
+
+    Returns:
+
+    """
+
+    table_ = table_parser.table(cli.system('storage-tier-list {}'.format(cluster), ssh_client=con_ssh),
+                                combine_multiline_entry=True)
+    if table_:
+        if filters:
+            table_ = table_parser.filter_table(table_, **filters)
+        values = table_parser.get_column(table_, rtn_val)
+        return values
+    else:
+        return []
+
+
+def add_storage_ceph_osd(host, disk_uuid, journal_location=None, journal_size=None, function=None, tier_uuid=None,
+                         auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
+    """
+
+    Args:
+        host:
+        disk_uuid:
+        journal_location:
+        journal_size:
+        function:
+        tier_uuid:
+        auth_info:
+        con_ssh:
+        fail_ok:
+
+    Returns:
+
+    """
+    if not host or not disk_uuid:
+        raise ValueError("host name and disk uuid must be specified")
+
+    cmd = "host-stor-add"
+
+    args = ""
+    if journal_location:
+        args += " --journal-location {}".format(journal_location)
+    if journal_size:
+        args += " --journal-size {}".format(journal_size)
+    if tier_uuid:
+        args += " --tier-uuid {}".format(tier_uuid)
+
+    cmd += " {} {}{} {}".format(args, host, function if function else '', disk_uuid)
+    rc, output = cli.system(cmd, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+    if rc != 0:
+        msg = "Fail to add ceph osd to host {} disk {}: {}".format(host, disk_uuid)
+        LOG.warning(msg)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.StorageError(msg)
+
+    return 0, None

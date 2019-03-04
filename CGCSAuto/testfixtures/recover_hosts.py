@@ -1,4 +1,3 @@
-import time
 from pytest import fixture
 
 from utils import table_parser, cli
@@ -57,6 +56,7 @@ class HostsToRecover():
 
         Args:
             hostnames (str|list):
+            scope
 
         """
         if scope is None:

@@ -9,11 +9,12 @@ class PageObject(basewebobject.BaseWebObject):
     # BASE_URL = 'http://' + ProjVar.get_var("LAB")['floating ip']
     PARTIAL_URL = None
 
-    def __init__(self, driver=None):
+    def __init__(self, driver=None, port=None):
         if not driver:
             driver = HorizonDriver.get_driver()
         super(PageObject, self).__init__(driver)
         self._page_title = None
+        self.port = port
 
     @property
     def page_title(self):
@@ -25,7 +26,11 @@ class PageObject(basewebobject.BaseWebObject):
         prefix = 'http'
         if CliAuth.get_var('HTTPS'):
             prefix = 'https'
-        base_url = '{}://{}'.format(prefix, ProjVar.get_var("LAB")['floating ip'])    # horizon url matt
+        oam_ip = ProjVar.get_var("LAB")['floating ip']
+
+        if not self.port:
+            self.port = 8080 if prefix == 'http' else 8443
+        base_url = '{}://{}:{}'.format(prefix, oam_ip, self.port)    # horizon url matt
         if not base_url.endswith('/'):
             base_url += '/'
         return base_url

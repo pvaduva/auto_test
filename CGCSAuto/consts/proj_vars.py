@@ -1,6 +1,4 @@
-import os
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
-from consts.build_server import YOW_CGTS4_LX
+from consts.filepaths import WRSROOT_HOME
 
 
 class ProjVar:
@@ -34,7 +32,11 @@ class ProjVar:
                   'NO_TEARDOWN': False,
                   'VSWITCH_TYPE': None,
                   'IS_DC': False,
-                  'BUILD_INFO': None
+                  'PRIMARY_SUBCLOUD': None,
+                  'BUILD_INFO': None,
+                  'TEMP_DIR': '',
+                  'INSTANCE_BACKING': [],
+                  'OPENSTACK_DEPLOYED': None,
                   }
 
     @classmethod
@@ -90,42 +92,73 @@ class InstallVars:
     __install_steps = {}
 
     @classmethod
-    def set_install_vars(cls, lab, resume, skip_labsetup,
-                         build_server=None,
-                         host_build_dir=None,
-                         guest_image=None,
-                         files_server=None,
-                         hosts_bulk_add=None,
-                         boot_if_settings=None,
-                         tis_config=None,
-                         lab_setup=None,
-                         heat_templates=None,
-                         license_path=None,
-                         out_put_dir=None,
-                         boot_server=None,
-                         controller0_ceph_mon_device=None,
-                         controller1_ceph_mon_device=None,
-                         ceph_mon_gib=None):
-
-        __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
+    def set_install_vars(cls, lab,
+                         build_server,
+                         host_build_dir,
+                         guest_image,
+                         guest_server,
+                         files_server,
+                         hosts_bulk_add,
+                         boot_if_settings,
+                         tis_config,
+                         lab_setup,
+                         heat_templates,
+                         license_path,
+                         boot_server,
+                         iso_path,
+                         iso_server,
+                         controller0_ceph_mon_device,
+                         controller1_ceph_mon_device,
+                         boot_type='feed',
+                         ceph_mon_gib=None,
+                         low_latency=False,
+                         security="standard",
+                         stop=None,
+                         patch_server=None,
+                         patch_dir=None,
+                         multi_region=False,
+                         dist_cloud=False,
+                         ovs=False,
+                         kubernetes=False,
+                         resume=False,
+                         wipedisk=False,
+                         skips=None,
+                         dc_float_ip=None,
+                         install_subcloud=None,
+                         no_openstack_install=False,
+                         ipv6_config=False,
+                         helm_chart_path=None):
 
         cls.__var_dict = {
             'LAB': lab,
             'LAB_NAME': lab['short_name'],
             'RESUME': resume,
-            'SKIP_LABSETUP': skip_labsetup,
-
+            'STOP': stop,
+            'SKIP': skips if skips is not None else [],
+            'WIPEDISK': wipedisk,
+            'MULTI_REGION': multi_region,
+            'DISTRIBUTED_CLOUD': dist_cloud,
+            'OVS': ovs,
+            "KUBERNETES": kubernetes,
+            "NO_OPENSTACK_INSTALL": no_openstack_install,
+            "IPV6_CONFIG": ipv6_config,
             # TIS BUILD info
-            'BUILD_SERVER': __build_server,
-            'TIS_BUILD_DIR': host_build_dir if host_build_dir else BuildServerPath.DEFAULT_HOST_BUILD_PATH,
+            'BUILD_SERVER': build_server,
+            'TIS_BUILD_DIR': host_build_dir,
 
             # Files paths
-            'FILES_SERVER': files_server if files_server else __build_server,
-            'DEFAULT_LAB_FILES_DIR': "{}/rt/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab/yow/{}".format(
-                    host_build_dir, lab['name']),
+            'FILES_SERVER': files_server,
+            'ISO_PATH': iso_path,
+            'ISO_HOST': iso_server,
+            'PATCH_DIR': patch_dir,
+            'PATCH_SERVER': patch_server,
             # Default tuxlab for boot
-            'BOOT_SERVER':  boot_server if boot_server else 'yow-tuxlab2',
-
+            'BOOT_SERVER':  boot_server,
+            'BOOT_TYPE': boot_type,
+            'LOW_LATENCY': low_latency,
+            'DC_FLOAT_IP': dc_float_ip,
+            'INSTALL_SUBCLOUD': install_subcloud,
+            'SECURITY': security,
             # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
             # Unspecified. This needs to be parsed/converted when rsync/scp files.
             # Lab specific
@@ -133,12 +166,13 @@ class InstallVars:
             'HOSTS_BULK_ADD': hosts_bulk_add,
             'BOOT_IF_SETTINGS': boot_if_settings,
             'LAB_SETUP_PATH': lab_setup,
+            'HELM_CHART_PATH': helm_chart_path,
 
             # Generic
-            'LICENSE': license_path if license_path else BuildServerPath.DEFAULT_LICENSE_PATH,
-            'GUEST_IMAGE': guest_image if guest_image else BuildServerPath.DEFAULT_GUEST_IMAGE_PATH,
-            'HEAT_TEMPLATES': heat_templates if heat_templates else BuildServerPath.HEAT_TEMPLATES,
-            'OUT_PUT_DIR': out_put_dir,
+            'LICENSE': license_path,
+            'GUEST_IMAGE': guest_image,
+            'GUEST_SERVER': guest_server,
+            'HEAT_TEMPLATES': heat_templates,
             'BUILD_ID': None,
             'CONTROLLER0_CEPH_MON_DEVICE': controller0_ceph_mon_device,
             'CONTROLLER1_CEPH_MON_DEVICE': controller1_ceph_mon_device,
@@ -182,35 +216,23 @@ class UpgradeVars:
     __upgrade_steps = {}
 
     @classmethod
-    def set_upgrade_vars(cls, build_server=None,
-                         tis_build_dir=None,
-                         upgrade_version=None,
-                         upgrade_license_path=None,
-                         patch_dir=None,
+    def set_upgrade_vars(cls, build_server,
+                         tis_build_dir,
+                         upgrade_version,
+                         patch_dir,
+                         upgrade_license_path,
                          orchestration_after=None,
                          storage_apply_strategy=None,
                          compute_apply_strategy=None,
                          max_parallel_computes=None,
                          alarm_restrictions=None):
 
-        __build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
-
         cls.__var_dict = {
-
             'UPGRADE_VERSION': upgrade_version,
             # TIS BUILD info
-            'BUILD_SERVER': __build_server,
-            'TIS_BUILD_DIR':
-                tis_build_dir if tis_build_dir
-                else (BuildServerPath.LATEST_HOST_BUILD_PATHS[upgrade_version]
-                      if upgrade_version in BuildServerPath.LATEST_HOST_BUILD_PATHS
-                      else BuildServerPath.DEFAULT_HOST_BUILD_PATH),
-
-            'PATCH_DIR':
-                patch_dir if patch_dir
-                else (BuildServerPath.PATCH_DIR_PATHS[upgrade_version]
-                      if upgrade_version in BuildServerPath.PATCH_DIR_PATHS else None),
-
+            'BUILD_SERVER': build_server,
+            'TIS_BUILD_DIR': tis_build_dir,
+            'PATCH_DIR': patch_dir,
             # Generic
             'UPGRADE_LICENSE': upgrade_license_path,
             # Orchestration -  the orchestration starting point after certain number of nodes upgraded normally
@@ -262,24 +284,18 @@ class UpgradeVars:
 
 class PatchingVars:
     __var_dict = {
-        'DEF_PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
-        #'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_5.0_Test_Patch_Build',
-        'DEF_PATCH_BASE_DIR': '/localdisk/loadbuild/jenkins/CGCS_6.0_Test_Patch_Build',
-        'DEF_PATCH_BUILD_BASE_DIR': '/localdisk/loadbuild/jenkins/',
-        'DEF_PATCH_IN_LAB_BASE_DIR': os.path.join(WRSROOT_HOME, 'patch-files'),
+        # Common patch vars
         'PATCH_DIR': None,
-        'PATCH_BUILD_SERVER': BuildServerPath.DEFAULT_BUILD_SERVER,
-        'USERNAME': 'svc-cgcsauto',  # getpass.getuser()
-        'PASSWORD': ')OKM0okm',  # getpass.getpass()
-        'PATCH_BASE_DIR': None,
-        # Patch orchestration
+        'PATCH_BUILD_SERVER': None,
+
+        # Formal release patch vars
+        'PATCH_BASE_DIR': '/localdisk/loadbuild/jenkins/TC_18.03_Patch_Formal_Build',
         'CONTROLLER_APPLY_TYPE': "serial",
         'STORAGE_APPLY_TYPE': "serial",
         'COMPUTE_APPLY_TYPE': "serial",
         'MAX_PARALLEL_COMPUTES': 2,
         'INSTANCE_ACTION': "stop-start",
         'ALARM_RESTRICTIONS': "strict",
-
     }
 
     @classmethod
@@ -295,15 +311,10 @@ class PatchingVars:
         return cls.__var_dict[var_name]
 
     @classmethod
-    def set_patching_var(cls, **kwargs):
+    def set_patching_var(cls, patch_dir=None, **kwargs):
+        cls.__var_dict.update(patch_dir=patch_dir)
         kwargs = {k.upper(): v for k, v in kwargs.items()}
         cls.__var_dict.update(**kwargs)
-
-
-class BackupRestore:
-    USB_MOUNT_POINT = '/media/wrsroot'
-    USB_BACKUP_PATH = '{}/backups'.format(USB_MOUNT_POINT)
-    LOCAL_BACKUP_PATH = '/sandbox/backups'
 
 
 class RestoreVars:
@@ -311,35 +322,20 @@ class RestoreVars:
     __var_dict = {}
 
     @classmethod
-    def set_restore_vars(cls, backup_src=None,
-                         build_server=None,
-                         backup_src_path=None,
-                         backup_build_id=None,
-                         backup_builds_dir=None,
-                         cinder_backup=False):
-
-        if backup_src.lower() == 'usb':
-            if backup_src_path is None or \
-                    (backup_src_path is not None and BackupRestore.USB_MOUNT_POINT not in backup_src_path):
-                backup_src_path = BackupRestore.USB_BACKUP_PATH
-
-        elif backup_src.lower() == 'local':
-            if backup_src_path is None:
-                backup_src_path = BackupRestore.LOCAL_BACKUP_PATH
-
+    def set_restore_vars(cls, backup_src='local', **kwargs):
+        kwargs = kwargs if kwargs else {}
         cls.__var_dict = {
-            'BACKUP_SRC': backup_src if backup_src else "USB",
-            'BACKUP_SRC_PATH': backup_src_path,
-            'BACKUP_BUILD_ID': backup_build_id if backup_build_id else None,
-
-            'BACKUP_BUILDS_DIR': backup_builds_dir if backup_builds_dir
-            else os.path.basename(BuildServerPath.DEFAULT_HOST_BUILDS_DIR),
-            'BACKUP_SRC_SERVER': None,
-            'SKIP_SETUP_FEED': False,
-            'SKIP_REINSTALL': False,
-            'LOW_LATENCY': False,
-            'BUILD_SERVER': build_server,
-            'CINDER_BACKUP': cinder_backup,
+            'BACKUP_SRC': backup_src,
+            'BACKUP_SRC_PATH': kwargs.pop('backup_src_path', ''),
+            'BACKUP_BUILD_ID': kwargs.pop('backup_build_id', None),
+            'BACKUP_BUILDS_DIR': kwargs.pop('backup_builds_dir', None),
+            'BACKUP_SRC_SERVER': kwargs.pop('backup_src_server', None),
+            'SKIP_SETUP_FEED': kwargs.pop('skip_setup_feed', False),
+            'SKIP_REINSTALL': kwargs.pop('skip_reinstall', False),
+            'LOW_LATENCY': kwargs.pop('low_latency', False),
+            'BUILD_SERVER': kwargs.pop('build_server', ''),
+            'CINDER_BACKUP': kwargs.pop('cinder_backup', True),
+            'REINSTALL_STORAGE': kwargs.pop('reinstall_storage', False),
         }
 
     @classmethod
@@ -367,24 +363,16 @@ class BackupVars:
     __var_dict = {}
 
     @classmethod
-    def set_backup_vars(cls, backup_dest=None, backup_dest_path=None, delete_backups=True, dest_labs=None, cinder_backup=False):
-
-        if backup_dest.lower() == 'usb':
-            if backup_dest_path is None or \
-                    (backup_dest_path is not None and BackupRestore.USB_MOUNT_POINT not in backup_dest_path):
-                backup_dest_path = BackupRestore.USB_BACKUP_PATH
-
-        elif backup_dest.lower() == 'local':
-            if backup_dest_path is None:
-                backup_dest_path = BackupRestore.LOCAL_BACKUP_PATH
-
+    def set_backup_vars(cls, backup_dest=None, **kwargs):
+        kwargs = kwargs if kwargs else {}
         cls.__var_dict = {
-            'BACKUP_DEST': backup_dest.lower() if backup_dest else "usb",
-            'BACKUP_DEST_PATH': backup_dest_path,
-            'DELETE_BUCKUPS': delete_backups,
-            'DEST_LABS': dest_labs.split(',') if dest_labs else None,
-            'BACKUP_DEST_SERVER': None,
-            'CINDER_BACKUP': cinder_backup,
+            'BACKUP_DEST': backup_dest,
+            'BACKUP_DEST_PATH': kwargs.pop('backup_dest_path', ''),
+            'DELETE_BUCKUPS': kwargs.pop('delete_backups', True),
+            'DEST_LABS': kwargs.pop('dest_labs', '').split() if kwargs.get('dest_labs', '') else '',
+            'BACKUP_DEST_SERVER': kwargs.pop('backup_dest_server', None),
+            'CINDER_BACKUP': kwargs.pop('cinder_backup', True),
+            'REINSTALL_STORAGE': kwargs.pop('reinstall_storage', False),
         }
 
     @classmethod

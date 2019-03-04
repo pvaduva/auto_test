@@ -193,3 +193,4 @@ class UpgradeComplete:
     START = ' system  upgrade-complete'
     LOG_PATH = '/var/log/sysinv.log'
     END = '.*controllerconfig.upgrades.management .*Finished upgrade complete'
+

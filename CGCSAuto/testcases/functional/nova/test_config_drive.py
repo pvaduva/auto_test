@@ -94,9 +94,9 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
     LOG.info("The vm host is now: {}".format(new_host))
     LOG.tc_step("Check vm files exist on new vm host after migrated")
     with host_helper.ssh_to_host(new_host) as host_ssh:
-        cmd = " ls /etc/nova/instances/{}".format(vm_id)
+        cmd = " ls /var/lib/nova/instances/{}".format(vm_id)
         cmd_output = host_ssh.exec_cmd(cmd)[1]
-        # 'libvirt.xml' is removed from /etc/nova/instances in newton
+        # 'libvirt.xml' is removed from /var/lib/nova/instances in newton
         assert all(x in cmd_output for x in ['console.log', 'disk.config', 'disk.info']),\
             "VM not in host {}".format(new_host)
 

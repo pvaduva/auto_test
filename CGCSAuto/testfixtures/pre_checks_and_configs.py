@@ -4,13 +4,33 @@ import time
 from pytest import fixture, skip
 
 from consts.auth import Tenant
-from consts.cgcs import EventLogID, HostAvailState
+from consts.cgcs import EventLogID, HostAvailState, AppStatus
 from consts.filepaths import HeatTemplate
-from consts.proj_vars import ProjVar
+from consts.proj_vars import ProjVar, PatchingVars
 from consts.reasons import SkipSysType
-from keywords import system_helper, host_helper, keystone_helper, security_helper
+from keywords import system_helper, host_helper, keystone_helper, security_helper, container_helper, common, kube_helper
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+
+
+@fixture(scope='function')
+def check_stx_openstack(request):
+    app_name = 'stx-openstack'
+    if not container_helper.is_stx_openstack_deployed(applied_only=True):
+        skip('stx-openstack application is not applied')
+
+    def wait_for_recover():
+
+        post_status = container_helper.get_apps_values(apps=(app_name,), rtn_dict=False)[0][0]
+        if not post_status == AppStatus.APPLIED:
+            LOG.info("Dump info for unhealthy pods")
+            kube_helper.dump_pods_info()
+
+            if not post_status.endswith('ed'):
+                LOG.fixture_step("Wait for application apply finish")
+                container_helper.wait_for_apps_status(apps=app_name, status=AppStatus.APPLIED, timeout=3600,
+                                                      check_interval=15, fail_ok=False)
+    request.addfinalizer(wait_for_recover)
 
 
 @fixture(scope='session')
@@ -26,12 +46,18 @@ def skip_for_one_proc():
 @fixture(scope='function')
 def skip_for_ovs():
     """
-    Skip test for OVS system, if test name contains avs_pattern
+    Skip test for OVS system, if test name contains certain pattern
     """
     test_name = ProjVar.get_var('TEST_NAME')
-    avs_pattern = 'avp|avr|avs|dpdk'
+    avs_pattern = 'avp|avr|avs|dpdk|e1000'
     if re.search(avs_pattern, test_name) and not system_helper.is_avs():
         skip("Test unsupported by OVS")
+
+
+@fixture(scope='session')
+def no_ovs():
+    if not system_helper.is_avs():
+        skip('Test unsupported by OVS')
 
 
 @fixture(scope='session')
@@ -151,3 +177,21 @@ def heat_files_check():
     heat_dir = HeatTemplate.HEAT_DIR
     if not con_ssh.file_exists(heat_dir):
         skip("HEAT templates directory not found. Expected heat dir: {}".format(heat_dir))
+
+
+@fixture(scope='session')
+def set_test_patch_info():
+
+    build_path = ProjVar.get_var('BUILD_PATH')
+    build_server = ProjVar.get_var('BUILD_SERVER')
+    if not build_path or not build_server:
+        skip('Build path or server not found from /etc/build.info')
+
+    with host_helper.ssh_to_build_server(bld_srv=build_server) as bs_ssh:
+        patch_dir = common.get_symlink(bs_ssh, file_path='{}/test_patches'.format(build_path))
+
+    if not patch_dir:
+        skip("Test patches are not available for {}:{}".format(build_server, build_path))
+
+    PatchingVars.set_patching_var(patch_dir=patch_dir)
+    return build_server, patch_dir

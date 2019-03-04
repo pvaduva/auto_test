@@ -17,9 +17,10 @@ from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, get_cli
 from utils.tis_log import LOG
 
 
-def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None):
+def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None,
+                                          central_region=False):
     if con_ssh is None:
-        con_ssh = get_cli_client()
+        con_ssh = get_cli_client(central_region=central_region)
     if dest_name is None:
         dest_name = source_path.split(sep='/')[-1]
 
@@ -46,7 +47,7 @@ def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None,
 
 def _scp_from_remote_server_to_active_controller(source_server, source_path, dest_dir, dest_name=None,
                                                  source_user=SvcCgcsAuto.USER, source_password=SvcCgcsAuto.PASSWORD,
-                                                 timeout=900, con_ssh=None):
+                                                 timeout=900, con_ssh=None, is_dir=False):
     """
     SCP file or files under a directory from remote server to TiS server
 
@@ -56,6 +57,7 @@ def _scp_from_remote_server_to_active_controller(source_server, source_path, des
         dest_name (str): destination file name if not dir
         timeout (int):
         con_ssh:
+        is_dir
 
     Returns (str|None): destination file/dir path if scp successful else None
 
@@ -63,13 +65,13 @@ def _scp_from_remote_server_to_active_controller(source_server, source_path, des
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    if dest_name is None:
+    if dest_name is None and not is_dir:
         dest_name = source_path.split(sep='/')[-1]
 
     dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
 
     LOG.info('Check if file already exists on TiS')
-    if con_ssh.file_exists(file_path=dest_path):
+    if not is_dir and con_ssh.file_exists(file_path=dest_path):
         LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
         return dest_path
 
@@ -87,24 +89,25 @@ def _scp_from_remote_server_to_active_controller(source_server, source_path, des
         if not nat_ssh.file_exists(nat_dest_path):
             LOG.info("scp file from {} to NatBox: {}".format(nat_name, source_server))
             nat_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
-                                dest_path=nat_dest_path, source_pswd=source_password, timeout=timeout)
+                                dest_path=nat_dest_path, source_pswd=source_password, timeout=timeout, is_dir=is_dir)
 
         LOG.info('scp file from natbox {} to active controller'.format(nat_name))
         dest_user = HostLinuxCreds.get_user()
         dest_pswd = HostLinuxCreds.get_password()
         dest_ip = ProjVar.get_var('LAB').get('floating ip')
         nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
-                              dest_password=dest_pswd, timeout=timeout)
+                              dest_password=dest_pswd, timeout=timeout, is_dir=is_dir)
 
     else:   # if not a VBox lab, scp from remote server directly to TiS server
         LOG.info("scp file(s) from {} to tis".format(source_server))
         con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
-                            dest_path=dest_path, source_pswd=source_password, timeout=timeout)
+                            dest_path=dest_path, source_pswd=source_password, timeout=timeout, is_dir=is_dir)
 
     return dest_path
 
 
-def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None):
+def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None,
+                                              is_dir=False):
     """
     SCP file or files under a directory from test server to TiS server
 
@@ -114,6 +117,7 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
         dest_name (str): destination file name if not dir
         timeout (int):
         con_ssh:
+        is_dir (bool)
 
     Returns (str|None): destination file/dir path if scp successful else None
 
@@ -132,7 +136,8 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
                                                         source_user=source_user,
                                                         source_password=source_password,
                                                         timeout=timeout,
-                                                        con_ssh=con_ssh)
+                                                        con_ssh=con_ssh,
+                                                        is_dir=is_dir)
 
 
 def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=900, is_dir=False,
@@ -469,6 +474,7 @@ def _execute_with_openstack_cli():
 
 def wait_for_val_from_func(expt_val, timeout, check_interval, func, *args, **kwargs):
     end_time = time.time() + timeout
+    current_val = None
     while time.time() < end_time:
         current_val = func(*args, **kwargs)
         if not isinstance(expt_val, list) or isinstance(expt_val, tuple):
@@ -590,37 +596,120 @@ def parse_args(args_dict, repeat_arg=False, vals_sep=' '):
     Returns (str):
 
     """
+    def convert_val_dict(key__, vals_dict, repeat_key):
+        vals_ = []
+        for k, v in vals_dict.items():
+            if ' ' in v:
+                v = '"{}"'.format(v)
+            vals_.append('{}={}'.format(k, v))
+        if repeat_key:
+            args_str = ' ' + ' '.join(['{} {}'.format(key__, v_) for v_ in vals_])
+        else:
+            args_str = ' {} {}'.format(key__, vals_sep.join(vals_))
+        return args_str
+
     args = ''
     for key, val in args_dict.items():
         if val is None:
             continue
 
+        key = key if key.startswith('-') else '--{}'.format(key)
         if isinstance(val, str):
             if ' ' in val:
                 val = '"{}"'.format(val)
-            args += ' --{}={}'.format(key, val)
+            args += ' {}={}'.format(key, val)
         elif isinstance(val, bool):
             if val:
-                args += ' --{}'.format(key)
+                args += ' {}'.format(key)
         elif isinstance(val, (int, float)):
-            args += ' --{}={}'.format(key, val)
+            args += ' {}={}'.format(key, val)
         elif isinstance(val, dict):
-            vals = []
-            for key_, val_ in val.items():
-                if ' ' in val_:
-                    val_ = '"{}"'.format(val_)
-                vals.append('{}={}'.format(key_, val_))
-            if repeat_arg:
-                args += ' ' + ' '.join(['--{} {}'.format(key, val_) for val_ in vals])
-            else:
-                args += ' --{} {}'.format(key, vals_sep.join(vals))
+            args += convert_val_dict(key__=key, vals_dict=val, repeat_key=repeat_arg)
         elif isinstance(val, (list, tuple)):
             if repeat_arg:
                 for val_ in val:
-                    args += ' --{}={}'.format(key, val_)
+                    if isinstance(val_, dict):
+                        args += convert_val_dict(key__=key, vals_dict=val_, repeat_key=False)
+                    else:
+                        args += ' {}={}'.format(key, val_)
             else:
-                args += ' --{}={}'.format(key, vals_sep.join(val))
+                args += ' {}={}'.format(key, vals_sep.join(val))
         else:
             raise ValueError("Unrecognized value type. Key: {}; value: {}".format(key, val))
 
     return args
+
+
+def get_symlink(ssh_client, file_path):
+    code, output = ssh_client.exec_cmd('ls -l {} | grep --color=never ""'.format(file_path))
+    if code != 0:
+        LOG.warning('{} not found!'.format(file_path))
+        return None
+
+    res = re.findall('> (.*)', output)
+    if not res:
+        LOG.warning('No symlink found for {}'.format(file_path))
+        return None
+
+    link = res[0].strip()
+    return link
+
+
+def is_file(filename, ssh_client):
+    code = ssh_client.exec_cmd('test -f {}'.format(filename), fail_ok=True)[0]
+    return 0 == code
+
+
+def is_dir(dirname, ssh_client):
+    code = ssh_client.exec_cmd('test -d {}'.format(dirname), fail_ok=True)[0]
+    return 0 == code
+
+
+def lab_time_now(con_ssh=None, date_format='%Y-%m-%dT%H:%M:%S'):
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
+
+    date_cmd_format = date_format + '.%N'
+    timestamp = get_date_in_format(ssh_client=con_ssh, date_format=date_cmd_format)
+    with_milliseconds = timestamp.split('.')[0] + '.{}'.format(int(int(timestamp.split('.')[1]) / 1000))
+    format1 = date_format + '.%f'
+    parsed = datetime.strptime(with_milliseconds, format1)
+
+    return with_milliseconds.split('.')[0], parsed
+
+
+def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=True, top_down=False, sudo=False,
+               start_time=None):
+
+    prefix_space = False
+    if 'bash' in file_path:
+        ssh_client.exec_cmd('HISTCONTROL=ignorespace')
+        prefix_space = True
+        sudo = True
+
+    # Reformat the timestamp to add or remove T based on the actual format in specified log
+    if start_time:
+        tmp_cmd = """zgrep -m 1 "" {} | awk '{{print $1}}'""".format(file_path)
+        if sudo:
+            tmp_time = ssh_client.exec_sudo_cmd(tmp_cmd, fail_ok=False, prefix_space=prefix_space)[1]
+        else:
+            tmp_time = ssh_client.exec_cmd(tmp_cmd, fail_ok=False, prefix_space=prefix_space)[1]
+
+        if re.search('\dT\d', tmp_time):
+            start_time = start_time.strip().replace(' ', 'T')
+        else:
+            start_time = start_time.strip().replace('T', ' ')
+
+    # Compose the zgrep cmd to search the log
+    init_filter = """| awk '$0 > "{}"'""".format(start_time) if start_time else ''
+    count = '' if get_all else '|grep --color=never -m 1 ""'
+    extended_regex = '-E ' if extended_regex else ''
+    base_cmd = '' if top_down else '|tac'
+    cmd = 'zgrep --color=never {}"{}" {}|grep -v grep{}{}{}'.format(extended_regex, pattern, file_path, init_filter,
+                                                                    base_cmd, count)
+    if sudo:
+        out = ssh_client.exec_sudo_cmd(cmd, fail_ok=True, prefix_space=prefix_space)[1]
+    else:
+        out = ssh_client.exec_cmd(cmd, fail_ok=True, prefix_space=prefix_space)[1]
+
+    return out

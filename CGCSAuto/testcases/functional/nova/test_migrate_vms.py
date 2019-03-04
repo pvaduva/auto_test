@@ -1,16 +1,12 @@
-import time
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 
 from consts.cgcs import FlavorSpec, EventLogID
-from consts.proj_vars import ProjVar
-from consts.auth import Tenant
 from consts.kpi_vars import LiveMigrate
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
-from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper, \
-    ixia_helper
+from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -54,8 +50,6 @@ def touch_files_under_vm_disks(vm_id, ephemeral=0, swap=0, vm_type='volume', dis
     ('local_image', 0, 0, 'dedicated', 1, 'image_with_vol', True),
     ('local_image', 1, 512, 'dedicated', 2, 'image_with_vol', True),
     ('local_image', 1, 512, 'dedicated', 1, 'image_with_vol', False),
-    mark.p1(('local_lvm', 0, 0, None, 1, 'volume', False)),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'volume', False)),
     mark.p1(('remote', 0, 0, None, 2, 'volume', False)),
     mark.p1(('remote', 1, 0, 'dedicated', 1, 'volume', False)),
     mark.domain_sanity(('remote', 1, 512, None, 1, 'image', False)),
@@ -115,17 +109,6 @@ def test_live_migrate_vm_positive(hosts_per_stor_backing, storage_backing, ephem
     # mark.p1(('local_image', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),     # newton change
     # mark.p1(('local_image', 0, 0, 'shared', 2, 'image', False, ??)),      obsolete in Mitaka
     # mark.p1(('local_image', 1, 1, 'dedicated', 1, 'image', False, ??)),   obsolete in Mitaka
-    mark.p1(('local_lvm', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 1, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 0, 512, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 0, 512, 'volume', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
-    mark.p1(('local_lvm', 1, 0, 'volume', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
-    mark.p1(('local_lvm', 0, 0, 'image', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 1, 0, 'image', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED_LVM')),
-    mark.p1(('local_lvm', 0, 0, 'image', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
-    mark.p1(('local_lvm', 0, 512, 'image', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
-    mark.p1(('local_lvm', 0, 0, 'image_with_vol', False, 'LiveMigErr.LVM_PRECHECK_ERROR')),
-    mark.p1(('local_lvm', 0, 0, 'image_with_vol', True, 'LiveMigErr.GENERAL_NO_HOST')),
     mark.p1(('remote', 0, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
     mark.p1(('remote', 1, 0, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
     mark.p1(('remote', 0, 512, 'volume', True, 'LiveMigErr.BLOCK_MIG_UNSUPPORTED')),
@@ -191,11 +174,6 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
     mark.domain_sanity(('local_image', 1, 0, 'shared', 2, 'image', 'confirm')),
     mark.domain_sanity(('local_image', 0, 512, 'dedicated', 1, 'image', 'confirm')),
     mark.domain_sanity(('local_image', 0, 0, None, 1, 'image_with_vol', 'confirm')),
-    mark.p1(('local_lvm', 0, 0, None, 1, 'volume', 'confirm')),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 2, 'image', 'confirm')),
-    mark.domain_sanity(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'confirm')),
-    mark.p1(('local_lvm', 0, 512, None, 2, 'volume', 'confirm')),
-    mark.domain_sanity(('local_lvm', 1, 512, 'dedicated', 2, 'volume', 'confirm')),
     mark.p1(('remote', 0, 0, None, 2, 'volume', 'confirm')),
     mark.p1(('remote', 1, 0, None, 1, 'volume', 'confirm')),
     mark.domain_sanity(('remote', 1, 512, None, 1, 'image', 'confirm')),
@@ -205,11 +183,6 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
     mark.p1(('local_image', 1, 0, 'shared', 2, 'image', 'revert')),
     mark.p1(('local_image', 0, 512, 'dedicated', 1, 'image', 'revert')),
     mark.p1(('local_image', 0, 0, 'dedicated', 2, 'image_with_vol', 'revert')),
-    mark.p1(('local_lvm', 0, 0, None, 2, 'volume', 'revert')),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'volume', 'revert')),
-    mark.p1(('local_lvm', 0, 512, None, 1, 'volume', 'revert')),
-    mark.p1(('local_lvm', 1, 0, 'dedicated', 2, 'image', 'revert')),
-    mark.p1(('local_lvm', 0, 0, 'dedicated', 1, 'image_with_vol', 'revert')),
     mark.p1(('remote', 0, 0, None, 2, 'volume', 'revert')),
     mark.p1(('remote', 1, 512, None, 1, 'volume', 'revert')),
     mark.p1(('remote', 0, 0, None, 1, 'image', 'revert')),
@@ -260,7 +233,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
         LOG.tc_step("Check that source host no longer has instance files")
         with host_helper.ssh_to_host(prev_vm_host) as prev_ssh:
             # TC6621
-            assert not prev_ssh.file_exists('/etc/nova/instances/{}'.format(vm_id)), \
+            assert not prev_ssh.file_exists('/var/lib/nova/instances/{}'.format(vm_id)), \
                 "Instance files found on previous host {} after cold migrate to {}".format(prev_vm_host, post_vm_host)
 
     LOG.tc_step("Ensure vm is pingable from NatBox after cold migration {}".format(resize))
@@ -280,10 +253,6 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
     ('local_image', 1, 0, 'volume'),
     ('local_image', 1, 512, 'volume'),
     ('local_image', 0, 512, 'image'),
-    ('local_lvm', 0, 0, 'image'),
-    ('local_lvm', 1, 0, 'volume'),
-    ('local_lvm', 0, 512, 'volume'),
-    ('local_lvm', 1, 512, 'image'),
     ('remote', 0, 0, 'image'),
     ('remote', 1, 0, 'volume'),
     ('remote', 0, 512, 'image'),
@@ -340,15 +309,13 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 
     LOG.tc_step("Create a flavor with {} vcpus, {}G ephemera disk, {}M swap disk".format(vcpus, ephemeral, swap))
     flavor_id = nova_helper.create_flavor(name='migration_test', ephemeral=ephemeral, swap=swap, vcpus=vcpus,
-                                          check_storage_backing=False)[1]
-    ResourceCleanup.add('flavor', flavor_id)
+                                          storage_backing=storage_backing, cleanup='function')[1]
 
-    specs = {FlavorSpec.STORAGE_BACKING: storage_backing}
     if cpu_pol is not None:
-        specs[FlavorSpec.CPU_POLICY] = cpu_pol
+        specs = {FlavorSpec.CPU_POLICY: cpu_pol}
 
-    LOG.tc_step("Add following extra specs: {}".format(specs))
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
+        LOG.tc_step("Add following extra specs: {}".format(specs))
+        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
 
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))
@@ -363,16 +330,29 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
 
 
 @mark.parametrize(('guest_os', 'mig_type', 'cpu_pol'), [
-    mark.sanity(('ubuntu_14', 'live', 'dedicated')),
-    mark.sanity(('ubuntu_14', 'cold', 'dedicated')),
-    # mark.sanity(('cgcs-guest', 'live', None)),
-    mark.sanity(('tis-centos-guest', 'live', None)),
-    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'cold', None)),
+    ('ubuntu_14', 'live', 'dedicated'),  # Live migration with pinned VM may not be unsupported
+    mark.priorities('sanity', 'cpe_sanity')(('ubuntu_14', 'cold', 'dedicated')),
+    mark.priorities('sanity', 'cpe_sanity')(('tis-centos-guest', 'live', None)),
+    ('tis-centos-guest', 'cold', None),
 ])
 def test_migrate_vm(check_system, guest_os, mig_type, cpu_pol):
+    """
+    Test migrate vms for given guest type
+    Args:
+        check_system:
+        guest_os:
+        mig_type:
+        cpu_pol:
+
+    Test Steps:
+        - Create a glance image from given guest type
+        - Create a vm from cinder volume using above image
+        - Live/cold migrate the vm
+        - Ensure vm moved to other host and in good state (active and reachabe from NatBox)
+
+    """
     LOG.tc_step("Create a flavor with 1 vcpu")
-    flavor_id = nova_helper.create_flavor(name='{}-mig'.format(mig_type), vcpus=1, root_disk=9)[1]
-    ResourceCleanup.add('flavor', flavor_id)
+    flavor_id = nova_helper.create_flavor(name='{}-mig'.format(mig_type), vcpus=1, root_disk=9, cleanup='function')[1]
 
     if cpu_pol is not None:
         specs = {FlavorSpec.CPU_POLICY: cpu_pol}
@@ -435,8 +415,8 @@ def test_migrate_vm_various_guest(check_system, guest_os, vcpus, ram, cpu_pol, b
     img_id = check_helper.check_fs_sufficient(guest_os=guest_os, boot_source=boot_source)
 
     LOG.tc_step("Create a flavor with 1 vcpu")
-    flavor_id = nova_helper.create_flavor(name='migrate', vcpus=vcpus, ram=ram, guest_os=guest_os)[1]
-    ResourceCleanup.add('flavor', flavor_id)
+    flavor_id = nova_helper.create_flavor(name='migrate', vcpus=vcpus, ram=ram, guest_os=guest_os,
+                                          cleanup='function')[1]
 
     if cpu_pol is not None:
         specs = {FlavorSpec.CPU_POLICY: cpu_pol}
@@ -459,23 +439,24 @@ def test_migrate_vm_various_guest(check_system, guest_os, vcpus, ram, cpu_pol, b
                               source=boot_source, source_id=source_id, guest_os=guest_os, cleanup='function')[1]
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-    vm_host_origin = nova_helper.get_vm_host(vm_id)
-    prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_origin],
-                                                      vm_host=vm_host_origin, cpu_pol=cpu_pol, guest=guest_os)[1]
+    vm_host = nova_helper.get_vm_host(vm_id)
+    prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host],
+                                                      vm_host=vm_host, cpu_pol=cpu_pol, guest=guest_os)[1]
 
+    # Live migration may not be unsupported for pinned vm.
     LOG.tc_step("Live migrate {} VM".format(guest_os))
     vm_helper.live_migrate_vm(vm_id)
 
     LOG.tc_step("Ping vm from NatBox after live migration")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-    vm_host_live_mig = nova_helper.get_vm_host(vm_id)
+    vm_host = nova_helper.get_vm_host(vm_id)
     # vm topology from inside vm will not change after live-migrate between HT and non-HT vm
     if not cpu_pol == 'dedicated':
         prev_siblings = None
 
-    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host_live_mig], cpu_pol=cpu_pol,
-                                      vm_host=vm_host_live_mig, prev_siblings=prev_siblings, guest=guest_os)
+    check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus[vm_host], cpu_pol=cpu_pol,
+                                      vm_host=vm_host, prev_siblings=prev_siblings, guest=guest_os)
 
     LOG.tc_step("Cold migrate vm and check vm is moved to different host")
     vm_helper.cold_migrate_vm(vm_id)

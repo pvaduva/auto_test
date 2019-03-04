@@ -18,7 +18,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 @fixture(scope='module')
 def hosts_with_backing():
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
 
     LOG.fixture_step("Hosts with {} backing: {}".format(storage_backing, hosts))
     return storage_backing, hosts
@@ -30,9 +30,8 @@ class TestQoS:
         storage_backing, hosts = hosts_with_backing
 
         LOG.fixture_step("Create a flavor with {} backing".format(storage_backing))
-        flavor = nova_helper.create_flavor(storage_backing, check_storage_backing=False)[1]
+        flavor = nova_helper.create_flavor(storage_backing, storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor, scope='class')
-        nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.STORAGE_BACKING: storage_backing})
 
         return flavor, hosts
 
@@ -83,7 +82,7 @@ class TestQoS:
         LOG.tc_step("Create QoS spec: {}".format(qos_specs))
         # consumer must be set to both or xmldump will not display correct tag and data
         qos_id = cinder_helper.create_qos_specs(consumer='both', qos_name=name_str, **qos_specs)[1]
-        ResourceCleanup.add('qos', qos_id)
+        ResourceCleanup.add('volume_qos', qos_id)
 
         LOG.tc_step("Create volume type and associate above QoS spec to it")
         volume_type_id = cinder_helper.create_volume_type("test_volume_type")[1]
@@ -158,11 +157,11 @@ class TestFlavor:
         name_str = 'flv_{}_{}'.format(disk_spec_str, disk_spec_val)
 
         LOG.tc_step("Create flavor with 4 vpus, 1G ram, 2G root disk")
-        flavor_id = nova_helper.create_flavor(name_str, vcpus=4, ram=1024, root_disk=2, check_storage_backing=False)[1]
+        flavor_id = nova_helper.create_flavor(name_str, vcpus=4, ram=1024, root_disk=2,
+                                              storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor_id)
 
         extra_specs = {disk_spec_name: disk_spec_val,
-                       FlavorSpec.STORAGE_BACKING: storage_backing,
                        FlavorSpec.CPU_POLICY: 'dedicated'
                        }
 

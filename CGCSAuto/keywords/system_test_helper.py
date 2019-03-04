@@ -273,7 +273,7 @@ def sys_reboot_storage():
     This is to identify the storage nodes and turn them off and on via vlm
     :return:
     """
-    controllers, computes, storages = system_helper.get_hosts_by_personality()
+    controllers, computes, storages = system_helper.get_hostnames_per_personality(rtn_tuple=True)
 
     LOG.info("Online or Available hosts before power-off: {}".format(storages))
     LOG.tc_step("Powering off hosts in multi-processes to simulate power outage: {}".format(storages))

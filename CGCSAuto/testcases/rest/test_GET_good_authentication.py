@@ -1,6 +1,7 @@
 import pytest
 from utils.tis_log import LOG
 from utils.rest import Rest
+
 from testcases.rest import rest_test_helper
 
 
@@ -57,3 +58,5 @@ def test_good_authentication(sysinv_rest, operation, resource):
     if operation == "GET":
         LOG.info("getting... {}".format(resource))
         rest_test_helper.get(sysinv_rest, resource=resource)
+
+

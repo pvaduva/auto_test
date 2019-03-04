@@ -58,18 +58,18 @@ def launch_instance_on_compute(network_name=None,
     host_helper.unlock_host(host_name)
     _lock_unlock_computes_except_one(host_name, action='lock')
 
-    assert host_name in host_helper.get_hosts(availability=[HostAvailState.AVAILABLE,
+    assert host_name in system_helper.get_hostnames(availability=[HostAvailState.AVAILABLE,
                                                             HostAvailState.DEGRADED])
 
-    lvm_hosts = host_helper.get_hosts_in_storage_aggregate('local_lvm')
-    remote_hosts = host_helper.get_hosts_in_storage_aggregate('remote')
+    lvm_hosts = host_helper.get_hosts_in_storage_backing('local_lvm')
+    remote_hosts = host_helper.get_hosts_in_storage_backing('remote')
     backing = 'local_image'
     if host_name in lvm_hosts:
         backing = 'local_lvm'
     elif host_name in remote_hosts:
         backing = 'remote'
     flavor_id = nova_helper.create_flavor(host_name, storage_backing=backing,
-                                          check_storage_backing=False, guest_os=image_name)[1]
+                                          guest_os=image_name)[1]
     ResourceCleanup.add('flavor', flavor_id)
 
     LOG.tc_step('Booting instances on {}'.format(host_name))

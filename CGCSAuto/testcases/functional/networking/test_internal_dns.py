@@ -287,7 +287,7 @@ def test_ping_between_vms_using_hostnames():
     set_dns_servers(subnet_list)
 
     LOG.tc_step("Launch two VMs using the same network")
-    nics = [{"net-id": mgmt_net_id, "vif-model": "virtio"}]
+    nics = [{"net-id": mgmt_net_id}]
     vm1_id = vm_helper.boot_vm(nics=nics, cleanup='function')[1]
     vm2_id = vm_helper.boot_vm(nics=nics, cleanup='function')[1]
     vm1_name = nova_helper.get_vm_name_from_id(vm1_id)

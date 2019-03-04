@@ -68,12 +68,16 @@ class TestLocalStorage:
         'local_storage_type': []
     }
 
-    @fixture(scope='class', autouse=True, params=['image', 'lvm'])
+    @fixture(scope='class', autouse=True, params=['image', 'remote'])
     def setup_local_storage(self, request, get_target_host):
         local_storage = request.param
         host = get_target_host
 
         def cleanup():
+
+            if not system_helper.is_storage_system():
+                skip("This test requires a storage system")
+
             profiles_created = self._pop_cleanup_list('profile')
             old_new_types = self._pop_cleanup_list('local_storage_type')
 
@@ -239,7 +243,8 @@ class TestLocalStorage:
 
         return host_pv_sizes
 
-    def test_local_storage_operations(self, setup_local_storage, ensure_two_hypervisors, ensure_multiple_disks):
+    # Obsolete following test due to feature already covered in test_storage_profiles.py.
+    def _test_local_storage_operations(self, setup_local_storage, ensure_two_hypervisors, ensure_multiple_disks):
         """
         Args:
             setup_local_storage: test fixture to configure storage backing for selected host
@@ -276,8 +281,8 @@ class TestLocalStorage:
         Notes:
                 will cover 3 test cases:
                     34.  Local Storage Create/Apply/Delete – Local Image
-                    35.  Local Storage Profile Create/Apply/Delete – Local LVM
-                    36.  Local Storage Profile Apply (Local Image ↔ Local LVM)
+                    35.  Local Storage Profile Create/Apply/Delete – Remote
+                    36.  Local Storage Profile Apply (Local Image ↔ Remote)
         """
         local_storage_type, compute_src = setup_local_storage
         LOG.tc_step('Create a storage-profile with the expected type of local-storage backing:{}'
@@ -317,8 +322,8 @@ class TestLocalStorage:
         con_ssh = ControllerClient.get_active_controller()
 
         # Change storage backing if needed
-        if compute_dest in host_helper.get_hosts_in_storage_aggregate(local_storage_type, con_ssh=con_ssh, up_only=False):
-            backends = ['image', 'lvm', 'remote']
+        if compute_dest in host_helper.get_hosts_in_storage_backing(local_storage_type, con_ssh=con_ssh, up_only=False):
+            backends = ['image', 'remote']
             backends.remove(local_storage_type)
             host_helper.modify_host_lvg(compute_dest, inst_backing=backends[0])
 
@@ -335,7 +340,8 @@ class TestLocalStorage:
         assert host_helper.is_host_with_instance_backing(compute_dest, storage_type=local_storage_type), \
             'Local-storage backing failed to change to {} on host:{}'.format(local_storage_type, compute_dest)
 
-    def test_apply_profile_to_smaller_sized_host(self, setup_local_storage, ensure_two_hypervisors):
+    # Obsolete following test due to feature already covered in test_storage_profiles.py.
+    def _test_apply_profile_to_smaller_sized_host(self, setup_local_storage, ensure_two_hypervisors):
         """
 
         Args:
@@ -363,7 +369,7 @@ class TestLocalStorage:
         Notes:
                 will cover 2 test cases:
                     37.  Local Storage Profile Negative Test (Insufficient Resources/Different Devices)
-                        – Local_LVM profile
+                        – Remote profile
                     38.  Local Storage Profile Negative Test (Different Devices) – Local_Image profile
         """
         local_storage_type, compute_src = setup_local_storage
@@ -584,7 +590,7 @@ class TestLocalStorage:
     def test_import_storage_profile(self, setup_local_storage):
         """
         Args:
-            setup_local_storage(str): type of local-storage backing, allowed values: image, lvm
+            setup_local_storage(str): type of local-storage backing, allowed values: image, remote
 
         Setup:
 
@@ -606,7 +612,11 @@ class TestLocalStorage:
         Returns:
 
         """
+
         local_storage_type, compute_src = setup_local_storage
+        
+        if not system_helper.is_storage_system():
+            skip("This test requires a storage system")
 
         LOG.tc_step('Get the name of the profile and check if it is existing')
         local_file = self.get_local_storprfoile_file(local_storage_type=local_storage_type)

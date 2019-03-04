@@ -15,7 +15,7 @@ def test_show_cpu_data():
         - Verify that the data is in a valid form
 
     """
-    hosts = host_helper.get_hosts()
+    hosts = system_helper.get_hostnames()
     for host in hosts:
         if host == 'None':
             continue
@@ -38,7 +38,7 @@ def test_show_cpu_data():
             phy_2 = table_parser.get_value_two_col_table(table_2, 'physical_core')
             assert 0 <= int(phy_1) == int(phy_2), "FAIL: The phy_core value is invalid"
 
-            functions = ['Platform', 'vSwitch', 'Shared', 'VMs']
+            functions = ['Platform', 'vSwitch', 'Shared', 'Applications']
             funct_1 = table_parser.get_values(table_, 'assigned_function', strict=True, log_core=log_core)[0]
             funct_2 = table_parser.get_value_two_col_table(table_2, 'assigned_function')
             assert funct_1 == funct_2 and funct_1 in functions, "FAIL: The assigned_function value is invalid"
@@ -54,7 +54,7 @@ def test_show_mem_data():
         - Verify the memory data is in a valid form and that the different forms match
 
     """
-    hosts = host_helper.get_hosts()
+    hosts = system_helper.get_hostnames()
     for host in hosts:
         if host == 'None':
             continue

@@ -1,66 +1,26 @@
+import os
 
 import pytest
-import os
+
 from utils.tis_log import LOG
-from consts.auth import SvcCgcsAuto, HostLinuxCreds, Tenant
-from keywords import system_helper,  install_helper, patching_helper, orchestration_helper
+from utils.clients.ssh import ControllerClient, SSHClient
+from consts.cgcs import Prompt, PatchState
+from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.filepaths import WRSROOT_HOME
 from consts.build_server import Server, get_build_server_info
 from consts.proj_vars import ProjVar, PatchingVars, InstallVars
-from consts.cgcs import Prompt
-from utils.clients.ssh import ControllerClient, SSHClient
-
-
-def pre_check_patch():
-
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
-    LOG.tc_func_start("PATCH_ORCHESTRATION_TEST")
-
-    # Check system health for patch orchestration;
-    check_health()
-
-
-def check_health(check_patch_ignored_alarms=True):
-
-    rc, health = system_helper.get_system_health_query()
-    if rc == 0:
-        LOG.info("System health OK for patching ......")
-    else:
-        if len(health) > 2:
-            assert False, "System health query failed: {}".format(health)
-        else:
-            if "No alarms" in health.keys() and check_patch_ignored_alarms:
-                rtn = ('Alarm ID',)
-                current_alarms_ids = system_helper.get_alarms(rtn_vals=rtn, mgmt_affecting=True)
-                affecting_alarms = [id_ for id_ in current_alarms_ids if id_ not in
-                                    orchestration_helper.IGNORED_ALARM_IDS]
-                if len(affecting_alarms) > 0:
-                    assert False, "Management affecting alarm(s) present: {}".format(affecting_alarms)
-            elif "All hosts are patch current" in health.keys():
-                LOG.info("Some hosts are not patch current")
-            else:
-                assert False, "System health query failed: {}".format(health)
-
-    return rc, health
+from keywords import system_helper, install_helper, patching_helper, orchestration_helper
 
 
 @pytest.fixture(scope='session')
 def patch_orchestration_setup():
+    ProjVar.set_var(SOURCE_CREDENTIAL=True)
+    patching_helper.check_system_health()
 
     lab = InstallVars.get_install_var('LAB')
-    pre_check_patch()
-
-    build_id = system_helper.get_system_build_id()
-
     bld_server = get_build_server_info(PatchingVars.get_patching_var('PATCH_BUILD_SERVER'))
     output_dir = ProjVar.get_var('LOG_DIR')
     patch_dir = PatchingVars.get_patching_var('PATCH_DIR')
-    if not patch_dir:
-        patch_base_dir = PatchingVars.get_patching_var('PATCH_BASE_DIR')
-        if build_id:
-            patch_dir = patch_base_dir + '/' + build_id
-        else:
-            patch_dir = patch_base_dir + '/latest_build'
 
     LOG.info("Using  patch directory path: {}".format(patch_dir))
     bld_server_attr = dict()
@@ -223,7 +183,7 @@ def test_system_patch_orchestration(patch_orchestration_setup):
     """
 
     lab = patch_orchestration_setup['lab']
-    check_health(check_patch_ignored_alarms=False)
+    patching_helper.check_system_health(check_patch_ignored_alarms=False)
 
     LOG.info("Starting patch orchestration for lab {} .....".format(lab))
 
@@ -234,7 +194,7 @@ def test_system_patch_orchestration(patch_orchestration_setup):
 
     patch_dest_dir = WRSROOT_HOME + '/patches'
     rc = patching_helper.run_patch_cmd('upload-dir', args=patch_dest_dir)[0]
-    assert rc in [0,1], "Fail to upload patches in dir {}".format(patch_dest_dir)
+    assert rc in [0, 1], "Fail to upload patches in dir {}".format(patch_dest_dir)
 
     uploaded = patching_helper.get_available_patches()
     if rc == 0:
@@ -242,18 +202,17 @@ def test_system_patch_orchestration(patch_orchestration_setup):
     else:
         LOG.info("Patches are already in repo")
 
-
     if len(uploaded) > 0:
         LOG.tc_step("Applying patches ...")
         uploaded_patch_ids = ' '.join(uploaded)
-        applied = patching_helper.apply_patches(patch_ids=uploaded_patch_ids)
+        applied = patching_helper.apply_patches(patch_ids=uploaded_patch_ids)[1]
 
         LOG.info("Patches applied: {}".format(applied))
     else:
         LOG.info("No Patches are applied; Patches may be already applied: {}")
 
-    partial_patches_ids = patching_helper.get_patches_in_state(expected_states=['Partial-Apply', 'Partial-Remove'])
-    if len (partial_patches_ids) > 0:
+    partial_patches_ids = patching_helper.get_patches_in_state((PatchState.PARTIAL_APPLY, PatchState.PARTIAL_REMOVE))
+    if len(partial_patches_ids) > 0:
 
         current_alarms_ids = system_helper.get_alarms(mgmt_affecting=True, combine_entries=False)
         affecting_alarms = [id_ for id_ in current_alarms_ids if id_[0] not in orchestration_helper.IGNORED_ALARM_IDS]
@@ -277,4 +236,3 @@ def test_system_patch_orchestration(patch_orchestration_setup):
         LOG.info("Deleted  patch orchestration strategy .....")
     else:
         pytest.skip("All patches in  patch-dir are already in system.")
-

@@ -40,14 +40,16 @@ def pre_configs(request):
     active, standby = system_helper.get_active_standby_controllers()
     if not standby:
         skip('No standby controller on system')
-    controllers = [active, standby]
 
+    LOG.fixture_step("Ensure dovetail test node mgmt nic connects to lab under test")
+    compliance_helper.update_dovetail_mgmt_interface()
+
+    controllers = [active, standby]
     storages = system_helper.get_hostnames(personality='storage', availability=HostAvailState.AVAILABLE)
     hosts_dict = {'controller': controllers,
                   'compute': computes,
                   'storage': storages
                   }
-
     all_hosts = list(set(controllers + computes + storages))
 
     LOG.fixture_step("Enable port_security for the system and update existing networks")
@@ -59,8 +61,6 @@ def pre_configs(request):
         for net in networks:
             network_helper.set_network(net_id=net, enable_port_security=True)
 
-    LOG.fixture_step("Ensure dovetail test node mgmt nic connects to lab under test")
-    compliance_helper.update_dovetail_mgmt_interface()
     configure_tis(all_hosts, request=request)
     configure_dovetail_server(hosts_per_personality=hosts_dict)
 
@@ -93,7 +93,7 @@ def configure_dovetail_server(hosts_per_personality):
         'OS_TENANT_NAME': tenant_name,
         'OS_USERNAME': admin_dict['user'],
         'OS_PASSWORD': admin_dict['password'],
-        'OS_AUTH_URL': keystone_public_url.replace(':', '\:').replace('/', '\/'),
+        'OS_AUTH_URL': keystone_public_url.replace(':', r'\:').replace(r'/', r'\/'),
         'OS_IDENTITY_API_VERSION': CliAuth.get_var('OS_IDENTITY_API_VERSION'),
     }
 

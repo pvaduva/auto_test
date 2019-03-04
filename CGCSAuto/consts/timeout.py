@@ -24,6 +24,26 @@ class HostTimeout:
     INSTALL_CLONE = 3600
     INSTALL_CLONE_STATUS = 60
     INSTALL_CONTROLLER = 2400
+    INSTALL_LOAD = 3600
+    POST_INSTALL_SCRIPTS = 3600
+    CONFIG_CONTROLLER_TIMEOUT = 1800
+    CEPH_MON_ADD_CONFIG_TIMEOUT = 300
+
+
+class InstallTimeout:
+    CONTROLLER_UNLOCK = 9000   # Host reaches enabled/available state after system host-unlock returned
+    CONFIG_CONTROLLER_TIMEOUT = 1800
+    # REBOOT = 2000   # Host reaches enabled/available state after sudo reboot -f from host
+    UPGRADE = 7200
+    WIPE_DISK_TIMEOUT = 30
+    SYSTEM_RESTORE = 3600   # System restore complete
+    SYSTEM_BACKUP = 1800    # system backup complete
+    BACKUP_COPY_USB = 600
+    INSTALL_CLONE = 3600
+    INSTALL_CLONE_STATUS = 60
+    INSTALL_CONTROLLER = 2400
+    INSTALL_LOAD = 3600
+    POST_INSTALL_SCRIPTS = 3600
 
 
 class VMTimeout:
@@ -47,7 +67,7 @@ class VMTimeout:
 
 class VolumeTimeout:
     STATUS_CHANGE = 2700  # Windows guest takes a long time
-    DELETE = 60
+    DELETE = 90
 
 
 class SysInvTimeout:
@@ -90,11 +110,21 @@ class CeilTimeout:
 
 
 class OrchestrationPhaseTimeout:
-        INITIAL = 20
-        BUILD = 60
-        ABORT = 7200
-        APPLY = 86400
+    INITIAL = 20
+    BUILD = 60
+    ABORT = 7200
+    APPLY = 86400
+
+
+class DCTimeout:
+    SYNC = 660    # 10 minutes + 1
+    SUBCLOUD_AUDIT = 600    # 4 minutes + 1
+    PATCH_AUDIT = 240   # 3 minutes + 1
 
 
 class MiscTimeout:
     NTPQ_UPDATE = 1260     # timeout for two audits. 'sudo ntpq' got pulled every 10 minutes in /var/log/user.log
+
+class K8sTimeout:
+    APP_UPLOAD = 300  # TBD
+    APP_APPLY = 120  # TBD

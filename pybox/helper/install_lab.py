@@ -690,15 +690,6 @@ def install_patches_before_config(stream, release='R6', username='wrsroot', pass
     """
     Installs patches before controller_config has been run.
     Args:
-        stream(stream): Stream to controller-0
-        release(str): Release that is being installed.
-    Steps:
-        - Checks for patches
-        - Uploads patch directory
-        - Applies patches
-        - Installs patches on controller-0
-        - Reboots controller-0
-    """
     if release == 'R6':
         LOG.info("Currently no patches for R6")
         return

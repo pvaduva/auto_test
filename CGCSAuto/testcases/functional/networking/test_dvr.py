@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 
 from consts.auth import Tenant
 from consts.cgcs import RouterStatus
-from keywords import network_helper, vm_helper, system_helper, host_helper, cinder_helper
+from keywords import network_helper, vm_helper, system_helper, host_helper, cinder_helper, nova_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -131,6 +131,15 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
         - Revert router to
 
     """
+    # Increase instance quota count if needed
+    instance_quota = nova_helper.get_quotas('instances')[0]
+    current_vms = len(nova_helper.get_vms(strict=False))
+    quota_needed = current_vms + vms_num
+    if instance_quota < quota_needed:
+        LOG.tc_step("Increase the instance quota from {} to {}".format(instance_quota, quota_needed))
+        quota_diff = quota_needed - instance_quota
+        nova_helper.update_quotas(instances=instance_quota + quota_diff)
+
     if srv_grp_policy == 'anti-affinity' and len(host_helper.get_up_hypervisors()) == 1:
         skip("Only one nova host on the system.")
 
@@ -149,20 +158,20 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
     mgmt_net_id = network_helper.get_mgmt_net_id()
     internal_net_id = network_helper.get_internal_net_id()
 
-    vif = 'avp' if system_helper.is_avs() else 'e1000'
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'virtio'},
-            {'net-id': internal_net_id, 'vif-model': vif}]
+    internal_vif = {'net-id': internal_net_id}
+    if system_helper.is_avs():
+        internal_vif['vif-model'] = 'avp'
+
+    nics = [{'net-id': mgmt_net_id}, {'net-id': tenant_net_id}, internal_vif]
     for i in range(vms_num):
         vol = cinder_helper.create_volume(rtn_exist=False)[1]
         ResourceCleanup.add(resource_type='volume', resource_id=vol)
         vm_id = vm_helper.boot_vm('dvr_ew_traffic', source='volume', source_id=vol, nics=nics, cleanup='function',
                                   hint={'group': srv_grp_id})[1]
-        # ResourceCleanup.add(resource_type='vm', resource_id=vm_id)
         vms.append(vm_id)
         LOG.tc_step("Wait for vm {} pingable from NatBox".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     from_vm = vms[0]
-    LOG.tc_step("Ping vms' over management and data networks from vm {}, and verify ping successful.".format(from_vm))
+    LOG.tc_step("Ping vms over management and data networks from vm {}, and verify ping successful.".format(from_vm))
     vm_helper.ping_vms_from_vm(from_vm=from_vm, to_vms=vms, net_types=['data', 'mgmt', 'internal'], fail_ok=False)

@@ -24,7 +24,7 @@ class ChangepasswordPage(basepage.BasePage):
     _password_form_locator = (by.By.ID, 'change_password_modal')
 
     CHANGE_PASSWORD_FORM_FIELDS = ("current_password", "new_password",
-                                       "confirm_password")
+                                   "confirm_password")
 
     @property
     def password_form(self):

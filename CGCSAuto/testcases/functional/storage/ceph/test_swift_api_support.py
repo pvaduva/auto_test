@@ -117,6 +117,7 @@ def pre_swift_check():
 
 
 def get_large_img_file():
+    client = get_cli_client()
     if not ProjVar.get_var('REMOTE_CLI'):
         cmd = "df -h ~ | awk ' {print $4}'"
         rc, output = client.exec_cmd(cmd)
@@ -131,7 +132,7 @@ def get_large_img_file():
 
     obj_dir = get_obj_dir()
     dest_dir = '{}/{}'.format(obj_dir, TEST_OBJ_DIR)
-    glance_helper._scp_guest_image(img_os='win_2012', dest_dir=dest_dir, timeout=300)
+    glance_helper._scp_guest_image(img_os='win_2012', dest_dir=dest_dir, timeout=300, con_ssh=client)
     large_filename = GuestImages.IMAGE_FILES['win_2012'][2]
     large_file_info = get_test_obj_file_names(pattern=large_filename)
     return large_file_info

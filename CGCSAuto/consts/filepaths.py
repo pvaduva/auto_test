@@ -1,3 +1,5 @@
+import os
+
 WRSROOT_HOME = '/home/wrsroot/'
 
 
@@ -10,6 +12,9 @@ class TiSPath:
     HEAT = '/home/wrsroot/heat/'
     BACKUPS = '/opt/backups'
     CUSTOM_HEAT_TEMPLATES = '/home/wrsroot/custom_heat_templates/'
+    HELM_CHARTS_DIR = '/www/pages/helm_charts/'
+    DOCKER_CONF = '/etc/docker-distribution/registry/config.yml'
+    DOCKER_REPO = '/var/lib/docker-distribution/docker/registry/v2/repositories'
 
 
 class VMPath:
@@ -45,36 +50,87 @@ class TestServerPath:
     USER_DATA = '/home/svc-cgcsauto/userdata/'
     TEST_SCRIPT = '/home/svc-cgcsauto/test_scripts/'
     CUSTOM_HEAT_TEMPLATES = '/sandbox/custom_heat_templates/'
+    CUSTOM_APPS = '/sandbox/custom_apps/'
 
 
 class PrivKeyPath:
     OPT_PLATFORM = '/opt/platform/id_rsa'
     WRS_HOME = '/home/wrsroot/.ssh/id_rsa'
 
+class BuildDirs:
+    VALID_BUILD_DIRS = ['TS_15.12_Host', 'TS_16.10_Host', 'TS_16.10_Prestaging_Build', 'TC_17.06_Host',
+                        'TC_17.06_Prestaging_Build', 'TC_18.03_Host', 'TC_18.03_Prestaging_Build', 'TC_18.07_Host',
+                        'CGCS_6.0_Host', 'Titanium_R6_build', 'StarlingX_18.10', 'StarlingX_Upstream_build']
+
+
+    def is_builds_dir_name_valid(self, builds_dir_name):
+        if builds_dir_name:
+            return builds_dir_name in BuildDirs.VALID_BUILD_DIRS
+        else:
+            return False
+
 
 class BuildServerPath:
+
     DEFAULT_BUILD_SERVER = 'yow-cgts1-lx'
     DEFAULT_WORK_SPACE = '/localdisk/loadbuild/jenkins'
     TITANIUM_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/Titanium_R6_build'
     STX_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/StarlingX_Upstream_build'
     STX_RELEASE_DIR = '/localdisk/loadbuild/jenkins/StarlingX_18.10'
-    DEFAULT_HOST_BUILDS_DIR = TITANIUM_HOST_BUILDS_DIR
+    DEFAULT_HOST_BUILDS_DIR = STX_HOST_BUILDS_DIR
     DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img'
+    LATEST_BUILD = 'latest_build'
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build'.format(DEFAULT_HOST_BUILDS_DIR)
     DEFAULT_LICENSE_PATH = '/folk/cgts/lab/license.lic'
     DEFAULT_PATCH_DIR = '/folk/cgts/patches-to-verify/'
     DEFAULT_PATCH_ENABLE_DEV_DIR = '/folk/cgts/tools/Enable_dev_certificate_patch/'
-    HEAT_TEMPLATES = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
-    CONFIG_LAB_REL_PATH = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
-    
-    LATEST_HOST_BUILD_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Host/latest_build/',
-                               '16.10': '/localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/',
-                               '17.06': '/localdisk/loadbuild/jenkins/TC_17.06_Host/latest_build/',
-                               '18.01': '/localdisk/loadbuild/jenkins/CGCS_5.0_Host/latest_build/',
-                               '18.03': '/localdisk/loadbuild/jenkins/TC_18.03_Host/latest_build/',
-                               '18.04': '/localdisk/loadbuild/jenkins/CGCS_6.0_Host/latest_build/',
-                               '18.07': '/localdisk/loadbuild/jenkins/TC_18.07_Host/latest_build/',
+    HEAT_TEMPLATES_PREV = 'std/repo/addons/wr-cgcs/layers/cgcs/openstack/recipes-base/python-heat/python-heat/templates'
+    HEAT_TEMPLATES = 'export/heat-templates'
+    LAB_CONF_DIR_PREV = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
+    LAB_CONF_DIR = "lab"
+    STX_HELM_CHARTS = 'std/build-helm/stx'
+
+    HEAT_TEMPLATES_EXTS = {'16.10': HEAT_TEMPLATES_PREV, '17.06': HEAT_TEMPLATES_PREV, '18.03': HEAT_TEMPLATES_PREV,
+                           'default': HEAT_TEMPLATES}
+
+    DEFAULT_LAB_CONFIG_PATH_EXTS = {'16.10': LAB_CONF_DIR_PREV, '17.06': LAB_CONF_DIR_PREV,
+                                    '18.03': LAB_CONF_DIR_PREV, 'default': LAB_CONF_DIR}
+
+    class BldsDirNames:
+        TS_15_12_HOST = 'TS_15.12_Host'
+        TS_16_10_HOST =  'TS_16.10_Host'
+        TS_16_10_PRESTAGING_BUILD = 'TS_16.10_Prestaging_Build'
+        TC_17_06_HOST = 'TC_17.06_Host'
+        TC_17_06_PRESTAGING_BUILD = 'TC_17.06_Prestaging_Build'
+        TC_18_03_HOST = 'TC_18.03_Host'
+        TC_18_03_PRESTAGING_BUILD = 'TC_18.03_Prestaging_Build'
+        TC_18_07_HOST = 'TC_18.07_Host'
+        CGCS_6_0_HOST = 'CGCS_6.0_Host'
+        TITANIUM_R6_BUILD = 'Titanium_R6_build'
+        STARLINGX_18_10 = 'StarlingX_18.10'
+        STARLINGX_UPSTREAM = 'StarlingX_Upstream_build'
+
+        R2_VERSION_SEARCH_REGEX = r'(?:15.12|CGTS_2.0)'
+        R3_VERSION_SEARCH_REGEX = r'(?:_16.10|CGCS_3.0)'
+        R4_VERSION_SEARCH_REGEX = r'(?:_17.06|CGCS_4.0)'
+        R5_VERSION_SEARCH_REGEX = r'(?:_18.03|CGCS_5.0)'
+        R6_VERSION_SEARCH_REGEX = r'(?:CGCS_6.0|_R6_|StarlingX)'
+
+    LATEST_HOST_BUILD_PATHS = {'15.12': os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TS_15_12_HOST, LATEST_BUILD),
+                               '16.10': os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TS_16_10_HOST, LATEST_BUILD),
+                               '17.06': [os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TC_17_06_HOST, LATEST_BUILD),
+                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TC_17_06_PRESTAGING_BUILD,
+                                                      LATEST_BUILD)],
+                               '18.03': [os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TC_18_03_HOST, LATEST_BUILD),
+                                         os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TC_18_03_PRESTAGING_BUILD,
+                                                      LATEST_BUILD)],
+                               'default':
+                                   [os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.TITANIUM_R6_BUILD, LATEST_BUILD),
+                                    os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_18_10, LATEST_BUILD),
+                                    os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.STARLINGX_UPSTREAM, LATEST_BUILD),
+                                    os.path.join(DEFAULT_WORK_SPACE, BldsDirNames.CGCS_6_0_HOST, LATEST_BUILD)],
                                }
+
     TIS_LICENSE_PATHS = {'15.12': ['/folk/cgts/lab/TiS15-GA-full.lic', '/folk/cgts/lab/TiS15.12-CPE-full-dec2016.lic'],
                          '16.10': ['/folk/cgts/lab/TiS16-full.lic', '/folk/cgts/lab/TiS16-CPE-full.lic'],
                          '17.00': ['/folk/cgts/lab/TiS17-full.lic', '/folk/cgts/lab/TiS17-CPE-full.lic'],
@@ -82,7 +138,11 @@ class BuildServerPath:
                          '18.01': ['/folk/cgts/lab/R5-full.lic', '/folk/cgts/lab/R5-AIO-DX-full.lic',
                                    '/folk/cgts/lab/R5-AIO-SX-full.lic'],
                          '18.03': ['/folk/cgts/lab/R5-full.lic', '/folk/cgts/lab/R5-AIO-DX-full.lic',
-                                   '/folk/cgts/lab/R5-AIO-SX-full.lic']
+                                   '/folk/cgts/lab/R5-AIO-SX-full.lic'],
+                         '18.07': ['/folk/cgts/lab/R6-EAR1-eval.lic', '/folk/cgts/lab/R6-EAR1-AIO-DX-eval.lic',
+                                   '/folk/cgts/lab/R6-EAR1-AIO-SX-eval.lic'],
+                         'default': ['/folk/cgts/lab/R6-full.lic', '/folk/cgts/lab/R6-AIO-DX-full.lic',
+                                     '/folk/cgts/lab/R6-AIO-SX-full.lic'],
                          }
 
     PATCH_DIR_PATHS = {'15.12': DEFAULT_PATCH_DIR + '15.12',
@@ -90,27 +150,31 @@ class BuildServerPath:
                        '17.06': DEFAULT_PATCH_DIR + '17.06',
                        '18.03': DEFAULT_PATCH_DIR + '18.03',
                        '18.04': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
+                       'default': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
                        }
 
     TEST_PATCH_DIR_PATHS = {'18.03': DEFAULT_WORK_SPACE + '/TC_18.03_Test_Patch_Build/latest_build',
                             '18.04': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
+                            'default': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
                            }
 
     PATCH_ENABLE_DEV_CERTIFICATES = {
+        'default': DEFAULT_PATCH_ENABLE_DEV_DIR + 'PATCH.ENABLE_DEV_CERTIFICATE.patch',
         '17.06': DEFAULT_PATCH_ENABLE_DEV_DIR + 'PATCH.ENABLE_DEV_CERTIFICATE-17.06.patch',
         '18.03': DEFAULT_PATCH_ENABLE_DEV_DIR + 'PATCH.ENABLE_DEV_CERTIFICATE-18.03.patch',
-        '18.04': DEFAULT_PATCH_ENABLE_DEV_DIR + 'PATCH.ENABLE_DEV_CERTIFICATE.patch'
+        '18.04': DEFAULT_PATCH_ENABLE_DEV_DIR + 'PATCH.ENABLE_DEV_CERTIFICATE.patch',
     }
-
 
     GUEST_IMAGE_PATHS = {'15.12': '/localdisk/loadbuild/jenkins/TS_15.12_Guest/cgcs-guest.img',
                          '16.10': '/localdisk/loadbuild/jenkins/CGCS_3.0_Guest_Daily_Build/cgcs-guest.img',
                          '17.06':
                              '/localdisk/loadbuild/jenkins/TC_17.06_Guest/latest_build/export/tis-centos-guest.img',
-                         '18.01':
-                             '/localdisk/loadbuild/jenkins/CGCS_5.0_Guest/latest_build/export/tis-centos-guest.img',
                          '18.03':
-                             '/localdisk/loadbuild/jenkins/TC_18.03_Guest/latest_build/export/tis-centos-guest.img'
+                             '/localdisk/loadbuild/jenkins/TC_18.03_Guest/latest_build/export/tis-centos-guest.img',
+                         '18.07':
+                             '/localdisk/loadbuild/jenkins/TC_18.07_Guest/latest_build/export/tis-centos-guest.img',
+                         'default':
+                             '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img',
                          }
 
 
@@ -139,3 +203,19 @@ class CompConfPath:
 class MuranoPath:
     APP_DEMO_PATH = '/folk/cgts/users/jsun3/com.wrs.titanium.murano.examples.demo.zip'
     BASE_PACKAGES = ["/var/cache/murano/meta/io.murano.zip", "/var/cache/murano/meta/io.murano.applications.zip"]
+
+
+class TuxlabServerPath:
+    DEFAULT_TUXLAB_SERVER = 'yow-tuxlab2'
+    DEFAULT_BARCODES_DIR = '/export/pxeboot/vlm-boards'
+
+
+class LogPath:
+    LAB_SETUP_LOG = '/home/wrsroot/lab_setup.group0.log'
+    HEAT_SETUP_LOG = '/home/wrsroot/launch_heat_stacks.log'
+    CONFIG_CONTROLLER_LOG = '/var/log/puppet/latest/puppet.log'
+
+
+class SysLogPath:
+    DC_MANAGER = '/var/log/dcmanager/dcmanager.log'
+    DC_ORCH = '/var/log/dcorch/dcorch.log'

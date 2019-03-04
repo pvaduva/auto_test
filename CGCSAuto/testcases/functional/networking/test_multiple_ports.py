@@ -2,7 +2,7 @@ from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec, VMStatus, GuestImages
+from consts.cgcs import FlavorSpec, VMStatus
 from consts.reasons import SkipHostIf
 from consts.auth import Tenant
 from keywords import vm_helper, nova_helper, network_helper, check_helper, glance_helper, system_helper
@@ -23,38 +23,32 @@ def id_params(val):
 
 
 def _append_nics_for_net(vifs, net_id, nics):
+    glance_vif = None
     for vif in vifs:
-        if isinstance(vif, str):
-            vif_model = vif
-            pci_addr = None
-        else:
-            vif_model, pci_addr = vif
-
-        vif_ = vif_model.split(sep='_x')
+        vif_ = vif.split(sep='_x')
         vif_model = vif_[0]
+        if vif_model in ('e1000', 'rt18139'):
+            glance_vif = vif_model
         iter_ = int(vif_[1]) if len(vif_) > 1 else 1
         for i in range(iter_):
             nic = {'net-id': net_id, 'vif-model': vif_model}
-            if pci_addr is not None:
-                pci_prefix, pci_append = pci_addr.split(':')
-                pci_append_incre = format(int(pci_append, 16) + i, '02x')
-                nic['vif-pci-address'] = ':'.join(['0000', pci_prefix, pci_append_incre]) + '.0'
             nics.append(nic)
 
-    return nics
+    return nics, glance_vif
 
 
 def _boot_multiports_vm(flavor, mgmt_net_id, vifs, net_id, net_type, base_vm, pcipt_seg_id=None):
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'}]
+    nics = [{'net-id': mgmt_net_id}]
 
-    nics = _append_nics_for_net(vifs, net_id=net_id, nics=nics)
+    nics, glance_vif = _append_nics_for_net(vifs, net_id=net_id, nics=nics)
+    img_id = None
+    if glance_vif:
+        img_id = glance_helper.create_image(name=glance_vif, hw_vif_model=glance_vif, cleanup='function')[1]
 
     LOG.tc_step("Boot a test_vm with following nics on same networks as base_vm: {}".format(nics))
-    vm_under_test = vm_helper.boot_vm(name='multiports', nics=nics, flavor=flavor, cleanup='function')[1]
+    vm_under_test = vm_helper.boot_vm(name='multiports', nics=nics, flavor=flavor, cleanup='function',
+                                      image_id=img_id)[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
-
-    LOG.tc_step("Check vm PCI address is as configured")
-    check_helper.check_vm_pci_addr(vm_under_test, nics)
 
     if pcipt_seg_id:
         LOG.tc_step("Add vlan to pci-passthrough interface for VM.")
@@ -85,9 +79,9 @@ class TestMutiPortsBasic:
         tenant_net_id = network_helper.get_tenant_net_id()
         internal_net_id = network_helper.get_internal_net_id()
 
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': 'e1000'},
-                {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+        nics = [{'net-id': mgmt_net_id},
+                {'net-id': tenant_net_id},
+                {'net-id': internal_net_id}]
 
         LOG.fixture_step("(class) Boot a base vm with following nics: {}".format(nics))
         base_vm = vm_helper.boot_vm(name='multiports_base', flavor=flavor_id, nics=nics, cleanup='class',
@@ -99,11 +93,10 @@ class TestMutiPortsBasic:
         return base_vm, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id
 
     @mark.parametrize('vifs', [
-        mark.p2((('avp', '00:02'), ('avp', '00:1f'))),
-        mark.p2((('virtio', '01:01'), ('virtio', None))),
-        mark.p2((('e1000', '04:09'), ('virtio', '08:1f'))),
-        mark.p2((('avp_x8', None), ('virtio_x7', None))),
-        mark.priorities('nightly', 'sx_nightly')((('virtio_x4', None), )),
+        mark.p2(('avp_x2',)),
+        mark.p2(('e1000_x2',)),
+        mark.p2(('avp_x8', 'virtio_x7')),
+        mark.priorities('nightly', 'sx_nightly')(('virtio_x4',))
     ], ids=id_params)
     def test_multiports_on_same_network_vm_actions(self, vifs, skip_for_ovs, base_setup):
         """
@@ -158,24 +151,23 @@ class TestMutiPortsBasic:
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
 
-            LOG.tc_step("Verify vm pci address preserved after {}".format(vm_actions))
-            check_helper.check_vm_pci_addr(vm_under_test, nics)
+            # LOG.tc_step("Verify vm pci address preserved after {}".format(vm_actions))
+            # check_helper.check_vm_pci_addr(vm_under_test, nics)
 
             LOG.tc_step("Verify ping from base_vm to vm_under_test over management and data networks still works "
                         "after {}".format(vm_actions))
             vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
 
-    # @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     @mark.p2
     @mark.parametrize('vifs', [
-        (('avp', '00:05'), ('e1000', '08:01'), ('virtio', '01:1f'), ('virtio', None)),
+        ('avp', 'e1000'),
     ], ids=id_params)
     def test_multiports_on_same_network_evacuate_vm(self, vifs, skip_for_ovs, base_setup):
         """
         Test evacuate vm with multiple ports on same network
 
         Args:
-            vifs (tuple): each item in the tuple is 1 nic to be added to vm with specified (vif_mode, pci_address)
+            vifs (tuple): each item in the tuple is 1 nic to be added to vm with specified vif model
             base_setup (tuple): test fixture to boot base vm
 
         Setups:
@@ -207,9 +199,6 @@ class TestMutiPortsBasic:
         LOG.tc_step("Reboot vm host {}".format(host))
         vm_helper.evacuate_vms(host=host, vms_to_check=vm_under_test, ping_vms=True)
 
-        LOG.tc_step("Verify vm pci address preserved after evacuation")
-        check_helper.check_vm_pci_addr(vm_under_test, nics)
-
         LOG.tc_step("Verify ping from base_vm to vm_under_test over management and data networks still works after "
                     "evacuation.")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
@@ -224,7 +213,6 @@ class TestMutiPortsPCI:
                                                       net_name='internal0-net')
         if not avail_net:
             skip(SkipHostIf.PCI_IF_UNAVAIL)
-
         LOG.info("Internal network(s) selected for pcipt and sriov: {}".format(avail_net))
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
         flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048)[1]
@@ -245,15 +233,15 @@ class TestMutiPortsPCI:
         tenant_net_id = network_helper.get_tenant_net_id()
         internal_net_id = network_helper.get_internal_net_id(net_name=internal_net_name, strict=True)
 
-        vif_type = 'avp' if system_helper.is_avs() else 'e1000'
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': 'virtio'},
-                {'net-id': internal_net_id, 'vif-model': 'virtio'},
+        vif_type = 'avp' if system_helper.is_avs() else 'virtio'
+        nics = [{'net-id': mgmt_net_id},
+                {'net-id': tenant_net_id},
+                {'net-id': internal_net_id},
                 {'net-id': internal_net_id, 'vif-model': 'pci-sriov'},
                 {'net-id': internal_net_id, 'vif-model': vif_type}, ]
 
         if extra_pcipt_net:
-            nics.append({'net-id': extra_pcipt_net, 'vif-model': 'virtio'})
+            nics.append({'net-id': extra_pcipt_net})
 
         LOG.fixture_step("(class) Boot a base pci vm with following nics: {}".format(nics))
         base_vm_pci = vm_helper.boot_vm(name='multiports_pci_base', flavor=flavor_id, nics=nics, cleanup='class',
@@ -262,8 +250,7 @@ class TestMutiPortsPCI:
         vm_helper.wait_for_vm_pingable_from_natbox(base_vm_pci, fail_ok=False)
 
         LOG.fixture_step("(class) Ping base PCI vm from itself over data, and internal (vlan 0 only) networks")
-        vm_helper.ping_vms_from_vm(to_vms=base_vm_pci, from_vm=base_vm_pci, net_types=['data', 'internal'],
-                                   vlan_zero_only=True)
+        vm_helper.ping_vms_from_vm(to_vms=base_vm_pci, from_vm=base_vm_pci, net_types=['data', 'internal'])
         vm_helper.configure_vm_vifs_on_same_net(vm_id=base_vm_pci)
 
         LOG.fixture_step("(class) Get seg_id for internal0-net1 to prepare for vlan tagging on pci-passthough "
@@ -284,13 +271,13 @@ class TestMutiPortsPCI:
             extra_pcipt_net, extra_pcipt_net_name
 
     @mark.parametrize('vifs', [
-        mark.p2(['virtio', 'avp', 'pci-passthrough']),
+        mark.p2(('virtio', 'avp', 'pci-passthrough')),
         # mark.p2(['virtio_x7', 'pci-sriov_x7']),       This test requires compute configured with 8+ sriov vif
         # mark.p2(['virtio_x6', 'avp_x6', 'pci-passthrough']),
-        mark.p2([('virtio_x7', '05:03'), ('avp_x5', '00:04'), ('pci-sriov', '05:02')]),
-        mark.p3((['pci-sriov', 'pci-passthrough'])),
-        mark.domain_sanity(([('avp', '00:02'), ('virtio', '02:01'), ('e1000', '08:01'), ('pci-passthrough', '05:1f'), ('pci-sriov', '08:02')])),
-        mark.p3((['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov'])),
+        mark.p2(('virtio_x7', 'avp_x5', 'pci-sriov')),
+        mark.p3(('pci-sriov', 'pci-passthrough')),
+        mark.domain_sanity(('avp', 'e1000', 'pci-passthrough', 'pci-sriov')),
+        mark.p3(('avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov')),
     ], ids=id_params)
     def test_multiports_on_same_network_pci_vm_actions(self, skip_for_ovs, base_setup_pci, vifs):
         """
@@ -335,20 +322,20 @@ class TestMutiPortsPCI:
                 pcipt_included = True
                 break
 
-        vif_type = 'avp' if system_helper.is_avs() else 'e1000'
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+        vif_type = 'avp' if system_helper.is_avs() else None
+        nics = [{'net-id': mgmt_net_id},
                 {'net-id': tenant_net_id, 'vif-model': vif_type}]
-        nics = _append_nics_for_net(vifs, net_id=internal_net_id, nics=nics)
+        nics, glance_vif = _append_nics_for_net(vifs, net_id=internal_net_id, nics=nics)
         if pcipt_included and extra_pcipt_net:
             nics.append({'net-id': extra_pcipt_net, 'vif-model': 'pci-passthrough'})
 
-        # Change guest value to assist for manual test that requires cgcs-guest
-        # guest = 'cgcs-guest'
-        guest = GuestImages.DEFAULT_GUEST
-        glance_helper.get_guest_image(guest)
+        img_id = None
+        if glance_vif:
+            img_id = glance_helper.create_image(name=glance_vif, hw_vif_model=glance_vif, cleanup='function')[1]
+
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
         vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, cleanup='function',
-                                          reuse_vol=False, guest_os=guest)[1]
+                                          reuse_vol=False, image_id=img_id)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
         if pcipt_included:
@@ -360,9 +347,9 @@ class TestMutiPortsPCI:
 
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
-
-        LOG.tc_step("Verify vm pci address")
-        check_helper.check_vm_pci_addr(vm_under_test, nics)
+        #
+        # LOG.tc_step("Verify vm pci address")
+        # check_helper.check_vm_pci_addr(vm_under_test, nics)
 
         for vm_actions in [['auto_recover'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
 
@@ -387,13 +374,13 @@ class TestMutiPortsPCI:
             vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'internal'],
                                        vlan_zero_only=True)
 
-            LOG.tc_step("Verify vm pci address after {}".format(vm_actions))
-            check_helper.check_vm_pci_addr(vm_under_test, nics)
+            # LOG.tc_step("Verify vm pci address after {}".format(vm_actions))
+            # check_helper.check_vm_pci_addr(vm_under_test, nics)
 
     # @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     @mark.parametrize('vifs', [
         # (['pci-sriov', 'pci-passthrough']),
-        mark.domain_sanity((['avp', 'virtio', 'e1000', 'pci-passthrough', 'pci-sriov'])),
+        mark.domain_sanity(('avp', 'virtio', 'pci-passthrough', 'pci-sriov')),
         # (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
     ], ids=id_params)
     def test_multiports_on_same_network_pci_evacuate_vm(self, skip_for_ovs, base_setup_pci, vifs):
@@ -425,8 +412,8 @@ class TestMutiPortsPCI:
         base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, extra_pcipt_net, \
             extra_pcipt_net_name = base_setup_pci
 
-        vif_type = 'avp' if system_helper.is_avs() else 'e1000'
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+        vif_type = 'avp' if system_helper.is_avs() else None
+        nics = [{'net-id': mgmt_net_id},
                 {'net-id': tenant_net_id, 'vif-model': vif_type}]
         for vif in vifs:
             nics.append({'net-id': internal_net_id, 'vif-model': vif})

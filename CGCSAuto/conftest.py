@@ -8,6 +8,8 @@ import pytest   # Don't remove. Used in eval
 
 import setup_consts
 import setups
+
+from consts.filepaths import BuildServerPath
 from consts.proj_vars import ProjVar, InstallVars, ComplianceVar
 from consts import build_server as build_server_consts
 from consts import cgcs
@@ -101,7 +103,7 @@ def _write_results(res_in_tests, test_name):
                 upload_results.upload_test_result(session_id=ProjVar.get_var('SESSION_ID'), test_name=test_name,
                                                   result=res_in_tests, start_time=tc_start_time, end_time=tc_end_time,
                                                   traceback=tracebacks, parse_name=True, search_forward=search_forward)
-            except Exception:
+            except:
                 LOG.exception("Unable to upload test result to TestHistory db! Test case: {}".format(test_name))
 
             finally:
@@ -114,7 +116,7 @@ def _write_results(res_in_tests, test_name):
             if not upload_res:
                 with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
                     f.write('\tUPLOAD_UNSUCC')
-        except Exception:
+        except:
             LOG.exception("Unable to upload test result to mongoDB! Test case: {}".format(test_name))
 
     tc_start_time = None
@@ -302,6 +304,13 @@ def pytest_configure(config):
     elif stress_count > 0:
         count = stress_count
 
+    # neccesary install params if --lab is not given
+    controller_arg = config.getoption('controller')
+    compute_arg = config.getoption('compute')
+    storage_arg = config.getoption('storage')
+    lab_file_dir = config.getoption('file_dir')
+    build_server = config.getoption('build_server')
+
     global no_teardown
     no_teardown = config.getoption('noteardown')
     if repeat_count > 0 or no_teardown:
@@ -314,7 +323,13 @@ def pytest_configure(config):
     collect_netinfo = config.getoption('netinfo')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
-    lab = setups.get_lab_from_cmdline(lab_arg=lab_arg, installconf_path=install_conf)
+    lab = setups.get_lab_from_cmdline(lab_arg=lab_arg,
+                                      installconf_path=install_conf,
+                                      controller_arg=controller_arg,
+                                      compute_arg=compute_arg,
+                                      storage_arg=storage_arg,
+                                      lab_files_dir=lab_file_dir,
+                                      bs=build_server)
     natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
     tenant = setups.get_tenant_dict(tenant_arg) if tenant_arg else setup_consts.PRIMARY_TENANT
     is_boot = True if bootvms_arg else setup_consts.BOOT_VMS
@@ -338,6 +353,7 @@ def pytest_configure(config):
         ProjVar.set_var(COLLECT_TELNET=True)
 
     # Compliance configs:
+
     file_or_dir = config.getoption('file_or_dir')
 
     refstack_suite = dovetail_suite = config.getoption('compliance_suite')
@@ -446,10 +462,21 @@ def pytest_addoption(parser):
     openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
     stress_help = "Number of iterations to run specified testcase(s). Abort rest of the test session on first failure"
     count_help = "Repeat tests x times - NO stop on failure"
-    skiplabsetup_help = "Do not run lab_setup post lab install"
-    installconf_help = "Full path of lab install configuration file. Template location: " \
+    skip_help = "Comma seperated list of parts of the install to skip. Usage: --skip=labsetup,config_controller \n" \
+                "labsetup: Do not run lab_setup post lab install \n" \
+                "pxeboot: Don't modify pxeboot.cfg \n" \
+                "feed: skip setup of network feed"
+    installconf_help = "Full path of lab fresh_install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
-    resumeinstall_help = 'Resume install of current lab from where it stopped/failed'
+    resumeinstall_help = 'Resume fresh_install of current lab from where it stopped/failed or from a given step'
+    wipedisk_help = 'Wipe the disk(s) on the hosts'
+    boot_help = 'Select how to boot the lab. Default is pxe. Options are: \n' \
+                'feed: boot from the network using pxeboot \n' \
+                'usb_burn: burn the USB using iso-path and boot from it \n' \
+                'usb_boot: Boot from load existing on USB \n' \
+                'pxe_iso: iso install flag'
+    iso_path_help = 'Full path to ISO file. Default is <build-dir'
+    ovs_help = 'Run using lab_setup_ovs.conf rather than lab_setup.conf (for StarlingX install)'
     changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
     region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
@@ -458,6 +485,7 @@ def pytest_addoption(parser):
     horizon_visible_help = "Display horizon on screen"
     remote_cli_help = 'Run testcases using remote CLI'
     no_console_log = 'Print minimal console logs'
+    kuber_help = 'Use kubernetes option in config_controller)'
 
     # Common reporting options:
     parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
@@ -500,27 +528,88 @@ def pytest_addoption(parser):
                      '--no_console', action='store_true', dest='noconsolelog', help=no_console_log)
 
     ##################################
-    # Lab install or upgrade options #
+    # Lab fresh_install or upgrade options #
     ##################################
+
     # Install
-    parser.addoption('--resumeinstall', '--resume-install', dest='resumeinstall', action='store_true',
-                     help=resumeinstall_help)
-    parser.addoption('--skiplabsetup', '--skip-labsetup', dest='skiplabsetup', action='store_true',
-                     help=skiplabsetup_help)
+    parser.addoption('--resumeinstall', '--resume-install', '--resume_install', dest='resumeinstall', action='store',
+                     help=resumeinstall_help, const=True, nargs='?', default=False)
+    parser.addoption('--stop', dest='stop_step', action='store', help='Which test step to stop at', default=None)
+    parser.addoption('--skip', dest='skiplist', action='store', nargs='*', help=skip_help)
+    parser.addoption('--wipedisk',  dest='wipedisk', action='store_true', help=wipedisk_help)
+    parser.addoption('--boot', dest='boot_list', action='store', default='feed', help=boot_help)
     parser.addoption('--installconf', '--install-conf', action='store', metavar='installconf', default=None,
                      help=installconf_help)
+    parser.addoption('--security', dest='security', action='store', default='standard')
+    parser.addoption('--drop', dest='drop_num', action='store', help='an integer representing which drop to install')
     # Ceph Post Install
     ceph_mon_device_controller0_help = "The disk device to use for ceph monitor in controller-0. e.g., /dev/sdc"
     ceph_mon_device_controller1_help = "The disk device to use for ceph monitor in controller-1. e.g., /dev/sdb"
     ceph_mon_gib_help = "The size of the partition to allocate on a controller disk for the Ceph monitor logical " \
                         "volume, in GiB (the default value is 20)"
+    build_server_help = "TiS build server host name where the Titium load software is downloaded from." \
+                        " ( default: {})".format(build_server_consts.DEFAULT_BUILD_SERVER['name'])
+    tis_builds_dir_help = "Directory name under build workspace (/localdisk/loadbuild/jenkins) containing " \
+                          "directories for Titanium Server loads (default: Titanium_R6_build)  e.g. TS_15.12_Host, " \
+                          "TS_16.10_Build, TS_16.10_Prestaging_Build, TC_17.06_Host, TC_18.03_Host, TC_18.07_Host, " \
+                          "CGCS_6.0_Host, StarlingX_18.10, StarlingX_Upstream_build, Titanium_R6_build. Default" \
+                          " is Titanium_R6_build"
+
     parser.addoption('--ceph-mon-dev-controller-0', '--ceph_mon_dev_controller-0',  dest='ceph_mon_dev_controller_0',
                      action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller0_help)
     parser.addoption('--ceph-mon-dev-controller-1', '--ceph_mon_dev_controller-1',  dest='ceph_mon_dev_controller_1',
                      action='store', metavar='DISK_DEVICE',  help=ceph_mon_device_controller1_help)
     parser.addoption('--ceph-mon-gib', '--ceph_mon_dev_gib',  dest='ceph_mon_gib',
                      action='store', metavar='SIZE',  help=ceph_mon_gib_help)
-    # Note --lab is also a lab install option, when config file is not provided.
+    parser.addoption('--boot-server', '--boot_server', dest='boot_server',
+                     help='server to boot from. Default is yow-tuxlab2')
+    parser.addoption('--build-server', '--build_server',  dest='build_server',
+                     action='store', metavar='SERVER', default=build_server_consts.DEFAULT_BUILD_SERVER['name'],
+                     help=build_server_help)
+    parser.addoption('--tis-builds-dir', '--tis_builds_dir',  dest='tis_builds_dir',
+                     action='store', metavar='DIR',  help=tis_builds_dir_help)
+
+    # install help
+    lab_files = ["TiS_config.ini_centos", "hosts_bulk_add.xml", "lab_setup.conf", "settings.ini"]
+    file_dir_help = "directory that contains the following lab files: {}. ".format(' '.join(v[1] for v in lab_files)) +\
+                    "Custom directories can be found at: /folk/cgts/lab/customconfigs" \
+                    "Default is: <load_path>/lab/yow/<lab_name>"
+    controller_help = "space-separated list of VLM barcodes for controllers"
+    compute_help = "space-separated list of VLM barcodes for computes"
+    storage_help = "space-separated list of VLM barcodes for storage nodes"
+    guest_image_help = "The full path to the tis-centos-guest.img in build-server" \
+                       "( default: {} )".format(BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
+    heat_help = "The full path to the python heat templates" \
+                "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES_PREV)
+    dcfloatip_help = " The distributed cloud central region floating ip if subcloud is specified."
+    openstack_install_help = 'flag for openstack install or not; default is false.'
+    ipv6_install_help = 'flag for ipv6 install or not; default is false.'
+    helm_chart_path_help = 'Full path to Helm charts files. Default is <build-dir>/std/build-helm/stx'
+    # Custom install options
+    parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',
+                     help=file_dir_help)
+    parser.addoption('--controller', dest='controller', action='store', help=controller_help)
+    parser.addoption('--compute', dest='compute', action='store', help=compute_help)
+    parser.addoption('--storage', dest='storage', action='store', help=storage_help)
+    parser.addoption('--guest_image', '--guest-image', '--guest_image_path', '--guest-image-path',
+                     dest='guest_image_path', action='store', metavar='guest image full path',
+                     default=BuildServerPath.DEFAULT_GUEST_IMAGE_PATH, help=guest_image_help)
+    parser.addoption('--heat_templates', '--heat-templates', '--heat_templates_path', '--heat-templates-path',
+                     dest='heat_templates', action='store', metavar='heat templates full path',
+                     default=None, help=heat_help)
+    parser.addoption('--iso-path', '--isopath', '--iso_path', dest='iso_path', action='store', default=None,
+                     help=iso_path_help)
+    parser.addoption('--ovs', '--OVS', dest='ovs_config', action='store_true', help=ovs_help)
+    parser.addoption('--kubernetes', '--kuber', '--kub', dest='kubernetes_config', action='store_true', help=kuber_help)
+    parser.addoption('--dc-float-ip', '--dc_float_ip', '--dcfip', dest='dc_float_ip', action='store', default=None,
+                     help=dcfloatip_help)
+    parser.addoption('--no-openstack-install',  dest='no_openstack_install', action='store_true', default=False,
+                     help=openstack_install_help)
+    parser.addoption('--ipv6',  dest='ipv6', action='store_true', default=False,
+                     help=ipv6_install_help)
+    parser.addoption('--helm-chart-path', '--helmchartpath', '--helm_chart_path', dest='helm_chart_path',
+                     action='store', default=None,  help=helm_chart_path_help)
+    # Note --lab is also a lab fresh_install option, when config file is not provided.
 
     ###############################
     #  Upgrade options #
@@ -528,12 +617,11 @@ def pytest_addoption(parser):
 
     upgrade_version_help = "TiS next software version that the lab is upgraded to. " \
                            "Valid options are: {}".format(' '.join(v[1] for v in cgcs.SUPPORTED_UPGRADES))
-    build_server_help = "TiS build server host name where the upgrade release software is downloaded from." \
-                        " ( default: {})".format(build_server_consts.DEFAULT_BUILD_SERVER['name'])
-    upgrade_build_dir_path = "The path to the upgrade software release build directory in build server." \
-                             " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \
-                             " Otherwise the default  build dir path for the upgrade software " \
-                             "version will be used"
+
+    upgrade_build_dir_path_help = "The path to the upgrade software release build directory in build server." \
+                                  " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \
+                                  " Otherwise the default  build dir path for the upgrade software " \
+                                  "version will be used"
 
     license_help = "The full path to the new release software license file in build-server. " \
                    "e.g /folk/cgts/lab/TiS16-full.lic or /folk/cgts/lab/TiS16-CPE-full.lic." \
@@ -547,11 +635,9 @@ def pytest_addoption(parser):
 
     parser.addoption('--upgrade-version', '--upgrade_version', '--upgrade', dest='upgrade_version',
                      action='store', metavar='VERSION',  default=None, help=upgrade_version_help)
-    parser.addoption('--build-server', '--build_server',  dest='build_server',
-                     action='store', metavar='SERVER', default=build_server_consts.DEFAULT_BUILD_SERVER['name'],
-                     help=build_server_help)
+
     parser.addoption('--tis-build-dir', '--tis_build_dir',  dest='tis_build_dir',
-                     action='store', metavar='DIR',  help=upgrade_build_dir_path)
+                     action='store', metavar='DIR',  help=upgrade_build_dir_path_help)
     parser.addoption('--license',  dest='upgrade_license', action='store',
                      metavar='license full path', help=license_help)
 
@@ -594,20 +680,16 @@ def pytest_addoption(parser):
                           "Applicable only for upgrades from R3."
     max_parallel_compute_help = "The maximum number of compute hosts to upgrade in parallel, if parallel apply type" \
                                 " is selected"
-    alarm_restriction_help = """Inidcates how to handle alarm restrictions based on the management affecting statuses
-                             of any existing alarms.
-                                 relaxed -  orchestration is allowed to proceed if none managment affecting alarms are
-                                            present
-                                 strict -  orchestration is not allowed if alarms are present
-                             """
+    alarm_restriction_help = """Indicates how to handle alarm restrictions based on the management affecting statuses
+                                of any existing alarms.
+                                relaxed - orchestration is allowed to proceed if no management affecting alarms present
+                                strict - orchestration is not allowed if alarms are present"""
+    instance_action_help = """Indicates how to VMs are moved from compute hosts when apply reboot-required patches. 
+                              There are two possible values for moving the VMs off the compute hosts: 
+                              start-stop -  This is typically used for VMs that do not support migration. 
+                              migrate -  instances are either live migrated or cold migrated  before compute host is 
+                              patched."""
 
-    instance_action_help = """Inidcates how to VMs are moved from compute hosts when apply reboot-required patches. There
-                             are two possible values for moving the VMs off the compute hosts:
-                                 start-stop -  instances are stopped before a compute host is patched. This is typically
-                                 used for VMs that do not support migration.
-                                 migrate -  instances are either live migrated or cold migrated  before compute host is
-                                 patched.
-                             """
     parser.addoption('--controller-apply-type', '--controller_apply_type', '--ctra',  dest='controller_strategy',
                      action='store',  help=apply_strategy_help)
 
@@ -649,20 +731,25 @@ def pytest_addoption(parser):
     # Restore only
     parser.addoption('--backup-build-id', '--backup_build-id',  dest='backup_build_id',
                      action='store', help="The build id of the backup")
+
     parser.addoption('--backup-builds-dir', '--backup_builds-dir',  dest='backup_builds_dir',
                      action='store', help="The Titanium builds dir where the backup build id belong. "
                                           "Such as CGCS_5.0_Host or TC_17.06_Host")
+    parser.addoption('--cinder-backup', '--cinder_backup',  dest='cinder_backup',
+                     action='store_true', help="Using upstream cinder-backup CLIs", default=True)
 
+    parser.addoption('--low-latency', '--low_latency', '--lowlatency', '--low-lat', '--low_lat', '--lowlat',
+                     dest='low_latency', action='store_true', help="Restore a low-latency lab")
+
+    parser.addoption('--reinstall-storage', '--reinstall-storage',  dest='reinstall_storage',
+                     action='store_true', default=False, help="Whether to reinstall storage nodes or not. "
+                                                              "By default, do not reinstall them.")
     parser.addoption('--skip-setup-feed', '--skip_setup_feed',  dest='skip_setup_feed',
-                     action='store_true', help="Reuse the existing feed on the pxeboot server (tuxlab1/2) instead of "
-                                          "setup feed from scratch")
+                     action='store_true', help="Use existing feed on tuxlab (tuxlab1/2)")
+
     parser.addoption('--skip-reinstall', '--skip_reinstall',  dest='skip_reinstall',
                      action='store_true', help="Reuse the lab in states without reinstall it. "
                                                "This will be helpful if the lab was/will be in customized way.")
-    parser.addoption('--low-latency', '--low_latency',  dest='low_latency',
-                     action='store_true', help="Restore a low-latency lab")
-    parser.addoption('--cinder-backup', '--cinder_backup',  dest='cinder_backup',
-                     action='store_true', help="Using upstream cinder-backup CLIs")
 
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
@@ -726,6 +813,16 @@ def pytest_unconfigure(config):
     except Exception as e:
         LOG.debug(e)
         pass
+    log_dir = ProjVar.get_var('LOG_DIR')
+    if not log_dir:
+        try:
+            from utils.clients.ssh import ControllerClient
+            ssh_list = ControllerClient.get_active_controllers(fail_ok=True)
+            for con_ssh_ in ssh_list:
+                con_ssh_.close()
+        except:
+            pass
+        return
 
     log_dir = ProjVar.get_var('LOG_DIR')
     if not log_dir:
@@ -795,10 +892,10 @@ def pytest_unconfigure(config):
     except Exception as e:
         LOG.warning("Unable to parse test steps. \nDetails: {}".format(e.__str__()))
 
-    try:
-        setups.list_migration_history(con_ssh=con_ssh)
-    except:
-        LOG.warning("Failed to run nova migration-list")
+    # try:
+    #     setups.list_migration_history(con_ssh=con_ssh)
+    # except:
+    #     LOG.warning("Failed to run nova migration-list")
 
     if test_count > 0 and (ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL'))):
         # Collect tis logs if collect all required upon test(s) failure
@@ -852,6 +949,11 @@ def pytest_collection_modifyitems(items):
             LOG.debug(msg=msg)
             item.add_marker(eval("pytest.mark.known_issue"))
 
+        # add dc maker to all tests start with test_dc_xxx
+        dc_maker = item.get_marker('dc')
+        if not dc_maker and 'test_dc_' in item.nodeid:
+            item.add_marker(pytest.mark.dc)
+
     # add trylast tests to the end
     for item in move_to_last:
         items.remove(item)
@@ -863,33 +965,11 @@ def pytest_collection_modifyitems(items):
 
 
 def pytest_generate_tests(metafunc):
-    # Modify the order of the fixtures to delete resources before revert host
-    # config_host_fixtures = {'class': 'config_host_class', 'module': 'config_host_module'}
-    # metafunc.fixturenames = list(set(list(metafunc.fixturenames)))
-    # for key, config_fixture in config_host_fixtures.items():
-    #     delete_res_fixture = 'delete_resources_{}'.format(key)
-    #
-    #     if config_fixture in metafunc.fixturenames and delete_res_fixture in metafunc.fixturenames:
-    #         index = list(metafunc.fixturenames).index(delete_res_fixture)
-    #         index = max([0, index-1])
-    #         metafunc.fixturenames.remove(config_fixture)
-    #         metafunc.fixturenames.insert(index, config_fixture)
-
-    # NOTE! repeat using parameters are commented out. Tests are now repeated by modifying the tests list
-    # Stress fixture
-    # global count
-    # if count > 0:
-    #     # Add autorepeat fixture and parametrize the fixture
-    #     param_name = 'autorepeat'
-    #     metafunc.parametrize(param_name, range(count), indirect=True, ids=__params_gen)
-    #
-    # print(str(count))
-    # print("{}".format(metafunc.fixturenames))
 
     # Prefix 'remote_cli' to test names so they are reported as a different testcase
     if ProjVar.get_var('REMOTE_CLI'):
         metafunc.parametrize('prefix_remote_cli', ['remote_cli'])
-
+    # Append compliance suite to test name
     elif ComplianceVar.get_var('REFSTACK_SUITE'):
         suite = ComplianceVar.get_var('REFSTACK_SUITE').strip().rsplit(r'/', maxsplit=1)[-1]
         metafunc.parametrize('compliance_suite', [suite])

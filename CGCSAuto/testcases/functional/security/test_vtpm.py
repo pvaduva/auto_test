@@ -10,7 +10,7 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 core_flavor_name = 'flavor_vtpm'
-vtpm_base_dir = '/etc/nova/instances/{vm_id}/vtpm-{instance_name}/state'
+vtpm_base_dir = '/var/lib/nova/instances/{vm_id}/vtpm-{instance_name}/state'
 vtpm_file_name = 'tpm2-00.permall'
 vtpm_device = '/dev/tpm0'
 
@@ -44,6 +44,7 @@ def prepare_vms(request):
                 if vm_id:
                     vm_helper.delete_vms(vm_id)
         nova_helper.delete_flavors(g_flavors.values())
+        g_flavors.clear()
 
     request.addfinalizer(clean_up)
 
@@ -741,6 +742,7 @@ def reuse_existing_vms(vm_operation, extra_specs):
     return True
 
 
+# US129306
 @mark.parametrize(('vm_operation', 'extra_specs'), [
     ('create', 'vtpm'),
     ('create', 'autorc'),
@@ -792,7 +794,7 @@ def reuse_existing_vms(vm_operation, extra_specs):
 
     ('resize_to_non_vtpm', 'vtpm'),
 ])
-def test_vtpm(vm_operation, extra_specs):
+def _test_vtpm(vm_operation, extra_specs):
     global g_vms, g_reusable
 
     LOG.tc_step('Verify vTPM is functioning on VMs right after they are: {}'.format(vm_operation))

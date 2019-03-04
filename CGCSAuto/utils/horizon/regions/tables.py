@@ -184,12 +184,12 @@ class TableRegion(baseregion.BaseRegion):
             lambda: all([not self._is_element_displayed(row) for row
                          in rows_getter()]))
 
-    def wait_cell_status(self, cell_getter, statuses):
+    def wait_cell_status(self, cell_getter, statuses, timeout=None):
         if not isinstance(statuses, (list, tuple)):
             statuses = (statuses,)
         try:
             return self._wait_till_text_present_in_element(cell_getter,
-                                                           statuses)
+                                                           statuses, timeout=timeout)
         except: # exceptions.TimeoutException:
             return False
 
@@ -259,11 +259,9 @@ def bind_table_action(action_name):
         @functools.wraps(method)
         def wrapper(table):
             actions = table._get_elements(*_actions_locator)
-            print('{}'.format(actions))
             action_element = None
             for action in actions:
                 target_action_id = '%s__action_%s' % (table.name, action_name)
-                print('target id: {}. Actual id: {}'.format(target_action_id, action.get_attribute('id')))
                 if action.get_attribute('id') == target_action_id:
                     action_element = action
                     break
@@ -276,7 +274,7 @@ def bind_table_action(action_name):
     return decorator
 
 
-def bind_row_action(action_name):
+def bind_row_action(action_name, attribute_search = 'id'):
     """A decorator to bind table region method to an actual row action button.
 
     Many table actions when started (by clicking a corresponding button
@@ -300,20 +298,24 @@ def bind_row_action(action_name):
     # both with *. Also primary action could be single as well, do not use
     # .btn-group because of that
     primary_action_locator = (
-        by.By.CSS_SELECTOR, 'td.actions_column *.btn:nth-child(1)')
+        by.By.CSS_SELECTOR,
+        'td.actions_column *.btn:nth-child(1)'
+    )
     secondary_actions_opener_locator = (
         by.By.CSS_SELECTOR,
-        'td.actions_column > .btn-group > *.btn:nth-child(2)')
+        'td.actions_column > .btn-group > *.btn:nth-child(2)'
+    )
     secondary_actions_locator = (
         by.By.CSS_SELECTOR,
-        'td.actions_column > .btn-group > ul.row_actions > li > a, button')
+        'td.actions_column > .btn-group > ul.row_actions > li > a, button'
+    )
 
     def decorator(method):
         @functools.wraps(method)
         def wrapper(table, row):
             def find_action(element):
                 pattern = "__action_%s" % action_name
-                return element.get_attribute('id').endswith(pattern)
+                return element.get_attribute(attribute_search).endswith(action_name)
 
             action_element = row._get_element(*primary_action_locator)
             if not find_action(action_element):

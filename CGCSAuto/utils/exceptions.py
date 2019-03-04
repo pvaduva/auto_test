@@ -35,15 +35,15 @@ class SSHException(TiSError):
     message = "SSH error."
 
 
-class TelnetException(TiSError):
+class TelnetError(TiSError):
     message = "Telnet Error"
 
 
-class TelnetTimeout(TelnetException):
+class TelnetTimeout(TelnetError):
     message = 'Telnet timeout'
 
 
-class TelnetEOF(TelnetException):
+class TelnetEOF(TelnetError):
     message = 'Telnet EOF.'
 
 
@@ -161,6 +161,10 @@ class SysinvError(TiSError):
     message = 'Sysinv error.'
 
 
+class ContainerError(SysinvError):
+    message = 'Container error.'
+
+
 class CinderError(TiSError):
     message = 'Cinder error.'
 
@@ -220,5 +224,31 @@ class RefStackError(TiSError):
 class DovetailError(TiSError):
     message = 'Dovetail test(s) failed.'
 
+
 class MuranoError(TiSError):
-    message = 'Murano error'
+    message = 'Murano error.'
+
+
+class DCError(TiSError):
+    message = 'DC error.'
+
+
+class PatchError(TiSError):
+    message = 'Patch error.'
+
+
+class KubeError(TiSError):
+    message = 'Kubernetes error.'
+
+
+class KubeCmdError(KubeError):
+    message = 'Kubernetes cmd failed.'
+
+
+class InstallError(TiSError):
+    message = 'Install error'
+
+
+class K8sError(TiSError):
+    message = 'K8s error'
+

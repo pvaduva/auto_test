@@ -200,10 +200,10 @@ def test_increase_host_partition_size():
             if device_node.startswith("/dev/nvme"):
                 device_node = device_node[:-1]
             LOG.tc_step("Modifying partition {} from size 1 to size {} from host {} on device node {}".format(
-                    uuid, int(size_gib), host, device_node))
-            partition_helper.modify_partition(host, uuid, str(int(size_gib)))
+                    uuid, int(size_gib) - 2, host, device_node))
+            partition_helper.modify_partition(host, uuid, str(int(size_gib) - 2))
             new_disk_available_gib = partition_helper.get_disk_info(host, device_node, "available_gib")
-            assert int(float(new_disk_available_gib)) == 0, \
+            assert 0 <= int(float(new_disk_available_gib)) <= 3, \
                 "Expected disk space to be consumed but instead we have {} available".format(new_disk_available_gib)
             # Only test one disk on each host
             break
@@ -549,7 +549,7 @@ def test_attempt_host_unlock_during_partition_creation():
 
         for uuid in free_disks:
             size_gib = float(free_disks[uuid])
-            if size_gib == 0.0:
+            if size_gib < 2.0:
                 LOG.info("Skip this disk due to insufficient space")
                 continue
 

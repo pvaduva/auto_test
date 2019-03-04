@@ -3,13 +3,14 @@ from contextlib import contextmanager
 
 from pytest import skip
 
+from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.clients.ssh import ContainerClient, SSHClient
 from consts.compliance import VM_ROUTE_VIA, Dovetail, USER_PASSWORD
 from consts.auth import Tenant, ComplianceCreds, CumulusCreds
 from consts.cgcs import Prompt
 from consts.proj_vars import ProjVar
-from keywords import network_helper, vm_helper, nova_helper, keystone_helper, cinder_helper
+from keywords import network_helper, nova_helper, keystone_helper, cinder_helper
 
 
 def add_route_for_vm_access(compliance_client):
@@ -24,29 +25,35 @@ def add_route_for_vm_access(compliance_client):
     LOG.fixture_step("Add routes to access VM from compliance server if not already done")
     cidrs = network_helper.get_subnets(name="tenant[1|2].*-mgmt0-subnet0|external-subnet0", regex=True,
                                        rtn_val='cidr', auth_info=Tenant.get('admin'))
-    cidrs_to_add = [r'{}.0/24'.format(re.findall('(.*).\d+/\d+', item)[0]) for item in cidrs]
+    cidrs_to_add = [r'{}.0/24'.format(re.findall(r'(.*).\d+/\d+', item)[0]) for item in cidrs]
     for cidr in cidrs_to_add:
         if compliance_client.exec_cmd('ip route | grep "{}"'.format(cidr))[0] != 0:
             compliance_client.exec_sudo_cmd('ip route add {} via {}'.format(cidr, VM_ROUTE_VIA))
 
 
 @contextmanager
-def start_container_shell(host_client, docker_cmd, prompt='.*root@.*# .*'):
+def start_container_shell(host_client, docker_cmd, prompt='.*root@.*# .*', remove=False):
     """
 
     Args:
         host_client (SSHClient):
         docker_cmd (str):
         prompt (str):
+        remove (bool): whether to remove the container after exiting
 
     """
     docker_conn = ContainerClient(host_client, entry_cmd=docker_cmd, initial_prompt=prompt)
     docker_conn.connect()
+    docker_id = None
+    if remove:
+        docker_id = docker_conn.exec_cmd('docker ps -q')[1]
 
     try:
         yield docker_conn
     finally:
         docker_conn.close()
+        if remove:
+            host_client.exec_cmd('docker rm {}'.format(docker_id))
 
 
 @contextmanager
@@ -72,7 +79,7 @@ def ssh_to_compliance_server(server=None, user=None, password=None, prompt=None)
 
     set_ps1 = False
     if prompt is None:
-        prompt = '.*{}@.*:.*\$ '.format(user)
+        prompt = r'.*{}@.*:.*\$ '.format(user)
         set_ps1 = True
     server_conn = SSHClient(server, user=user, password=password, initial_prompt=prompt)
     server_conn.connect()
@@ -116,6 +123,13 @@ def get_expt_mgmt_net():
 
 
 def update_dovetail_mgmt_interface():
+    """
+    Update dovetail vm mgmt interface on cumulus system.
+    Since cumulus system is on different version. This helper function requires use cli matches the cumulus tis.
+
+    Returns:
+
+    """
     expt_mgmt_net = get_expt_mgmt_net()
     if not expt_mgmt_net:
         skip('{} mgmt net is not found in Cumulus tis-lab project'.format(ProjVar.get_var('LAB')['name']))
@@ -124,32 +138,54 @@ def update_dovetail_mgmt_interface():
         cumulus_auth = CumulusCreds.TENANT_TIS_LAB
         vm_id = nova_helper.get_vm_id_from_name(vm_name='dovetail', fail_ok=False, con_ssh=cumulus_con,
                                                 auth_info=cumulus_auth)
-        dovetail_nics = network_helper.get_vm_nics(vm_id=vm_id, con_ssh=cumulus_con, auth_info=cumulus_auth)
-        mgmt_nic = [nic for nic in dovetail_nics if 'nic2' in nic][0]['nic2']
-        mgmt_net_name = mgmt_nic['network']
-        if mgmt_net_name == expt_mgmt_net:
-            LOG.info("{} interface already attached to Dovetail vm".format(mgmt_net_name))
-            return
+
+        dovetail_networks = nova_helper.get_vms(vms=vm_id, return_val='Networks', con_ssh=cumulus_con,
+                                                auth_info=cumulus_auth)[0]
+
+        actual_nets = dovetail_networks.split(sep=';')
+        prev_mgmt_nets = []
+        for net in actual_nets:
+            net_name, net_ip = net.split('=')
+            if '-MGMT-net' in net_name:
+                prev_mgmt_nets.append(net_name)
+
+        attach = True
+        if expt_mgmt_net in prev_mgmt_nets:
+            attach = False
+            prev_mgmt_nets.remove(expt_mgmt_net)
+            LOG.info("{} interface already attached to Dovetail vm".format(expt_mgmt_net))
+
+        if prev_mgmt_nets:
+            LOG.info("Detach interface(s) {} from dovetail vm".format(prev_mgmt_nets))
+            vm_ports_table = table_parser.table(cli.nova('interface-list', vm_id, ssh_client=cumulus_con,
+                                                         auth_info=cumulus_auth))
+            for prev_mgmt_net in prev_mgmt_nets:
+                prev_net_id = network_helper.get_net_id_from_name(net_name=prev_mgmt_net, con_ssh=cumulus_con,
+                                                                  auth_info=cumulus_auth)
+
+                prev_port = table_parser.get_values(vm_ports_table, 'Port ID', **{'Net ID': prev_net_id})[0]
+                detach_arg = '{} {}'.format(vm_id, prev_port)
+                cli.nova('interface-detach', detach_arg, ssh_client=cumulus_con, auth_info=cumulus_auth)
 
         mgmt_net_id = network_helper.get_net_id_from_name(net_name=expt_mgmt_net, con_ssh=cumulus_con,
                                                           auth_info=cumulus_auth)
-        LOG.info("Attach {} from dovetail vm".format(expt_mgmt_net))
-        vm_helper.attach_interface(vm_id=vm_id, net_id=mgmt_net_id, vif_model='virtio', auth_info=cumulus_auth,
-                                   con_ssh=cumulus_con)
+        if attach:
+            LOG.info("Attach {} to dovetail vm".format(expt_mgmt_net))
+            args = '--net-id {} {}'.format(mgmt_net_id, vm_id)
+            cli.nova('interface-attach', args, ssh_client=cumulus_con, auth_info=cumulus_auth)
 
-        LOG.info("Detach {} for lab under test".format(mgmt_net_name))
-        vm_helper.detach_interface(vm_id=vm_id, port_id=mgmt_nic['port_id'], con_ssh=cumulus_con,
-                                   auth_info=cumulus_auth)
-
-        dovetail_nics = network_helper.get_vm_nics(vm_id=vm_id, con_ssh=cumulus_con, auth_info=cumulus_auth)
-        mgmt_nic = [nic for nic in dovetail_nics if 'nic2' in nic][0]['nic2']
-        assert expt_mgmt_net == mgmt_nic['network']
+        vm_ports_table = table_parser.table(cli.nova('interface-list', vm_id, ssh_client=cumulus_con,
+                                                     auth_info=cumulus_auth))
+        mgmt_mac = table_parser.get_values(vm_ports_table, 'MAC Addr', **{'Net ID': mgmt_net_id})[0]
 
     ComplianceCreds.set_host(Dovetail.TEST_NODE)
     ComplianceCreds.set_user(Dovetail.USERNAME)
     ComplianceCreds.set_password(Dovetail.PASSWORD)
     with ssh_to_compliance_server() as dovetail_ssh:
-        eth_name = network_helper.get_eth_for_mac(dovetail_ssh, mac_addr=mgmt_nic['mac_address'])
+        if not attach and network_helper.ping_server('192.168.204.3', ssh_client=dovetail_ssh, fail_ok=True)[0] == 0:
+            return
+        LOG.info("Bring up dovetail mgmt interface and assign ip")
+        eth_name = network_helper.get_eth_for_mac(dovetail_ssh, mac_addr=mgmt_mac)
         dovetail_ssh.exec_sudo_cmd('ip link set dev {} up'.format(eth_name))
         dovetail_ssh.exec_sudo_cmd('dhclient {}'.format(eth_name), expect_timeout=180)
         dovetail_ssh.exec_cmd('ip addr')

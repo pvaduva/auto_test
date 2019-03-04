@@ -50,11 +50,10 @@ def refstack_setup(refstack_pre_check, request):
     LOG.fixture_step("Create test flavors")
     flavors = []
     for i in range(2):
-        flavor_id = nova_helper.create_flavor(name='refstack', vcpus=2, ram=2048, root_disk=2)[1]
+        flavor_id = nova_helper.create_flavor(name='refstack', vcpus=2, ram=2048, root_disk=2, cleanup='session')[1]
         nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated',
                                                          FlavorSpec.MEM_PAGE_SIZE: 2048})
         flavors.append(flavor_id)
-        ResourceCleanup.add('flavor', flavor_id, scope='session')
 
     LOG.fixture_step("Get/create test images")
     images = [glance_helper.get_image_id_from_name()]

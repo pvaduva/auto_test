@@ -13,7 +13,8 @@ def test_db_purge():
 
         LOG.tc_step("Iteration-{}: Creating and deleting image, volume, vm".format(count))
         LOG.info("------ Creating image, volume, vm")
-        image_id = glance_helper.create_image(name='glance-purge', **{ImageMetadata.AUTO_RECOVERY: 'true'})[1]
+        image_id = glance_helper.create_image(name='glance-purge', cleanup='function',
+                                              **{ImageMetadata.AUTO_RECOVERY: 'true'})[1]
         vol_id = cinder_helper.create_volume(name='cinder-purge', image_id=image_id)[1]
         vm_id = vm_helper.boot_vm(name='nova-purge', source='volume', source_id=vol_id)[1]
 

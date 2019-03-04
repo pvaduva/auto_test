@@ -44,8 +44,7 @@ def test_autorecovery_image_metadata_in_volume(auto_recovery, disk_format, conta
     LOG.tc_step("Create an image with property auto_recovery={}, disk_format={}, container_format={}".
                 format(auto_recovery, disk_format, container_format))
     image_id = glance_helper.create_image(disk_format=disk_format, container_format=container_format,
-                                          **{property_key: auto_recovery})[1]
-    ResourceCleanup.add('image', resource_id=image_id)
+                                          cleanup='function', **{property_key: auto_recovery})[1]
 
     LOG.tc_step("Create a volume from the image")
     vol_id = cinder_helper.create_volume(name='auto_recov', image_id=image_id, rtn_exist=False)[1]
@@ -118,11 +117,11 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
     LOG.tc_step("Create an image with property auto_recovery={}, disk_format={}, container_format={}".
                 format(image_auto_recovery, disk_format, container_format))
     if image_auto_recovery is None:
-        image_id = glance_helper.create_image(disk_format=disk_format, container_format=container_format)[1]
+        image_id = glance_helper.create_image(disk_format=disk_format, container_format=container_format,
+                                              cleanup='function')[1]
     else:
         image_id = glance_helper.create_image(disk_format=disk_format, container_format=container_format,
-                                              **{property_key: image_auto_recovery})[1]
-    ResourceCleanup.add('image', resource_id=image_id)
+                                              cleanup='function', **{property_key: image_auto_recovery})[1]
 
     # auto recovery in image metadata will not work if vm booted from volume
     # LOG.tc_step("Create a volume from the image")
@@ -318,12 +317,14 @@ def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
     GuestLogs.remove(vm_id)
 
 
+# Deprecated - KVM crash detection
 @mark.features(Features.AUTO_RECOV, Features.HEARTBEAT)
 @mark.parametrize('heartbeat', [
     # mark.p1(True),    # remove - covered by test_vm_with_health_check_failure
-    mark.priorities('sanity', 'cpe_sanity', 'sx_sanity', 'kpi')(False)
+    # mark.priorities('sanity', 'cpe_sanity', 'sx_sanity', 'kpi')(False)    # FIXME remove from sanity due to step unknown
+    False
 ])
-def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
+def _test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
     """
     Test vm auto recovery by killing the host kvm.
 
@@ -353,9 +354,9 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-            {'net-id': tenant_net_id, 'vif-model': 'virtio'},
-            {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+    nics = [{'net-id': mgmt_net_id},
+            {'net-id': tenant_net_id},
+            {'net-id': internal_net_id}]
     vm_id = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
     target_host = nova_helper.get_vm_host(vm_id)
@@ -365,9 +366,9 @@ def test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
 
         mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=Tenant.get_secondary())
         tenant_net_id = network_helper.get_tenant_net_id(auth_info=Tenant.get_secondary())
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
-                {'net-id': tenant_net_id, 'vif-model': 'virtio'},
-                {'net-id': internal_net_id, 'vif-model': 'virtio'}]
+        nics = [{'net-id': mgmt_net_id},
+                {'net-id': tenant_net_id},
+                {'net-id': internal_net_id}]
         vm_observer = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='function', auth_info=Tenant.get_secondary())[1]
 
         vm_helper.setup_kernel_routing(vm_observer)

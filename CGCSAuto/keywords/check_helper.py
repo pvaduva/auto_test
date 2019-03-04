@@ -11,11 +11,11 @@ from pytest import skip
 
 from utils.tis_log import LOG
 from utils.rest import Rest
+from consts.auth import Tenant
 from consts.cgcs import MELLANOX_DEVICE, GuestImages, EventLogID
 from consts.reasons import SkipStorageSpace
-from testfixtures.fixture_resources import ResourceCleanup
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
-    glance_helper, storage_helper
+    glance_helper, storage_helper, kube_helper, container_helper
 
 SEP = '\n------------------------------------ '
 
@@ -372,15 +372,16 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
     # numa_nodes = list(range(len(procs)))
     vm_host_, numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
     assert vm_host == vm_host_, "VM is on {} instead of {}".format(vm_host_, vm_host)
-    with host_helper.ssh_to_host(vm_host) as host_ssh:
 
-        LOG.info("{}Check total allocated vcpus increased by {} from nova-compute.log on host".
-                 format(SEP, expt_increase))
-        expt_total = round(prev_total_cpus + expt_increase, 4)
-        post_total_log = host_helper.wait_for_total_allocated_vcpus_update_in_log(host_ssh, prev_cpus=prev_total_cpus,
-                                                                                  expt_cpus=expt_total, fail_ok=True)
-        assert expt_total == post_total_log, 'vcpus increase in nova-compute.log is not as expected. ' \
-                                             'Expected: {}. Actual: {}'.format(expt_total, post_total_log)
+    LOG.info("{}Check total allocated vcpus increased by {} from nova-compute log for {}".
+             format(SEP, expt_increase, vm_host))
+    expt_total = round(prev_total_cpus + expt_increase, 4)
+    post_total_log = host_helper.wait_for_total_allocated_vcpus_update_in_log(vm_host, prev_cpus=prev_total_cpus,
+                                                                              expt_cpus=expt_total, fail_ok=True)
+    assert expt_total == post_total_log, 'vcpus increase in nova-compute.log is not as expected. ' \
+                                         'Expected: {}. Actual: {}'.format(expt_total, post_total_log)
+
+    with host_helper.ssh_to_host(vm_host) as host_ssh:
 
         LOG.info("{}Check vcpus for vm via sudo virsh vcpupin".format(SEP))
         vcpu_pins = host_helper.get_vcpu_pins_for_instance_via_virsh(host_ssh=host_ssh,
@@ -521,10 +522,12 @@ def check_vm_vcpus_via_nova_show(vm_id, min_cpu, current_cpu, max_cpu, con_ssh=N
     assert [min_cpu, current_cpu, max_cpu] == actual_vcpus, "vcpus in nova show {} is not as expected".format(vm_id)
 
 
-def check_vm_numa_nodes(vm_id, on_vswitch_nodes=True):
+def check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True):
     vm_host, vm_numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
     vswitch_cores_dict = host_helper.get_host_cpu_cores_for_function(vm_host, func='vSwitch')
     vswitch_procs = [proc for proc in vswitch_cores_dict if vswitch_cores_dict[proc]]
+    if not vswitch_procs:
+        return
 
     if on_vswitch_nodes:
         assert set(vm_numa_nodes) <= set(vswitch_procs), "VM {} is on numa nodes {} instead of vswitch numa nodes {}" \
@@ -535,58 +538,58 @@ def check_vm_numa_nodes(vm_id, on_vswitch_nodes=True):
                                                                                                vswitch_procs)
 
 
-def check_vm_pci_addr(vm_id, vm_nics):
-    """
-    Check vm pci addresses are as configured via nova show and from vm
-    Args:
-        vm_id (str):
-        vm_nics (list): nics passed to nova boot cli
+# def check_vm_pci_addr(vm_id, vm_nics):
+#     """
+#     Check vm pci addresses are as configured via nova show and from vm
+#     Args:
+#         vm_id (str):
+#         vm_nics (list): nics passed to nova boot cli
+#
+#     Returns:
+#
+#     """
+#     nova_show_nics = _check_vm_pci_addr_via_nova_show(vm_id, vm_nics)
+#     _check_vm_pci_addr_on_vm(vm_id, nova_show_nics)
 
-    Returns:
+#
+# def _check_vm_pci_addr_via_nova_show(vm_id, vm_nics):
+#     """
+#     Check vm pci address via nova show
+#     Args:
+#         vm_id (str):
+#         vm_nics (list): nics passed to nova boot cli
+#
+#     Returns (list): nova show nics
+#
+#     """
+#     LOG.info("Check vm pci address in nova show is as configured in nova boot")
+#     nova_show_nics = nova_helper.get_vm_interfaces_info(vm_id)
+#     for i in range(len(vm_nics)):
+#         boot_vm_nic = vm_nics[i]
+#         nova_show_nic = nova_show_nics[i]
+#         expt_pci_addr = boot_vm_nic.get('vif-pci-address', '')
+#         actual_pci_addr = nova_show_nic.get('vif_pci_address', '')
+#         assert expt_pci_addr == actual_pci_addr, "Assigned pci address {} is not in nova show nic: {}".\
+#             format(expt_pci_addr, actual_pci_addr)
+#
+#     return nova_show_nics
 
-    """
-    nova_show_nics = _check_vm_pci_addr_via_nova_show(vm_id, vm_nics)
-    _check_vm_pci_addr_on_vm(vm_id, nova_show_nics)
-
-
-def _check_vm_pci_addr_via_nova_show(vm_id, vm_nics):
-    """
-    Check vm pci address via nova show
-    Args:
-        vm_id (str):
-        vm_nics (list): nics passed to nova boot cli
-
-    Returns (list): nova show nics
-
-    """
-    LOG.info("Check vm pci address in nova show is as configured in nova boot")
-    nova_show_nics = nova_helper.get_vm_interfaces_info(vm_id)
-    for i in range(len(vm_nics)):
-        boot_vm_nic = vm_nics[i]
-        nova_show_nic = nova_show_nics[i]
-        expt_pci_addr = boot_vm_nic.get('vif-pci-address', '')
-        actual_pci_addr = nova_show_nic.get('vif_pci_address', '')
-        assert expt_pci_addr == actual_pci_addr, "Assigned pci address {} is not in nova show nic: {}".\
-            format(expt_pci_addr, actual_pci_addr)
-
-    return nova_show_nics
-
-
-def _check_vm_pci_addr_on_vm(vm_id, nova_show_nics=None):
-    LOG.info("Check vm PCI address is as configured from vm via ethtool")
-    if not nova_show_nics:
-        nova_show_nics = nova_helper.get_vm_interfaces_info(vm_id)
-
-    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        for nic_ in nova_show_nics:
-            pci_addr = nic_.get('vif_pci_address')
-            if pci_addr:
-                mac_addr = nic_['mac_address']
-                eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
-                code, output = vm_ssh.exec_cmd('ethtool -i {} | grep bus-info'.
-                                               format(eth_name), fail_ok=False)
-                assert pci_addr in output, "Assigned pci address does not match pci info for vm {}. Assigned: {}; " \
-                                           "Actual: {}".format(eth_name, pci_addr, output)
+#
+# def _check_vm_pci_addr_on_vm(vm_id, nova_show_nics=None):
+#     LOG.info("Check vm PCI address is as configured from vm via ethtool")
+#     if not nova_show_nics:
+#         nova_show_nics = nova_helper.get_vm_interfaces_info(vm_id)
+#
+#     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+#         for nic_ in nova_show_nics:
+#             pci_addr = nic_.get('vif_pci_address')
+#             if pci_addr:
+#                 mac_addr = nic_['mac_address']
+#                 eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
+#                 code, output = vm_ssh.exec_cmd('ethtool -i {} | grep bus-info'.
+#                                                format(eth_name), fail_ok=False)
+#                 assert pci_addr in output, "Assigned pci address does not match pci info for vm {}. Assigned: {}; " \
+#                                            "Actual: {}".format(eth_name, pci_addr, output)
 
 
 def check_fs_sufficient(guest_os, boot_source='volume'):
@@ -610,9 +613,9 @@ def check_fs_sufficient(guest_os, boot_source='volume'):
 
     LOG.tc_step("Get/Create {} image".format(guest_os))
     check_disk = True if 'win' in guest_os else False
-    img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk)
-    if not re.search('ubuntu_14|{}'.format(GuestImages.TIS_GUEST_PATTERN), guest_os):
-        ResourceCleanup.add('image', img_id)
+    cleanup = None if re.search('ubuntu_14|{}'.format(GuestImages.TIS_GUEST_PATTERN), guest_os) else 'function'
+    img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk, cleanup=cleanup)
+    return img_id
 
 
 def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths, content, root=None, vm_action=None,
@@ -727,6 +730,8 @@ def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths,
     LOG.info("loss_paths: {}, no_loss_paths: {}, total_file_pahts: {}".format(loss_paths, no_loss_paths, final_paths))
     res_files = {}
     with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id, vm_image_name=guest_os) as vm_ssh:
+        vm_ssh.exec_sudo_cmd('cat /etc/fstab')
+        vm_ssh.exec_sudo_cmd("mount | grep --color=never '/dev'")
 
         for file_path in loss_paths:
             vm_ssh.exec_sudo_cmd('touch {}2'.format(file_path), fail_ok=False)
@@ -783,8 +788,8 @@ def _check_disk_size(vm_ssh, disk_name, expt_size):
     assert actual_size == expt_size, "Expected disk size: {}M. Actual: {}M".format(expt_size, actual_size)
 
 
-def check_alarms(before_alarms, timeout=300):
-    after_alarms = system_helper.get_alarms()
+def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
+    after_alarms = system_helper.get_alarms(auth_info=auth_info, con_ssh=con_ssh)
     new_alarms = []
     check_interval = 5
     schedule_conn_test = False
@@ -800,21 +805,31 @@ def check_alarms(before_alarms, timeout=300):
                 # NTP alarm handling
                 LOG.info("NTP alarm found, checking ntpq stats")
                 host = entity_id.split('host=')[1].split('.ntp')[0]
-                host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
+                host_helper.wait_for_ntp_sync(host=host, fail_ok=False, auth_info=auth_info, con_ssh=con_ssh)
                 continue
 
             new_alarms.append((alarm_id, entity_id))
 
     if schedule_conn_test:
         LOG.info("Providernet connectivity alarm found, schedule providernet connectivity test")
-        network_helper.schedule_providernet_connectivity_test()
+        network_helper.schedule_providernet_connectivity_test(auth_info=auth_info, con_ssh=con_ssh)
 
+    res = True
+    remaining_alarms = None
     if new_alarms:
         LOG.info("New alarms detected. Waiting for new alarms to clear.")
         res, remaining_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=timeout,
-                                                                   check_interval=check_interval)
-        assert res, "New alarm(s) found and did not clear within {} seconds. " \
-                    "Alarm IDs and Entity IDs: {}".format(timeout, remaining_alarms)
+                                                                   check_interval=check_interval,
+                                                                   auth_info=auth_info, con_ssh=con_ssh)
+
+    if not res:
+        msg = "New alarm(s) found and did not clear within {} seconds. Alarm IDs and Entity IDs: {}".\
+            format(timeout, remaining_alarms)
+        LOG.warning(msg)
+        if not fail_ok:
+            assert res, msg
+
+    return res, remaining_alarms
 
 
 def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):

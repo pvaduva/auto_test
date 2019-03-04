@@ -3,14 +3,12 @@ import re
 from pytest import fixture, mark
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
-from keywords import nova_helper, host_helper, vm_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from keywords import nova_helper
 
 
 @fixture(scope='module', autouse=True)
 def flavor_to_test():
-    flavor_id = nova_helper.create_flavor(check_storage_backing=False)[1]
-    ResourceCleanup.add('flavor', flavor_id, scope='module')
+    flavor_id = nova_helper.create_flavor(cleanup='module')[1]
 
     return flavor_id
 
@@ -25,21 +23,18 @@ def test_flavor_default_specs():
        - Check "aggregate_instance_extra_specs:storage": "local_image" is included in extra specs of the flavor
     """
     LOG.tc_step("Create flavor with minimal input.")
-    flavor = nova_helper.create_flavor(check_storage_backing=False)[1]
-    ResourceCleanup.add('flavor', flavor)
+    flavor = nova_helper.create_flavor(cleanup='function')[1]
 
     extra_specs = nova_helper.get_flavor_extra_specs(flavor=flavor)
-    expected_spec = '"aggregate_instance_extra_specs:storage": "local_image"'
     LOG.tc_step("Check local_image storage is by default included in flavor extra specs")
-    assert extra_specs["aggregate_instance_extra_specs:storage"] == 'local_image', \
-        "Flavor {} extra specs does not include: {}".format(flavor, expected_spec)
+    assert not extra_specs, "Flavor {} extra specs is not empty by default: {}".format(flavor, extra_specs)
 
 
 @mark.parametrize(('extra_spec_name', 'values'), [
-    mark.p3((FlavorSpec.STORAGE_BACKING, ['local_lvm', 'remote', 'local_image'])),
+    # mark.p3((FlavorSpec.STORAGE_BACKING, ['remote', 'local_image'])),     # feature deprecated
     mark.p3((FlavorSpec.VCPU_MODEL, ['Nehalem', 'SandyBridge', 'Westmere', 'Haswell'])),
     mark.p3((FlavorSpec.CPU_POLICY, ['dedicated', 'shared'])),
-    mark.p3((FlavorSpec.NUMA_NODES, [1])),
+    # mark.p3((FlavorSpec.NUMA_NODES, [1])),    # feature deprecated
     mark.p2((FlavorSpec.AUTO_RECOVERY, ['true', 'false', 'TRUE', 'FALSE'])),
 ])
 def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):
@@ -85,12 +80,9 @@ def test_create_flavor_with_excessive_vcpu_negative():
     # Create a flavor with over 128 vcpus
     vcpu_num = 129
     LOG.tc_step("Create flavor with over 128 vCPUs - {}".format(vcpu_num))
-    exitcode, output = nova_helper.create_flavor(vcpus=129, fail_ok=True)
-    if exitcode == 0:
-        ResourceCleanup.add('vm', output)
+    exitcode, output = nova_helper.create_flavor(vcpus=129, fail_ok=True, cleanup='function')
 
     # Check if create_flavor returns erroneous exit code and error output is a proper human-readable message
-
     expt_err = "Invalid input .* vcpus.*{}.* is greater than the maximum of 128".format(vcpu_num)
 
     LOG.tc_step("Check flavor creation fails and proper error message displayed")

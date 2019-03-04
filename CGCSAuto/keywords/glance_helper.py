@@ -6,7 +6,7 @@ import json
 from pytest import skip
 
 from consts.auth import Tenant, SvcCgcsAuto
-from consts.cgcs import GuestImages
+from consts.cgcs import GuestImages, ImageMetadata
 from consts.proj_vars import ProjVar
 from consts.filepaths import WRSROOT_HOME
 from consts.timeout import ImageTimeout
@@ -108,7 +108,7 @@ def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05
     file_size = get_image_size(img_file_path=img_file_path, guest_os=guest_os, ssh_client=image_host_ssh)
 
     if con_ssh is None:
-        name = 'central_region' if ProjVar.get_var('IS_DC') else None
+        name = 'RegionOne' if ProjVar.get_var('IS_DC') else None
         con_ssh = ControllerClient.get_active_controller(name=name)
     if 0 == con_ssh.exec_cmd('ceph df')[0]:
         # assume image storage for ceph is sufficient
@@ -252,7 +252,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
                  disk_format=None, container_format=None, min_disk=None, min_ram=None, public=None,
                  protected=None, cache_raw=False, store=None, wait=None, timeout=ImageTimeout.CREATE, con_ssh=None,
                  auth_info=Tenant.get('admin'), fail_ok=False, ensure_sufficient_space=True, sys_con_for_dc=True,
-                 wait_for_subcloud_sync=True, cleanup=None, **properties):
+                 wait_for_subcloud_sync=True, cleanup=None, hw_vif_model=None, **properties):
     """
     Create an image with given criteria.
 
@@ -273,10 +273,11 @@ def create_image(name=None, image_id=None, source_image_file=None,
         con_ssh (SSHClient):
         auth_info (dict):
         fail_ok (bool):
-        ensure_sufficient_space (bool): Ensure glance image storage is sufficient to create new image
+        ensure_sufficient_space (bool)
         sys_con_for_dc (bool): create image on system controller if it's distributed cloud
         wait_for_subcloud_sync (bool):
         cleanup (str|None): add to teardown list. 'function', 'class', 'module', 'session', or None
+        hw_vif_model (None|str): if this is set, 'hw_vif_model' in properties will be overridden
         **properties: key=value pair(s) of properties to associate with the image
 
     Returns (tuple): (rtn_code(int), message(str))      # 1, 2 only applicable if fail_ok=True
@@ -298,8 +299,11 @@ def create_image(name=None, image_id=None, source_image_file=None,
     elif 'ge_edge' in file_path and 'hw_firmware_type' not in properties:
         properties['hw_firmware_type'] = 'uefi'
 
+    if hw_vif_model:
+        properties[ImageMetadata.VIF_MODEL] = hw_vif_model
+
     if sys_con_for_dc and ProjVar.get_var('IS_DC'):
-        con_ssh = ControllerClient.get_active_controller('central_region')
+        con_ssh = ControllerClient.get_active_controller('RegionOne')
         create_auth = Tenant.get(tenant_dictname=auth_info['tenant'], dc_region='SystemController').copy()
         image_host_ssh = get_cli_client(central_region=True)
     else:
@@ -350,7 +354,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
         '--min-disk': min_disk,
         '--min-ram': min_ram,
         '--file': file_path,
-        '--wait': 0 if wait else 1
+        # '--wait': 0 if wait else 1
     }
     optional_args_str = ''
     if cache_raw:
@@ -551,7 +555,7 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
     imgs_to_del_str = ' '.join(imgs_to_del)
 
     if sys_con_for_dc and ProjVar.get_var('IS_DC'):
-        con_ssh = ControllerClient.get_active_controller('central_region')
+        con_ssh = ControllerClient.get_active_controller('RegionOne')
         auth_info = Tenant.get(tenant_dictname=auth_info['tenant'], dc_region='SystemController')
 
     LOG.debug("images to delete: {}".format(imgs_to_del))
@@ -619,6 +623,11 @@ def get_image_properties(image, property_keys, auth_info=Tenant.get('admin'), co
     return results
 
 
+def get_image_value(image, field, auth_info=Tenant.get('admin'), con_ssh=None):
+    table_ = table_parser.table(cli.glance('image-show', image, ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.get_value_two_col_table(table_, field)
+
+
 def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=None):
     """
 
@@ -664,7 +673,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=No
     return dest_path
 
 
-def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
+def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None, use_existing=True):
     """
     Get or create a glance image with given guest OS
     Args:
@@ -673,6 +682,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
         rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
         check_disk (bool): whether to check if image storage disk is sufficient to create new glance image
         cleanup (str|None)
+        use_existing (bool): whether to use existing guest image if exists
 
     Returns (str): image_id
 
@@ -683,7 +693,9 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None):
             skip("Skip tests with large images for vbox")
 
     LOG.info("Get or create a glance image with {} guest OS".format(guest_os))
-    img_id = get_image_id_from_name(guest_os, strict=True)
+    img_id = None
+    if use_existing:
+        img_id = get_image_id_from_name(guest_os, strict=True)
 
     if not img_id:
         con_ssh = None
@@ -810,13 +822,15 @@ def unset_image(image, properties=None, tags=None, con_ssh=None, auth_info=Tenan
 def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None, container_format=None,
               disk_format=None, architecture=None, instance_id=None, kernel_id=None, os_distro=None,
               os_version=None, ramdisk_id=None, activate=None, project=None, project_domain=None, tags=None,
-              protected=None, visibility=None, membership=None, con_ssh=None, auth_info=Tenant.get('admin')):
+              protected=None, visibility=None, membership=None, hw_vif_model=None,
+              con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Set image properties/metadata
     Args:
         image (str):
         new_name (str|None):
         properties (dict|None):
+        hw_vif_model (str|None): override hw_vif_model in properties if any
         min_disk (int|str|None):
         min_ram (int|str|None):
         container_format (str|None):
@@ -877,6 +891,10 @@ def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None
         args.append('--{}'.format(membership))
         # Unsure how to do post check
 
+    if not properties:
+        properties = {}
+    if hw_vif_model:
+        properties[ImageMetadata.VIF_MODEL] = hw_vif_model
     if properties:
         for key, val in properties.items():
 
@@ -908,7 +926,7 @@ def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None
 
     for key, val in other_args.items():
         if val[0] is not None:
-            args[key] = val[0]
+            args.append('{} {}'.format(key, val[0]))
             if val[1]:
                 post_checks[val[1]] = val[0]
 

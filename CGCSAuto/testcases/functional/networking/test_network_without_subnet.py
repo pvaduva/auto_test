@@ -1,31 +1,30 @@
-import re
 import random
-from pytest import fixture, mark
-from utils.tis_log import LOG
 
+from pytest import fixture, mark
+
+from utils.tis_log import LOG
 from consts.cgcs import VMStatus
 from keywords import network_helper, nova_helper, vm_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
 def base_vm(setups):
-    port_security = False
     LOG.fixture_step("Create a network without subnet with port security disabled")
-    tenant_net_id = network_helper.create_network(name='net_without_subnet', port_security=port_security)[1]
-    ResourceCleanup.add('network', tenant_net_id)
+    tenant_net_id = network_helper.create_network(name='net_without_subnet', port_security=False,
+                                                  cleanup='module')[1]
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    mgmt_nic = {'net-id': mgmt_net_id, 'vif-model': 'virtio'}
-    tenant_net_nic = {'net-id': tenant_net_id, 'vif-model': 'virtio'}
+    mgmt_nic = {'net-id': mgmt_net_id}
+    tenant_net_nic = {'net-id': tenant_net_id}
     nics = [mgmt_nic, tenant_net_nic]
     LOG.fixture_step("Create a VM with one nic using network without subnet")
     vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='module')[1]
 
     LOG.fixture_step("Assign an ip to the nic over network without subnet")
-    _assign_ip_to_nic(vm_id)
+    ports = network_helper.get_ports(server=vm_id, network=tenant_net_id)
+    _assign_ip_to_nic(vm_id, ports=ports)
 
-    return vm_id, mgmt_nic, tenant_net_id, port_security
+    return vm_id, mgmt_nic, tenant_net_id
 
 
 @fixture(scope='module')
@@ -35,7 +34,7 @@ def setups(request):
 
     network_quota = network_helper.get_quota('network')
     instance_quota = nova_helper.get_quotas('instances')[0]
-    network_helper.update_quotas(network=network_quota + 20)
+    network_helper.update_quotas(network=network_quota + 5)
     nova_helper.update_quotas(instances=instance_quota + 5)
 
     def _revert_quota():
@@ -44,17 +43,17 @@ def setups(request):
     request.addfinalizer(_revert_quota)
 
 
-@mark.parametrize(('if_attach_arg', 'vif_model'), [
+@mark.parametrize(('if_attach_param', 'vif_model'), [
     ('port_id', 'virtio'),
-    ('net-id', 'avp')
+    ('net_id', 'avp')
 ])
-def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_arg, vif_model):
+def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_param, vif_model):
     """
     Sample test case for Boot an instance with network without subnet
     Args:
         skip_for_ovs: skip test if avp is specified
         base_vm (tuple): (base_vm_id, mgmt_nic, tenant_net_id)
-        if_attach_arg (str): whether to attach via port_id or net_id
+        if_attach_param (str): whether to attach interface
         vif_model (str): vif_model to pass to interface-attach cli, or None
 
     Setups:
@@ -75,40 +74,38 @@ def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_arg, vif_model
         - Delete base vm, volume    (module)
 
     """
-
-    base_vm_id, mgmt_nic, tenant_net_id, port_security = base_vm
-
-    if if_attach_arg == 'port_id':
-        tenant_port_id = network_helper.create_port(tenant_net_id, 'port_without_subnet',
-                                                    port_security=port_security)[1]
-        ResourceCleanup.add('port', tenant_port_id)
-        tenant_net_nic = {'port-id': tenant_port_id, 'vif-model': vif_model}
-    else:
-        tenant_net_nic = {'net-id': tenant_net_id, 'vif-model': vif_model}
+    base_vm_id, mgmt_nic, tenant_net_id = base_vm
+    tenant_net_nic = {'net-id': tenant_net_id}
+    if vif_model == 'avp':
+        tenant_net_nic['vif-model'] = vif_model
 
     LOG.tc_step("Boot a vm with network without subnet")
     vm_under_test = vm_helper.boot_vm(name='vm-net-without-subnet', nics=[mgmt_nic, tenant_net_nic],
                                       cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_under_test)
+    init_ports = network_helper.get_ports(network=tenant_net_id, server=vm_under_test)
+    init_ip = _assign_ip_to_nic(vm_under_test, init_ports, base_vm_id=base_vm_id)[0]
 
     for vm_actions in [['cold_migrate'], ['live_migrate'], ['suspend', 'resume'], ['stop', 'start']]:
-        tenant_port_id = _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model,
-                                                            tenant_net_id)
+        tenant_port_id, ip_addrs = _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model,
+                                                                      tenant_net_id, if_attach_param)
         if vm_actions[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
                         "base vm over management and data networks")
             vm_helper.set_vm_state(vm_id=vm_under_test, error_state=True, fail_ok=False)
             vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE, fail_ok=True, timeout=600)
         else:
-            LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
+            LOG.tc_step("Perform following action(s) on vm {}: {}, and verify ping vm over mgmt and data networks".
+                        format(vm_under_test, vm_actions))
             for action in vm_actions:
                 vm_helper.perform_action_on_vm(vm_under_test, action=action)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test)
-        _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, tenant_port_id)
+        _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, tenant_port_id,
+                                            port_ip=ip_addrs[0], init_port_ip=init_ip)
 
 
-def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, tenant_net_id):
+def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, tenant_net_id, attach_param):
 
     """
 
@@ -118,27 +115,31 @@ def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vi
         vm_actions (list|tuple):
         vif_model (str):
         tenant_net_id (str):
+        attach_param (str): port_id or net_id
 
     Returns tenant_port_id (str):
 
     """
-    LOG.tc_step("Attach the interface to {} of {} vif_model".format(vm_under_test, vif_model))
-    tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, net_id=tenant_net_id)[1]
+    LOG.tc_step("Before {}: Attach {} interface to {}, assign a static ip, and ping data interfaces from the other vm".
+                format(vm_actions, vif_model, vm_under_test))
+    if attach_param == 'port_id':
+        LOG.tc_step("Create a port for network without subnet")
+        tenant_port_id = network_helper.create_port(tenant_net_id, 'port_without_subnet', cleanup='function',
+                                                    port_security=False)[1]
+        attach_arg = {'port_id': tenant_port_id}
+    else:
+        attach_arg = {'net_id': tenant_net_id}
 
-    LOG.tc_step("Assign IP to attached interface to {} VM {}".format(tenant_port_id, vm_under_test))
-    ip_addr = _assign_ip_to_nic(vm_under_test)
-    LOG.info("ip address to ping {}".format(ip_addr))
+    # TODO Update vif model config. Right now vif model avp still under implementation
+    tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, **attach_arg)[1]
 
-    LOG.tc_step("Verify ping from base_vm to vm_under_test over attached data networks still works "
-                "before {}".format(vm_actions))
-    with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
-        LOG.info("ip address to ping {}".format(ip_addr))
-        network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
+    ip_addrs = _assign_ip_to_nic(vm_under_test, ports=[tenant_port_id], base_vm_id=base_vm_id)
 
-    return tenant_port_id
+    return tenant_port_id, ip_addrs
 
 
-def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, tenant_port_id):
+def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, port_to_detach, port_ip,
+                                        init_port_ip):
 
     """
     Args:
@@ -146,76 +147,52 @@ def _post_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, v
         vm_under_test (str): vm id of instance to be tested
         vm_actions (list|tuple):
         vif_model (str):
-        tenant_port_id (str):
+        port_to_detach (str):
 
     """
-
-    ip_addr = _find_ip_to_ping(vm_under_test)
-    LOG.info("ip address to ping {}".format(ip_addr))
-
-    LOG.tc_step("Verify ping from base_vm to vm_under_test over management & attached data networks still works "
-                "after {}".format(vm_actions))
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt'], retry=10)
     with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
-        network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
+        for ip_addr in (init_port_ip, port_ip):
+            network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
 
-    LOG.tc_step("Detach the {} interface {}".format(vif_model, tenant_port_id))
-    vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id, cleanup_route=False)
-    vm_helper.cleanup_routes_for_vifs(vm_id=vm_under_test, vm_ips=ip_addr)
+    LOG.tc_step("After {}: Detach the {} port {} and ping vm's mgmt and data interface".
+                format(vm_actions, vif_model, port_to_detach))
+    vm_helper.detach_interface(vm_id=vm_under_test, port_id=port_to_detach, cleanup_route=False)
+    vm_helper.cleanup_routes_for_vifs(vm_id=vm_under_test, vm_ips=port_ip)
 
-    LOG.tc_step("Verify ping from base_vm to vm_under_test over management & data networks still works "
-                "after {}".format(vm_actions))
-    # _assign_ip_to_nic(vm_under_test)
-    ip_addr = _find_ip_to_ping(vm_under_test)
-    LOG.info("ip address to ping {}".format(ip_addr))
+    LOG.info("Ping tenant net ip for port that is not detached: {}".format(init_port_ip))
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt'], retry=10)
     with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
-        network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
+        network_helper.ping_server(init_port_ip, ssh_client=vm_ssh, retry=5)
 
 
 ASSIGNED_IPS = []
 
 
-def _assign_ip_to_nic(vm_id):
-    """
-    ip link set <dev> up, and dhclient <dev> to bring up the interface of last nic for given VM
-    Args:
-        vm_id (str):
-    """
-    vm_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id)
-    vnic = vm_nics[-1]
+def __get_unassigned_ip():
     global ASSIGNED_IPS
-    static_ip = '172.16.0.{}'.format(random.choice(list(set(range(2, 255))-set(ASSIGNED_IPS))))
+    static_ip = '172.16.0.{}'.format(random.choice(list(set(range(2, 255)) - set(ASSIGNED_IPS))))
     ASSIGNED_IPS.append(static_ip)
-    vm_helper.add_ifcfg_scripts(vm_id=vm_id, vnics=[vnic], reboot=False, static_ips=[static_ip])
-    vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_id, vnics=[vnic], vm_ips=[static_ip], reboot=True)
-
-    # dhclient_leases_cache = '/var/lib/dhclient/dhclient.leases'
-    # with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-    #     if vm_ssh.file_exists(dhclient_leases_cache):
-    #         vm_ssh.exec_sudo_cmd('rm {}'.format(dhclient_leases_cache))
-    #     vnic = vm_nics[-1]
-    #     mac_addr = vnic['mac_address']
-    #     eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
-    #     assert eth_name, "Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id)
-    #     vm_ssh.exec_sudo_cmd('ifconfig {} 172.16.0.{}/24 up'.format(eth_name, ))
-    #     vm_ssh.exec_cmd('ip addr')
     return static_ip
 
 
-def _find_ip_to_ping(vm_id):
+def _assign_ip_to_nic(vm_id, ports, base_vm_id=None):
     """
     ip link set <dev> up, and dhclient <dev> to bring up the interface of last nic for given VM
     Args:
         vm_id (str):
     """
-    vm_nics = nova_helper.get_vm_interfaces_info(vm_id=vm_id)
-    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        vnic = vm_nics[-1]
-        mac_addr = vnic['mac_address']
-        eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
-        assert eth_name, "Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id)
-        output = vm_ssh.exec_cmd('ip addr show {}'.format(eth_name), fail_ok=False)[1]
-        ip_addr = re.findall(r'inet (172.16.0.\d+)', output)[0]
-        vm_ssh.exec_cmd('ip addr')
-    return ip_addr
+    vm_macs = network_helper.get_ports(rtn_val='MAC Address', server=vm_id, port_id=ports)
+    static_ips = []
+    for _ in vm_macs:
+        static_ips.append(__get_unassigned_ip())
+    vm_helper.add_ifcfg_scripts(vm_id=vm_id, mac_addrs=vm_macs, reboot=False, static_ips=static_ips)
+    vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_id, ports=ports, vm_ips=static_ips, reboot=True)
+
+    if base_vm_id:
+        with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
+            LOG.info("ip address to ping {}".format(static_ips))
+            for ip_addr in static_ips:
+                network_helper.ping_server(ip_addr, ssh_client=vm_ssh, retry=5)
+
+    return static_ips

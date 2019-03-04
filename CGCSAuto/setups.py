@@ -6,18 +6,17 @@ import time
 
 import pexpect
 
-import setup_consts
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
-from consts.cgcs import Prompt, MULTI_REGION_MAP, SUBCLOUD_PATTERN
-from consts.filepaths import PrivKeyPath, WRSROOT_HOME
-from consts.lab import Labs, add_lab_entry, NatBoxes
+from consts.cgcs import Prompt, MULTI_REGION_MAP, SUBCLOUD_PATTERN, SysType, DROPS
+from consts.filepaths import PrivKeyPath, WRSROOT_HOME, BuildServerPath
+from consts.lab import Labs, add_lab_entry, NatBoxes, update_lab
 from consts.proj_vars import ProjVar, InstallVars
+from consts import build_server
 from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper, \
-    dc_helper
+    install_helper, vlm_helper, dc_helper
 from utils import exceptions, lab_info
 from utils import local_host
-from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, \
-    SSHFromSSH
+from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, SSHFromSSH
 from utils.clients.local import RemoteCLIClient
 from utils.clients.telnet import TELNET_LOGIN_PROMPT, TelnetClient
 from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERFACES
@@ -28,14 +27,14 @@ def less_than_two_controllers(con_ssh=None, auth_info=Tenant.get('admin')):
     return len(system_helper.get_controllers(con_ssh=con_ssh, auth_info=auth_info)) < 2
 
 
-def setup_tis_ssh(lab, prompt=''):
+def setup_tis_ssh(lab):
     con_ssh = ControllerClient.get_active_controller(fail_ok=True)
 
     if con_ssh is None:
         try:
             con_ssh = SSHClient(lab['floating ip'], HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                                 CONTROLLER_PROMPT)
-            con_ssh.connect(retry=True, retry_timeout=30, prompt=r'.*\:~\$')
+            con_ssh.connect(retry=True, retry_timeout=30)
             ControllerClient.set_active_controller(con_ssh)
         except:
             if ProjVar.get_var('COLLECT_SYS_NET_INFO'):
@@ -48,9 +47,8 @@ def setup_tis_ssh(lab, prompt=''):
 
 
 def setup_vbox_tis_ssh(lab):
-    
-    if 'external_ip'in lab.keys():
-        
+    if 'external_ip' in lab.keys():
+
         con_ssh = ControllerClient.get_active_controller(fail_ok=True)
         if con_ssh:
             con_ssh.disconnect()
@@ -71,28 +69,34 @@ def setup_primary_tenant(tenant):
     LOG.info("Primary Tenant for test session is set to {}".format(tenant['tenant']))
 
 
-def setup_natbox_ssh(keyfile_path, natbox, con_ssh):
+def setup_natbox_ssh(natbox):
     natbox_ip = natbox['ip']
     NATBoxClient.set_natbox_client(natbox_ip)
     nat_ssh = NATBoxClient.get_natbox_client()
-    nat_ssh.exec_cmd('mkdir -p ~/priv_keys/')
     ProjVar.set_var(natbox_ssh=nat_ssh)
 
-    _copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh=con_ssh)
-    _copy_pubkey()
     return nat_ssh
 
 
-def _copy_pubkey():
-    with host_helper.ssh_to_host('controller-0') as con_0_ssh:
+def copy_keyfiles(nat_ssh, con_ssh):
+    try:
+        nat_ssh.exec_cmd('mkdir -p ~/priv_keys/')
+        _copy_privkey_to_natbox(nat_ssh=nat_ssh, con_ssh=con_ssh)
+        _copy_pubkey(con_ssh=con_ssh)
+    except Exception:
+        LOG.error('Copy private/public key failed. Continue test session.')
+
+
+def _copy_pubkey(con_ssh):
+    with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
         pubkey_path = '{}/key.pub'.format(WRSROOT_HOME)
         if not con_0_ssh.file_exists(pubkey_path):
             try:
                 LOG.info("Attempt to copy public key to both controllers and localhost if applicable")
                 # copy public key to key.pub
-                con_0_ssh.exec_cmd('cp {}/.ssh/*.pub {}'.format(WRSROOT_HOME, pubkey_path))
+                con_0_ssh.exec_cmd('cp {}/.ssh/*.pub {}'.format(WRSROOT_HOME, pubkey_path), expect_timeout=30)
 
-                if not system_helper.is_simplex():
+                if con_0_ssh.exec_cmd('nslookup controller-1')[0] == 0:
                     # copy publickey to controller-1
                     con_0_ssh.scp_on_source(source_path=pubkey_path, dest_path=pubkey_path,
                                             dest_ip='controller-1',
@@ -108,7 +112,7 @@ def _copy_pubkey():
             LOG.info("Public key file copied to localhost")
 
 
-def _copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
+def _copy_privkey_to_natbox(con_ssh, nat_ssh=None, keyfile_path=None):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
@@ -118,39 +122,47 @@ def _copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
     """
 
     # Assume the tenant key-pair was added by lab_setup from exiting keys from controller-0:/home/wrsroot/.ssh
+    if not keyfile_path:
+        keyfile_path = ProjVar.get_var('KEYFILE_PATH')
+
     LOG.info("scp key file from controller to NATBox")
     keyfile_name = keyfile_path.split(sep='/')[-1]
+
+    if not nat_ssh:
+        nat_ssh = NATBoxClient.get_natbox_client()
 
     if not con_ssh.file_exists(keyfile_name):
         if not con_ssh.file_exists(PrivKeyPath.OPT_PLATFORM):
 
             gen_new_key = False
-            with host_helper.ssh_to_host('controller-0') as con_0_ssh:
+            with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
                 if not con_0_ssh.file_exists(PrivKeyPath.WRS_HOME):
                     gen_new_key = True
 
-            if gen_new_key:
-                if nova_helper.get_key_pair():
+            if gen_new_key and nova_helper.get_key_pair():
                     raise exceptions.TiSError("Cannot find ssh keys for existing nova keypair.")
 
-                passphrase_prompt_1 = '.*Enter passphrase.*'
-                passphrase_prompt_2 = '.*Enter same passphrase again.*'
+            if gen_new_key:
+                with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
+                    passphrase_prompt_1 = '.*Enter passphrase.*'
+                    passphrase_prompt_2 = '.*Enter same passphrase again.*'
 
-                con_ssh.send('ssh-keygen')
-                index = con_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
-                if index == 1:
-                    con_ssh.send()
-                    con_ssh.expect(passphrase_prompt_1)
-                con_ssh.send()    # Enter empty passphrase
-                con_ssh.expect(passphrase_prompt_2)
-                con_ssh.send()    # Repeat passphrase
-                con_ssh.expect(Prompt.CONTROLLER_0)
+                    con_0_ssh.send('ssh-keygen')
+                    index = con_0_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
+                    if index == 1:
+                        con_0_ssh.send()
+                        con_0_ssh.expect(passphrase_prompt_1)
+                        con_0_ssh.send()    # Enter empty passphrase
 
-            # ssh keys should now exist under wrsroot home dir
-            active_con = system_helper.get_active_controller_name()
+                    con_0_ssh.expect(passphrase_prompt_2)
+                    con_0_ssh.send()    # Repeat passphrase
+                    con_0_ssh.expect(Prompt.CONTROLLER_0)
+
+            # ssh keys should now exist under wrsroot home dir on controller-0
+            active_con = con_ssh.get_hostname()
             if active_con != 'controller-0':
                 con_ssh.send(
-                        'scp controller-0:{} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.WRS_HOME))
+                    'scp controller-0:{} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.WRS_HOME))
 
                 index = con_ssh.expect([Prompt.PASSWORD_PROMPT, Prompt.CONTROLLER_1, Prompt.ADD_HOST])
                 if index == 2:
@@ -181,7 +193,7 @@ def _copy_keyfile_to_natbox(nat_ssh, keyfile_path, con_ssh):
         try:
             nat_ssh.flush()
             cmd_3 = 'scp -v -o ConnectTimeout=30 {}@{}:{} {}'.format(
-                    HostLinuxCreds.get_user(), tis_ip, keyfile_name, keyfile_path)
+                HostLinuxCreds.get_user(), tis_ip, keyfile_name, keyfile_path)
             nat_ssh.send(cmd_3)
             rtn_3_index = nat_ssh.expect([nat_ssh.get_prompt(), Prompt.PASSWORD_PROMPT, '.*\(yes/no\)\?.*'])
             if rtn_3_index == 2:
@@ -218,9 +230,9 @@ def boot_vms(is_boot):
 
 
 def get_lab_dict(labname):
+
     labname = labname.strip().lower().replace('-', '_')
-    labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
-    labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
+    labs = get_labs_list()
 
     for lab in labs:
         if labname in lab.get('name').replace('-', '_').lower().strip() \
@@ -234,6 +246,32 @@ def get_lab_dict(labname):
         lab_valid_short_names = [lab.get('short_name') for lab in labs]
         # lab_valid_names = [lab['name'] for lab in labs]
         raise ValueError("{} is not found! Available labs: {}".format(labname, lab_valid_short_names))
+
+
+def get_labs_list():
+    labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
+    labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
+    return labs
+
+
+def get_dc_labs_list(labs):
+    if not labs:
+        labs = get_labs_list()
+
+    dc_labs = [lab for lab in labs if any([k for k, v in lab.items() if 'subcloud' in k and isinstance(v, dict)])]
+    return dc_labs
+
+
+def is_lab_subcloud(lab):
+    dc_labs = get_dc_labs_list(get_labs_list())
+    for dc_lab in dc_labs:
+        subclouds = [k for k, v in dc_lab.items() if 'subcloud' in k]
+        for subcloud in subclouds:
+            if lab['short_name'] == dc_lab[subcloud]['short_name']:
+                dc_float_ip = dc_lab['floating ip']
+                return True, subcloud, dc_float_ip
+
+    return False, None, None
 
 
 def get_natbox_dict(natboxname):
@@ -269,7 +307,7 @@ def get_tis_timestamp(con_ssh):
     return con_ssh.exec_cmd('date +"%T"')[1]
 
 
-def get_build_info(con_ssh):
+def set_build_info(con_ssh):
     code, output = con_ssh.exec_cmd('cat /etc/build.info')
     build_path = None
     if code != 0:
@@ -356,13 +394,13 @@ def copy_test_files():
     if ProjVar.get_var('IS_DC'):
         _rsync_files_to_con1(con_ssh=ControllerClient.get_active_controller(name=ProjVar.get_var('PRIMARY_SUBCLOUD')),
                              file_to_check='{}/heat/README'.format(WRSROOT_HOME), central_region=central_region)
-        con_ssh = ControllerClient.get_active_controller(name='central_region')
+        con_ssh = ControllerClient.get_active_controller(name='RegionOne')
         central_region = True
 
     _rsync_files_to_con1(con_ssh=con_ssh, central_region=central_region)
 
 
-def get_auth_via_openrc(con_ssh):
+def get_auth_via_openrc(con_ssh, use_telnet=False, con_telnet=None):
     valid_keys = ['OS_AUTH_URL',
                   'OS_ENDPOINT_TYPE',
                   'CINDER_ENDPOINT_TYPE',
@@ -372,8 +410,11 @@ def get_auth_via_openrc(con_ssh):
                   'OS_REGION_NAME',
                   'OS_INTERFACE',
                   'OS_KEYSTONE_REGION_NAME']
+    if use_telnet and con_telnet:
+        code, output = con_telnet.exec_cmd('cat /etc/nova/openrc')
+    else:
+        code, output = con_ssh.exec_cmd('cat /etc/nova/openrc')
 
-    code, output = con_ssh.exec_cmd('cat /etc/nova/openrc')
     if code != 0:
         return None
 
@@ -388,17 +429,14 @@ def get_auth_via_openrc(con_ssh):
     return auth_dict
 
 
-def get_lab_from_cmdline(lab_arg, installconf_path):
+def get_lab_from_cmdline(lab_arg, installconf_path, controller_arg=None, compute_arg=None, storage_arg=None,
+                         lab_files_dir=None, bs=None):
     lab_dict = None
     if not lab_arg and not installconf_path:
-        lab_dict = setup_consts.LAB
-        if lab_dict is None:
-            raise ValueError("No lab is specified via cmdline or setup_consts.py")
-        LOG.warning("lab is not specified via cmdline! Using lab from setup_consts file: {}".format(
-                lab_dict['short_name']))
+        raise ValueError("No lab is specified via cmdline or install_conf")
 
     if installconf_path:
-        installconf = configparser.ConfigParser()
+        installconf = configparser.ConfigParser(allow_no_value=True)
         installconf.read(installconf_path)
 
         # Parse lab info
@@ -412,23 +450,129 @@ def get_lab_from_cmdline(lab_arg, installconf_path):
                         format(lab_arg, lab_name))
         lab_arg = lab_name
 
+    if controller_arg:
+        lab_dict = get_lab_from_install_args(lab_arg, controller_arg, compute_arg, storage_arg, lab_files_dir,
+                                             bs=bs)
+
     if lab_dict is None:
-        lab_dict = get_lab_dict(lab_arg)
+        if lab_arg:
+            lab_dict = get_lab_dict(lab_arg)
     return lab_dict
 
 
-def is_vbox():
-    lab_name = ProjVar.get_var('LAB_NAME')
+def get_lab_from_install_args(lab_arg, controllers, computes, storages, lab_files_dir, bs):
+    p = r'[,| ]+'
+    controller_nodes = [int(node) for node in re.split(p, controllers.strip())] if controllers else []
+    compute_nodes = [int(node) for node in re.split(p, computes.strip())] if computes else []
+    storage_nodes = [int(node) for node in re.split(p, storages.strip())] if storages else []
+    __build_server = bs if bs and bs != "" else BuildServerPath.DEFAULT_BUILD_SERVER
+    files_server = __build_server
+    if lab_files_dir:
+        files_dir = lab_files_dir
+        if files_dir.find(":/") != -1:
+            files_server = files_dir[:files_dir.find(":/")]
+            files_dir = files_dir[files_dir.find(":") + 1:]
+    else:
+        files_dir = None
+    # Get lab info
+    lab_info_ = None
+    if lab_arg:
+        lab_info_ = get_lab_dict(lab_arg)
+
+    if controller_nodes and not lab_info_:
+        labs = [getattr(Labs, item) for item in dir(Labs) if not item.startswith('__')]
+        labs = [lab_ for lab_ in labs if isinstance(lab_, dict)]
+        for lab in labs:
+            if 'controller_nodes' in lab:
+                if controller_nodes == lab['controller_nodes']:
+                    lab_info_ = lab
+                    break
+        # Add new entry
+        if not lab_info_:
+            LOG.warning("no lab stored with the controller barcodes {}! Creating a new lab".format(controller_nodes))
+            lab_info_ = {}
+            controller_attributes = vlm_helper.get_attributes_dict(controller_nodes, val="barcodes")
+            lab_info_["controller_nodes"] = controller_nodes
+            for i in range(0, len(controller_attributes)):
+                controller_name = "controller-{}".format(i)
+                lab_info_["{} ip".format(controller_name)] = controller_attributes[i]["IP Address"]
+            base_name = ''
+            if files_dir and files_server:
+                lab_info_.update(get_info_from_lab_files(files_server, files_dir))
+                lab_info_["name"] = lab_info_.pop("system_name")    # rename system_name to name
+            else:
+                barcodes = controller_nodes + compute_nodes + storage_nodes
+                aliases = vlm_helper.get_attributes_dict(barcodes, attr="alias", val="barcodes")
+                print("list of aliases: {}".format(aliases))
+                highest = "0"
+                lowest = "inf"  # arbitrarily large number
+                for alias_dict in aliases:
+                    print("alias dictionary: {}".format(alias_dict))
+                    alias = alias_dict["alias"]
+                    print("alias: {}".format(alias))
+                    node_num_pattern = r"-(\d+)"
+                    node_num = re.search(node_num_pattern, alias).group(1)
+                    if int(node_num) > int(highest):
+                        highest = node_num
+                    if float(node_num) < float(lowest):
+                        lowest = node_num
+                        base_name = alias
+                lab_info_["name"] = base_name + "_{}".format(highest) if highest > lowest else base_name
+
+            short_naming_dict = {"wildcat": "WCP", "ironpass": "IP", "wolfpass": "WP", "supermicro": "SM"}
+            short_name_pattern = r".*-(\d+)(_\d+)?"
+            match = re.search(short_name_pattern, lab_info_["name"])
+            system_name = match.group(0)
+            first_node_num = match.group(1)
+            last_node_num = match.group(2) if match.group(2) else ""
+            for server_type in short_naming_dict.keys():
+                if server_type in system_name:
+                    lab_info_["short_name"] = short_naming_dict[server_type] + "_{}{}".\
+                        format(first_node_num, last_node_num)
+            if not lab_info_.get("short_name"):
+                lab_info_["short_name"] = lab_info_["name"].split("-")[2] + "_{}{}".\
+                    format(first_node_num, last_node_num)
+
+    if files_dir and files_server and not lab_info_:
+        try:
+            conf_file_info = get_info_from_lab_files(files_server, files_dir)
+            lab_info_ = get_lab_dict(conf_file_info["system_name"])
+        except ValueError:
+            LOG.error("--file_dir path lead to a lab that is not supported. Please manually write install "
+                      "configuration and try again. ")
+            raise
+        except AssertionError:
+            LOG.error("Please ensure --file_dir was entered correctly and exists in {}. ".format(files_server))
+            raise
+    # Update lab info
+    if compute_nodes:
+        lab_info_["compute_nodes"] = compute_nodes
+    if storage_nodes:
+        lab_info_["storage_nodes"] = storage_nodes
+    lab_dict = update_lab(lab_dict_name=lab_info_["short_name"].upper(), lab_name=lab_info_["short_name"],
+                          floating_ip=None, **lab_info_)
+    LOG.warning("Discovered the following lab info: {}".format(lab_dict))
+
+    return lab_dict
+
+
+def is_vbox(lab=None):
+    if not lab:
+        lab = ProjVar.get_var('LAB')
+    lab_name = lab['name']
     nat_name = ProjVar.get_var('NATBOX').get('name')
 
     return 'vbox' in lab_name or nat_name == 'localhost' or nat_name.startswith('128.224.')
 
 
-def get_nodes_info():
-    if is_vbox():
+def get_nodes_info(lab=None):
+
+    if not lab:
+        lab = ProjVar.get_var('LAB')
+
+    if is_vbox(lab=lab):
         return
 
-    lab = ProjVar.get_var('LAB')
     nodes_info = create_node_dict(lab['controller_nodes'], 'controller')
     nodes_info.update(create_node_dict(lab.get('compute_nodes', None), 'compute'))
     nodes_info.update(create_node_dict(lab.get('storage_nodes', None), 'storage'))
@@ -440,7 +584,7 @@ def get_nodes_info():
 def collect_telnet_logs_for_nodes(end_event):
     nodes_info = get_nodes_info()
     node_threads = []
-    kwargs = {'prompt': '{}|:~\$'.format(TELNET_LOGIN_PROMPT), 'end_event': end_event}
+    kwargs = {'prompt': r'{}|:~\$'.format(TELNET_LOGIN_PROMPT), 'end_event': end_event}
     for node_name in nodes_info:
         kwargs['hostname'] = node_name
         kwargs['telnet_ip'] = nodes_info[node_name].telnet_ip
@@ -480,173 +624,274 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
         node_telnet.close()
 
 
-def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0_ceph_mon_device,
-                       controller1_ceph_mon_device, ceph_mon_gib):
+def set_install_params(installconf_path, lab=None, skip=None, resume=False, controller0_ceph_mon_device=None, drop=None,
+                       patch_dir=None, ovs=False, build_server=None, tis_build_dir="latest_build",
+                       boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None, wipedisk=False,
+                       boot="feed", iso_path=None, security="standard", low_latency=False, stop=None,
+                       kubernetes=False, dc_float_ip=None, install_subcloud=None, no_openstack_install=False,
+                       ipv6_config=False, helm_chart_path=None):
 
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
                          "has to be provided")
+
+    if not installconf_path:
+        installconf_path = write_installconf(lab=lab, controller=None,
+                                             tis_build_dir=tis_build_dir, lab_files_dir=None, build_server=build_server,
+                                             files_server=None, compute=None, storage=None, license_path=None,
+                                             guest_image=None, heat_templates=None, security=security,
+                                             low_latency=low_latency, stop=stop, skip=skip, resume=resume,
+                                             boot_server=boot_server, boot=boot, iso_path=iso_path, ovs=ovs,
+                                             patch_dir=patch_dir, kubernetes=kubernetes, helm_chart_path=helm_chart_path)
+
     print("Setting Install vars : {} ".format(locals()))
 
+    # Initialize values
     errors = []
     lab_to_install = lab
-    build_server = None
-    host_build_dir = None
-    guest_image = None
-    files_server = None
-    hosts_bulk_add = None
-    boot_if_settings = None
-    tis_config = None
-    lab_setup = None
-    heat_templates = None
-    license_path = None
-    out_put_dir = None
+    drop = int(drop) if drop else None
+    bs = BuildServerPath.DEFAULT_BUILD_SERVER
+    host_build_dir = BuildServerPath.LATEST_HOST_BUILD_PATHS.get(DROPS.get(drop, None),
+                                                                 BuildServerPath.DEFAULT_HOST_BUILD_PATH)
+    license_path = BuildServerPath.DEFAULT_LICENSE_PATH
+    guest_image = files_server = hosts_bulk_add = boot_if_settings = tis_config = lab_setup = files_dir = \
+        heat_templates = out_put_dir = multi_region_lab = dist_cloud_lab = None
+
     vbox = True if lab and 'vbox' in lab.lower() else False
     if vbox:
         LOG.info("The test lab is a VBOX TiS setup")
 
-    installconf = None
-    if installconf_path:
+    # Parse install conf file
+    installconf = configparser.ConfigParser()
+    installconf.read(installconf_path)
+    # Parse lab info
+    lab_info_ = installconf['LAB']
+    lab_name = lab_info_['LAB_NAME']
+    dc_system = True if lab_info_.get('CENTRAL_REGION') else False
+    vbox = True if 'vbox' in lab_name.lower() else False
 
-        installconf = configparser.ConfigParser()
-        installconf.read(installconf_path)
+    if lab_name:
+        lab_to_install = get_lab_dict(lab_name)
+    if not lab_to_install:
+        raise ValueError("lab name has to be provided via cmdline option --lab=<lab_name> or inside install_conf")
+    if dc_system and 'central_region' not in lab_to_install:
+        raise ValueError("Distributed cloud system value mismatch")
 
-        # Parse lab info
-        lab_info_ = installconf['LAB']
-        lab_name = lab_info_['LAB_NAME']
-        vbox = True if 'vbox' in lab_name.lower() else False
-        if vbox:
-            LOG.info("The test lab is a VBOX TiS setup")
-        if lab_name:
-            lab_to_install = get_lab_dict(lab_name)
+    central_reg_info_ = eval(lab_info_.get('CENTRAL_REGION')) if dc_system else None
+    con0_ip = lab_info_.get('CONTROLLER0_IP') if not dc_system else \
+        (central_reg_info_['controller-0 ip'] if central_reg_info_ else None)
+    if con0_ip:
+        lab_to_install['controller-0 ip'] = con0_ip
+    con1_ip = lab_info_.get('CONTROLLER1_IP') if not dc_system else \
+        (central_reg_info_['controller-1 ip'] if central_reg_info_ else None)
+    if con1_ip:
+        lab_to_install['controller-1 ip'] = con1_ip
+    float_ip = lab_info_['FLOATING_IP']
+    if float_ip:
+        lab_to_install['floating ip'] = float_ip
 
-        if lab_to_install:
-            con0_ip = lab_info_['CONTROLLER0_IP']
-            if con0_ip:
-                lab_to_install['controller-0 ip'] = con0_ip
+    # Parse nodes info
+    nodes_info = installconf['NODES']
+    naming_map = {'CONTROLLERS': 'controller_nodes',
+                  'COMPUTES': 'compute_nodes',
+                  'STORAGES': 'storage_nodes'}
 
-            con1_ip = lab_info_['CONTROLLER1_IP']
-            if con1_ip:
-                lab_to_install['controller-1 ip'] = con1_ip
+    for confkey, constkey in naming_map.items():
+        value_in_conf = nodes_info[confkey] if confkey in nodes_info.keys() else None
+        if value_in_conf:
+            barcodes = value_in_conf.split(sep=' ')
+            lab_to_install[constkey] = barcodes
 
-            float_ip = lab_info_['FLOATING_IP']
-            if float_ip:
-                lab_to_install['floating ip'] = float_ip
+    if (not dc_system and not lab_to_install['controller_nodes']) or \
+            (dc_system and not lab_to_install['central_region']['controller_nodes']):
+        errors.append("Nodes barcodes have to be provided for custom lab")
 
-        else:
-            raise ValueError("lab name has to be provided via cmdline option --lab=<lab_name> or inside install_conf "
-                             "file")
+    # Parse build info
+    build_info = installconf['BUILD']
+    conf_build_server = build_info['BUILD_SERVER']
+    conf_host_build_dir = build_info['TIS_BUILD_PATH']
+    conf_iso_path = build_info["BUILD_ISO_PATH"]
+    conf_patch_dir = build_info["PATCHES"]
+    if conf_build_server:
+        bs = conf_build_server
+    if conf_host_build_dir:
+        host_build_dir = conf_host_build_dir
+    if conf_iso_path:
+        iso_path = conf_iso_path
+    if conf_patch_dir:
+        patch_dir = conf_patch_dir
 
-        # Parse nodes info
-        nodes_info = installconf['NODES']
-        naming_map = {'CONTROLLERS': 'controller_nodes',
-                      'COMPUTES': 'compute_nodes',
-                      'STORAGES': 'storage_nodes'}
+    # Parse files info
+    conf_files = installconf['CONF_FILES']
+    conf_files_server = conf_files['FILES_SERVER']
+    conf_license_path = conf_files['LICENSE_PATH']
+    conf_tis_config = conf_files['FILES_DIR']
+    conf_boot_if_settings = conf_files['BOOT_IF_SETTINGS_PATH']
+    conf_hosts_bulk_add = conf_files['HOST_BULK_ADD_PATH']
+    conf_labsetup = conf_files['LAB_SETUP_CONF_PATH']
+    conf_guest_image = conf_files['GUEST_IMAGE_PATH']
+    conf_heat_templates = conf_files['HEAT_TEMPLATES']
+    conf_ovs = eval(conf_files['OVS_CONFIG'])
+    conf_kuber = eval(conf_files['KUBERNETES_CONFIG'])
+    conf_helm_chart = conf_files['HELM_CHART_PATH']
+    if conf_files_server:
+        files_server = conf_files_server
+    if conf_license_path:
+        license_path = conf_license_path
+    if conf_tis_config:
+        tis_config = conf_tis_config
+    if conf_boot_if_settings:
+        boot_if_settings = conf_boot_if_settings
+    if conf_hosts_bulk_add:
+        hosts_bulk_add = conf_hosts_bulk_add
+    if conf_labsetup:
+        lab_setup = conf_labsetup
+    if conf_guest_image:
+        guest_image = conf_guest_image
+    if conf_heat_templates:
+        heat_templates = conf_heat_templates
+    ovs = conf_ovs
+    kubernetes = conf_kuber
+    helm_chart_path = conf_helm_chart
 
-        for confkey, constkey in naming_map.items():
-            value_in_conf = nodes_info[confkey]
-            if value_in_conf:
-                barcodes = value_in_conf.split(sep=' ')
-                lab_to_install[constkey] = barcodes
+    boot_info = installconf["BOOT"]
+    conf_boot_server = boot_info["BOOT_SERVER"]
+    conf_low_latency = eval(boot_info["LOW_LATENCY_INSTALL"])
+    conf_boot_type = boot_info["BOOT_TYPE"]
+    if conf_boot_server:
+        boot_server = conf_boot_server
+    low_latency = conf_low_latency
+    if conf_boot_type:
+        boot = conf_boot_type
 
-        if not lab_to_install['controller_nodes']:
-            errors.append("Nodes barcodes have to be provided for custom lab")
+    installer_steps = installconf["CONTROL"]
+    conf_resume_step = installer_steps["RESUME_POINT"]
+    conf_final_step = installer_steps["STOP_POINT"]
+    conf_skip_steps = installer_steps["STEPS_TO_SKIP"]
+    if conf_resume_step:
+        resume = conf_resume_step
+    if conf_final_step:
+        stop = conf_final_step
+    if conf_skip_steps:
+        skip = eval(conf_skip_steps)
 
-        # Parse build info
-        build_info = installconf['BUILD']
-        conf_build_server = build_info['BUILD_SERVER']
-        conf_host_build_dir = build_info['TIS_BUILD_PATH']
-        if conf_build_server:
-            build_server = conf_build_server
-        if conf_host_build_dir:
-            host_build_dir = conf_host_build_dir
-
-        # Parse files info
-        conf_files = installconf['CONF_FILES']
-        conf_files_server = conf_files['FILES_SERVER']
-        conf_license_path = conf_files['LICENSE_PATH']
-        conf_tis_config = conf_files['TIS_CONFIG_PATH']
-        conf_boot_if_settings = conf_files['BOOT_IF_SETTINGS_PATH']
-        conf_hosts_bulk_add = conf_files['HOST_BULK_ADD_PATH']
-        conf_labsetup = conf_files['LAB_SETUP_CONF_PATH']
-        conf_guest_image = conf_files['GUEST_IMAGE_PATH']
-        conf_heat_templates = conf_files['HEAT_TEMPLATES']
-
-        if conf_files_server:
-            files_server = conf_files_server
-        if conf_license_path:
-            license_path = conf_license_path
-        if conf_tis_config:
-            tis_config = conf_tis_config
-        if conf_boot_if_settings:
-            boot_if_settings = conf_boot_if_settings
-        if conf_hosts_bulk_add:
-            hosts_bulk_add = conf_hosts_bulk_add
-        if conf_labsetup:
-            lab_setup = conf_labsetup
-        if conf_guest_image:
-            guest_image = conf_guest_image
-        if conf_heat_templates:
-            heat_templates = conf_heat_templates
-
-    else:
-        lab_to_install = get_lab_dict(lab)
-
-    if not lab_to_install.get('controller-0 ip', None):
+    # install conf file parsing ended. Check for errors.
+    if (not dc_system and not lab_to_install.get('controller-0 ip', None)) or \
+            (dc_system and not lab_to_install['central_region'].get('controller-0 ip', None)):
         errors.append('Controller-0 ip has to be provided for custom lab')
-
     if errors:
         raise ValueError("Install param error(s): {}".format(errors))
 
-    # compute directory for all logs based on lab, and timestamp on local machine
-    out_put_dir = "/tmp/output_" + lab_to_install['name'] + '/' + time.strftime("%Y%m%d-%H%M%S")
+    # Set default values if unset
+    files_server = files_server if files_server else bs
+    if files_dir:
+        # add lab resource type and any other lab information in the lab files
+        lab_info_dict = None
+        if low_latency:
+            lowlat_dir = files_dir + '-lowlatency'
+            try:
+                lab_info_dict = get_info_from_lab_files(files_server, lowlat_dir, lab_name=lab_to_install["name"],
+                                                        host_build_dir=host_build_dir)
+                files_dir = lowlat_dir if lab_info_dict else files_dir
+            except (FileNotFoundError, ValueError):
+                pass
 
-    # add nodes dictionary
+        if not lab_info_dict:
+            lab_info_dict = get_info_from_lab_files(files_server, files_dir, lab_name=lab_to_install["name"],
+                                                    host_build_dir=host_build_dir)
+        lab_to_install.update(dict((system_label, system_info) for (system_label, system_info) in lab_info_dict.items()
+                                   if "system" in system_label))
+        multi_region_lab = lab_info_dict["multi_region"]
+        dist_cloud_lab = lab_info_dict["dist_cloud"]
+        lab_to_install.update(lab_info_dict)
 
-    lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller', vbox=vbox))
-
-    if 'compute_nodes' in lab_to_install:
-
-        lab_to_install.update(create_node_dict(lab_to_install['compute_nodes'], 'compute', vbox=vbox))
-    if 'storage_nodes' in lab_to_install:
-        lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage', vbox=vbox))
-
-    if vbox:
-        lab_to_install['boot_device_dict'] = VBOX_BOOT_INTERFACES
     else:
-        lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
+        dist_cloud_lab = dc_system
+        lab_to_install['dist_cloud'] = dist_cloud_lab
 
-    if vbox:
-        # get the ip address of the local linux vm
-        cmd = 'ip addr show | grep "128.224" | grep "\<inet\>" | awk \'{ print $2 }\' | awk -F "/" \'{ print $1 }\''
-        local_external_ip = os.popen(cmd).read().strip()
-        lab_to_install['local_ip'] = local_external_ip
-        vbox_gw = installconf['VBOX_GATEWAY']
-        external_ip = vbox_gw['EXTERNAL_IP']
-        if external_ip and external_ip != local_external_ip:
-            LOG.info("TiS VM external gwy IP is {}".format(external_ip))
-            lab_to_install['external_ip'] = external_ip
-            external_port = vbox_gw['EXTERNAL_PORT']
-            if external_port:
-                LOG.info("TiS VM external gwy port is {}".format(external_port))
-                lab_to_install['external_port'] = external_port
+    system_mode = get_system_mode_from_lab_info(lab_to_install, multi_region_lab=multi_region_lab,
+                                                dist_cloud_lab=dist_cloud_lab)
+    lab_to_install['system_mode'] = system_mode if system_mode else ''
+    ProjVar.set_var(sys_type=system_mode)
+
+    if system_mode and system_mode == SysType.DISTRIBUTED_CLOUD:
+        # add nodes dictionary to centeral and subclouds
+        if 'central_region' not in lab_to_install:
+            raise ValueError("Distributed cloud system lab dictionary does not contain central region system info")
+
+        central_reg_lab = lab_to_install['central_region']
+        if central_reg_lab:
+            central_reg_lab.update(get_nodes_info(lab=central_reg_lab))
+            central_reg_lab['boot_device_dict'] = create_node_boot_dict(central_reg_lab['name'])
+            central_reg_lab['system_mode'] = get_system_mode_from_lab_info(central_reg_lab)
+        subclouds = [k for k in lab_to_install if 'subcloud' in k]
+        for subcloud in subclouds:
+            lab_to_install[subcloud].update(get_nodes_info(lab=lab_to_install[subcloud]))
+            subcloud_lab = lab_to_install[subcloud]
+            subcloud_lab['system_mode'] = get_system_mode_from_lab_info(subcloud_lab)
+
+    else:
+        # add nodes dictionary
+        lab_to_install.update(create_node_dict(lab_to_install['controller_nodes'], 'controller', vbox=vbox))
+        if 'compute_nodes' in lab_to_install:
+            lab_to_install.update(create_node_dict(lab_to_install['compute_nodes'], 'compute', vbox=vbox))
+        if 'storage_nodes' in lab_to_install:
+            lab_to_install.update(create_node_dict(lab_to_install['storage_nodes'], 'storage', vbox=vbox))
+
+        if vbox:
+            lab_to_install['boot_device_dict'] = VBOX_BOOT_INTERFACES
+            # get the ip address of the local linux vm
+            cmd = r""""ip addr | grep "128.224" | grep "\<inet\>" | awk '{ print $2 }' | awk -F "/" '{ print $1 }'"""
+            local_external_ip = os.popen(cmd).read().strip()
+            lab_to_install['local_ip'] = local_external_ip
+            vbox_gw = installconf['VBOX_GATEWAY']
+            external_ip = vbox_gw['EXTERNAL_IP']
+            if external_ip and external_ip != local_external_ip:
+                LOG.info("TiS VM external gwy IP is {}".format(external_ip))
+                lab_to_install['external_ip'] = external_ip
+                external_port = vbox_gw['EXTERNAL_PORT']
+                if external_port:
+                    LOG.info("TiS VM external gwy port is {}".format(external_port))
+                    lab_to_install['external_port'] = external_port
+                else:
+                    raise ValueError("The external access port to connect to {} must be provided".format(external_ip))
+            username = local_host.get_user()
+            if "svc-cgcsauto" in username:
+                password = SvcCgcsAuto.PASSWORD
             else:
-                raise exceptions.UpgradeError("The  external access port along with external ip must be provided: {} "
-                                              .format(external_ip))
-        username = local_host.getpass.getuser()
-        password = ''
-        if "svc-cgcsauto" in username:
-            password = SvcCgcsAuto.PASSWORD
-        else:
-            password = local_host.getpass.getpass()
+                password = local_host.get_password()
 
-        lab_to_install['local_user'] = username
-        lab_to_install['local_password'] = password
+            lab_to_install['local_user'] = username
+            lab_to_install['local_password'] = password
+        elif 'boot_device_dict' not in lab_to_install:
+                lab_to_install['boot_device_dict'] = create_node_boot_dict(lab_to_install['name'])
 
-    InstallVars.set_install_vars(lab=lab_to_install, resume=resume, skip_labsetup=skip_labsetup,
-                                 build_server=build_server,
+    # Set undefined values
+    boot_server = boot_server if boot_server else 'yow-tuxlab2'
+    guest_server = bs
+    if not guest_image:
+        guest_image = BuildServerPath.GUEST_IMAGE_PATHS.get(DROPS.get(drop),
+                                                            BuildServerPath.DEFAULT_GUEST_IMAGE_PATH)
+    elif ':/' in guest_image:
+        guest_server, guest_image = guest_image.split(':', 1)
+
+    iso_server = bs
+    iso_path = iso_path if iso_path else os.path.join(host_build_dir, 'export/bootimage.iso')
+    if ':/' in iso_path:
+        iso_server, iso_path = iso_path.split(':', 1)
+    patch_server = bs
+    if patch_dir and ':/' in patch_dir:
+        patch_server, patch_dir = patch_dir.split(':', 1)
+
+    InstallVars.set_install_vars(lab=lab_to_install,
+                                 resume=resume,
+                                 skips=skip,
+                                 wipedisk=wipedisk,
+                                 build_server=bs,
+                                 boot_server=boot_server,
                                  host_build_dir=host_build_dir,
                                  guest_image=guest_image,
+                                 guest_server=guest_server,
                                  files_server=files_server,
                                  hosts_bulk_add=hosts_bulk_add,
                                  boot_if_settings=boot_if_settings,
@@ -654,19 +899,221 @@ def set_install_params(lab, skip_labsetup, resume, installconf_path, controller0
                                  lab_setup=lab_setup,
                                  heat_templates=heat_templates,
                                  license_path=license_path,
-                                 out_put_dir=out_put_dir,
                                  controller0_ceph_mon_device=controller0_ceph_mon_device,
                                  controller1_ceph_mon_device=controller1_ceph_mon_device,
-                                 ceph_mon_gib=ceph_mon_gib
+                                 ceph_mon_gib=ceph_mon_gib,
+                                 security=security,
+                                 boot_type=boot.strip().lower(),
+                                 low_latency=low_latency,
+                                 iso_path=iso_path,
+                                 iso_server=iso_server,
+                                 stop=stop,
+                                 patch_dir=patch_dir,
+                                 patch_server=patch_server,
+                                 multi_region=multi_region_lab,
+                                 dist_cloud=dist_cloud_lab,
+                                 dc_float_ip=dc_float_ip,
+                                 install_subcloud=install_subcloud,
+                                 ovs=ovs,
+                                 kubernetes=kubernetes,
+                                 no_openstack_install=no_openstack_install,
+                                 ipv6_config=ipv6_config,
+                                 helm_chart_path=helm_chart_path
                                  )
+
+
+def write_installconf(lab, controller, lab_files_dir, build_server, files_server, tis_build_dir,
+                      compute, storage, patch_dir, license_path, guest_image, heat_templates, boot, iso_path,
+                      low_latency, security, stop, ovs,  boot_server, resume, skip, kubernetes, helm_chart_path):
+
+    """
+    Writes a file in ini format of the fresh_install variables
+    Args:
+        lab: Str name of the lab to fresh_install
+        controller: Str comma separated list of controller node barcodes
+        lab_files_dir: Str path to the directory containing the lab files
+        build_server: Str name of a valid build server. Default is yow-cgts4-lx
+        files_server
+        tis_build_dir: Str path to the desired build directory. Default is the latest
+        compute: Str comma separated list of compute node barcodes
+        storage: Str comma separated list of storage node barcodes
+        license_path: Str path to the license file
+        guest_image: Str path to the guest image
+        heat_templates: Str path to the python heat templates
+        patch_dir
+        boot
+        iso_path
+        low_latency
+        security
+        stop
+        ovs
+        boot_server
+        resume
+        skip
+
+    Returns: the path of the written file
+
+    """
+    if lab:
+        lab_dict = get_lab_dict(lab)
+    else:
+        lab_dict = ProjVar.get_var("LAB")
+    if not lab_dict:
+        lab_dict = get_lab_from_install_args(lab, controller, compute, storage, lab_files_dir, build_server)
+
+    LOG.info("Lab info: {}\n\n".format(lab_dict))
+    # Write .ini file
+    config = configparser.ConfigParser(allow_no_value=True)
+    config.optionxform = str
+    labconf_lab_dict = {}
+
+    # [LAB] section
+    for lab_key in lab_dict.keys():
+        if lab_key == "name":
+            labconf_key = "LAB_NAME"
+            labconf_lab_dict[labconf_key] = lab_dict[lab_key]
+            continue
+        labconf_key = lab_key.replace(" ", "_")
+        labconf_key = labconf_key.replace("-", "")
+        labconf_key = labconf_key.upper()
+        labconf_lab_dict[labconf_key] = lab_dict[lab_key]
+
+    # TODO: temp fix for simplex labs
+    if "CONTROLLER1_IP" not in labconf_lab_dict.keys():
+        labconf_lab_dict["CONTROLLER1_IP"] = ""
+
+    # [NODES] section
+    node_keys = [key for key in labconf_lab_dict if 'NODE' in key]
+    node_values = [' '.join(list(map(str, labconf_lab_dict.pop(k)))) for k in node_keys]
+    node_dict = dict(zip((k.replace("_NODES", "S") for k in node_keys), node_values))
+
+    # [BUILD] and [CONF_FILES] section
+    if not ovs and 'starlingx' in tis_build_dir.lower():
+        ovs = True
+
+    build_dict = {"BUILD_SERVER": build_server,
+                  "TIS_BUILD_PATH": tis_build_dir,
+                  "BUILD_ISO_PATH": iso_path if iso_path else '',
+                  "PATCHES": patch_dir if patch_dir else ''}
+
+    files_dict = {"FILES_SERVER": files_server, "FILES_DIR": lab_files_dir if lab_files_dir else '',
+                  "LICENSE_PATH": license_path if license_path else '',
+                  "GUEST_IMAGE_PATH": guest_image if guest_image else '',
+                  "HEAT_TEMPLATES": heat_templates if heat_templates else '',
+                  "LAB_SETUP_CONF_PATH": lab_files_dir,
+                  "BOOT_IF_SETTINGS_PATH": '',
+                  "HOST_BULK_ADD_PATH": '',
+                  "OVS_CONFIG": str(ovs),
+                  "KUBERNETES_CONFIG": str(kubernetes),
+                  "HELM_CHART_PATH": helm_chart_path if helm_chart_path else ''}
+
+    boot_dict = {"BOOT_TYPE": boot, "BOOT_SERVER": boot_server if boot_server else '', "SECURITY_PROFILE": security,
+                 "LOW_LATENCY_INSTALL": low_latency}
+    control_dict = {"RESUME_POINT": resume if resume else '',
+                    "STEPS_TO_SKIP": skip if skip else '', "STOP_POINT": stop if (stop or stop == 0) else ''}
+    config["LAB"] = labconf_lab_dict
+    config["NODES"] = node_dict
+    config["BUILD"] = build_dict
+    config["CONF_FILES"] = files_dict
+    config["BOOT"] = boot_dict
+    config["CONTROL"] = control_dict
+
+    for k in config:
+       config[k] = {kv: vv if vv else '' for kv, vv in config[k].items()}
+
+    install_config_name = "{}_install.cfg.ini".format(lab_dict['short_name'])
+    install_config_path = ProjVar.get_var('TEMP_DIR') + install_config_name
+    try:
+        with open(install_config_path, "w") as install_config_file:
+            os.chmod(install_config_path, 0o777)
+            config.write(install_config_file)
+            install_config_file.close()
+    except FileNotFoundError:
+        os.makedirs(ProjVar.get_var('TEMP_DIR'), exist_ok=True)
+        with open(install_config_path, "w+") as install_config_file:
+            os.chmod(install_config_path, 0o777)
+            config.write(install_config_file)
+            install_config_file.close()
+
+    return install_config_path
+
+
+def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir=None):
+    """
+    retrieves information about the lab by parsing the lab files. If a specific server or directory isn't given
+    will use the default build server and directory.
+    Args:
+        conf_server: str name of a valid build server (see: CGCSAuto/consts/build_server.py)
+        conf_dir: str path to the directory containing the lab files
+        lab_name: str name of the lab
+        host_build_dir: str path to the desired build
+
+    Returns: dict of key, value pairs of elements in the lab files that have "SYSTEM_" as a key.
+    typically SYSTEM_NAME (from TiS_config.ini), and SYSTEM_MODE
+
+    """
+    lab_info_dict = {}
+    info_prefix = "SYSTEM_"
+    multi_region_identifer = r"\[REGION2_PXEBOOT_NETWORK\]"
+    dist_cloud_identifer = r"DISTRIBUTED_CLOUD_ROLE"
+    if conf_dir:
+        lab_files_path = conf_dir
+    elif lab_name is not None and host_build_dir is not None:
+        version = install_helper.extract_software_version_from_string_path(host_build_dir)
+        version = version if version in BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS else 'default'
+        lab_files_path = "{}/{}/yow/{}".format(host_build_dir, BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[version],
+                                               install_helper.get_git_name(lab_name))
+    else:
+        raise ValueError("Could not access lab files")
+
+    with host_helper.ssh_to_build_server(bld_srv=conf_server) as ssh_conn:
+        if not ssh_conn.exec_cmd('test -d {}'.format(lab_files_path))[0] == 0:
+            raise FileNotFoundError('{} does not exist on {}'.format(lab_files_path, conf_server))
+
+        # check lab configuration for special cases (i.e. distributed cloud or multi region)
+        multi_region = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos"
+                                         .format(multi_region_identifer, lab_files_path))[0] == 0
+        dist_cloud = ssh_conn.exec_cmd("grep '{}' {}/TiS_config.ini_centos*"
+                                       .format(dist_cloud_identifer, lab_files_path))[0] == 0
+
+    lab_info_dict["multi_region"] = multi_region
+    lab_info_dict["dist_cloud"] = dist_cloud
+
+    # get boot_device_dict
+    configname = os.path.basename(os.path.normpath(conf_dir))
+    settings_filepath = conf_dir + "/settings.ini"
+    if ssh_conn.exec_cmd('test -f {}/settings.ini'.format(conf_dir))[0] == 0:
+        lab_info_dict["boot_device_dict"] = create_node_boot_dict(
+            configname=configname, settings_filepath=settings_filepath, settings_server_conn=ssh_conn)
+    else:
+        lab_info_dict["boot_device_dict"] = create_node_boot_dict(configname=configname)
+
+    # collect SYSTEM info
+    rc, output = ssh_conn.exec_cmd('grep -r --color=none {} {}'.format(info_prefix, lab_files_path), rm_date=False)
+    assert rc == 0, 'Lab config path not found in {}:{}'.format(conf_server, lab_files_path)
+    lab_info_ = output.replace(' ', '')
+    lab_info_list = lab_info_.splitlines()
+    for line in lab_info_list:
+        key = line[line.find(info_prefix):line.find('=')].lower()
+        val = line[line.find('=') + 1:].lower()
+        lab_info_dict[key] = val.replace('"', '')
+    # Workaround for r430 labs
+    lab_name = lab_info_dict["system_name"]
+    last_num = -1
+    if not lab_name[last_num].isdigit():
+        while not lab_name[last_num].isdigit():
+            last_num -= 1
+        lab_info_dict["name"] = lab_name[:last_num+1]
+
+    return lab_info_dict
 
 
 def is_https(con_ssh):
     return keystone_helper.is_https_lab(con_ssh=con_ssh, source_openrc=True)
 
-
-def list_migration_history(con_ssh):
-    nova_helper.get_migration_list_table(con_ssh=con_ssh)
+#
+# def list_migration_history(con_ssh):
+#     nova_helper.get_migration_list_table(con_ssh=con_ssh)
 
 
 def get_version_and_patch_info():
@@ -679,6 +1126,45 @@ def get_version_and_patch_info():
 
     # LOG.info("SW Version and Patch info: {}".format(info))
     return info
+
+
+def get_system_mode_from_lab_info(lab, multi_region_lab=False, dist_cloud_lab=False):
+    """
+
+    Args:
+        lab:
+        multi_region_lab:
+        dist_cloud_lab:
+
+    Returns:
+
+    """
+
+    if multi_region_lab:
+        return SysType.MULTI_REGION
+    elif dist_cloud_lab:
+        return SysType.DISTRIBUTED_CLOUD
+
+    elif 'system_mode' not in lab:
+        if 'storage_nodes' in lab:
+            return SysType.STORAGE
+        elif 'compute_nodes' in lab:
+            return SysType.REGULAR
+
+        elif len(lab['controller_nodes']) > 1:
+            return SysType.AIO_DX
+        else:
+            return SysType.AIO_SX
+
+    elif 'system_mode' in lab:
+        if "simplex" in lab['system_mode']:
+            return SysType.AIO_SX
+        else:
+            return SysType.AIO_DX
+    else:
+        LOG.warning("Can not determine the lab to install system type based on provided information. Lab info: {}"
+                    .format(lab))
+        return None
 
 
 def set_session(con_ssh):
@@ -696,10 +1182,10 @@ def set_session(con_ssh):
             from utils.cgcs_reporter import upload_results
             sw_version = '-'.join(ProjVar.get_var('SW_VERSION'))
             build_id = ProjVar.get_var('BUILD_ID')
-            build_server = ProjVar.get_var('BUILD_SERVER')
+            bs_ = ProjVar.get_var('BUILD_SERVER')
             session_id = upload_results.upload_test_session(lab_name=ProjVar.get_var('LAB')['name'],
                                                             build_id=build_id,
-                                                            build_server=build_server,
+                                                            build_server=bs_,
                                                             sw_version=sw_version,
                                                             patches=patches,
                                                             log_dir=ProjVar.get_var('LOG_DIR'),
@@ -789,15 +1275,15 @@ def set_region(region=None):
 
 
 def set_dc_vars():
-    if not ProjVar.get_var('IS_DC') or ControllerClient.get_active_controller(name='central_region', fail_ok=True):
+    if not ProjVar.get_var('IS_DC') or ControllerClient.get_active_controller(name='RegionOne', fail_ok=True):
         return
 
     central_con_ssh = ControllerClient.get_active_controller()
-    ControllerClient.set_active_controller(central_con_ssh, name='central_region')
+    ControllerClient.set_active_controller(central_con_ssh, name='RegionOne')
+    primary_subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
     sub_clouds = dc_helper.get_subclouds(avail='online', con_ssh=central_con_ssh)
     LOG.info("Online subclouds: {}".format(sub_clouds))
 
-    primary_subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
     lab = ProjVar.get_var('LAB')
 
     for subcloud in sub_clouds:
@@ -966,11 +1452,13 @@ def collect_sys_net_info(lab):
             res_['ping_fip_from_natbox_after_arp'] = True
 
     LOG.info("Lab networking info collected: {}".format(res_))
+    return res_
 
 
 def setup_remote_cli_client():
     """
-    Download openrc files from horizon and install remote cli clients to virtualenv
+    Download openrc files from horizon andinstall remote cli clients to virtualenv
+
     Notes: This has to be called AFTER set_region, so that the tenant dict will be updated as per region.
 
     Returns (RemoteCliClient)
@@ -990,5 +1478,18 @@ def setup_remote_cli_client():
         os.makedirs(dest_path, exist_ok=True)
         common.scp_from_active_controller_to_localhost(source_path='{}/{}/*'.format(WRSROOT_HOME, dir_name),
                                                        dest_path=dest_path, is_dir=True)
-
     return client
+
+
+# TODO: handle ip's as hostnames
+def initialize_server(server_hostname, prompt=None):
+    if prompt is None:
+        prompt = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', '.*')
+
+    server_conn = SSHClient(server_hostname, user=SvcCgcsAuto.USER,
+                            password=SvcCgcsAuto.PASSWORD, initial_prompt=prompt)
+    server_conn.connect()
+    server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
+    server_dict = {"name": server_hostname, "prompt": prompt, "ssh_conn": server_conn}
+
+    return build_server.Server(**server_dict)

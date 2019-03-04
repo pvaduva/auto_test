@@ -45,16 +45,16 @@ def _test_ceph_osd_process_kill():
         2.  Determine how many OSDs we have provisioned
         3.  Randomly pick one OSD and get the pid of the OSD process
         4.  Kill the ceph-osd PID for that OSD
-        5.  Take the OSD out of service (ceph osd out, ceph osd down, ceph osd
-        rm)
-        6.  Verify expected alarms are raised
-        7.  Re-add OSD via 'ceph osd create'
-        8.  Wait for alarms to clear
         9.  Ensure ceph-osd process is running again
 
     Potential flaws:
-        1.  We're not checking if unexpected alarms are raised (TODO).  If we
-        do this, that means tests cannot run concurrently.
+        We're no longer checking if the expected alarms are raised.  OSDs
+        recover too fast after process kill for this to be detected.  User
+        should do alarm validation as a seperate activity.  Alarms expected if
+        the process stayed down would be:
+        1.  Ceph health warn
+        2.  Loss of replication
+        3.  Failure of osd.X process
 
     Teardown:
         - None
@@ -84,45 +84,10 @@ def _test_ceph_osd_process_kill():
     assert osd_pid, msg
     LOG.info(msg)
 
-    LOG.tc_step("Set ceph to no out")
-    cmd = 'ceph osd set noout'
-    con_ssh.exec_cmd(cmd, fail_ok=False)
-
-    LOG.tc_step('Kill the OSD process')
+    LOG.tc_step('Kill OSD processes')
     proc_killed, msg = storage_helper.kill_process(osd_host, osd_pid)
     assert proc_killed, msg
     LOG.info(msg)
-
-    with host_helper.ssh_to_host(osd_host) as host_ssh:
-        LOG.tc_step('Take OSD {} out of service'.format(osd_id))
-        cmd = 'ceph osd out {}'.format(osd_id)
-        host_ssh.exec_cmd(cmd, fail_ok=False)
-
-        LOG.tc_step('Bring OSD {} down'.format(osd_id))
-        cmd = 'ceph osd down {}'.format(osd_id)
-        host_ssh.exec_cmd(cmd, fail_ok=False)
-
-        LOG.tc_step('Remove OSD {}'.format(osd_id))
-        cmd = 'ceph osd rm {}'.format(osd_id)
-        host_ssh.exec_cmd(cmd, fail_ok=False)
-
-    LOG.tc_step('Check for loss of replication alarm in group {}'.format(storage_group))
-    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_LOR, timeout=180)
-    
-    LOG.tc_step('Check for ceph health warning alarm')
-    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=180)
-
-    LOG.tc_step('Check for OSD failure alarm')
-    entity_instance = 'host={}.process=ceph (osd.{}'.format(osd_host, osd_id)
-    system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=180)
-
-    LOG.tc_step("Set ceph to unset no out")
-    cmd = 'ceph osd unset noout'
-    con_ssh.exec_cmd(cmd, fail_ok=False)
-
-    LOG.tc_step('Put the OSD {} back in service'.format(osd_id))
-    cmd = 'ceph osd create 5'.format(osd_id)
-    con_ssh.exec_cmd(cmd, fail_ok=False)
 
     LOG.tc_step('Check the OSD process is restarted with a different pid')
     endtime = time.time() + 300
@@ -137,16 +102,6 @@ def _test_ceph_osd_process_kill():
     assert osd_pid2 != osd_pid, msg
 
     LOG.info('Old pid is {} and new pid is {}'.format(osd_pid, osd_pid2))
-
-    LOG.tc_step('Check that loss of replication alarm in group {} alarm clears'.format(storage_group))
-    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_LOR, timeout=300)
-    
-    LOG.tc_step('Check that ceph health warning clears')
-    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_ALARM_COND, timeout=300)
-
-    LOG.tc_step('Check the OSD failure alarm clears')
-    entity_instance = 'host={}.process=ceph (osd.{}'.format(osd_host, osd_id)
-    system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_DEGRADE, entity_id=entity_instance, timeout=300)
 
 
 @mark.parametrize('monitor', [
@@ -420,7 +375,7 @@ def test_lock_stor_check_osds_down(host):
     con_ssh = ControllerClient.get_active_controller()
 
     if host == 'any':
-        storage_nodes = host_helper.get_hosts(personality='storage')
+        storage_nodes = system_helper.get_hostnames(personality='storage')
         LOG.info('System has {} storage nodes:'.format(storage_nodes))
         storage_nodes.remove('storage-0')
         node_id = random.randint(0, len(storage_nodes) - 1)
@@ -650,9 +605,7 @@ def test_storgroup_semantic_checks():
 
     table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
     capabilities = table_parser.get_value_two_col_table(table_, 'capabilities')
-    replication = ast.literal_eval(capabilities)
-    replication_factor = replication['replication']
-    storage_nodes = host_helper.get_hosts(personality='storage')
+    replication_factor = capabilities[1]
     LOG.info("The replication factor is: {}".format(replication_factor))
 
     # We want to test storage-0 since it is a ceph monitor
@@ -734,371 +687,6 @@ def test_storgroup_semantic_checks():
             osd_up = storage_helper.is_osd_up(osd_id, con_ssh)
             msg = 'OSD ID {} should be up but is not'.format(osd_id)
             assert osd_up, msg
-
-
-# Tested on PV0.  
-@mark.usefixtures('ceph_precheck')
-def test_import_with_cache_raw():
-    """
-    Verify that non-RAW format images, e.g. QCOW2, can be imported into glance
-    using --cache-raw.
-
-    This is US68056_tc1_import_with_cache_raw adapted from
-    us68056_glance_backend_to_storage_node.odt
-
-    Args:
-    - None
-
-    Setup:
-        - Requires a system with storage nodes
-        - Requires external connectivity to download images
-
-    Test Steps:
-        1.  Download a QCOW2 image
-        2.  Import into glance using --cache-raw
-        3.  Check the image file and the raw file are in rbd
-        4.  Create a volume from the imported image
-        5.  Launch a VM from volume
-        6.  Launch a VM from image
-        7.  Delete created:
-            - VMs
-            - volumes
-            - glance images
-        8.  Check rbd files are cleaned up
-
-    Flaws:
-        1.  Image names need more uniqueness
-
-    Defects:
-        1.  CGTS-3605 glance import --cache-raw should have an option to wait
-        until RAW image is available
-    """
-    con_ssh = get_cli_client()
-    size = 10
-    vm_list = []
-
-    # Return a list of images of a given type
-    image_names, img_dir = __get_images_on_client(client=con_ssh, img_type='qcow2')
-
-    LOG.tc_step('Import qcow2 images into glance')
-    for image in image_names:
-        source_image_loc = img_dir + "/" + image
-        img_name = 'testimage_{}'.format(image)
-        ret = glance_helper.create_image(source_image_file=source_image_loc,
-                                         disk_format='qcow2',
-                                         container_format='bare',
-                                         cache_raw=True, wait=True, name=img_name)
-        ResourceCleanup.add('image', ret[1])
-        LOG.info("ret {}".format(ret))
-        assert ret[0] == 0, ret[2]
-        end_time = time.time() + 30
-        LOG.tc_step("Wait for image to finish RAW caching")
-        while time.time() < end_time:
-            cached = glance_helper.get_image_properties(ret[1], 'cache_raw_status')
-            if cached['cache_raw_status'] == 'Cached':
-                break
-        else:
-            assert 1 == 0, "The QCOW2 image did not finish caching"
-
-        LOG.tc_step('Check image is shown in rbd')
-        rbd_img_id = ret[1]
-        rbd_raw_img_id = rbd_img_id + '_raw'
-        cmd = 'rbd -p images ls'
-        rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
-        LOG.info("out {}:".format(out))
-        msg = '{} was not found in rbd image pool'.format(rbd_img_id)
-        assert rbd_img_id in out, msg
-        msg = '{} was not found in rbd image pool'.format(rbd_raw_img_id)
-        assert rbd_raw_img_id in out, msg
-
-        # Check how large of a flavor the image requires
-        flav_size = storage_helper.find_image_size(con_ssh, image)
-
-        LOG.tc_step('Create volume from the imported image')
-        volume_id = cinder_helper.create_volume(name=img_name,
-                                                image_id=rbd_img_id,
-                                                size=flav_size,
-                                                con_ssh=con_ssh,
-                                                rtn_exist=False)[1]
-        msg = "Unable to create volume"
-        assert volume_id, msg
-
-        LOG.tc_step('Create flavor of sufficient size for VM')
-        flv = nova_helper.create_flavor(name=img_name, root_disk=size)
-        ResourceCleanup.add('flavor', flv[1])
-        assert flv[0] == 0, flv[1]
-
-        LOG.tc_step('Launch VM from created volume')
-        vm_id = vm_helper.boot_vm(name=img_name, flavor=flv[1], source='volume', source_id=volume_id,
-                                  cleanup='function')[1]
-        vm_list.append(vm_id)
-
-        # When spawning, make sure we don't download the image
-        LOG.tc_step('Launch VM from image')
-        img_name2 = img_name + '_fromimage'
-        vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], source='image', source_id=rbd_img_id,
-                                   cleanup='function')[1]
-        vm_list.append(vm_id2)
-
-        LOG.tc_step('Delete VMs {}'.format(vm_list))
-        vm_helper.delete_vms(vms=vm_list, con_ssh=con_ssh)
-
-        LOG.tc_step('Delete Flavor(s) {}'.format(flv[1]))
-        nova_helper.delete_flavors(flv[1])
-
-        LOG.tc_step('Delete Image(s) {}'.format(rbd_img_id))
-        glance_helper.delete_images(rbd_img_id)
-
-        # We're doing this twice, extract to function
-        LOG.tc_step('Check images are cleaned up from rbd')
-        cmd = 'rbd -p images ls'
-        rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
-        msg = '{} was found in rbd image pool'.format(rbd_img_id)
-        assert rbd_img_id not in out, msg
-        msg = '{} was found in rbd image pool'.format(rbd_raw_img_id)
-        assert rbd_raw_img_id not in out, msg
-
-
-def __get_images_on_client(client, img_name=None, img_type='all'):
-    LOG.tc_step('Determine {} images we have available'.format(img_type))
-    image_names, img_dir = storage_helper.find_images(client, image_type=img_type, image_name=img_name)
-
-    if not image_names:
-        LOG.info('No requested images were found on the system')
-        LOG.tc_step('Downloading requested image(s)... this will take some time')
-        glance_helper._scp_guest_image()
-        image_names, img_dir = storage_helper.find_images(client, image_type=img_type, image_name=img_name)
-
-    return image_names, img_dir
-
-
-@mark.usefixtures('ceph_precheck')
-def test_import_raw_with_cache_raw():
-    """
-    Verify that RAW format images can be imported with --cache-raw but there is
-    no corresponding _raw image in rbd.
-
-    This is US68056_tc2_neg_import_RAW_with_cache_raw_enabled adapted from
-    us68056_glance_backend_to_storage_node.odt
-
-    Args:
-    - None
-
-    Setup:
-        - Requires a system with storage nodes
-        - Requires external connectivity to download images
-
-    Test Steps:
-        1.  Import the cgcs-guest image into glance with --cache-raw specified
-        2.  Confirm:
-            - The image is imported successfully
-            - There is no corresponding _raw image in rbd
-            - In Horizon, RAW cache state should be set to disabled
-        3.  Ensure you can launch a VM from image using the imported image
-        4.  Ensure you can launch a VM from volume using the imported image
-    """
-    con_ssh = get_cli_client()
-
-    # Return a list of images of a given type
-    LOG.tc_step('Determine what raw images we have available')
-    image_names, img_dir = __get_images_on_client(client=con_ssh, img_type='raw')
-
-    LOG.tc_step('Import raw images into glance with --cache-raw')
-    for image in image_names:
-        source_image_loc = img_dir + '/' + image
-        ret = glance_helper.create_image(source_image_file=source_image_loc,
-                                         disk_format='raw',
-                                         container_format='bare',
-                                         cache_raw=True)
-        ResourceCleanup.add('image', ret[1])
-        LOG.info("ret {}".format(ret))
-        assert ret[0] == 0, ret[2]
-
-        LOG.tc_step('Check image is shown in rbd but no raw file is generated')
-        rbd_img_id = ret[1]
-        rbd_raw_img_id = rbd_img_id + '_raw'
-        cmd = 'rbd -p images ls'
-        rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
-        LOG.info("out {}:".format(out))
-        msg = '{} was not found in rbd image pool'.format(rbd_img_id)
-        assert rbd_img_id in out, msg
-        msg = '{} was found in rbd image pool'.format(rbd_raw_img_id)
-        assert rbd_raw_img_id not in out, msg
-
-    # TODO: Clean up resources used
-
-
-# INPROGRESS
-# Blocked due to product issue CGTS-7694 (uses cache-raw)
-@mark.usefixtures('ceph_precheck', 'ubuntu14_image')
-def _test_exceed_size_of_img_pool():
-    """
-    Verify that system behaviour when we exceed the size of the rbd image pool.
-
-    This is US68056_tc3_neg_exceed_size_of_image_pool adapted from
-    us68056_glance_backend_to_storage_node.odt
-
-    Args:
-    - None
-
-    Setup:
-        - Requires a system with storage nodes
-        - Requires external connectivity to download images
-
-    Test Steps:
-        1. Fill up the ceph img pool
-        2. Ensure the system alarms
-    """
-
-    con_ssh = get_cli_client()
-
-    # Return a list of images of a given type
-    LOG.tc_step('Determine what qcow2 images we have available')
-    img_name = 'ubuntu_14'
-    image_names, img_dir = __get_images_on_client(client=con_ssh, img_name=img_name)
-
-    LOG.tc_step('Import qcow2 images into glance until pool is full')
-    source_img_path = "{}/{}".format(img_dir, GuestImages.IMAGE_FILES[img_name][2])
-
-    timeout = 7200
-    end_time = time.time() + timeout
-    while time.time() < end_time:
-        code, image_id = glance_helper.create_image(source_image_file=source_img_path,
-                                                    disk_format='qcow2',
-                                                    container_format='bare',
-                                                    cache_raw=True, wait=True)
-        ResourceCleanup.add('image', image_id)
-
-        if code != 0:
-            break
-    else:
-        raise exceptions.TimeoutException("Timed out (2 hours) filling out image pool.")
-
-    # 800.001   Storage Alarm Condition: Pgs are degraded/stuck/blocked.
-    # Please check 'ceph -s' for more details
-    LOG.tc_step('Query alarms for ceph alarms')
-    assert system_helper.wait_for_alarm(alarm_id=EventLogID.STORAGE_ALARM_COND), "Alarm {} not raised"\
-        .format(EventLogID.STORAGE_ALARM_COND)
-
-    LOG.tc_step('Verify the health cluster is not healthy')         # yang TODO verify healthy or unhealthy?
-    ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-    assert ceph_healthy, msg
-
-
-# Blocked due to product issue CGTS-7694
-@mark.usefixtures('ceph_precheck')
-def _test_import_large_images_with_cache_raw():
-    """
-    Verify that system behaviour when we attempt to import large images, i.e.
-    20-40GB, with cache-raw enabled.
-
-    This is US68056_tc4_import_large_images_with_cache_raw
-    us68056_glance_backend_to_storage_node.odt
-
-    Args:
-    - None
-
-    Setup:
-        - Requires a system with storage nodes
-
-    Test Steps:
-        1.  Determine if we have a cgcs-guest.img and if not, rsync from the
-        other controller
-        2.  Use qemu-img resize to enlarge an existing cgcs-guest image
-        3.  Use qemu-img convert to convert the raw image into qcow2
-        4.  Import image into glance with --cache-raw specified
-        5.  Ensure the image is imported successfully
-        6.  Create a flavor of sufficient size for the image
-        6.  Using the image, create a volume
-        7.  Launch a VM from volume
-        8.  Launch a VM from image
-        9.  Cleanup flavors and VMs
-    """
-    con_ssh = get_cli_client()
-    img = 'cgcs-guest'
-    glance_helper.get_guest_image(guest_os=img)
-
-    base_img = img + '.img'
-    qcow2_img = img + '.qcow2'
-    new_img = '40GB' + base_img
-    vm_list = []
-
-    # Check that we have the cgcs-guest.img available
-    # If we are on controller-1, we may need to rsync image files from
-    # controller-0
-    LOG.tc_step('Determine if the cgcs-guest image is available')
-    image_names, img_dir = __get_images_on_client(client=con_ssh, img_name=img, img_type='all')
-    # Resize the image to 40GB
-    LOG.tc_step('Resize the cgcs-guest image to 40GB')
-    cmd = 'cp {}/{} {}/{}'.format(img_dir, base_img, img_dir, new_img)
-    rtn_code, out = con_ssh.exec_cmd(cmd)
-    assert not rtn_code, out
-
-    new_img_loc = img_dir + '/' + new_img
-    cmd = 'qemu-img resize {} -f raw 40G'.format(new_img_loc)
-    rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=600)
-    assert not rtn_code, out
-
-    # Confirm the virtual size is 40GB
-    size = storage_helper.find_image_size(con_ssh, image_name=new_img)
-    msg = 'Image was not resized to 40GB'
-    assert str(size) == '40', msg
-
-    # Convert the image to qcow2
-    LOG.tc_step('Convert the raw image to qcow2')
-    args = '{}/{} {}/{}'.format(img_dir, new_img, img_dir, qcow2_img)
-    cmd = 'qemu-img convert -f raw -O qcow2' + ' ' + args
-    con_ssh.exec_cmd(cmd, expect_timeout=600)
-
-    # Check the image type is updated
-    image_names, img_dir = storage_helper.find_images(con_ssh, image_type='qcow2')
-    msg = 'qcow2 image was not found in {}'.format(img_dir)
-    assert qcow2_img in image_names, msg
-
-    LOG.tc_step('Import image into glance')
-    source_img = img_dir + '/' + qcow2_img
-    out = glance_helper.create_image(source_image_file=source_img,
-                                     disk_format='qcow2',
-                                     container_format='bare',
-                                     cache_raw=True, wait=True)
-    ResourceCleanup.add('image', out[1])
-    msg = 'Failed to import {} into glance'.format(qcow2_img)
-    assert out[0] == 0, msg
-
-    LOG.tc_step('Create volume from the imported image')
-    volume_id = cinder_helper.create_volume(name=qcow2_img,
-                                            image_id=out[1],
-                                            size=40,
-                                            con_ssh=con_ssh,
-                                            rtn_exist=False)[1]
-    msg = "Unable to create volume"
-    assert volume_id, msg
-
-    LOG.tc_step('Create flavor of sufficient size for VM')
-    flv = nova_helper.create_flavor(name=qcow2_img, root_disk=size)
-    ResourceCleanup.add('flavor', flv[1])
-    assert flv[0] == 0, flv[1]
-
-    LOG.tc_step('Launch VM from created volume')
-    vm_id = vm_helper.boot_vm(name=qcow2_img, flavor=flv[1], source='volume', source_id=volume_id,
-                              cleanup='function')[1]
-    vm_list.append(vm_id)
-
-    # When spawning, make sure we don't download the image
-    LOG.tc_step('Launch VM from image')
-    img_name2 = qcow2_img + '_fromimage'
-    vm_id2 = vm_helper.boot_vm(name=img_name2, flavor=flv[1], source='image', source_id=out[1], cleanup='function')[1]
-    vm_list.append(vm_id2)
-
-    # yang TODO use ResourceCleanup in case of test fail.
-    LOG.tc_step('Delete VMs {}'.format(vm_list))
-    vm_helper.delete_vms(vms=vm_list, con_ssh=con_ssh)
-
-    LOG.tc_step('Delete Flavor(s) {}'.format(flv[1]))
-    nova_helper.delete_flavors(flv[1])
-
-    LOG.tc_step('Delete Image(s) {}'.format(out[1]))
-    glance_helper.delete_images(out[1])
 
 
 # Tested on PV0.  Runtime: 58.82 seconds.  Status: Pass  Date: Aug 8, 2017

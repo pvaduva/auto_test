@@ -78,7 +78,7 @@ def _vms():
         tenant_net_ids += tenant_net_ids
     assert len(tenant_net_ids) >= VMS_COUNT
 
-    vif = 'avp' if system_helper.is_avs() else 'e1000'
+    vif = 'avp' if system_helper.is_avs() else 'virtio'
     vm_vif_models = {'virtio_vm1': ('virtio', tenant_net_ids[0]),
                      '{}_vm1'.format(vif): (vif, tenant_net_ids[1]),
                      'virtio_vm2': ('virtio', tenant_net_ids[2]),
@@ -87,7 +87,7 @@ def _vms():
     vms = []
     for vm_name, vifs in vm_vif_models.items():
         vif_model, tenant_net_id = vifs
-        nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+        nics = [{'net-id': mgmt_net_id},
                 {'net-id': tenant_net_id, 'vif-model': vif_model},
                 {'net-id': internal_net_id, 'vif-model': vif_model}]
 
@@ -209,6 +209,22 @@ def test_dnat_ubuntu_vm_udp(_vms, router_info):
 
 def check_ssh_to_vm_and_wait_for_packets(start_event, end_event, received_event, vm_id, vm_ip, vm_ext_port,
                                          expt_output, protocol='tcp', timeout=1200):
+    """
+
+    Args:
+        start_event (Events):
+        end_event (Events):
+        received_event (Events):
+        vm_id:
+        vm_ip:
+        vm_ext_port:
+        expt_output:
+        protocol:
+        timeout:
+
+    Returns:
+
+    """
     with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name='ubuntu_14', vm_ip=vm_ip, vm_ext_port=vm_ext_port,
                                          username='ubuntu', password='ubuntu', retry=False) as vm_ssh:
 
@@ -397,8 +413,6 @@ def check_port_forwarding_ports(ext_gateway_ip, nat_ssh, vm_id, ssh_port, old_po
 
         assert received_event.wait_for_event(timeout=30), "Event {} is not set".format(received_event)
 
-    except:
-        raise
     finally:
         end_event.set()
         vm_thread.wait_for_thread_end(timeout=40, fail_ok=False)
@@ -448,8 +462,6 @@ def check_port_forwarding_protocol(ext_gateway_ip, nat_ssh, vm_pfs, vm_ssh_pfs, 
         for event in received_events:
             assert event.wait_for_event(timeout=40, fail_ok=False), "Event {} is not set".format(event)
 
-    except:
-        raise
     finally:
         end_event.set()
         for thread in vm_threads:

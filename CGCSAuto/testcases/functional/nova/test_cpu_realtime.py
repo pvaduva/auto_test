@@ -38,18 +38,18 @@ def test_flavor_cpu_realtime_negative(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vc
 
     """
 
-    flv_id, code, output = create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, True, False)
+    flv_id, code, output = create_rt_flavor(vcpus, cpu_pol=cpu_pol, cpu_rt=cpu_rt, rt_mask=rt_mask,
+                                            shared_vcpu=shared_vcpu, fail_ok=True)
 
     LOG.tc_step("Check extra specs is rejected and proper error message displayed")
     assert 1 == code
     assert re.search(eval(expt_err), output), "Actual: {}".format(output)
 
 
-def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False, check_storage_backing=True,
+def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False,
                      storage_backing=None, numa_nodes=None, cpu_thread=None, min_vcpus=None):
     LOG.tc_step("Create a flavor with {} vcpus".format(vcpus))
-    flv_id = nova_helper.create_flavor(name='cpu_rt_{}'.format(vcpus), vcpus=vcpus,
-                                       check_storage_backing=check_storage_backing, storage_backing=storage_backing)[1]
+    flv_id = nova_helper.create_flavor(name='cpu_rt_{}'.format(vcpus), vcpus=vcpus, storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flv_id)
 
     args = {
@@ -57,9 +57,9 @@ def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False
         FlavorSpec.CPU_REALTIME: cpu_rt,
         FlavorSpec.CPU_REALTIME_MASK: rt_mask,
         FlavorSpec.SHARED_VCPU: shared_vcpu,
-        FlavorSpec.NUMA_NODES: numa_nodes,
+        # FlavorSpec.NUMA_NODES: numa_nodes,
         FlavorSpec.CPU_THREAD_POLICY: cpu_thread,
-        FlavorSpec.MIN_VCPUS: min_vcpus
+        # FlavorSpec.MIN_VCPUS: min_vcpus
     }
 
     extra_specs = {}
@@ -216,7 +216,7 @@ def parse_rt_and_ord_cpus(vcpus, cpu_rt, cpu_rt_mask):
 @fixture(scope='module')
 def check_hosts():
     LOG.info("Get system storage backing, shared cpu, and HT configs.")
-    storage_backing, hosts = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
     hosts_with_shared_cpu = []
     ht_hosts = []
     for host in hosts:
@@ -229,14 +229,14 @@ def check_hosts():
 
 
 @mark.parametrize(('vcpus', 'cpu_rt', 'rt_mask', 'rt_source', 'shared_vcpu', 'numa_nodes', 'cpu_thread', 'min_vcpus'), [
-    (3, None, '^0', 'flavor', None, None, 'prefer', 1),
-    (4, 'yes', '^0', 'favor', None, 2, 'require', None),
+    (3, None, '^0', 'flavor', None, None, 'prefer', None),   # min_vcpu deprecated
+    (4, 'yes', '^0', 'favor', None, None, 'require', None),     # numa_nodes deprecated
     #   (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate', 4),
-    (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate', None),     # temp
-    (3, 'yes', '^0-1', 'image', None, None, None, 2),
-    (4, 'no', '^0-2', 'image', 0, 2, None, None),
+    (6, 'yes', '^2-3', 'flavor', None, None, 'isolate', None),     # tmp. numa nodes deprecated
+    (2, 'yes', '^1', 'flavor', 1, None, None, None),
+    (3, 'yes', '^0-1', 'image', None, None, None, None),    # Deprecated - vcpu
+    # (4, 'no', '^0-2', 'image', 0, 2, None, None),     # numa_nodes deprecated
     (3, 'yes', '^1-2', 'image', None, None, 'isolate', None),
-    (2, 'yes', '^1', 'flavor', 1, 1, None, None),
     (4, 'no', '^0-2', 'flavor', 2, None, None, None),
     (4, 'no', '^0-2', 'image', None, None, None, None),
 ])
@@ -250,7 +250,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
         rt_source (str): flavor or image
         rt_mask (str):
         shared_vcpu (int|None):min_vcpus
-        numa_nodes (int): number of numa_nodes to boot vm on
+        numa_nodes (int|None): number of numa_nodes to boot vm on
         cpu_thread
         min_vcpus
         check_hosts (tuple): test fixture
@@ -289,8 +289,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
     image_id = None
     if rt_mask_img is not None:
         image_medata = {ImageMetadata.CPU_RT_MASK: rt_mask_img}
-        image_id = glance_helper.create_image(name='rt_mask', **image_medata)[1]
-        ResourceCleanup.add('image', image_id)
+        image_id = glance_helper.create_image(name='rt_mask', cleanup='function', **image_medata)[1]
 
     vol_id = cinder_helper.create_volume(image_id=image_id)[1]
     ResourceCleanup.add('volume', vol_id)
@@ -298,7 +297,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
     name = 'rt-{}_mask-{}_{}vcpu'.format(cpu_rt, rt_mask_flv, vcpus)
     flv_id = create_rt_flavor(vcpus, cpu_pol='dedicated', cpu_rt=cpu_rt_flv, rt_mask=rt_mask_flv,
                               shared_vcpu=shared_vcpu, numa_nodes=numa_nodes, cpu_thread=cpu_thread,
-                              min_vcpus=min_vcpus, check_storage_backing=False, storage_backing=storage_backing)[0]
+                              min_vcpus=min_vcpus, storage_backing=storage_backing)[0]
 
     LOG.tc_step("Boot a vm with above flavor")
     vm_id = vm_helper.boot_vm(name=name, flavor=flv_id, cleanup='function', source='volume', source_id=vol_id)[1]

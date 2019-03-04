@@ -1,13 +1,8 @@
 from pytest import mark
 
-from utils import table_parser, cli
 from utils.tis_log import LOG
-
-from consts.auth import Tenant
 from consts.cgcs import ImageMetadata
 from keywords import vm_helper, glance_helper, cinder_helper, network_helper, system_helper
-
-from testfixtures.fixture_resources import ResourceCleanup
 
 
 @mark.p3
@@ -37,8 +32,8 @@ def test_attach_cinder_volume_to_instance(vol_vif, skip_for_ovs):
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
 
-    vif_model = 'avp' if system_helper.is_avs() else 'e1000'
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+    vif_model = 'avp' if system_helper.is_avs() else 'virtio'
+    nics = [{'net-id': mgmt_net_id},
             {'net-id': tenant_net_id},
             {'net-id': internal_net_id, 'vif-model': vif_model},
             ]
@@ -46,25 +41,23 @@ def test_attach_cinder_volume_to_instance(vol_vif, skip_for_ovs):
     LOG.tc_step("Boot up VM from default tis image")
     vm_id = vm_helper.boot_vm(name='vm_attach_vol_{}'.format(vol_vif), source='image', nics=nics, cleanup='function')[1]
 
-    pre_nics = network_helper.get_vm_nics(vm_id)
+    prev_ports = network_helper.get_ports(server=vm_id)
 
     LOG.tc_step("Create an image with vif model metadata set to {}".format(vol_vif))
-    img_id = glance_helper.create_image('vif_{}'.format(vol_vif), **{ImageMetadata.VIF_MODEL: vol_vif})[1]
-    ResourceCleanup.add('image', img_id)
+    img_id = glance_helper.create_image('vif_{}'.format(vol_vif), cleanup='function',
+                                        **{ImageMetadata.VIF_MODEL: vol_vif})[1]
 
     LOG.tc_step("Boot a volume from above image")
-    volume_id = cinder_helper.create_volume('vif_{}'.format(vol_vif), image_id=img_id)[1]
-    ResourceCleanup.add('volume', volume_id)
+    volume_id = cinder_helper.create_volume('vif_{}'.format(vol_vif), image_id=img_id, cleanup='function')[1]
 
     # boot a cinder volume and attached it to vm
     LOG.tc_step("Attach cinder Volume to VM")
     vm_helper.attach_vol_to_vm(vm_id, vol_id=volume_id)
-    # teardown: delete vm and volume will happen automatically
 
     LOG.tc_step("Check vm nics vif models are not changed")
-    post_nics = network_helper.get_vm_nics(vm_id)
+    post_ports = network_helper.get_ports(server=vm_id)
 
-    assert pre_nics == post_nics
+    assert prev_ports == post_ports
 
 
 @mark.parametrize('img_vif', [
@@ -73,35 +66,49 @@ def test_attach_cinder_volume_to_instance(vol_vif, skip_for_ovs):
     mark.p3('e1000')
 ])
 def test_vif_model_from_image(img_vif, skip_for_ovs):
+    """
+    Test vif model set in image metadata is reflected in vm nics when use normal vnic type.
+    Args:
+        img_vif (str):
+        skip_for_ovs:
+
+    Test Steps:
+        - Create a glance image with given img_vif in metadata
+        - Create a cinder volume from above image
+        - Create a vm with 3 vnics from above cinder volume:
+            - nic1 and nic2 with normal vnic type
+            - nic3 with avp (if AVS, otherwise normal)
+        - Verify nic1 and nic2 vif model is the same as img_vif
+        - Verify nic3 vif model is avp (if AVS, otherwise normal)
+
+    """
 
     LOG.tc_step("Create an image with vif model metadata set to {}".format(img_vif))
-    img_id = glance_helper.create_image('vif_{}'.format(img_vif), **{ImageMetadata.VIF_MODEL: img_vif})[1]
-    ResourceCleanup.add('image', img_id)
+    img_id = glance_helper.create_image('vif_{}'.format(img_vif), cleanup='function',
+                                        **{ImageMetadata.VIF_MODEL: img_vif})[1]
 
     LOG.tc_step("Boot a volume from above image")
-    volume_id = cinder_helper.create_volume('vif_{}'.format(img_vif), image_id=img_id)[1]
-    ResourceCleanup.add('volume', volume_id)
+    volume_id = cinder_helper.create_volume('vif_{}'.format(img_vif), image_id=img_id, cleanup='function')[1]
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
     internal_net_id = network_helper.get_internal_net_id()
 
-    vif_model = 'avp' if system_helper.is_avs() else 'e1000'
-
-    nics = [{'net-id': mgmt_net_id, 'vif-model': 'virtio'},
+    vif_model = 'avp' if system_helper.is_avs() else img_vif
+    nics = [{'net-id': mgmt_net_id},
             {'net-id': tenant_net_id},
-            {'net-id': internal_net_id, 'vif-model': vif_model},
-            ]
+            {'net-id': internal_net_id, 'vif-model': vif_model}]
 
     LOG.tc_step("Boot a vm from above volume with following nics: {}".format(nics))
     vm_id = vm_helper.boot_vm(name='vif_img_{}'.format(img_vif), nics=nics, source='volume', source_id=volume_id,
                               cleanup='function')[1]
 
-    LOG.tc_step("Verify nics info from nova show to ensure tenant net vif is as specified in image metadata")
-    table_ = table_parser.table(cli.nova('show', vm_id, auth_info=Tenant.get('admin')))
-    actual_nics = table_parser.get_value_two_col_table(table_, field='wrs-if:nics', merge_lines=False)
-    actual_nics = [eval(nic_) for nic_ in actual_nics]
-
-    assert 'virtio' == list(actual_nics[0].values())[0]['vif_model']
-    assert vif_model == list(actual_nics[2].values())[0]['vif_model']
-    assert img_vif == list(actual_nics[1].values())[0]['vif_model']
+    LOG.tc_step("Verify vnics info from virsh to ensure tenant net vif is as specified in image metadata")
+    internal_mac = network_helper.get_ports(server=vm_id, network=internal_net_id, rtn_val='MAC Address')[0]
+    vm_interfaces = vm_helper.get_vm_interfaces_via_virsh(vm_id)
+    for vm_if in vm_interfaces:
+        if_mac, if_model = vm_if
+        if if_mac == internal_mac:
+            assert if_model == vif_model
+        else:
+            assert if_model == img_vif

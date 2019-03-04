@@ -275,7 +275,7 @@ def test_snat_computes_lock_reboot(snat_setups):
     assert vm_host in hypervisors, "vm host is not in nova hypervisor-list"
 
     hosts_should_lock = set(hypervisors) - {vm_host}
-    hosts_already_locked = set(host_helper.get_hosts(administrative='locked'))
+    hosts_already_locked = set(system_helper.get_hostnames(administrative='locked'))
     hosts_to_lock = list(hosts_should_lock - hosts_already_locked)
     LOG.tc_step("Lock all compute hosts {} except vm host {}".format(hosts_to_lock, vm_host))
     for host_ in hosts_to_lock:
