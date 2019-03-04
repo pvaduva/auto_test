@@ -495,11 +495,11 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
 
     LOG.tc_step(test_step)
     if do_step(test_step):
-        # if len(hostnames) == 1:
-        #     host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400,
-        #                             check_hypervisor_up=False, check_webservice_up=False)
-        # else:
-        host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
+        if len(hostnames) == 1:
+            host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400,
+                                    check_hypervisor_up=False, check_webservice_up=False)
+        else:
+            host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
         kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=3600)
         #host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh, timeout=3600)
     if LOG.test_step == final_step or test_step == final_step:
