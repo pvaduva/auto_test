@@ -604,10 +604,11 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
         if os.path.basename(lab_file_dir) == 'yow':
             lab_file_dir += '/{}'.format(lab_name)
 
-        script_path = lab_file_dir
+        #script_path = lab_file_dir
         if '/lab/yow/' in lab_file_dir:
             script_path = os.path.join(lab_file_dir.rsplit('/lab/yow/', maxsplit=1)[0], 'lab/scripts')
-
+        else:
+            script_path = os.path.join(default_lab_config_path, "scripts")
     else:
         lab_file_dir = default_lab_config_path + "/yow/{}".format(lab['name'])
         script_path = os.path.join(default_lab_config_path, "scripts")
