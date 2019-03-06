@@ -87,6 +87,8 @@ def pytest_configure(config):
             if lab_file_dir.find(":/") != -1:
                 files_server = lab_file_dir[:lab_file_dir.find(":/")]
                 lab_file_dir = lab_file_dir[lab_file_dir.find(":") + 1:]
+            elif not os.path.isabs(lab_file_dir) and '/' not in lab_file_dir and lab_name in lab_file_dir:
+                lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '')
         else:
             lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '')
 
