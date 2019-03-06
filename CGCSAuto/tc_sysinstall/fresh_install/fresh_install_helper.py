@@ -184,8 +184,8 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
     test_step = "Download lab files"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        LOG.info("Downloading heat templates")
-        install_helper.download_heat_templates(lab, build_server, load_path, heat_path=heat_path)
+        # LOG.info("Downloading heat templates")
+        # install_helper.download_heat_templates(lab, build_server, load_path, heat_path=heat_path)
         LOG.info("Downloading guest image")
         install_helper.download_image(lab, guest_server, guest_path)
         LOG.info("Copying license")
