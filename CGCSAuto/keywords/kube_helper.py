@@ -592,7 +592,7 @@ def get_openstack_pods_info(pod_names=None, strict=False, con_ssh=None, fail_ok=
     return filtered_pods
 
 
-def wait_for_pods_ready(pod_names=None, namespace='all', node=None, timeout=120, check_interval=5, con_ssh=None,
+def wait_for_pods_ready(pod_names=None, namespace='all', node=None, timeout=300, check_interval=5, con_ssh=None,
                         fail_ok=False, strict=False, pods_to_exclude=None):
     """
     Wait for pods ready
