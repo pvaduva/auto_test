@@ -644,7 +644,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                              boot_server=boot_server, boot=boot, iso_path=iso_path, ovs=ovs,
                                              patch_dir=patch_dir, kubernetes=kubernetes, helm_chart_path=helm_chart_path)
 
-    print("Setting Install vars : {} ".format(locals()))
+    # print("Setting Install vars : {} ".format(locals()))
 
     # Initialize values
     errors = []
@@ -752,6 +752,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         heat_templates = conf_heat_templates
     ovs = conf_ovs
     kubernetes = conf_kuber
+
     helm_chart_path = conf_helm_chart
 
     boot_info = installconf["BOOT"]

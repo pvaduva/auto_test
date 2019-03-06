@@ -91,7 +91,7 @@ def get_modify_time(ssh_client, file_path):
 def __get_latest_build_dir(build_server, build_dir):
     with host_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
         output = bld_srv_ssh.exec_cmd('ls -l {} | grep --color="never" "latest_build"'.format(build_dir))[1]
-        build_dir_ = output.split(sep=r'/')[-1]
+        build_dir_ = output.split('->')[-1].strip().split(sep=r'/')[-1]
         print("Latest build dir: {}".format(build_dir_))
 
         return build_dir_

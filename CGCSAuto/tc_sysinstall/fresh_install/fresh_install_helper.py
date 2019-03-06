@@ -184,8 +184,8 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
     test_step = "Download lab files"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        # LOG.info("Downloading heat templates")
-        # install_helper.download_heat_templates(lab, build_server, load_path, heat_path=heat_path)
+        LOG.info("Downloading heat templates with best effort")
+        install_helper.download_heat_templates(lab, build_server, load_path, heat_path=heat_path)
         LOG.info("Downloading guest image")
         install_helper.download_image(lab, guest_server, guest_path)
         LOG.info("Copying license")
@@ -503,7 +503,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
         else:
             host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
         kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=3600)
-        #host_helper.wait_for_hosts_ready(hostnames, con_ssh=con_ssh, timeout=3600)
+
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 

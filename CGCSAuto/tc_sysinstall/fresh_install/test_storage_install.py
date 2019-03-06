@@ -46,22 +46,22 @@ def install_setup(request):
 
 def test_storage_install(install_setup):
     """
-         Configure the active controller
+     Configure the active controller
 
-         Prerequisites:
-             - pxeboot has been setup.
-         Test Setups:
-             - Retrieve dictionary containing lab information
-             - Retrieve required paths to directories, images, and licenses
-             - Determine active controller
-             - Initialize build server and boot server objects
-             - Retrieve what steps to be skipped
-         Test Steps:
-             - Install controller-0
-             - Download configuration files, heat templates, images, and licenses
-             - Configure controller-0, run lab_setup, and unlock controller-0
-             -
-         """
+     Prerequisites:
+         - pxeboot has been setup.
+     Test Setups:
+         - Retrieve dictionary containing lab information
+         - Retrieve required paths to directories, images, and licenses
+         - Determine active controller
+         - Initialize build server and boot server objects
+         - Retrieve what steps to be skipped
+     Test Steps:
+         - Install controller-0
+         - Download configuration files, heat templates, images, and licenses
+         - Configure controller-0, run lab_setup, and unlock controller-0
+         -
+     """
     lab = install_setup["lab"]
     hosts = lab["hosts"]
     boot_device = lab['boot_device_dict']
@@ -105,8 +105,6 @@ def test_storage_install(install_setup):
     fresh_install_helper.boot_hosts(boot_device)
     fresh_install_helper.wait_for_hosts_to_be_online([host for host in hosts if controller0_node.name not in host],
                                                      lab=lab)
-    # fresh_install_helper.wait_for_hosts_ready([host for host in hosts if controller0_node.name not in host],
-    #                                           lab=lab)
 
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 

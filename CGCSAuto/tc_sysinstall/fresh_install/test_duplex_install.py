@@ -2,7 +2,7 @@ from pytest import skip, fixture
 
 from consts.cgcs import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
-from keywords import host_helper, install_helper, vlm_helper
+from keywords import install_helper, vlm_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
 from setups import setup_tis_ssh, collect_sys_net_info
 from utils.tis_log import LOG
@@ -48,26 +48,26 @@ def install_setup(request):
 
 def test_duplex_install(install_setup):
     """
-         Complete fresh_install steps for a duplex lab
-         Test Setups:
-             - Retrieve dictionary containing lab information
-             - Retrieve required paths to directories, images, and licenses
-             - Determine active controller
-             - Initialize build server and boot server objects
-             - Retrieve what steps to be skipped
-         Test Steps:
-             - Install controller-0
-             - Download configuration files, heat templates, images, and licenses
-             - Configure controller-0, run lab_setup, and unlock controller-0
-             - Add the standby controller
-             - Run the lab_setup.sh script
-             - Re-add the standby controller
-             - Run the lab_setup.sh script
-             - Install the Standby Controller
-             - Run the lab_setup.sh script twice
-             - Unlock the standby controller
-             - Run the lab_setup.sh script
-         """
+     Complete fresh_install steps for a duplex lab
+     Test Setups:
+         - Retrieve dictionary containing lab information
+         - Retrieve required paths to directories, images, and licenses
+         - Determine active controller
+         - Initialize build server and boot server objects
+         - Retrieve what steps to be skipped
+     Test Steps:
+         - Install controller-0
+         - Download configuration files, heat templates, images, and licenses
+         - Configure controller-0, run lab_setup, and unlock controller-0
+         - Add the standby controller
+         - Run the lab_setup.sh script
+         - Re-add the standby controller
+         - Run the lab_setup.sh script
+         - Install the Standby Controller
+         - Run the lab_setup.sh script twice
+         - Unlock the standby controller
+         - Run the lab_setup.sh script
+     """
     lab = install_setup["lab"]
     boot_device = lab["boot_device_dict"]
     controller0_node = lab["controller-0"]
@@ -105,18 +105,13 @@ def test_duplex_install(install_setup):
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    #fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
-
     fresh_install_helper.bulk_add_hosts(lab=lab, con_ssh=controller0_node.ssh_conn)
-
     fresh_install_helper.boot_hosts(boot_device)
 
     fresh_install_helper.wait_for_hosts_to_be_online(["controller-1"], lab=lab)
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.unlock_hosts(["controller-1"], con_ssh=controller0_node.ssh_conn)
-
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     if lab.get("floating ip"):

@@ -77,7 +77,8 @@ class BuildServerPath:
     TITANIUM_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/Titanium_R6_build'
     STX_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/StarlingX_Upstream_build'
     STX_RELEASE_DIR = '/localdisk/loadbuild/jenkins/StarlingX_18.10'
-    DEFAULT_HOST_BUILDS_DIR = STX_HOST_BUILDS_DIR
+    STX_MASTER_CENGN_DIR = '/import/mirrors/cengn/master/centos'
+    DEFAULT_HOST_BUILDS_DIR = STX_MASTER_CENGN_DIR
     DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img'
     LATEST_BUILD = 'latest_build'
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build'.format(DEFAULT_HOST_BUILDS_DIR)
@@ -88,7 +89,8 @@ class BuildServerPath:
     HEAT_TEMPLATES = 'export/heat-templates'
     LAB_CONF_DIR_PREV = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
     LAB_CONF_DIR = "lab"
-    STX_HELM_CHARTS = 'std/build-helm/stx'
+    STX_HELM_CHARTS = 'outputs/helm-charts'
+    ISO_PATH = 'outputs/iso/bootimage.iso'
 
     HEAT_TEMPLATES_EXTS = {'16.10': HEAT_TEMPLATES_PREV, '17.06': HEAT_TEMPLATES_PREV, '18.03': HEAT_TEMPLATES_PREV,
                            'default': HEAT_TEMPLATES}

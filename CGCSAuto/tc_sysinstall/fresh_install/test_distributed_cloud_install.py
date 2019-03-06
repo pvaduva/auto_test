@@ -108,14 +108,12 @@ def test_distributed_cloud_install(install_setup):
     load_path = InstallVars.get_install_var("TIS_BUILD_DIR")
     ipv6_install = InstallVars.get_install_var("IPV6_CONFIG")
 
-
     fresh_install_helper.download_lab_files(lab=central_region_lab, lab_files_server=lab_files_server,
                                             build_server=build_server,
                                             guest_server=guest_server,
                                             load_path=load_path,
                                             license_path=InstallVars.get_install_var("LICENSE"),
                                             guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
-
 
     # TODO Change config and lab setup files to common name
     # config_file_ext = ''.join(central_region_lab['short_name'].split('_')[0:2])
@@ -147,7 +145,6 @@ def test_distributed_cloud_install(install_setup):
 
     LOG.info("Running lab setup script ...")
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
-    #fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     LOG.info("Unlocking controller-1 ...")
     fresh_install_helper.unlock_hosts([host for host in hosts if controller0_node.name not in host],

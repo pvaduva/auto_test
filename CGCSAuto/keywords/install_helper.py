@@ -558,6 +558,10 @@ def download_image(lab, server, guest_path):
 
 def download_heat_templates(lab, server, load_path, heat_path=None):
 
+    if 'vbox' in lab['name']:
+        LOG.info("Skip download heat files for vbox")
+        return
+
     if not heat_path:
         sys_version = extract_software_version_from_string_path(load_path)
         sys_version = sys_version if sys_version in BuildServerPath.HEAT_TEMPLATES_EXTS else 'default'
@@ -566,17 +570,12 @@ def download_heat_templates(lab, server, load_path, heat_path=None):
         heat_path = heat_path
 
     cmd = "test -e " + heat_path
-    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0,  'Heat template path not found in {}:{}'.format(
-            server.name, load_path)
+    if server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] != 0:
+        LOG.warning('heat template path does not exist: {}. Skip download heat files.'.format(heat_path))
+        return
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-    if 'vbox' in lab['name']:
-        return
-    else:
-
-        server.ssh_conn.rsync(heat_path + "/*",
-                              lab['controller-0 ip'],
-                              TiSPath.HEAT, pre_opts=pre_opts)
+    server.ssh_conn.rsync(heat_path + "/*", lab['controller-0 ip'], TiSPath.HEAT, pre_opts=pre_opts)
 
 
 def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file_dir=None):

@@ -46,19 +46,19 @@ def install_setup(request):
 
 def test_simplex_install(install_setup):
     """
-         Complete fresh_install steps for a simplex lab
-         Test Setups:
-             - Retrieve dictionary containing lab information
-             - Retrieve required paths to directories, images, and licenses
-             - Initialize build server and boot server objects
-             - Retrieve what steps to be skipped
-         Test Steps:
-             - Install controller-0
-             - Download configuration files, heat templates, images, and licenses
-             - Configure controller-0, run lab_setup, and unlock controller-0
-             - Run lab setup script if specified
-             - Setup heat resources
-         """
+     Complete fresh_install steps for a simplex lab
+     Test Setups:
+         - Retrieve dictionary containing lab information
+         - Retrieve required paths to directories, images, and licenses
+         - Initialize build server and boot server objects
+         - Retrieve what steps to be skipped
+     Test Steps:
+         - Install controller-0
+         - Download configuration files, heat templates, images, and licenses
+         - Configure controller-0, run lab_setup, and unlock controller-0
+         - Run lab setup script if specified
+         - Setup heat resources
+     """
     lab = install_setup["lab"]
     controller0_node = lab["controller-0"]
     final_step = install_setup["control"]["stop"]
@@ -90,7 +90,7 @@ def test_simplex_install(install_setup):
     else:
         fresh_install_helper.configure_controller(controller0_node)
 
-    controller0_node.telnet_conn.hostname = "controller\-[01]"
+    controller0_node.telnet_conn.hostname = r"controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)

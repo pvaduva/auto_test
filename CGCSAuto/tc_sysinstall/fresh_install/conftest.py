@@ -1,11 +1,12 @@
 import os
 import re
 
+import setups
 from utils.tis_log import LOG
 from utils.node import Node
+from utils.jenkins_utils import build_info
 from consts.proj_vars import InstallVars, ProjVar
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
-from setups import write_installconf, set_install_params, get_lab_dict, is_lab_subcloud
 from tc_sysinstall.fresh_install import fresh_install_helper
 
 ########################
@@ -50,7 +51,7 @@ def pytest_configure(config):
     no_manage = config.getoption('no_manage')
 
     if lab_arg:
-        lab_dict = get_lab_dict(lab_arg)
+        lab_dict = setups.get_lab_dict(lab_arg)
         lab_name = lab_dict['name']
         if 'yow' in lab_name:
             lab_name = lab_name[4:]
@@ -60,7 +61,7 @@ def pytest_configure(config):
     else:
         raise ValueError("Lab name must be provided")
 
-    is_subcloud, sublcoud_name, dc_float_ip = is_lab_subcloud(lab_dict)
+    is_subcloud, sublcoud_name, dc_float_ip = setups.is_lab_subcloud(lab_dict)
 
     if resume_install is True:
         resume_install = fresh_install_helper.get_resume_step(lab_dict)
@@ -69,13 +70,21 @@ def pytest_configure(config):
     if not install_conf:
         build_server = build_server if build_server else BuildServerPath.DEFAULT_BUILD_SERVER
         if not tis_builds_dir and not tis_build_dir:
+            # Take latest master load from cengn
             host_build_dir_path = BuildServerPath.DEFAULT_HOST_BUILD_PATH
         elif tis_build_dir and os.path.isabs(tis_build_dir):
             host_build_dir_path = tis_build_dir
         else:
+            # Take in-house StarlingX_Upstream_build
             tis_builds_dir = tis_builds_dir if tis_builds_dir else ''
             tis_build_dir = tis_build_dir if tis_build_dir else BuildServerPath.LATEST_BUILD
             host_build_dir_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, tis_builds_dir, tis_build_dir)
+
+        host_build_dir_path = os.path.abspath(host_build_dir_path)
+        if host_build_dir_path.endswith('/latest_build'):
+            build_id = build_info.get_latest_host_build_dir(build_server=build_server,
+                                                            latest_build_simlink=host_build_dir_path)
+            host_build_dir_path = host_build_dir_path[:-len('latest_build')] + build_id
 
         files_server = build_server
 
@@ -87,36 +96,43 @@ def pytest_configure(config):
             if lab_file_dir.find(":/") != -1:
                 files_server = lab_file_dir[:lab_file_dir.find(":/")]
                 lab_file_dir = lab_file_dir[lab_file_dir.find(":") + 1:]
-            elif not os.path.isabs(lab_file_dir) and '/' not in lab_file_dir and lab_name in lab_file_dir:
-                lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '')
+            if not os.path.isabs(lab_file_dir):
+                lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_file_dir)
         else:
             lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '')
 
         if not heat_templates:
-            heat_templates = os.path.join(host_build_dir_path, BuildServerPath.HEAT_TEMPLATES)
+            heat_templates = os.path.join(BuildServerPath.STX_HOST_BUILDS_DIR, 'latest_full_build',
+                                          BuildServerPath.HEAT_TEMPLATES)
         elif not os.path.isabs(heat_templates):
             heat_templates = os.path.join(host_build_dir_path, heat_templates)
+
         if not helm_chart_path:
             helm_chart_path = os.path.join(host_build_dir_path, BuildServerPath.STX_HELM_CHARTS)
 
-        install_conf = write_installconf(lab=lab_arg, controller=controller, compute=compute, storage=storage,
-                                         lab_files_dir=lab_file_dir, patch_dir=patch_dir,
-                                         tis_build_dir=host_build_dir_path,
-                                         build_server=build_server, files_server=files_server,
-                                         license_path=install_license, guest_image=guest_image,
-                                         heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
-                                         security=security, low_latency=low_lat, stop=stop_step, ovs=ovs,
-                                         boot_server=boot_server, resume=resume_install, skip=skiplist,
-                                         kubernetes=kubernetes, helm_chart_path=helm_chart_path)
+        if boot_type.lower() in ('usb_burn', 'pxe_iso') and not iso_path:
+            iso_path = os.path.join(host_build_dir_path, BuildServerPath.ISO_PATH)
 
-        set_install_params(lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
-                           installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
-                           controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
-                           boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
-                           patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, dc_float_ip=dc_float_ip,
-                           install_subcloud=sublcoud_name, kubernetes=kubernetes,
-                           no_openstack_install=no_openstack_install, ipv6_config=ipv6_config,
-                           helm_chart_path=helm_chart_path, no_manage=no_manage)
+        install_conf = setups.write_installconf(
+            lab=lab_arg, controller=controller, compute=compute, storage=storage,
+            lab_files_dir=lab_file_dir, patch_dir=patch_dir,
+            tis_build_dir=host_build_dir_path,
+            build_server=build_server, files_server=files_server,
+            license_path=install_license, guest_image=guest_image,
+            heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
+            security=security, low_latency=low_lat, stop=stop_step, ovs=ovs,
+            boot_server=boot_server, resume=resume_install, skip=skiplist,
+            kubernetes=kubernetes, helm_chart_path=helm_chart_path)
+
+        setups.set_install_params(
+            lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
+            installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
+            controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
+            boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
+            patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, dc_float_ip=dc_float_ip,
+            install_subcloud=sublcoud_name, kubernetes=kubernetes,
+            no_openstack_install=no_openstack_install, ipv6_config=ipv6_config,
+            helm_chart_path=helm_chart_path, no_manage=no_manage)
 
     frame_str = '*'*len('Install Arguments:')
     print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))

@@ -47,27 +47,27 @@ def install_setup(request):
 
 def test_standard_install(install_setup):
     """
-         Configure the active controller
+     Configure the active controller
 
-         Prerequisites:
-             - pxeboot has been setup.
-         Test Setups:
-             - Retrieve dictionary containing lab information
-             - Retrieve required paths to directories, images, and licenses
-             - Determine active controller
-             - Initialize build server and boot server objects
-             - Retrieve what steps to be skipped
-         Test Steps:
-             - Install controller-0
-             - Download configuration files, heat templates, images, and licenses
-             - Configure controller-0, run lab_setup, and unlock controller-0
-             - Add the other hosts
-             - Boot the other hosts
-             - Run lab setup
-             - Unlock the other hosts
-             - Run lab setup
-             - Setup heat resources and clear any install related alarms
-         """
+     Prerequisites:
+         - pxeboot has been setup.
+     Test Setups:
+         - Retrieve dictionary containing lab information
+         - Retrieve required paths to directories, images, and licenses
+         - Determine active controller
+         - Initialize build server and boot server objects
+         - Retrieve what steps to be skipped
+     Test Steps:
+         - Install controller-0
+         - Download configuration files, heat templates, images, and licenses
+         - Configure controller-0, run lab_setup, and unlock controller-0
+         - Add the other hosts
+         - Boot the other hosts
+         - Run lab setup
+         - Unlock the other hosts
+         - Run lab setup
+         - Setup heat resources and clear any install related alarms
+     """
     lab = install_setup["lab"]
     hosts = lab["hosts"]
     boot_device = lab['boot_device_dict']
@@ -102,7 +102,7 @@ def test_standard_install(install_setup):
     else:
         fresh_install_helper.configure_controller(controller0_node)
 
-    controller0_node.telnet_conn.hostname = "controller\-[01]"
+    controller0_node.telnet_conn.hostname = r"controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
@@ -117,15 +117,13 @@ def test_standard_install(install_setup):
 
     # Unlock controller-1
     fresh_install_helper.unlock_hosts(['controller-1'], con_ssh=controller0_node.ssh_conn)
-
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
-    #WK1 - adding ceph mon to compute-0
+    # WK1 - adding ceph mon to compute-0
     fresh_install_helper.add_ceph_ceph_mon_to_host(controller0_node, 'compute-0')
     hosts_to_unlock = system_helper.get_hostnames(administrative='locked', availability='online',
-                                con_ssh=controller0_node.ssh_conn)
-    #hosts_to_unlock = [host for host in hosts if controller0_node.name not in host and 'controller-1' not in host]
-    if len(hosts_to_unlock) > 0:
+                                                  con_ssh=controller0_node.ssh_conn)
+    if hosts_to_unlock:
         fresh_install_helper.unlock_hosts(hosts_to_unlock, con_ssh=controller0_node.ssh_conn)
 
     # WK2-  add ceph osds to controllers:
@@ -138,6 +136,7 @@ def test_standard_install(install_setup):
     if lab.get("floating ip"):
         collect_sys_net_info(lab)
         setup_tis_ssh(lab)
+
     fresh_install_helper.wait_for_hosts_ready(controller0_node.name, lab=lab)
 
     fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
