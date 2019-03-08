@@ -845,7 +845,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=True
     if check_containers and not use_telnet:
         from keywords import kube_helper, container_helper
 
-        res_nodes = kube_helper.wait_for_nodes_ready(hosts=host, timeout=40, con_ssh=con_ssh, fail_ok=fail_ok)[0]
+        res_nodes = kube_helper.wait_for_nodes_ready(hosts=host, timeout=180, con_ssh=con_ssh, fail_ok=fail_ok)[0]
         res_app = True
         if check_stx:
             res_app = container_helper.wait_for_apps_status(apps='stx-openstack', status=AppStatus.APPLIED,

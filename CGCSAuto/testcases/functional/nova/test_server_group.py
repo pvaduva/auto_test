@@ -41,7 +41,7 @@ def create_flavor_and_server_group(storage_backing=None, policy=None):
 # server group messaging is removed since STX
 @mark.parametrize(('policy', 'vms_num'), [
     mark.priorities('nightly', 'domain_sanity', 'sx_nightly')(('affinity', 2)),
-    # ('soft_anti_affinity', 3),    TODO add after cutover
+    ('soft_anti_affinity', 3),    # TODO add after cutover
     mark.priorities('nightly', 'domain_sanity')(('anti_affinity', 2)),   # For system with 2+ hypervisors
     # ('soft_affinity', 3),     TODO add after cutover
 ])

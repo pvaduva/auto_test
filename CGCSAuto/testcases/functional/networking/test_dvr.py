@@ -1,6 +1,4 @@
-import random
 import time
-from collections import Counter
 
 from pytest import mark, fixture, skip
 
@@ -150,7 +148,7 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
         network_helper.update_router_distributed(router_id, distributed=True)
 
     LOG.tc_step("Boot {} vms with server group policy {}".format(vms_num, srv_grp_policy))
-    affinity_grp, anti_affinity_grp = server_groups(best_effort=True)
+    affinity_grp, anti_affinity_grp = server_groups(soft=True)
     srv_grp_id = affinity_grp if srv_grp_policy == 'affinity' else anti_affinity_grp
 
     vms = []

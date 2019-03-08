@@ -20,7 +20,7 @@ def check_system():
         skip("Vxlan provider-net not configured")
 
     for pnet in providernets:
-        internal_nets = network_helper.get_networks_on_providernet(providernet_id=pnet, strict=False, name='internal')
+        internal_nets = network_helper.get_networks_on_providernet(providernet=pnet, strict=False, name='internal')
         if internal_nets:
             break
     else:

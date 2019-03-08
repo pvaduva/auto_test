@@ -2283,12 +2283,12 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
     return nova_pci_devices
 
 
-def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth_info=Tenant.get('admin'), strict=True,
+def get_networks_on_providernet(providernet, rtn_val='id', con_ssh=None, auth_info=Tenant.get('admin'), strict=True,
                                 regex=False, exclude=False, **kwargs):
     """
 
     Args:
-        providernet_id(str):
+        providernet(str):
         rtn_val(str): 'id' or 'name'
         con_ssh (SSHClient):
         auth_info (dict):
@@ -2300,15 +2300,16 @@ def get_networks_on_providernet(providernet_id, rtn_val='id', con_ssh=None, auth
     Returns:
         statue (0 or 1) and the list of network ID
     """
-    if not providernet_id:
+    if not providernet:
         raise ValueError("No providernet_id provided.")
 
-    table_ = table_parser.table(cli.neutron(cmd='net-list-on-providernet', positional_args=providernet_id,
-                                            auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.openstack(cmd='network list',
+                                              positional_args='--provider-physical-network={}'.format(providernet),
+                                              auth_info=auth_info, ssh_client=con_ssh))
 
     networks = table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, exclude=exclude, **kwargs)
 
-    LOG.info("Networks on providernet {} with args - '{}': {}".format(providernet_id, kwargs, networks))
+    LOG.info("Networks on providernet {} with args - '{}': {}".format(providernet, kwargs, networks))
     # return list(set(networks))
     return list(networks)
 
@@ -2748,7 +2749,7 @@ def get_net_on_segment(providernet, seg_id, rtn_val='name', con_ssh=None, auth_i
     Returns (str|None): network id/name or None if no network on given seg id
 
     """
-    nets = get_networks_on_providernet(providernet_id=providernet, rtn_val=rtn_val, con_ssh=con_ssh,
+    nets = get_networks_on_providernet(providernet=providernet, rtn_val=rtn_val, con_ssh=con_ssh,
                                        auth_info=auth_info, **{'segmentation_id': seg_id})
 
     net = nets[0] if nets else None
@@ -4015,10 +4016,10 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
 
     """
     rtn_networks = []
-    networks = get_networks_on_providernet(providernet_id=vxlan_provider_net_id, rtn_val='id', con_ssh=con_ssh)
+    networks = get_networks_on_providernet(providernet=vxlan_provider_net_id, rtn_val='id', con_ssh=con_ssh)
     if not networks:
         return rtn_networks
-    provider_attributes = get_networks_on_providernet(providernet_id=vxlan_provider_net_id, con_ssh=con_ssh,
+    provider_attributes = get_networks_on_providernet(providernet=vxlan_provider_net_id, con_ssh=con_ssh,
                                                       rtn_val='providernet_attributes')
     if not provider_attributes:
         return rtn_networks
