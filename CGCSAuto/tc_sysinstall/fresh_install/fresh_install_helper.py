@@ -965,7 +965,15 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
     Returns:
 
     """
+    LOG.info("Starting  install teardown ..")
+    try:
+        active_controller_node.telnet_conn.login(handle_init_login=True)
+        output = active_controller_node.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)[1]
+        LOG.info(output)
+    except (exceptions.TelnetError, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
+        LOG.error(e_.__str__())
 
+    LOG.info("Reconnecting to active controller  install teardown ..")
     try:
         if active_controller_node.ssh_conn:
             LOG.fixture_step("Get build info")
@@ -999,6 +1007,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     # Initialise server objects
     file_server = InstallVars.get_install_var("FILES_SERVER")
     iso_host = InstallVars.get_install_var("ISO_HOST")
+    iso_path = InstallVars.get_install_var("ISO_PATH")
     patch_server = InstallVars.get_install_var("PATCH_SERVER")
     guest_server = InstallVars.get_install_var("GUEST_SERVER")
     servers = list({file_server, iso_host, patch_server, guest_server})
@@ -1098,6 +1107,11 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         elif "pxe_iso" in boot["boot_type"] and 'feed' not in skip_list:
             install_helper.rsync_image_to_boot_server(iso_host_obj, lab_dict=lab_dict)
             install_helper.mount_boot_server_iso(lab_dict=lab_dict)
+
+        elif 'iso_feed' in boot["boot_type"] and 'feed' not in skip_list:
+            skip_cfg = "pxeboot" in skip_list
+            install_helper.set_up_feed_from_boot_server_iso(iso_host_obj, lab_dict=lab, iso_path=iso_path,
+                                                            skip_cfg=skip_cfg)
 
         elif 'feed' in boot["boot_type"] and 'feed' not in skip_list:
             load_path = directories["build"]

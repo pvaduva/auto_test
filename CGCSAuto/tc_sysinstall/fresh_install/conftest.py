@@ -167,4 +167,5 @@ def pytest_runtest_teardown(item):
                 progress_file.write("End step: {}".format(str(final_step)))
 
             os.chmod(progress_file_path, 0o755)
+            LOG.info("Done Writing install step to {}".format(progress_file_path))
             break

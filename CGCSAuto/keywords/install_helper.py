@@ -16,15 +16,16 @@ from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
 from consts.vlm import VlmAction
 from consts.bios import NODES_WITH_KERNEL_BOOT_OPTION_SPACING
+from consts.build_server import Server
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common, network_helper, \
     vlm_helper
 from utils import telnet as telnetlib, exceptions, cli, table_parser, lab_info, multi_thread, menu
 from utils.clients.ssh import SSHClient, ControllerClient
 from utils.clients.telnet import TelnetClient, LOGIN_REGEX
 from utils.clients.local import LocalHostClient
-from utils.node import create_node_boot_dict, create_node_dict
+from utils.node import create_node_boot_dict, create_node_dict, Node
 from utils.tis_log import LOG
-from utils.node import Node
+
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 UPGRADE_LOAD_SIG_FILE = "bootimage.sig"
@@ -3927,6 +3928,140 @@ def mount_boot_server_iso(lab_dict=None, tuxlab_conn=None):
     tuxlab_conn.close()
 
     return 0, None
+
+
+def set_up_feed_from_boot_server_iso(server, lab_dict=None,  tuxlab_conn=None, iso_path=None, skip_cfg=False):
+
+    if lab_dict is None:
+        lab_dict = InstallVars.get_install_var("LAB")
+    if iso_path is None:
+        iso_path = InstallVars.get_install_var("ISO_PATH")
+    barcode = lab_dict["controller_nodes"][0]
+
+    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, tuxlab_server)
+
+    if not tuxlab_conn:
+        tuxlab_conn = establish_ssh_connection(tuxlab_server, user=SvcCgcsAuto.USER, password=SvcCgcsAuto.PASSWORD,
+                                               initial_prompt=tuxlab_prompt)
+        tuxlab_conn.deploy_ssh_key()
+
+     # connect to test server to mount USB iso
+    test_server_attr = dict()
+    test_server_attr['name'] = SvcCgcsAuto.HOSTNAME.split('.')[0]
+    test_server_attr['server_ip'] = SvcCgcsAuto.SERVER
+    test_server_attr['prompt'] = r'\[{}@{} {}\]\$ '\
+        .format(SvcCgcsAuto.USER, test_server_attr['name'], SvcCgcsAuto.USER)
+
+    test_server_conn = establish_ssh_connection(test_server_attr['name'], user=SvcCgcsAuto.USER,
+                                                password=SvcCgcsAuto.PASSWORD,
+                                                initial_prompt=test_server_attr['prompt'])
+
+    test_server_conn.set_prompt(test_server_attr['prompt'])
+    test_server_conn.deploy_ssh_key(get_ssh_public_key())
+    test_server_attr['ssh_conn'] = test_server_conn
+    test_server_obj = Server(**test_server_attr)
+    media_iso_path = "/media/iso/{}".format(barcode)
+    temp_iso_path = "/tmp/iso/{}".format(barcode)
+    if test_server_conn.exec_cmd("test -f {}".format(temp_iso_path)) == 0:
+        test_server_conn.exec_sudo_cmd("rm -rf {}/*".format(temp_iso_path))
+    else:
+        test_server_conn.exec_sudo_cmd("mkdir -p {}".format(temp_iso_path))
+        test_server_conn.exec_sudo_cmd("chmod -R 777 {}".format(temp_iso_path), fail_ok=False)
+
+    pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
+    server.ssh_conn.rsync(iso_path, test_server_obj.server_ip, temp_iso_path,
+                          dest_user=SvcCgcsAuto.USER, dest_password=SvcCgcsAuto.PASSWORD,
+                          extra_opts=["--delete", "--force", "--chmod=Du=rwx"], pre_opts=pre_opts,
+                          timeout=InstallTimeout.INSTALL_LOAD)
+
+    cmd = "umount {}; echo if we fail we ignore it".format(media_iso_path)
+    test_server_conn.exec_sudo_cmd(cmd, fail_ok=True)
+    cmd = "rm -rf {}".format(media_iso_path)
+    test_server_conn.exec_sudo_cmd(cmd, fail_ok=False)
+    cmd = "mkdir -p {}".format(media_iso_path)
+    test_server_conn.exec_sudo_cmd(cmd, fail_ok=False)
+    cmd = "mount -o loop {}/bootimage.iso {}".format(temp_iso_path, media_iso_path)
+    test_server_conn.exec_sudo_cmd(cmd, fail_ok=False)
+
+    controller0 = lab_dict["controller-0"]
+    LOG.info("Set feed for {} network boot".format(barcode))
+    tuxlab_sub_dir = SvcCgcsAuto.USER + '/' + os.path.basename(iso_path.split('/outputs')[0])
+
+    tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + str(controller0.barcode)
+
+    if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
+        msg = "Failed to cd to: " + tuxlab_barcode_dir
+        LOG.error(msg)
+        return False
+
+    feed_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
+    LOG.info("Copy load into {}".format(feed_path))
+    tuxlab_conn.exec_cmd("mkdir -p " + tuxlab_sub_dir)
+    tuxlab_conn.exec_cmd("chmod 755 " + tuxlab_sub_dir)
+
+    cfg_link = tuxlab_conn.exec_cmd("readlink pxeboot.cfg")[1]
+    if cfg_link != "pxeboot.cfg.gpt":
+        LOG.info("Changing pxeboot.cfg symlink to pxeboot.cfg.gpt")
+        tuxlab_conn.exec_cmd("ln -s pxeboot.cfg.gpt pxeboot.cfg")
+
+    # LOG.info("Installing Centos load to feed path: {}".format(feed_path))
+    # bld_server_conn.exec_cmd("cd " + load_path)
+
+    test_server_conn.rsync(media_iso_path + "/", tuxlab_server, feed_path,
+                          dest_user=SvcCgcsAuto.USER, dest_password=SvcCgcsAuto.PASSWORD,
+                          extra_opts=["--delete", "--force", "--chmod=Du=rwx"], pre_opts=pre_opts,
+                          timeout=InstallTimeout.INSTALL_LOAD)
+
+    LOG.info("Updating pxeboot kickstart files")
+    update_pxeboot_ks_files(lab_dict, tuxlab_conn, feed_path)
+
+    LOG.info("Create new symlink to {}".format(feed_path))
+    if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
+        msg = "Failed to remove feed"
+        LOG.error(msg)
+        return False
+
+    if tuxlab_conn.exec_cmd("ln -s " + tuxlab_sub_dir + "/" + " feed")[0] != 0:
+        msg = "Failed to set VLM target {} feed symlink to: " + tuxlab_sub_dir
+        LOG.error(msg)
+        return False
+
+    tuxlab_conn.close()
+
+    cmd = "umount {}".format(media_iso_path)
+    test_server_conn.exec_sudo_cmd(cmd, fail_ok=False)
+    LOG.info("Deleting the bootimage.iso from /tmp/iso/{}".format(barcode))
+    test_server_conn.exec_sudo_cmd("rm -f /tmp/iso/{}/*.iso".format(barcode), fail_ok=False)
+
+    test_server_conn.close()
+
+    return 0, None
+
+
+def update_pxeboot_ks_files(lab, tuxlab_conn, feed_path):
+
+    controller0_node = lab['controller-0']
+    lab_name = controller0_node.host_name
+    LOG.info("Controller-0 node name is {}".format(lab_name))
+    if re.search("\-0\d$", lab_name):
+        lab_name = lab_name.replace('-0', '-')
+    LOG.info("Controller-0 node name is {}".format(lab_name))
+    base_url = "http://128.224.151.254/umalab/{}_feed".format(lab_name)
+    tuxlab_conn.exec_cmd("chmod 755 {}/*.cfg".format(feed_path), fail_ok=False)
+
+    cmd = '''
+        sed -i "s#xxxHTTP_URLxxx#{}#g;s#xxxHTTP_URL_PATCHESxxx#{}/patches#g;s#NUM_DIRS#2#g" {}/pxeboot/*.cfg'''\
+        .format( base_url, base_url, feed_path)
+
+    tuxlab_conn.exec_cmd(cmd, fail_ok=False)
+    cmd = "cp {}/pxeboot/pxeboot_controller.cfg {}/yow-tuxlab2_controller.cfg".format(feed_path, feed_path)
+    tuxlab_conn.exec_cmd(cmd, fail_ok=False)
+    cmd = "cp {}/pxeboot/pxeboot_smallsystem.cfg {}/yow-tuxlab2_smallsystem.cfg".format(feed_path, feed_path)
+    tuxlab_conn.exec_cmd(cmd, fail_ok=False)
+    cmd = "cp {}/pxeboot/pxeboot_smallsystem_lowlatency.cfg {}/yow-tuxlab2_smallsystem_lowlatency.cfg"\
+        .format(feed_path, feed_path)
+    tuxlab_conn.exec_cmd(cmd, fail_ok=False)
 
 
 def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True, yaml_files=None):
