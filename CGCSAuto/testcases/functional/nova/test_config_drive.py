@@ -61,7 +61,7 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
         check_vm_config_drive_data(vm_id)
 
         LOG.tc_step("Lock the compute host")
-        compute_host = vm_helper.get_vm_host_and_numa_nodes(vm_id)[0]
+        compute_host = nova_helper.get_vm_host(vm_id)
         HostsToRecover.add(compute_host)
         host_helper.lock_host(compute_host, swact=True)
 
@@ -74,7 +74,7 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
         LOG.tc_setp("Check config drive after vm rebooted")
         check_vm_config_drive_data(vm_id)
 
-    vm_host = vm_helper.get_vm_host_and_numa_nodes(vm_id)[0]
+    vm_host = nova_helper.get_vm_host(vm_id)
     instance_name = nova_helper.get_vm_instance_name(vm_id)
     LOG.info("The vm host is now: {}".format(vm_host))
     LOG.tc_step("Check vm files exist on new vm host after migrated")
