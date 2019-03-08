@@ -154,7 +154,7 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
     mark.p1(('shared', None, True)),
     mark.p1(('shared', 'false', False)),
 ])
-def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autorecovery):
+def _test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autorecovery):
     """
     Test auto recovery with guest heartbeat enabled
 
@@ -241,7 +241,7 @@ def test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autoreco
     mark.p1(('false', False)),
     mark.priorities('domain_sanity', 'nightly', 'sx_nightly')(('True', True)),
 ])
-def test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
+def _test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
     """
     Test guest heartbeat without autorecovery
 

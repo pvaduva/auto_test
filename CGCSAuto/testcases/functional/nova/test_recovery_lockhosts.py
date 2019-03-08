@@ -39,7 +39,7 @@ def target_host():
 
 
 @mark.p1
-def test_vm_autorecovery_reboot_host(target_host):
+def _test_vm_autorecovery_reboot_host(target_host):
     """
     Test vm auto recovery by rebooting the host while the rest of the nova hosts are locked.
 
