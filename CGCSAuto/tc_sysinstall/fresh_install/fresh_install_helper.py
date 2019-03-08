@@ -967,16 +967,11 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
     """
 
     try:
-        active_controller_node.telnet_conn.login(handle_init_login=True)
-        output = active_controller_node.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)[1]
-        LOG.info(output)
-    except (exceptions.TelnetError, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
-        LOG.error(e_.__str__())
-
-    try:
         if active_controller_node.ssh_conn:
-            active_controller_node.ssh_conn.connect(retry=True, retry_interval=3, retry_timeout=300)
+            LOG.fixture_step("Get build info")
+            active_controller_node.ssh_conn.connect(retry=True, retry_interval=10, retry_timeout=60)
             active_controller_node.ssh_conn.flush()
+            active_controller_node.ssh_conn.exec_cmd("cat /etc/build.info", fail_ok=True, expect_timeout=3)
     except (exceptions.SSHException, exceptions.SSHRetryTimeout, exceptions.SSHExecCommandFailed) as e_:
         LOG.error(e_.__str__())
 

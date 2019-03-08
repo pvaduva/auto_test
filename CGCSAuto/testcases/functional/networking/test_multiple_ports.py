@@ -141,6 +141,9 @@ class TestMutiPortsBasic:
             else:
                 LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
                 for action in vm_actions:
+                    if 'migrate' in action and system_helper.is_simplex():
+                        continue
+
                     kwargs = {}
                     if action == 'hard_reboot':
                         action = 'reboot'

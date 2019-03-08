@@ -4984,9 +4984,11 @@ def get_vms_ports_info(vms, rtn_subnet_id=False):
                 subnet_id = fixed_ip['subnet_id']
                 ip_addr = fixed_ip['ip_address']
                 subnet = subnet_id if rtn_subnet_id else table_parser.get_values(subnet_tab_, 'Subnet', id=subnet_id)[0]
+                net_id = table_parser.get_values(subnet_tab_, 'Network', id=subnet_id)[0]
 
-                LOG.info("VM {} port {}: mac={} ip={} subnet={}".format(vm, port, mac, ip_addr, subnet))
-                info[vm].append((ip_addr, subnet, mac))
+                LOG.info("VM {} port {}: mac={} ip={} subnet={} net_id={}".format(vm, port, mac, ip_addr, subnet,
+                                                                                  net_id))
+                info[vm].append((ip_addr, subnet, mac, net_id))
 
     return info
 
@@ -5065,7 +5067,7 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True):
     }
 
     for vm, info in get_vms_ports_info([vm1, vm2]).items():
-        for ip, cidr, mac in info:
+        for ip, cidr, mac, net_id in info:
             # expect one data and one internal
             if ip in interfaces[vm]['data']:
                 interfaces[vm]['data'] = {'ip': ip, 'cidr': cidr, 'mac': mac}
@@ -5169,7 +5171,7 @@ def setup_avr_routing(vm_id, mtu=1500, vm_type='vswitch', **kwargs):
         internals = list()
     internal_dict = dict()
     for vm, info in get_vms_ports_info([vm_id]).items():
-        for ip, cidr, mac in info:
+        for ip, cidr, mac, net_id in info:
             if ip in datas:
                 data_dict[ip] = ipaddress.ip_network(cidr).netmask
             elif ip in internals:
@@ -5278,13 +5280,12 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
         ip_pairs.append((src_ip, ip))
 
     LOG.info("Getting VLANs associated")
-    for vm, ports in get_vms_ports_info(list(src.values())+list(dest.values()), rtn_subnet_id=True).items():
-        for ip, subnet_id, mac in ports:
+    for vm, ports in get_vms_ports_info(list(src.values())+list(dest.values()), rtn_subnet_id=False).items():
+        for ip, cidr, mac, net_id in ports:
             if ip in src or ip in dest:
-                table = table_parser.table(cli.neutron('subnet-show', subnet_id, auth_info=Tenant.get('admin')))
-                cidr = table_parser.get_value_two_col_table(table, "cidr")
-                net_type = table_parser.get_value_two_col_table(table, "wrs-provider:network_type")
-                seg_id = table_parser.get_value_two_col_table(table, "wrs-provider:segmentation_id")
+                table = table_parser.table(cli.openstack('network show', net_id, auth_info=Tenant.get('admin')))
+                net_type = table_parser.get_value_two_col_table(table, "provider:network_type")
+                seg_id = table_parser.get_value_two_col_table(table, "provider:segmentation_id")
                 if ip in src:
                     LOG.info("src: network_type={} seg_id={}".format(net_type, seg_id))
                     src[ip] = int(seg_id), cidr

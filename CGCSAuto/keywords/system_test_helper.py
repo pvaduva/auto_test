@@ -353,8 +353,8 @@ def traffic_with_preset_configs(ixncfg, ixia_session=None):
 
         ixia_session.load_config(ixncfg)
 
-        subnet_table = table_parser.table(cli.neutron('subnet-list', auth_info=Tenant.ADMIN))
-        cidrs = list(map(ipaddress.ip_network, table_parser.get_column(subnet_table, 'cidr')))
+        subnet_table = table_parser.table(cli.openstack('subnet list', auth_info=Tenant.ADMIN))
+        cidrs = list(map(ipaddress.ip_network, table_parser.get_column(subnet_table, 'Subnet')))
         for vport in ixia_session.getList(ixia_session.getRoot(), 'vport'):
             for interface in ixia_session.getList(vport, 'interface'):
                 if ixia_session.testAttributes(interface, enabled='true'):
@@ -363,10 +363,10 @@ def traffic_with_preset_configs(ixncfg, ixia_session=None):
                     vlan_interface = ixia_session.getList(interface, 'vlan')[0]
                     for cidr in cidrs:
                         if gw in cidr:
-                            subnet_id = table_parser.get_values(subnet_table, 'id', cidr=cidr)[0]
+                            net_id = table_parser.get_values(subnet_table, 'Network', cidr=cidr)[0]
                             table = table_parser.table(
-                                cli.neutron('subnet-show', subnet_id, auth_info=Tenant.ADMIN))
-                            seg_id = table_parser.get_value_two_col_table(table, "wrs-provider:segmentation_id")
+                                cli.openstack('network show', net_id, auth_info=Tenant.ADMIN))
+                            seg_id = table_parser.get_value_two_col_table(table, "provider:segmentation_id")
                             ixia_session.configure(vlan_interface, vlanEnable=True, vlanId=str(seg_id))
                             LOG.info("vport {} interface {} gw {} vlan updated to {}".format(vport, interface, gw,
                                                                                              seg_id))

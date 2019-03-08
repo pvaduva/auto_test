@@ -427,7 +427,7 @@ def test_qos_weight_enforced(request, no_ovs, skip_if_25g):
             dst_ip = network_helper.get_data_ips_for_vms(vm2)[0]
             dst_mac = None
             for vm_id, info in vm_helper.get_vms_ports_info([vm2], rtn_subnet_id=True).items():
-                for ip, subnet_id, mac in info:
+                for ip, subnet_id, mac, net_id in info:
                     if ip == dst_ip:
                         dst_mac = mac
                         break

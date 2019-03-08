@@ -21,10 +21,6 @@ def test_kpi_cinder_volume_creation(collect_kpi):
     if not collect_kpi:
         skip("KPI only test. Skip due to kpi collection is not enabled.")
 
-    avail_cinder = storage_helper.get_storage_usage(service='cinder')
-    if avail_cinder < 20:
-        skip("Less than 20G free cinder storage space")
-
     LOG.tc_step("Create a 20g volume from default tis guest and collect image download rate, image conversion rate, "
                 "and total volume creation time")
     init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
