@@ -110,7 +110,7 @@ def pytest_configure(config):
         if not helm_chart_path:
             helm_chart_path = os.path.join(host_build_dir_path, BuildServerPath.STX_HELM_CHARTS)
 
-        if boot_type.lower() in ('usb_burn', 'pxe_iso') and not iso_path:
+        if boot_type.lower() in ('usb_burn', 'pxe_iso', 'iso_feed') and not iso_path:
             iso_path = os.path.join(host_build_dir_path, BuildServerPath.ISO_PATH)
 
         install_conf = setups.write_installconf(

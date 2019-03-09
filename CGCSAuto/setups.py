@@ -877,7 +877,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         guest_server, guest_image = guest_image.split(':', 1)
 
     iso_server = bs
-    iso_path = iso_path if iso_path else os.path.join(host_build_dir, 'export/bootimage.iso')
+    iso_path = iso_path if iso_path else os.path.join(host_build_dir, BuildServerPath.ISO_PATH)
     if ':/' in iso_path:
         iso_server, iso_path = iso_path.split(':', 1)
     patch_server = bs

@@ -3392,7 +3392,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT, fail_ok=True)
 
-        if "failed" in output:
+        if rc != 0 or "failed" in output:
             err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
             LOG.error(err_msg)
             scp_logs_to_log_dir([LogPath.CONFIG_CONTROLLER_LOG], con_ssh=con_telnet)
@@ -3655,6 +3655,20 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
                     LOG.info("Selecting for  {}".format(sub_menu.name))
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern=security.upper() if not index else None)
+
+                elif sub_menu.name == "PXE Security Menu":
+
+                    # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+',
+                    #                       end_of_menu=b"Standard Security Profile Enabled (default setting)",
+                    #                       newline=b'(\x1b\[\d+;\d+H)+')
+                    sub_menu.find_options(node_obj.telnet_conn, option_identifier=sub_menu.option_identifier.encode())
+                    LOG.info("Selecting for  {}".format(sub_menu.name))
+                    # Since we are already in security menu we are setting the tag security option to standard to
+                    # match the submenu option tag
+                    tag['security'] = 'standard'
+                    sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
+                                    tag=tag)
+
                 else:
                     LOG.info("Selecting for  unknown")
                     boot_menu.select(telnet_conn=node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
@@ -3665,7 +3679,7 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
             pass
         except IndexError:
             LOG.error("Not enough indexes were given for the menu. {} indexes was given for {} amount of menus".format(
-                str(len(index)), str(len(boot_menu.sub_menus + 1))))
+                str(len(index)), str(len(boot_menu.sub_menus ) + 1)))
             raise
 
 

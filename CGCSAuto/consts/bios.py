@@ -152,6 +152,7 @@ class BootMenus:
         Security = {
             "name": "PXE Security Menu",
             "prompt": b"Security Profile Enabled Boot Options",
+            "option_identifiers": r"\dm?\)\s[\w]+",
             "wrap_around": True
         }
 

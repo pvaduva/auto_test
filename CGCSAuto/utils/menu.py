@@ -67,8 +67,10 @@ class Menu(object):
                         break
 
         if not option and tag is not None:
+            LOG.info("checking tag option matching  tag {}".format(tag))
             for item in self.options:
                 if item.tag is not None:
+                    LOG.info("option tag {}".format(item.tag))
                     if tag == item.tag:
                         option = item
                         break
@@ -79,7 +81,7 @@ class Menu(object):
         LOG.info("Attempt to select {} option {} index {}".format(self.name, option.name, option.index))
         if option.key == "Enter" or option.key == "Return":
             while self.index != option.index:
-                LOG.info("checking index option = {} index = {} current index = {}".format(option.name, option.index, self.index))
+                LOG.info("Current index = {}".format(self.index))
                 if option.index > self.index:
                     self.move_down(telnet_conn, curser_move=curser_move)
                 else:
@@ -201,27 +203,18 @@ class KickstartMenu(Menu):
                      option_identifier=r"(\dm?\)\s[\w]+)|Boot from hard drive\s+|([\w]+\s)+\s+> ".encode(),
                      newline=r'(\x1b\[\d+;\d+H)+'.encode()):
 
-        # telnet_conn.expect([end_of_menu], 5, fail_ok=True)
-        # output = str.encode(telnet_conn.cmd_output)
-        # options = re.split(newline, output)
-        # options = [option for option in options if re.search(option_identifier, option)]
-        #
-        # for i in range(0, len(options)):
-        #     self.options.append(KickstartOption(name=options[i].decode(), index=i))
-
         super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier,
                              newline=newline)
         # TODO: this is a wasteful way to initialize the Options.
         self.options = [KickstartOption(name=option.name, index=option.index, key=option.key) for option in self.options]
-        LOG.info("Kickstart options = {}".format(self.options))
         for option in self.options:
             # TODO: would like to make this more general, but it's impossible to determine the prompt
-            matches = re.search(r"\s([A-Za-z\-\(\)]{2,}\s)+\s", option.name)
-            if matches:
-                option_name = matches.group(0).strip()
-                LOG.info("Kickstart option: {}".format(option_name))
-            else:
-                LOG.info("Kickstart option: {}".format(option.name))
+            #LOG.info("Kickstart option before match: {}".format(option.name))
+            # matches = re.search(r"\s([A-Za-z\-\(\)]{2,}\s)+\s", option.name)
+            # if matches:
+            #     option_name = matches.group(0).strip()
+
+            LOG.info("Kickstart option no match: {} tag: ".format(option.name.lower(), option.tag))
             if "security" in option.name.lower() and ("  >" in option.name.lower() or "options" in option.name.lower()):
                 security_menu = KickstartMenu(name="PXE Security Menu", kwargs=bios.BootMenus.Kickstart.Security)
                 self.sub_menus.append(security_menu)
@@ -512,6 +505,7 @@ class KickstartOption(Option):
         tag_dict = {"os": "centos", "security": "standard", "type": None, "console": "serial"}
         super().__init__(name, index, key)
         option_name = self.name.lower()
+
         if tag is None:
             if "wrl" in option_name or "wrlinux" in option_name:
                 tag_dict["os"] = "wrl"
@@ -523,6 +517,14 @@ class KickstartOption(Option):
 
             if "security" in option_name and "extended" in option_name:
                 tag_dict["security"] = "extended"
+
+            if "security profile enabled" in option_name:
+                tag_dict["security"] = "extended"
+                install_type = ProjVar.get_var("SYS_TYPE")
+                if install_type == SysType.AIO_SX or install_type == SysType.AIO_DX:
+                    tag_dict["type"] = "cpe"
+                elif install_type == SysType.REGULAR or install_type == SysType.STORAGE:
+                        tag_dict["type"] = "standard"
 
             if "lowlat" in option_name or "low lat" in option_name or "low_lat" in option_name:
                 tag_dict["type"] = "lowlat"
