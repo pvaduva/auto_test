@@ -216,8 +216,10 @@ class KickstartMenu(Menu):
 
             LOG.info("Kickstart option no match: {} tag: ".format(option.name.lower(), option.tag))
             if "security" in option.name.lower() and ("  >" in option.name.lower() or "options" in option.name.lower()):
-                security_menu = KickstartMenu(name="PXE Security Menu", kwargs=bios.BootMenus.Kickstart.Security)
-                self.sub_menus.append(security_menu)
+                security_type = InstallVars.get_install_var("SECURITY")
+                if security_type == 'extended':
+                    security_menu = KickstartMenu(name="PXE Security Menu", kwargs=bios.BootMenus.Kickstart.Security)
+                    self.sub_menus.append(security_menu)
 
             if "controller configuration" in option.name.lower() and "  >" in option.name.lower():
                 if not self.get_sub_menu("Controller Configuration"):
