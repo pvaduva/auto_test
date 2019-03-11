@@ -15,6 +15,10 @@ from keywords import nova_helper, vm_helper, glance_helper, host_helper, system_
 from testfixtures.fixture_resources import ResourceCleanup
 
 
+def check_alarms():
+    pass
+
+
 @fixture(scope='module')
 def flavor_2g(add_1g_and_4k_pages):
     hosts, storage_backing = add_1g_and_4k_pages
@@ -141,9 +145,11 @@ def add_hosts_to_zone(request, skip_for_one_proc, add_cgcsauto_zone, add_admin_r
         skip("Less than two up hosts have same storage backing")
 
     hosts_to_add = [target_hosts[0], target_hosts[1]]
+    LOG.fixture_step('(module) Add hosts to cgcsauto aggregate: {}'.format(hosts_to_add))
     nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=hosts_to_add)
 
     def remove_host_from_zone():
+        LOG.fixture_step('(module) Remove hosts from cgcsauto aggregate: {}'.format(hosts_to_add))
         nova_helper.remove_hosts_from_aggregate(aggregate='cgcsauto', check_first=False)
     request.addfinalizer(remove_host_from_zone)
 
