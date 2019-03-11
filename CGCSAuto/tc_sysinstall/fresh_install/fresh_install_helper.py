@@ -965,15 +965,7 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
     Returns:
 
     """
-    LOG.info("Starting  install teardown ..")
-    try:
-        active_controller_node.telnet_conn.login(handle_init_login=True)
-        output = active_controller_node.telnet_conn.exec_cmd("cat /etc/build.info", fail_ok=True)[1]
-        LOG.info(output)
-    except (exceptions.TelnetError, exceptions.TelnetEOF, exceptions.TelnetTimeout) as e_:
-        LOG.error(e_.__str__())
 
-    LOG.info("Reconnecting to active controller  install teardown ..")
     try:
         if active_controller_node.ssh_conn:
             LOG.fixture_step("Get build info")
