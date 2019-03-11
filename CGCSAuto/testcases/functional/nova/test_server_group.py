@@ -98,9 +98,10 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
         members = nova_helper.get_server_group_info(srv_grp_id, headers='Members')[0]
         assert vm_id in members, "VM {} is not a member of server group {}".format(vm_id, srv_grp_id)
 
-        server_group_output = nova_helper.get_vm_nova_show_values(vm_id, ['wrs-sg:server_group'])[0]
-        assert srv_grp_id in server_group_output, \
-            'Server group info does not appear in nova show for vm {}'.format(vm_id)
+        # Deprecated:
+        # server_group_output = nova_helper.get_vm_nova_show_values(vm_id, ['wrs-sg:server_group'])[0]
+        # assert srv_grp_id in server_group_output, \
+        #     'Server group info does not appear in nova show for vm {}'.format(vm_id)
 
         vm_hosts.append(nova_helper.get_vm_host(vm_id))
 

@@ -15,6 +15,7 @@ from keywords import nova_helper, vm_helper, glance_helper, host_helper, system_
 from testfixtures.fixture_resources import ResourceCleanup
 
 
+@fixture()
 def check_alarms():
     pass
 
