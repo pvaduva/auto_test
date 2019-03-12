@@ -2700,7 +2700,7 @@ def get_system_software_version(con_ssh=None, use_telnet=False, con_telnet=None,
 
     info_dict = get_installed_build_info_dict(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
     sw_version = info_dict.get('SW_VERSION')
-    if sw_version not in sw_versions:
+    if not (sw_versions and sw_version == sw_versions[-1]):
         ProjVar.set_var(append=True, SW_VERSION=sw_version)
 
     return sw_version

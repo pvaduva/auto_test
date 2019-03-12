@@ -2488,6 +2488,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         security:
         clone_install:
         system_restore:
+        init_global_vars (bool) whether to set global vars from /etc/build.info
 
     Returns:
 

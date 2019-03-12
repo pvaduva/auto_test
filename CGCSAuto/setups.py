@@ -309,7 +309,7 @@ def get_tis_timestamp(con_ssh):
 
 def set_build_info(con_ssh):
     code, output = con_ssh.exec_cmd('cat /etc/build.info')
-    build_path = None
+    build_path = sw_version = None
     if code != 0:
         build_id = build_host = job = build_by = ' '
     else:
@@ -332,8 +332,16 @@ def set_build_info(con_ssh):
         if build_id.strip():
             build_path = '/localdisk/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
 
+        # get sw_version
+        sw_version = re.findall('''SW_VERSION=\"(.*)\"''', output)
+        sw_version = sw_version[0] if sw_version else None
+
     ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_host, JOB=job, BUILD_BY=build_by, BUILD_PATH=build_path,
                     BUILD_INFO=output)
+    if sw_version:
+        existing_versions = ProjVar.get_var('SW_VERSION')
+        if not (existing_versions and sw_version == existing_versions[-1]):
+            ProjVar.set_var(append=True, SW_VERSION=sw_version)
 
     return build_id, build_host, job, build_by
 
@@ -1170,9 +1178,6 @@ def get_system_mode_from_lab_info(lab, multi_region_lab=False, dist_cloud_lab=Fa
 
 
 def set_session(con_ssh):
-    version = lab_info._get_build_info(con_ssh, 'SW_VERSION')[0]
-    ProjVar.set_var(append=True, SW_VERSION=version)
-
     patches = lab_info._get_patches(con_ssh=con_ssh, rtn_str=False)
     if patches:
         ProjVar.set_var(PATCH=patches)

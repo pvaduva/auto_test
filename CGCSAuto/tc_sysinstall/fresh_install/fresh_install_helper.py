@@ -253,14 +253,6 @@ def set_guest_image_var(sys_version=None):
     return guest_path
 
 
-def set_software_version_var(con_ssh=None, use_telnet=False, con_telnet=None):
-    system_version = system_helper.get_system_software_version(con_ssh=con_ssh, use_telnet=use_telnet,
-                                                               con_telnet=con_telnet)
-    ProjVar.set_var(append=True, sw_version=system_version)
-
-    return system_version
-
-
 def configure_controller(controller0_node, config_file='TiS_config.ini_centos', lab_setup_conf_file=None,
                          lab=None, final_step=None):
 
