@@ -3779,10 +3779,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
         if len(expt_prompts) > 0:
             LOG.info('In Kickstart menu expected promts = {}'.format(expt_prompts))
 
-            telnet_conn.read_until(kickstart_menu.prompt)
-            #ind = telnet_conn.expect(expt_prompts, 360)
-            #LOG.info('In Kickstart menu index = {}'.format(ind))
-            #time.sleep(2)
+            telnet_conn.read_until(kickstart_menu.prompt, timeout=360)
             select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
                                   security=security, usb=usb, expect_prompt=False)
     LOG.info('Kick start option selected')
