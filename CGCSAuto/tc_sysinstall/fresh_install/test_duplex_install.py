@@ -82,10 +82,10 @@ def test_duplex_install(install_setup):
         skip("stopping at install step: {}".format(LOG.test_step))
 
     fresh_install_helper.install_controller(sys_type=SysType.AIO_DX, patch_dir=patch_dir,
-                                            patch_server_conn=patch_server.ssh_conn)
-    controller0_node.telnet_conn.login()
-    controller0_node.telnet_conn.flush()
-    fresh_install_helper.set_software_version_var(use_telnet=True, con_telnet=controller0_node.telnet_conn)
+                                            patch_server_conn=patch_server.ssh_conn, init_global_vars=True)
+    # controller0_node.telnet_conn.login()
+    # controller0_node.telnet_conn.flush()
+    # fresh_install_helper.set_software_version_var(use_telnet=True, con_telnet=controller0_node.telnet_conn)
 
     build_server = install_setup["servers"]["build"]
     fresh_install_helper.download_lab_files(lab_files_server=lab_files_server, build_server=build_server,

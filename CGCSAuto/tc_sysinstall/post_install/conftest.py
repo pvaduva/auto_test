@@ -22,10 +22,9 @@ def pytest_configure(config):
     boot_server = config.getoption('boot_server')
     patch_dir = config.getoption('patch_dir')
 
-
     setups.set_install_params(installconf_path=None, lab=lab_arg, controller0_ceph_mon_device=controller0_ceph_mon_device,
                               controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
-                              patch_dir=patch_dir, bs=build_server, boot_server=boot_server)
+                              patch_dir=patch_dir, build_server=build_server, boot_server=boot_server)
     print(" Pre Configure Install vars: {}".format(InstallVars.get_install_vars()))
     print("")
 

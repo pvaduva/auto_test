@@ -45,7 +45,7 @@ def pytest_configure(config):
     patch_dir = config.getoption('patch_dir')
     ovs = config.getoption('ovs_config')
     kubernetes = config.getoption('kubernetes_config')
-    no_openstack_install = config.getoption('no_openstack_install')
+    no_openstack = config.getoption('no_openstack')
     ipv6_config = config.getoption('ipv6')
     helm_chart_path = config.getoption('helm_chart_path')
     no_manage = config.getoption('no_manage')
@@ -131,7 +131,7 @@ def pytest_configure(config):
             boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
             patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, dc_float_ip=dc_float_ip,
             install_subcloud=sublcoud_name, kubernetes=kubernetes,
-            no_openstack_install=no_openstack_install, ipv6_config=ipv6_config,
+            no_openstack=no_openstack, ipv6_config=ipv6_config,
             helm_chart_path=helm_chart_path, no_manage=no_manage)
 
     frame_str = '*'*len('Install Arguments:')

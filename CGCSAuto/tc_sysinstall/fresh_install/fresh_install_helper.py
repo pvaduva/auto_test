@@ -1,9 +1,8 @@
 import os
 import re
 import time
+
 from pytest import skip
-
-
 
 from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \
     keystone_helper
@@ -130,7 +129,7 @@ def do_step(step_name=None):
 
 
 def install_controller(security=None, low_latency=None, lab=None, sys_type=None, usb=None, patch_dir=None,
-                       patch_server_conn=None, final_step=None):
+                       patch_server_conn=None, final_step=None, init_global_vars=False):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
@@ -149,7 +148,7 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
         vlm_helper.power_off_hosts(lab["hosts"], lab=lab)
         install_helper.boot_controller(lab=lab, small_footprint=is_cpe, boot_usb=usb, security=security,
                                        low_latency=low_latency, patch_dir_paths=patch_dir,
-                                       bld_server_conn=patch_server_conn)
+                                       bld_server_conn=patch_server_conn, init_global_vars=init_global_vars)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
 
         reset_global_vars()
@@ -197,11 +196,10 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
 
-    if InstallVars.get_install_var("NO_OPENSTACK_INSTALL"):
+    if not InstallVars.get_install_var("DEPLOY_OPENSTACK"):
         controller0_node = lab['controller-0']
         controller0_node.telnet_conn.exec_cmd("touch .no_opentack_install")
 
-    #if InstallVars.get_install_var("KUBERNETES"):
     LOG.info("WK: Downloading the helm charts to active controller ...")
     helm_chart_path = InstallVars.get_install_var("HELM_CHART_PATH")
     install_helper.download_stx_helm_charts(lab, build_server, stx_helm_charts_path=helm_chart_path)
@@ -379,7 +377,6 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
         lab = InstallVars.get_install_var('LAB')
 
     hosts = [host for host in lab["hosts"] if host != 'controller-0']
-    #hosts.remove('controller-0')
 
     if not con_ssh:
         con_ssh = lab["controller-0"].ssh_conn
@@ -390,8 +387,8 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
         assert rc == 0, msg
         LOG.info("system host-bulk-add added: {}".format(added_hosts))
         for host in hosts:
-            assert any( host in host_list for host_list in added_hosts), "The host_bulk_add command failed to all " \
-                                                                         "hosts {}".format(hosts)
+            assert any(host in host_list for host_list in added_hosts), "The host_bulk_add command failed to all " \
+                                                                        "hosts {}".format(hosts)
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -1161,7 +1158,6 @@ def wait_for_hosts_ready(hosts,  lab=None):
     Args:
         hosts:
         lab:
-        con_ssh:
 
     Returns:
 
@@ -1244,7 +1240,8 @@ def add_ceph_ceph_mon_to_host(active_controller_node, host):
     """
 
     Args:
-        lab:
+        active_controller_node
+        host
 
     Returns:
 
@@ -1263,8 +1260,6 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf'):
     """
 
     Args:
-        active_controller_node:
-        host:
         lab:
         conf_file:
 
@@ -1283,7 +1278,7 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf'):
     controller0_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node, controller0_node.name)
     controller1_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node,  controller1_node.name)
     assert len(controller0_disk_paths) > 0 and len(controller1_disk_paths) > 0, \
-            "Unable to find OSD devices from conf file {} for the controllers".format(conf_file)
+        "Unable to find OSD devices from conf file {} for the controllers".format(conf_file)
 
     if host_helper.is_active_controller(controller0_node.name, con_ssh=active_node_ssh):
         hosts = [controller1_node.name, controller0_node.name]
@@ -1344,5 +1339,3 @@ def apply_node_labels(hosts, active_controller_node):
             cli.system(cmd.format(host), "sriov=enabled", ssh_client=active_controller_node.ssh_conn)
         else:
             cli.system(cmd.format(host), "openstack-control-plane=enabled", ssh_client=active_controller_node.ssh_conn)
-
-

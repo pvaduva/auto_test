@@ -606,8 +606,8 @@ def pytest_addoption(parser):
     parser.addoption('--kubernetes', '--kuber', '--kub', dest='kubernetes_config', action='store_true', help=kuber_help)
     parser.addoption('--dc-float-ip', '--dc_float_ip', '--dcfip', dest='dc_float_ip', action='store', default=None,
                      help=dcfloatip_help)
-    parser.addoption('--no-openstack-install',  dest='no_openstack_install', action='store_true', default=False,
-                     help=openstack_install_help)
+    parser.addoption('--no-openstack', '--no-openstack-install',  dest='no_openstack',
+                     action='store_true', default=False, help=openstack_install_help)
     parser.addoption('--ipv6',  dest='ipv6', action='store_true', default=False,
                      help=ipv6_install_help)
     parser.addoption('--helm-chart-path', '--helmchartpath', '--helm_chart_path', dest='helm_chart_path',

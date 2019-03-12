@@ -53,6 +53,11 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
     LOG.tc_step("Add date to config drive ...")
     check_vm_config_drive_data(vm_id)
 
+    vm_host = nova_helper.get_vm_host(vm_id)
+    instance_name = nova_helper.get_vm_instance_name(vm_id)
+    LOG.tc_step("Check config_drive vm files on hypervisor after vm launch")
+    check_vm_files_on_hypervisor(vm_id, vm_host=vm_host, instance_name=instance_name)
+
     if not system_helper.is_simplex():
         LOG.tc_step("Cold migrate VM")
         vm_helper.cold_migrate_vm(vm_id)
@@ -67,6 +72,8 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
 
         LOG.tc_step("Check config drive after locking VM host")
         check_vm_config_drive_data(vm_id, ping_timeout=VMTimeout.DHCP_RETRY)
+        vm_host = nova_helper.get_vm_host(vm_id)
+
     else:
         LOG.tc_step("Reboot vm")
         vm_helper.reboot_vm(vm_id)
@@ -74,20 +81,8 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
         LOG.tc_step("Check config drive after vm rebooted")
         check_vm_config_drive_data(vm_id)
 
-    vm_host = nova_helper.get_vm_host(vm_id)
-    instance_name = nova_helper.get_vm_instance_name(vm_id)
-    LOG.info("The vm host is now: {}".format(vm_host))
-    LOG.tc_step("Check vm files exist on new vm host after migrated")
-    with host_helper.ssh_to_host(vm_host) as host_ssh:
-        cmd = " ls /var/lib/nova/instances/{}".format(vm_id)
-        cmd_output = host_ssh.exec_cmd(cmd)[1]
-        # 'libvirt.xml' is removed from /var/lib/nova/instances in newton
-        assert all(x in cmd_output for x in ['console.log', 'disk.config', 'disk.info']),\
-            "VM not in host {}".format(vm_host)
-
-        output = host_ssh.exec_cmd('ls /run/libvirt/qemu')[1]
-        libvirt = "{}.xml".format(instance_name)
-        assert libvirt in output, "{} is not found in /run/libvirt/qemu on {}".format(libvirt, vm_host)
+    LOG.tc_step("Check vm files exist after nova operations")
+    check_vm_files_on_hypervisor(vm_id, vm_host=vm_host, instance_name=instance_name)
 
 
 def check_vm_config_drive_data(vm_id, ping_timeout=VMTimeout.PING_VM):
@@ -112,3 +107,17 @@ def check_vm_config_drive_data(vm_id, ping_timeout=VMTimeout.PING_VM):
         file_path = '{}/openstack/latest/meta_data.json'.format(mount)
         content = vm_ssh.exec_cmd('python -m json.tool {} | grep foo'.format(file_path), fail_ok=False)[1]
         assert '"foo": "bar"' in content
+
+
+def check_vm_files_on_hypervisor(vm_id, vm_host, instance_name):
+    with host_helper.ssh_to_host(vm_host) as host_ssh:
+        cmd = " ls /var/lib/nova/instances/{}".format(vm_id)
+        cmd_output = host_ssh.exec_cmd(cmd)[1]
+        # 'libvirt.xml' is removed from /var/lib/nova/instances in newton
+        for expt_file in ('console.log', 'disk.config'):    # , 'disk.info' missing
+            assert expt_file in cmd_output, \
+                "{} is not found for config drive vm {} on {}".format(expt_file, vm_id, vm_host)
+
+        output = host_ssh.exec_cmd('ls /run/libvirt/qemu')[1]
+        libvirt = "{}.xml".format(instance_name)
+        assert libvirt in output, "{} is not found in /run/libvirt/qemu on {}".format(libvirt, vm_host)

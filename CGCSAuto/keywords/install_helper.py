@@ -2475,7 +2475,8 @@ def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None
 
 
 def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False, low_latency=None,
-                    small_footprint=None, security=None, clone_install=False, system_restore=False):
+                    small_footprint=None, security=None, clone_install=False, system_restore=False,
+                    init_global_vars=False):
     """
     Boots controller-0 either from tuxlab or USB.
     Args:
@@ -2543,8 +2544,10 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         if boot_usb:
             setup_networking(controller0)
 
-        # controller0.ssh_conn.disconnect()
-        # controller0.ssh_conn = establish_ssh_connection(controller0, install_output_dir)
+    if init_global_vars:
+        from setups import set_build_info, set_session
+        set_build_info(con_ssh=controller0.telnet_conn)
+        set_session(con_ssh=controller0.telnet_conn)
 
 
 def setup_networking(controller0, conf_server=None, conf_dir=None):
@@ -4055,15 +4058,14 @@ def update_pxeboot_ks_files(lab, tuxlab_conn, feed_path):
     controller0_node = lab['controller-0']
     lab_name = controller0_node.host_name
     LOG.info("Controller-0 node name is {}".format(lab_name))
-    if re.search("\-0\d$", lab_name):
+    if re.search(r"-0\d$", lab_name):
         lab_name = lab_name.replace('-0', '-')
     LOG.info("Controller-0 node name is {}".format(lab_name))
     base_url = "http://128.224.151.254/umalab/{}_feed".format(lab_name)
     tuxlab_conn.exec_cmd("chmod 755 {}/*.cfg".format(feed_path), fail_ok=False)
 
-    cmd = '''
-        sed -i "s#xxxHTTP_URLxxx#{}#g;s#xxxHTTP_URL_PATCHESxxx#{}/patches#g;s#NUM_DIRS#2#g" {}/pxeboot/*.cfg'''\
-        .format( base_url, base_url, feed_path)
+    cmd = """sed -i "s#xxxHTTP_URLxxx#{}#g;s#xxxHTTP_URL_PATCHESxxx#{}/patches#g;s#NUM_DIRS#2#g" {}/pxeboot/*.cfg""".\
+        format( base_url, base_url, feed_path)
 
     tuxlab_conn.exec_cmd(cmd, fail_ok=False)
     cmd = "cp {}/pxeboot/pxeboot_controller.cfg {}/yow-tuxlab2_controller.cfg".format(feed_path, feed_path)

@@ -628,7 +628,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                        patch_dir=None, ovs=False, build_server=None, tis_build_dir="latest_build",
                        boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None, wipedisk=False,
                        boot="feed", iso_path=None, security="standard", low_latency=False, stop=None,
-                       kubernetes=False, dc_float_ip=None, install_subcloud=None, no_openstack_install=False,
+                       kubernetes=False, dc_float_ip=None, install_subcloud=None, no_openstack=False,
                        ipv6_config=False, helm_chart_path=None, no_manage=False):
 
     if not lab and not installconf_path:
@@ -917,7 +917,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                  install_subcloud=install_subcloud,
                                  ovs=ovs,
                                  kubernetes=kubernetes,
-                                 no_openstack_install=no_openstack_install,
+                                 deploy_openstack=not no_openstack,
                                  ipv6_config=ipv6_config,
                                  helm_chart_path=helm_chart_path,
                                  no_manage=no_manage

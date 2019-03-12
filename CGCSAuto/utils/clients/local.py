@@ -202,7 +202,7 @@ class LocalHostClient(SSHClient):
             ssh_key_path = os.path.expanduser('~/.ssh/id_rsa')
         # KNOWN_HOSTS_PATH = SSH_DIR + "/known_hosts"
         # REMOVE_HOSTS_SSH_KEY_CMD = "ssh-keygen -f {} -R {}"
-        if not os.path.isfile(ssh_key_path):
+        if not self.file_exists(ssh_key_path):
             self.exec_cmd("ssh-keygen -f {} -t rsa -N ''".format(ssh_key_path), fail_ok=False)
 
         ssh_key = self.exec_cmd("ssh-keygen -y -f {}".format(ssh_key_path), fail_ok=False)[1]
