@@ -419,9 +419,9 @@ def get_auth_via_openrc(con_ssh, use_telnet=False, con_telnet=None):
                   'OS_INTERFACE',
                   'OS_KEYSTONE_REGION_NAME']
     if use_telnet and con_telnet:
-        code, output = con_telnet.exec_cmd('cat /etc/nova/openrc')
+        code, output = con_telnet.exec_cmd('cat /etc/platform/openrc')
     else:
-        code, output = con_ssh.exec_cmd('cat /etc/nova/openrc')
+        code, output = con_ssh.exec_cmd('cat /etc/platform/openrc')
 
     if code != 0:
         return None

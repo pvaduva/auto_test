@@ -4065,9 +4065,12 @@ def update_pxeboot_ks_files(lab, tuxlab_conn, feed_path):
     base_url = "http://128.224.151.254/umalab/{}_feed".format(lab_name)
     tuxlab_conn.exec_cmd("chmod 755 {}/*.cfg".format(feed_path), fail_ok=False)
 
+    tuxlab_conn.exec_cmd("cp -r {}/pxeboot/EFI/* {}/EFI/".format(feed_path, feed_path), fail_ok=False)
+    tuxlab_conn.exec_cmd("mv {}/pxeboot/pxeboot_grub.cfg {}/grub.cfg".format(feed_path, feed_path), fail_ok=False)
+    tuxlab_conn.exec_cmd("ln -sf {}/grub.cfg {}/EFI/grub.cfg".format(feed_path, feed_path), fail_ok=False)
+
     cmd = """sed -i "s#xxxHTTP_URLxxx#{}#g;s#xxxHTTP_URL_PATCHESxxx#{}/patches#g;s#NUM_DIRS#2#g" {}/pxeboot/*.cfg""".\
         format( base_url, base_url, feed_path)
-
     tuxlab_conn.exec_cmd(cmd, fail_ok=False)
     cmd = "cp {}/pxeboot/pxeboot_controller.cfg {}/yow-tuxlab2_controller.cfg".format(feed_path, feed_path)
     tuxlab_conn.exec_cmd(cmd, fail_ok=False)
@@ -4076,6 +4079,7 @@ def update_pxeboot_ks_files(lab, tuxlab_conn, feed_path):
     cmd = "cp {}/pxeboot/pxeboot_smallsystem_lowlatency.cfg {}/yow-tuxlab2_smallsystem_lowlatency.cfg"\
         .format(feed_path, feed_path)
     tuxlab_conn.exec_cmd(cmd, fail_ok=False)
+    tuxlab_conn.exec_cmd("rm -rf {}/EFI/BOOT".format(feed_path), fail_ok=False)
 
 
 def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True, yaml_files=None):
