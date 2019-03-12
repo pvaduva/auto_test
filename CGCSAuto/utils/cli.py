@@ -156,7 +156,7 @@ def _get_rc_path(tenant, remote_cli=False):
     if remote_cli:
         openrc_path = os.path.join(ProjVar.get_var('LOG_DIR'), 'horizon', '{}-openrc.sh'.format(tenant))
     else:
-        openrc_path = '/etc/nova/openrc' if 'admin' in tenant else '~/openrc.{}'.format(tenant)
+        openrc_path = '/etc/platform/openrc' if 'admin' in tenant else '~/openrc.{}'.format(tenant)
 
     return openrc_path
 
