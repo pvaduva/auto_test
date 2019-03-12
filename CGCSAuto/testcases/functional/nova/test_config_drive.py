@@ -71,7 +71,7 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
         LOG.tc_step("Reboot vm")
         vm_helper.reboot_vm(vm_id)
 
-        LOG.tc_setp("Check config drive after vm rebooted")
+        LOG.tc_step("Check config drive after vm rebooted")
         check_vm_config_drive_data(vm_id)
 
     vm_host = nova_helper.get_vm_host(vm_id)
