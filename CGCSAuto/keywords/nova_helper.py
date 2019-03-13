@@ -1655,6 +1655,7 @@ def copy_flavor(from_flavor_id, new_name=None, con_ssh=None):
     return new_flavor_id
 
 
+# TODO: nova providernet-show no longer exists for pci pfs/vfs info. Update required.
 def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=True, auth_info=Tenant.get('admin'),
                           con_ssh=None, rtn_int=True):
     """

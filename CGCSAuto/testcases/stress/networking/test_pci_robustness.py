@@ -221,8 +221,9 @@ class TestSriov:
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
         check_vm_pci_interface(vms=vms, net_type=net_type)
-        vfs_use_post_boot = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
-        assert vfs_use_post_boot - vfs_use_init == vm_num * 2, "Number of PCI vfs used is not as expected"
+        # TODO: feature unavailable atm. Update required
+        # vfs_use_post_boot = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
+        # assert vfs_use_post_boot - vfs_use_init == vm_num * 2, "Number of PCI vfs used is not as expected"
 
         HostsToRecover.add(pci_hosts)
 
@@ -235,8 +236,9 @@ class TestSriov:
             assert other_host == vm_host, "VM did not move to {} after locking {}".format(other_host, initial_host)
 
         check_vm_pci_interface(vms, net_type=net_type, ping_timeout=VMTimeout.DHCP_RETRY)
-        vfs_use_post_lock = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
-        assert vfs_use_post_boot == vfs_use_post_lock, "Number of PCI vfs used after locking host is not as expected"
+        # TODO: feature unavailable atm. Update required
+        # vfs_use_post_lock = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
+        # assert vfs_use_post_boot == vfs_use_post_lock, "Number of PCI vfs used after locking host is not as expected"
 
         LOG.tc_step("Unlock {}".format(initial_host))
         host_helper.unlock_host(initial_host)
@@ -244,8 +246,9 @@ class TestSriov:
         LOG.tc_step("Reboot {} and ensure vms are evacuated to {}".format(other_host, initial_host))
         vm_helper.evacuate_vms(other_host, vms, post_host=initial_host, wait_for_host_up=True)
         check_vm_pci_interface(vms, net_type=net_type)
-        vfs_use_post_evac = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
-        assert vfs_use_post_boot == vfs_use_post_evac, "Number of PCI vfs used after evacuation is not as expected"
+        # TODO: feature unavailable atm. Update required
+        # vfs_use_post_evac = nova_helper.get_provider_net_info(pnet_id, field='pci_vfs_used')
+        # assert vfs_use_post_boot == vfs_use_post_evac, "Number of PCI vfs used after evacuation is not as expected"
 
 
 class TestPcipt:
@@ -337,24 +340,26 @@ class TestPcipt:
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
             vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id, seg_id)
 
-        pfs_use_post_boot = nova_helper.get_provider_net_info(pnet_id, field='pci_pfs_used')
-        resource_change = 2 if isinstance(seg_id, dict) else 1
-        assert pfs_use_post_boot - pfs_use_init == vm_num * resource_change, "Number of PCI pfs used is not as expected"
+        # TODO: feature unavailable atm. Update required
+        # pfs_use_post_boot = nova_helper.get_provider_net_info(pnet_id, field='pci_pfs_used')
+        # resource_change = 2 if isinstance(seg_id, dict) else 1
+        # assert pfs_use_post_boot - pfs_use_init == vm_num * resource_change, "Number of PCI pfs used is not as expected"
 
         check_vm_pci_interface(vms=vms, net_type=net_type)
         HostsToRecover.add(pci_hosts)
 
-        pfs_use_pre_action = pfs_use_post_boot
+        # pfs_use_pre_action = pfs_use_post_boot
         iter_count = 2 if len(pci_hosts) < 3 else 1
         for i in range(iter_count):
             if i == 1:
                 LOG.tc_step("Delete a pcipt vm and test lock and reboot pcipt host again for success pass")
                 vm_helper.delete_vms(vms=vms[1])
                 vms.pop()
-                pfs_use_pre_action -= resource_change
-                common.wait_for_val_from_func(expt_val=pfs_use_pre_action, timeout=30, check_interval=3,
-                                              func=nova_helper.get_provider_net_info,
-                                              providernet_id=pnet_id, field='pci_pfs_used')
+                # TODO: feature unavailable atm. Update required
+                # pfs_use_pre_action -= resource_change
+                # common.wait_for_val_from_func(expt_val=pfs_use_pre_action, timeout=30, check_interval=3,
+                #                               func=nova_helper.get_provider_net_info,
+                #                               providernet_id=pnet_id, field='pci_pfs_used')
 
             LOG.tc_step("Test lock {} vms hosts started - iter{}".format(vif_model, i+1))
             for vm in vms:
@@ -376,9 +381,9 @@ class TestPcipt:
 
                 check_vm_pci_interface(vms, net_type=net_type)
                 host_helper.unlock_host(pre_lock_host, available_only=True)
-
-            pfs_use_post_lock = nova_helper.get_provider_net_info(pnet_id, field='pci_pfs_used')
-            assert pfs_use_pre_action == pfs_use_post_lock, "Number of PCI pfs used after host-lock is not as expected"
+            # TODO: feature unavailable atm. Update required
+            # pfs_use_post_lock = nova_helper.get_provider_net_info(pnet_id, field='pci_pfs_used')
+            # assert pfs_use_pre_action == pfs_use_post_lock, "Number of PCI pfs used after host-lock is not as expected"
 
             LOG.tc_step("Test evacuate {} vms started - iter{}".format(vif_model, i+1))
             for vm in vms:
@@ -396,6 +401,6 @@ class TestPcipt:
                     assert post_evac_host in pci_hosts, "VM is not on pci host after evacuation"
 
                 check_vm_pci_interface(vms, net_type=net_type)
-
-            pfs_use_post_evac = nova_helper.get_provider_net_info(pnet_id, field='pci_pfs_used')
-            assert pfs_use_pre_action == pfs_use_post_evac, "Number of PCI pfs used after evacuation is not as expected"
+            # TODO: feature unavailable atm. Update required
+            # pfs_use_post_evac = nova_helper.get_provider_net_info(pnet_id, field='pci_pfs_used')
+            # assert pfs_use_pre_action == pfs_use_post_evac, "Number of PCI pfs used after evacuation is not as expected"

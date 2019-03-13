@@ -58,7 +58,6 @@ def vif_model_check(request):
     mgmt_net_id = network_helper.get_mgmt_net_id()
     pci_net_id = network_helper.get_networks(name=pci_net, strict=True)[0]
     pnet_name = network_helper.get_net_info(net_id=pci_net_id, field='provider:physical_network')
-    pnet_id = network_helper.get_providernets(name=pnet_name, rtn_val='id', strict=True)[0]
 
     nics = [{'net-id': mgmt_net_id}, {'net-id': pci_net_id}]
     if extra_pcipt_net:
@@ -85,7 +84,7 @@ def vif_model_check(request):
         seg_id = {pci_net: seg_id,
                   extra_pcipt_net_name: extra_pcipt_seg_id}
 
-    return vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_id, extra_pcipt_net_name, extra_pcipt_net
+    return vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_name, extra_pcipt_net_name, extra_pcipt_net
 
 
 @mark.p2
@@ -113,7 +112,7 @@ def test_evacuate_pci_vm(vif_model_check):
     Teardown:
         - Delete created vms and flavor
     """
-    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_id, extra_pcipt_net_name, extra_pcipt_net = \
+    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_name, extra_pcipt_net_name, extra_pcipt_net = \
         vif_model_check
 
     LOG.tc_step("Boot a vm with {} vif model on {} net".format(vif_model, net_type))
@@ -152,15 +151,16 @@ def test_evacuate_pci_vm(vif_model_check):
     vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type], vlan_zero_only=True)
 
 
+# TODO: feature unavailable atm. Update required
 @mark.p3
-def test_pci_resource_usage(vif_model_check):
+def _test_pci_resource_usage(vif_model_check):
     """
     Create a vm under test with specified vifs for tenant network
 
     Returns (str): id of vm under test
 
     """
-    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_id, extra_pcipt_net_name, extra_pcipt_net = \
+    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_name, extra_pcipt_net_name, extra_pcipt_net = \
         vif_model_check
 
     LOG.tc_step("Ensure core/vm quota is sufficient")
@@ -175,12 +175,12 @@ def test_pci_resource_usage(vif_model_check):
         max_resource = 'pci_pfs_configured'
 
     LOG.tc_step("Get resource usage for {} interface before booting VM(s)".format(vif_model))
-    LOG.info("provider net id for {} interface: {}".format(vif_model, pnet_id))
+    LOG.info("provider net for {} interface: {}".format(vif_model, pnet_name))
 
-    assert pnet_id, "provider network id for {} interface is not found".format(vif_model)
+    assert pnet_name, "provider network for {} interface is not found".format(vif_model)
 
     total_val, pre_resource_value = nova_helper.get_pci_interface_stats_for_providernet(
-            pnet_id, fields=(max_resource, resource_param))
+            pnet_name, fields=(max_resource, resource_param))
     LOG.info("Resource Usage {} for {}. Resource configured: {}".format(pre_resource_value, vif_model, total_val))
 
     expt_change = 2 if vif_model == 'pci-passthrough' and extra_pcipt_net else 1
@@ -204,7 +204,7 @@ def test_pci_resource_usage(vif_model_check):
         vm_helper.ping_vms_from_vm(from_vm=vm_id, to_vms=vm_id, net_types=['mgmt', net_type])
 
         LOG.tc_step("Check resource usage for {} interface increased by 1".format(vif_model))
-        resource_value = nova_helper.get_provider_net_info(pnet_id, field=resource_param)
+        resource_value = nova_helper.get_provider_net_info(pnet_name, field=resource_param)
         assert pre_resource_value + expt_change == resource_value, "Resource usage for {} is not increased by {}".\
             format(vif_model, expt_change)
 
@@ -215,7 +215,7 @@ def test_pci_resource_usage(vif_model_check):
         vm_helper.delete_vms(vm_to_del, check_first=False, stop_first=False)
         resource_val = common.wait_for_val_from_func(expt_val=pre_resource_value - expt_change, timeout=30,
                                                      check_interval=3, func=nova_helper.get_provider_net_info,
-                                                     providernet_id=pnet_id, field=resource_param)[1]
+                                                     providernet_id=pnet_name, field=resource_param)[1]
 
         assert pre_resource_value - expt_change == resource_val, "Resource usage for {} is not reduced by {}".\
             format(vif_model, expt_change)
@@ -469,7 +469,7 @@ class TestVmPCIOperations:
             self.is_pci_device_supported(pci_alias)
 
         self.vif_model, self.base_vm, self.base_flavor_id, self.nics_to_test, self.seg_id, self.net_type, \
-            self.pnet_id, self.extra_pcipt_net_name, self.extra_pcipt_net = vif_model_check
+            self.pnet_name, self.extra_pcipt_net_name, self.extra_pcipt_net = vif_model_check
 
         LOG.tc_step("Create a flavor with specified extra-specs and dedicated cpu policy")
         flavor_id = self.create_flavor_for_pci()
@@ -477,8 +477,9 @@ class TestVmPCIOperations:
         LOG.tc_step("Boot a vm with {} vif model on internal net".format(self.vif_model))
         resource_param = 'pci_vfs_used' if 'sriov' in self.vif_model else 'pci_pfs_used'
 
-        LOG.tc_step("Get resource usage for {} interface before booting VM(s)".format(self.vif_model))
-        pre_resource_value = nova_helper.get_provider_net_info(self.pnet_id, field=resource_param)
+        # TODO: feature unavailable atm. Update required
+        # LOG.tc_step("Get resource usage for {} interface before booting VM(s)".format(self.vif_model))
+        # pre_resource_value = nova_helper.get_provider_net_info(self.pnet_name, field=resource_param)
 
         res, vm_id, err, vol_id = vm_helper.boot_vm(name=self.vif_model, flavor=flavor_id, cleanup='function',
                                                     nics=self.nics_to_test, fail_ok=boot_forbidden)
@@ -506,11 +507,12 @@ class TestVmPCIOperations:
 
         self.wait_check_vm_states(step='boot')
 
-        LOG.tc_step("Check {} usage is incremented by 1".format(resource_param))
-        post_resource_value = nova_helper.get_provider_net_info(self.pnet_id, field=resource_param)
-        expt_change = 2 if self.vif_model == 'pci-passthrough' and self.extra_pcipt_net else 1
-        assert pre_resource_value + expt_change == post_resource_value, "{} usage is not incremented by {} as " \
-                                                                        "expected".format(resource_param, expt_change)
+        # TODO: feature unavailable atm. Update required
+        # LOG.tc_step("Check {} usage is incremented by 1".format(resource_param))
+        # post_resource_value = nova_helper.get_provider_net_info(self.pnet_name, field=resource_param)
+        # expt_change = 2 if self.vif_model == 'pci-passthrough' and self.extra_pcipt_net else 1
+        # assert pre_resource_value + expt_change == post_resource_value, "{} usage is not incremented by {} as " \
+        #                                                                 "expected".format(resource_param, expt_change)
 
         LOG.tc_step('Pause/Unpause {} vm'.format(self.vif_model))
         vm_helper.pause_vm(self.vm_id)
