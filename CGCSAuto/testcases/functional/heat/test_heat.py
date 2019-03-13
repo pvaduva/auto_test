@@ -272,9 +272,10 @@ def revert_quota(request):
 
 @mark.usefixtures('check_alarms')
 @mark.parametrize('template_name', [
-    # mark.sanity('WR_Neutron_ProviderNetRange.yaml'),  Need update due to datanetwork change
+    # mark.sanity('WR_Neutron_ProviderNetRange.yaml'),  # Need update due to datanetwork change
     mark.priorities('nightly', 'sx_nightly')('OS_Cinder_Volume.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Glance_Image.yaml'),
+    # mark.priorities('nightly', 'sx_nightly')('OS_Glance_Image.yaml'), # Stack update needed
+    # https://bugs.launchpad.net/bugs/1819483
     mark.priorities('nightly', 'sx_nightly')('OS_Ceilometer_Alarm.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Port.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Net.yaml'),
@@ -287,7 +288,7 @@ def revert_quota(request):
     mark.priorities('nightly', 'sx_nightly')('OS_Neutron_SecurityGroup.yaml'),
     # mark.priorities('nightly', 'sx_nightly')('OS_Nova_ServerGroup.yaml'),     # Stack update needed
     mark.priorities('nightly', 'sx_nightly')('OS_Nova_KeyPair.yaml'),
-    # mark.priorities('nightly', 'sx_nightly')('WR_Neutron_QoSPolicy.yaml'),    CGTS-10095
+    # mark.priorities('nightly', 'sx_nightly')('WR_Neutron_QoSPolicy.yaml'),    # CGTS-10095
     mark.priorities('nightly', 'sx_nightly')('OS_Heat_Stack.yaml'),
     mark.priorities('nightly', 'sx_nightly')('OS_Cinder_VolumeAttachment.yaml'),
     mark.priorities('sx_sanity', 'sanity', 'cpe_sanity')('OS_Nova_Server.yaml'),
