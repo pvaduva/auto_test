@@ -74,11 +74,11 @@ def get_vlan_providernet():
             min_ = int(entry[minimum_column])
             max_ = temp_max
 
-    providernet_id = network_helper.get_providernets(name)
+    providernet_id = system_helper.get_data_networks(name=name)
 
     if len(popped_entries) > 0:
         name = popped_entries[0][providernet_name_column]
-        popped_entry = network_helper.get_providernets(name)
+        popped_entry = system_helper.get_data_networks(name=name)
     else:
         popped_entry = ''
 

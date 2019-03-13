@@ -4237,6 +4237,16 @@ def create_data_network(name, net_type='vlan', mode=None, mtu=None, port_num=Non
     return 0, table_parser.get_value_two_col_table(table_, rtn_val)
 
 
+def get_data_networks(rtn_val='name', con_ssh=None, auth_info=Tenant.get('admin'), strict=True, **kwargs):
+    table_ = table_parser.table(cli.system('datanetwork-list', ssh_client=con_ssh, auth_info=auth_info))
+    if isinstance(rtn_val, str):
+        return table_parser.get_values(table_, rtn_val, strict=strict, **kwargs)
+
+    if kwargs:
+        table_ = table_parser.filter_table(table_, strict=strict, **kwargs)
+    return [table_parser.get_column(table_, header) for header in rtn_val]
+
+
 def get_data_network_values(datanetwork, fields=('uuid', ), fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get datanetwork values from system datanetwork-show table.

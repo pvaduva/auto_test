@@ -20,8 +20,8 @@ HOSTS_IF_MODIFY_ARGS = []
 
 def __get_mtu_to_mod(providernet_name, mtu_range='middle'):
     LOG.tc_step("Get a MTU value that is in mtu {} range".format(mtu_range))
-    pnet_mtus = network_helper.get_providernets(name=providernet_name, rtn_val='mtu', strict=False)
-    pnet_types = network_helper.get_providernets(name=providernet_name, rtn_val='type', strict=False)
+    pnet_mtus, pnet_types = system_helper.get_data_networks(rtn_val=('mtu', 'network_type'),
+                                                            strict=False, name=providernet_name)
 
     min_mtu = 1000
     max_mtu = 9216

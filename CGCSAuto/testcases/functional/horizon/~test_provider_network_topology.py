@@ -1,7 +1,7 @@
 from pytest import fixture
 
 from consts.auth import Tenant
-from keywords import network_helper
+from keywords import system_helper
 
 from utils import table_parser, cli
 from utils.tis_log import LOG
@@ -38,7 +38,7 @@ def _test_horizon_provider_network_topology(pnet_topology_pg):
     """
     pnet_topology_pg.go_to_target_page()
 
-    pnet_name_list = network_helper.get_providernets(rtn_val='name')
+    pnet_name_list = system_helper.get_data_networks(rtn_val='name')
     table_ = table_parser.table(cli.neutron('providernet-list', auth_info=Tenant.get('admin')))
     cli_row_dict_table = table_parser.row_dict_table(table_,'id')
     pnet_select = pnet_topology_pg.providernet_list.select_element_by_name(pnet_name_list[0])

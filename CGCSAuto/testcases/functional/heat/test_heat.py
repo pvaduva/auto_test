@@ -50,11 +50,8 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
             port_name = stack_name
         resource_found = network_helper.get_neutron_port(name=port_name)
 
-    elif to_verify is 'neutron_provider_net':
-        resource_found = network_helper.get_providernets(name='physnetX')
-
     elif to_verify is 'neutron_provider_net_range':
-        resource_found = network_helper.get_providernet_ranges_dict(providernet_name='sample_physnet_X')
+        resource_found = network_helper.get_network_segment_ranges(rtn_val='name', physical_network='sample_physnet_X')
 
     elif to_verify is 'nova_server_group':
         resource_found = nova_helper.get_server_groups(name=stack_name)

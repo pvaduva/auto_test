@@ -96,13 +96,13 @@ def test_dynamic_vxlan_functional(version, mode):
     """
     vxlan_provider_name = 'group0-data0b'
     vif_model = 'avp'
-    providernets = network_helper.get_providernets(rtn_val='name', strict=True, type='vxlan')
+    providernets = system_helper.get_data_networks(rtn_val='name', network_type='vxlan')
     if not providernets or (len(providernets) > 1) or (vxlan_provider_name not in providernets):
         skip("Vxlan provider-net not configured or Vxlan provider-net configured on more than one provider net\
          or not configurd on internal net")
 
     # get the id of the providr net
-    vxlan_provider_net_id = network_helper.get_providernets(rtn_val='id', strict=True, type='vxlan')
+    vxlan_provider_net_id = system_helper.get_data_networks(rtn_val='id', type='vxlan')
     vm_ids = []
 
     # get 2 computes so we can create the aggregate and force vm-ccupancy

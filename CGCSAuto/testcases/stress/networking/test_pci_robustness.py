@@ -64,8 +64,8 @@ def get_pci_net(request, vif_model, primary_tenant, primary_tenant_name, other_t
 
     pci_net_id = network_helper._get_net_ids(net_name=pci_net_name)[0]
     pnet_name = network_helper.get_net_info(net_id=pci_net_id, field='provider:physical_network')
-    pnet_id = network_helper.get_providernets(name=pnet_name, rtn_val='id', strict=True)[0]
-
+    # pnet_id = network_helper.get_providernets(name=pnet_name, rtn_val='id', strict=True)[0]
+    pnet_id = None
     LOG.info("PCI network selected to boot vm: {}".format(pci_net_name))
     if vif_model == 'pci-sriov':
         return net_type, pci_net_name, pci_net_id, pnet_id, pnet_name
@@ -133,16 +133,19 @@ class TestSriov:
 
         LOG.fixture_step("Calculate number of vms and number of vcpus for each vm")
         pci_hosts = get_pci_hosts(vif_model, pnet_name)
-        vfs_conf, vfs_use_init = nova_helper.get_pci_interface_stats_for_providernet(
-                pnet_id, fields=('pci_vfs_configured', 'pci_vfs_used'))
 
-        # TODO vfs configured per host is inaccurate when hosts are configured differently
-        vfs_conf_per_host = vfs_conf/len(pci_hosts)
-        if vfs_conf_per_host < 4:
-            skip('Less than 4 {} interfaces configured on each host'.format(vif_model))
+        # TODO: nova provider-show deprecated. Update required.
+        # vfs_conf, vfs_use_init = nova_helper.get_pci_interface_stats_for_providernet(
+        #         pnet_id, fields=('pci_vfs_configured', 'pci_vfs_used'))
+
+        # # TODO vfs configured per host is inaccurate when hosts are configured differently
+        # vfs_conf_per_host = vfs_conf/len(pci_hosts)
+        # if vfs_conf_per_host < 4:
+        #     skip('Less than 4 {} interfaces configured on each host'.format(vif_model))
         pci_hosts = pci_hosts[:2]
-
-        vm_num = min(4, int(vfs_conf_per_host / 4) * 2)
+        vm_num = 4
+        vfs_use_init = None
+        # vm_num = min(4, int(vfs_conf_per_host / 4) * 2)
 
         initial_host, min_cores_per_proc = get_host_with_min_vm_cores_per_proc(pci_hosts)
         other_host = pci_hosts[0] if initial_host == pci_hosts[1] else pci_hosts[1]
@@ -263,10 +266,12 @@ class TestPcipt:
         if len(pci_hosts) < 2:
             skip('Less than 2 hosts with {} interface configured'.format(vif_model))
 
-        pfs_conf, pfs_use_init = nova_helper.get_pci_interface_stats_for_providernet(
-                pnet_id, fields=('pci_pfs_configured', 'pci_pfs_used'))
-        if pfs_conf < 2:
-            skip('Less than 2 {} interfaces configured on system'.format(vif_model))
+        # TODO: feature unavailable atm. Update required
+        # pfs_conf, pfs_use_init = nova_helper.get_pci_interface_stats_for_providernet(
+        #         pnet_id, fields=('pci_pfs_configured', 'pci_pfs_used'))
+        # if pfs_conf < 2:
+        #     skip('Less than 2 {} interfaces configured on system'.format(vif_model))
+        pfs_use_init = None
 
         # Get initial host with least vcpus
         LOG.fixture_step("Calculate number of vms and number of vcpus for each vm")

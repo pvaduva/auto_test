@@ -658,14 +658,14 @@ def test_jumbo_frames(vm_type, skip_for_ovs, update_network_quotas):
     vm_test = vms[0]
     tenant_net = nics[1]['net-id']
     providernet = network_helper.get_net_info(tenant_net, field='provider:physical_network')
-    vm_test_mtu = int(network_helper.get_providernets(name=providernet, rtn_val='mtu')[0])
+    vm_test_mtu = int(system_helper.get_data_networks(name=providernet, rtn_val='mtu')[0])
 
     vms, nics = vm_helper.launch_vms(
         vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_secondary())
     vm_observer = vms[0]
     tenant_net = nics[1]['net-id']
     providernet = network_helper.get_net_info(tenant_net, field='provider:physical_network')
-    vm_observer_mtu = int(network_helper.get_providernets(name=providernet, rtn_val='mtu')[0])
+    vm_observer_mtu = int(system_helper.get_data_networks(name=providernet, rtn_val='mtu')[0])
 
     if vm_test_mtu != vm_observer_mtu:
         LOG.warning("Mismatched MTUs for data network(s) launched for VMs, taking the smaller one")

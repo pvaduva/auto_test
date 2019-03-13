@@ -7,7 +7,7 @@ from utils.tis_log import LOG
 from utils import cli
 from consts.auth import Tenant
 from consts.cli_errs import NetworkingErr
-from keywords import host_helper, network_helper, common
+from keywords import host_helper, network_helper, common, system_helper
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -22,7 +22,7 @@ def check_alarms():
 @fixture(scope='module', autouse=True)
 def providernet_(request):
 
-    providernets = network_helper.get_providernets(strict=True, type='vxlan')
+    providernets = system_helper.get_data_networks(network_type='vxlan')
     if not providernets:
         skip("No vxlan provider-net configured")
 
@@ -237,7 +237,7 @@ def prepare_segmentation_range(request):
         table_ = table_parser.table(output)
         provider_id = table_parser.get_value_two_col_table(table_, 'id')
     else:
-        provider_id = network_helper.get_providernets(strict=True, type='vxlan', name=provider)[0]
+        provider_id = system_helper.get_data_networks(network_type='vxlan', name=provider)[0]
 
     range_name = provider+"_range"
     range_name = create_vxlan_providernet_range(provider_id, range_name=range_name, range_min=min_rang,
@@ -322,7 +322,7 @@ def multiple_provider_net_range(request):
             table_ = table_parser.table(out)
             provider_ids.append(table_parser.get_value_two_col_table(table_, 'id'))
         else:
-            provider_ids.append(network_helper.get_providernets(strict=True, type='vxlan', name=provider)[0])
+            provider_ids.append(system_helper.get_data_networks(network_type='vxlan', name=provider)[0])
 
     # Create interface to associate with the two provider-nets
     nova_hosts = host_helper.get_hypervisors(state='up', status='enabled')

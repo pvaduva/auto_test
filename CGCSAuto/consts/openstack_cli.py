@@ -29,7 +29,6 @@ NEUTRON_MAP = {
     # below are wrs extensions mapping
     'host-bind-interface': 'host bind interface',
     'host-unbind-interface': 'host unbind interface',
-    'net-list-on-providernet': 'net list on providernet',
     'portforwarding-create': 'portforwarding create',
     'portforwarding-delete': 'portforwarding delete',
     'portforwarding-list': 'portforwarding list',
@@ -39,7 +38,6 @@ NEUTRON_MAP = {
     'providernet-connectivity-test-schedule': 'providernet connectivity test schedule',
     'providernet-create': 'providernet create',
     'providernet-delete': 'providernet delete',
-    'providernet-list': 'providernet list',
     'providernet-range-create': 'providernet range create',
     'providernet-range-delete': 'providernet range delete',
     'providernet-range-list': 'providernet range list',

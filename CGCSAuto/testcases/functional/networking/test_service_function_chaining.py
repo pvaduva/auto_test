@@ -2,7 +2,7 @@ import time
 from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
-from keywords import vm_helper, host_helper, network_helper, nova_helper
+from keywords import vm_helper, host_helper, network_helper, nova_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -15,7 +15,7 @@ def check_system():
         skip("Less than 3 hypervisors on system. Skip the test.")
 
     LOG.info("check if the lab has vxlan enabled network")
-    providernets = network_helper.get_providernets(rtn_val='name', strict=True, type='vxlan')
+    providernets = system_helper.get_data_networks(rtn_val='name', network_type='vxlan')
     if not providernets:
         skip("Vxlan provider-net not configured")
 
