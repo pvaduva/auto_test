@@ -3,6 +3,7 @@ import os
 import re
 import threading
 import time
+from urllib.request import urlopen
 
 import setups
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
@@ -4058,11 +4059,21 @@ def update_pxeboot_ks_files(lab, tuxlab_conn, feed_path):
 
     controller0_node = lab['controller-0']
     lab_name = controller0_node.host_name
+
     LOG.info("Controller-0 node name is {}".format(lab_name))
-    if re.search(r"-0\d$", lab_name):
-        lab_name = lab_name.replace('-0', '-')
-    LOG.info("Controller-0 node name is {}".format(lab_name))
-    base_url = "http://128.224.151.254/umalab/{}_feed".format(lab_name)
+    feed_url = "http://128.224.151.254/umalab/{}_feed".format(lab_name)
+    if urlopen(feed_url).getcode() != 200:
+        msg = "The tuxlab feed url {} is not valid for lab {}".format(feed_url, lab['short_name'])
+        if re.search(r"-0\d$", lab_name):
+            lab_name = lab_name.replace('-0', '-')
+            feed_url = "http://128.224.151.254/umalab/{}_feed".format(lab_name)
+            if urlopen(feed_url).getcode() != 200:
+                raise exceptions.InstallError(msg)
+        else:
+            raise exceptions.InstallError(msg)
+
+    LOG.info("The tuxlab feed url is {}".format(feed_url))
+    #base_url = "http://128.224.151.254/umalab/{}_feed".format(lab_name)
     tuxlab_conn.exec_cmd("chmod 755 {}/*.cfg".format(feed_path), fail_ok=False)
 
     tuxlab_conn.exec_cmd("cp -r {}/pxeboot/EFI/* {}/EFI/".format(feed_path, feed_path), fail_ok=False)
@@ -4070,7 +4081,7 @@ def update_pxeboot_ks_files(lab, tuxlab_conn, feed_path):
     tuxlab_conn.exec_cmd("ln -sf {}/grub.cfg {}/EFI/grub.cfg".format(feed_path, feed_path), fail_ok=False)
 
     cmd = """sed -i "s#xxxHTTP_URLxxx#{}#g;s#xxxHTTP_URL_PATCHESxxx#{}/patches#g;s#NUM_DIRS#2#g" {}/pxeboot/*.cfg""".\
-        format( base_url, base_url, feed_path)
+        format( feed_url, feed_url, feed_path)
     tuxlab_conn.exec_cmd(cmd, fail_ok=False)
     cmd = "cp {}/pxeboot/pxeboot_controller.cfg {}/yow-tuxlab2_controller.cfg".format(feed_path, feed_path)
     tuxlab_conn.exec_cmd(cmd, fail_ok=False)
