@@ -1486,7 +1486,7 @@ def wait_for_swact_complete_tel_session(before_host, swact_start_timeout=HostTim
     end_swact_start = start + swact_start_timeout
     swacted = False
     while not swacted:
-        host_telnet_session.write_line("source /etc/nova/openrc")
+        host_telnet_session.write_line("source /etc/platform/openrc")
         index, match, output = host_telnet_session.expect([bytes(Prompt.ADMIN_PROMPT, 'utf-8')], timeout=2)
         if match:
             swacted = True

@@ -73,7 +73,7 @@ class HeatStacks:
     NAME = 'heat_stacks'
     LOG_PATH = '/var/log/bash.log'
     START = 'launch_stacks.sh lab_setup.conf'
-    END = 'source /etc/nova/openrc'
+    END = 'source /etc/platform/openrc'
 
 
 class VolCreate:

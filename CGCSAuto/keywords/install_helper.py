@@ -809,9 +809,9 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
             raise exceptions.InstallError(msg)
 
     if conf_file:
-        cmd = "cd; source /etc/nova/openrc; ./{}.sh -f {}".format(script, conf_file)
+        cmd = "cd; source /etc/platform/openrc; ./{}.sh -f {}".format(script, conf_file)
     else:
-        cmd = "cd; source /etc/nova/openrc; ./{}.sh".format(script)
+        cmd = "cd; source /etc/platform/openrc; ./{}.sh".format(script)
 
     con_ssh.set_prompt(Prompt.ADMIN_PROMPT)
     rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout, fail_ok=fail_ok)
@@ -1486,7 +1486,7 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
 
             LOG.warn('checking system states')
 
-            cmd = 'cd; source /etc/nova/openrc'
+            cmd = 'cd; source /etc/platform/openrc'
             rc, output = connection.exec_cmd(cmd)
             assert rc == 0, \
                 'Failed to source the openrc after restore system configuration, rc:{}, output:\n{}'.format(rc, output)
@@ -2790,7 +2790,7 @@ def run_cpe_compute_config_complete(controller0_node, controller0):
         controller0_node.telnet_conn = open_telnet_session(controller0_node)
         controller0_node.telnet_conn.login()
 
-    controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
+    controller0_node.telnet_conn.exec_cmd("cd; source /etc/platform/openrc")
 
     telnet_client = controller0_node.telnet_conn
 
@@ -2825,7 +2825,7 @@ def run_cpe_compute_config_complete(controller0_node, controller0):
 
     for _ in range(40):
         try:
-            controller0_node.telnet_conn.exec_cmd('source /etc/nova/openrc')
+            controller0_node.telnet_conn.exec_cmd('source /etc/platform/openrc')
             if rc == 0:
                 rc, output = controller0_node.telnet_conn.exec_cmd('system host-show {}'.format(controller0))
                 if rc == 0 and output.strip():
@@ -2834,7 +2834,7 @@ def run_cpe_compute_config_complete(controller0_node, controller0):
         except exceptions.TelnetError as e:
             LOG.warn('got error:{}'.format(e))
 
-        LOG.info('{} is not ready yet, failed to source /etc/nova/openrc, continue to wait'.format(controller0))
+        LOG.info('{} is not ready yet, failed to source /etc/platform/openrc, continue to wait'.format(controller0))
         time.sleep(15)
 
     LOG.info('closing the telnet connnection to node:{}'.format(controller0))
@@ -3406,7 +3406,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         LOG.info("Controller configured")
         admin_prompt = r"\[.*\(keystone_admin\)\]\$ "
         con_telnet.set_prompt(admin_prompt)
-        con_telnet.exec_cmd('source /etc/nova/openrc')
+        con_telnet.exec_cmd('source /etc/platform/openrc')
         update_auth_url(ssh_con=None, use_telnet=True, con_telnet=con_telnet)
         host_helper.wait_for_hosts_states(controller0.name,
                                           availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],

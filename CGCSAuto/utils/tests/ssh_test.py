@@ -21,7 +21,7 @@ def setup():
     global ssh_client
     ssh_client = SSHClient(host=hostname, user=username, password=password)
     ssh_client.connect()
-    ssh_client.send("source /etc/nova/openrc")
+    ssh_client.send("source /etc/platform/openrc")
     ssh_client.prompt = ssh.ADMIN_PROMPT
     ssh_client.expect()
 
@@ -70,7 +70,7 @@ def test_send_cmd():
     ssh_client.flush()
     output = ssh_client.exec_cmd('date')
     assert 'eth' not in output
-    ssh_client.send(r'source /etc/nova/openrc')
+    ssh_client.send(r'source /etc/platform/openrc')
     ssh_client.set_prompt('.*keystone_admin.*')
     ssh_client.expect()
     exit_code, output = ssh_client.exec_cmd('system host-list')
@@ -102,7 +102,7 @@ def test_ssh_from_ssh():
 def test_expect_list():
     LOG.tc_func_start()
     ssh_client.connect()
-    ssh_client.send(r'source /etc/nova/openrc')
+    ssh_client.send(r'source /etc/platform/openrc')
     ssh_client.expect('.*keystone_admin.*')
     ssh_client.set_prompt('.*keystone_admin.*')
     ssh_client.send(r'system host-list', flush=True)

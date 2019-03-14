@@ -125,7 +125,7 @@ def test_install_cloned_image(install_clone_setup):
 
     LOG.info("Source Keystone user admin environment ...")
 
-    #controller0_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
+    #controller0_node.telnet_conn.exec_cmd("cd; source /etc/platform/openrc")
 
     LOG.tc_step ("Checking controller-0 hardware ....")
     install_helper.check_cloned_hardware_status('controller-0')

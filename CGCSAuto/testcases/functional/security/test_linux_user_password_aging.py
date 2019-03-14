@@ -383,7 +383,7 @@ def test_wrsroot_password_propagation():
 
 
 def swact_host_after_reset_wrsroot_raw(connect, active_controller_name):
-    cmd = 'source /etc/nova/openrc; system host-swact {}'.format(active_controller_name)
+    cmd = 'source /etc/platform/openrc; system host-swact {}'.format(active_controller_name)
     prompt = r'controller-[01] \~\(keystone_admin\)'
     index, output = execute_cmd(connect, cmd, allow_fail=True, prompt=prompt)
     LOG.info('returned: index:{}, output:{}, cmd:{}\n'.format(index, output, cmd))

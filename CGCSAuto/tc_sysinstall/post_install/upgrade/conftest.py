@@ -309,7 +309,7 @@ def get_system_active_controller():
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    cmd = "source /etc/nova/openrc; system servicegroup-list"
+    cmd = "source /etc/platform/openrc; system servicegroup-list"
     table_ = table_parser.table(con_ssh.exec_cmd(cmd)[1])
     table_ = table_parser.filter_table(table_, service_group_name='controller-services')
     controllers = table_parser.get_values(table_, 'hostname', state='active', strict=False)

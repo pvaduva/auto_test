@@ -54,7 +54,7 @@ def test_cgcslabsetup(con_ssh=None):
     cmd = '''echo {} | sudo -S chmod -R 755 /var/log'''.format(WRSPASS)
     code, output = con_ssh.exec_cmd(cmd)
     sleep(10)
-    cmd = '''source /etc/nova/openrc'''
+    cmd = '''source /etc/platform/openrc'''
     code, output = con_ssh.exec_cmd(cmd)
     sleep(10)
 

@@ -719,7 +719,7 @@ def test_restore(restore_setup):
     LOG.info("Source Keystone user admin environment ...")
     LOG.info("set prompt to:{}, telnet_conn:{}".format(controller_prompt, controller_node.telnet_conn))
 
-    controller_node.telnet_conn.exec_cmd("cd; source /etc/nova/openrc")
+    controller_node.telnet_conn.exec_cmd("cd; source /etc/platform/openrc")
 
 
     con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
