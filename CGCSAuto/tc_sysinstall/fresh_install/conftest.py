@@ -151,7 +151,7 @@ def pytest_configure(config):
     print("{:<20}: {}".format('LOG_DIR', ProjVar.get_var('LOG_DIR')))
     print('')
 
-    if resume_install and int(resume_install) >= 4:
+    if resume_install:
         try:
             con0_ip = install_vars.get('LAB', {}).get('controller-0 ip')
             if con0_ip:
@@ -159,7 +159,7 @@ def pytest_configure(config):
                     setups.set_build_info(con_ssh=con0_ssh)
                     setups.set_session(con_ssh=con0_ssh)
         except:
-            LOG.warning("Unable to ssh to controller-0")
+            pass
 
 
 def pytest_runtest_teardown(item):
