@@ -492,6 +492,7 @@ vif_map = {
     'e1000': 'normal',
     'rt18139': 'normal',
     'virtio': 'normal',
+    'avp': 'normal',
     'pci-sriov': 'direct',
     'pci-passthrough': 'direct-physical'}
 
@@ -511,20 +512,23 @@ def _convert_vnics(nics, con_ssh, auth_info, cleanup):
     converted_nics = []
     for nic in nics:
         nic = dict(nic)     # Do not modify original nic param
-        if 'vif-model' in nic and 'avp' != nic['vif-model']:
-            # temporarily ignore avp until avp change implemented
+        if 'vif-model' in nic:
             vif_model = nic.pop('vif-model')
             if vif_model:
                 vnic_type = vif_map[vif_model]
+                vif_model_ = vif_model if (system_helper.is_avs() and vnic_type == 'normal') else None
                 if 'port-id' in nic:
                     port_id = nic['port-id']
-                    if network_helper.get_port_values(port=port_id, fields='binding_vnic_type',
-                                                      con_ssh=con_ssh, auth_info=auth_info)[0] != vnic_type:
-                        network_helper.set_port(port_id, vnic_type=vnic_type, con_ssh=con_ssh, auth_info=auth_info)
+                    current_vnic_type, current_vif_model = network_helper.get_port_values(
+                        port=port_id, fields=('binding_vnic_type', 'binding_profile'), con_ssh=con_ssh,
+                        auth_info=auth_info)
+                    if current_vnic_type != vnic_type or (vif_model_ and vif_model_ not in current_vif_model):
+                        network_helper.set_port(port_id, vnic_type=vnic_type, con_ssh=con_ssh, auth_info=auth_info,
+                                                wrs_vif=vif_model_)
                 else:
                     net_id = nic.pop('net-id')
                     port_name = common.get_unique_name('port_{}'.format(vif_model))
-                    port_id = network_helper.create_port(net_id, name=port_name,
+                    port_id = network_helper.create_port(net_id, name=port_name, wrs_vif=vif_model_,
                                                          vnic_type=vnic_type, con_ssh=con_ssh, auth_info=auth_info,
                                                          cleanup=cleanup)[1]
                     nic['port-id'] = port_id
@@ -4014,7 +4018,7 @@ def write_in_vm(vm_id, end_event, start_event=None, expect_timeout=120, thread_t
     return thread
 
 
-def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=None, fail_ok=False, auth_info=None,
+def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, fail_ok=False, auth_info=None,
                      con_ssh=None):
     """
     Attach interface to a vm via port_id OR net_id
@@ -4023,7 +4027,6 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
         port_id (str): port to attach to vm
         net_id (str): port from given net to attach to vm
         fixed_ip (str): fixed ip for attached interface. Only works when attaching interface via net_id
-        vif_model (str): vif model for the interface
         fail_ok (bool):
         auth_info (dict):
         con_ssh (SSHClient):
@@ -4044,7 +4047,6 @@ def attach_interface(vm_id, port_id=None, net_id=None, fixed_ip=None, vif_model=
         '--port-id': port_id,
         '--net-id': net_id,
         '--fixed-ip': fixed_ip,
-        '--wrs-if:vif_model': vif_model,
     }
 
     for key, val in args_dict.items():

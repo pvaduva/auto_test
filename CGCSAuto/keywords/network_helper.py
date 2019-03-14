@@ -3185,7 +3185,7 @@ def create_port(net_id, name, project=None, fixed_ips=None, device_id=None, devi
         '--disable': True if enable_port is False else None,
         '--qos-policy': qos_pol,
         '--dns-name': dns_name,
-        '--wrs-binding:vif_model': wrs_vif,
+        '--binding-profile vif_model': wrs_vif,
         '--fixed-ip': fixed_ips,
         '--allowed-address-pair': allowed_addr_pairs,
         '--security-group': security_groups,
@@ -3260,7 +3260,7 @@ def delete_port(port_id, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=N
 
 
 def set_port(port_id, name=None, fixed_ips=None, no_fixed_ip=None, device_id=None, device_owner=None,
-             port_security=None, enable_port=None, mac_addr=None, vnic_type=None,
+             port_security=None, enable_port=None, mac_addr=None, vnic_type=None, wrs_vif=None,
              security_groups=None, no_security_groups=None, qos_pol=None, host_id=None,
              allowed_addr_pairs=None, no_allowed_addr_pairs=None, dns_name=None, description=None,
              tag=None, no_tag=None, fail_ok=False, auth_info=None, con_ssh=None):
@@ -3287,6 +3287,7 @@ def set_port(port_id, name=None, fixed_ips=None, no_fixed_ip=None, device_id=Non
         '--no-allowed-address': no_allowed_addr_pairs,
         '--tag': tag,
         '--no-tag': no_tag,
+        '--binding-profile vif_model': wrs_vif,
     }
     args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True, vals_sep=','), port_id)
     code, out = cli.openstack('port set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
