@@ -3978,7 +3978,7 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None,  tuxlab_conn=None, i
     test_server_attr['ssh_conn'] = test_server_conn
     test_server_obj = Server(**test_server_attr)
     media_iso_path = "/media/iso/{}".format(barcode)
-    temp_iso_path = "/tmp/iso/{}".format(barcode)
+    temp_iso_path = "/sandbox/iso/{}".format(barcode)
     if test_server_conn.exec_cmd("test -f {}".format(temp_iso_path)) == 0:
         test_server_conn.exec_sudo_cmd("rm -rf {}/*".format(temp_iso_path))
     else:
@@ -4047,8 +4047,8 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None,  tuxlab_conn=None, i
 
     cmd = "umount {}".format(media_iso_path)
     test_server_conn.exec_sudo_cmd(cmd, fail_ok=False)
-    LOG.info("Deleting the bootimage.iso from /tmp/iso/{}".format(barcode))
-    test_server_conn.exec_sudo_cmd("rm -f /tmp/iso/{}/*.iso".format(barcode), fail_ok=False)
+    LOG.info("Deleting the bootimage.iso from {}".format(temp_iso_path))
+    test_server_conn.exec_sudo_cmd("rm -f {}/*.iso".format(temp_iso_path), fail_ok=False)
 
     test_server_conn.close()
 
@@ -4062,7 +4062,12 @@ def update_pxeboot_ks_files(lab, tuxlab_conn, feed_path):
 
     LOG.info("Controller-0 node name is {}".format(lab_name))
     feed_url = "http://128.224.151.254/umalab/{}_feed".format(lab_name)
-    if urlopen(feed_url).getcode() != 200:
+    try:
+        url_code = urlopen(feed_url).getcode()
+    except:
+        url_code = 404
+
+    if url_code != 200:
         msg = "The tuxlab feed url {} is not valid for lab {}".format(feed_url, lab['short_name'])
         if re.search(r"-0\d$", lab_name):
             lab_name = lab_name.replace('-0', '-')
