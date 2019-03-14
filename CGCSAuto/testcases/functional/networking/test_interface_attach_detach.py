@@ -40,7 +40,7 @@ def base_vm():
 @mark.nics
 @mark.parametrize(('guest_os', 'if_attach_arg', 'vifs'), [
     ('tis-centos-guest', 'net_id', [('virtio', 2)]),
-    ('tis-centos-guest', 'net_id', [('avp', 8), ('rtl8139', 7)]),
+    ('tis-centos-guest', 'port_id', [('avp', 8), ('rtl8139', 7)]),
     ('vxworks', 'net_id', [('e1000', 0)])
 ], ids=id_gen)
 def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_for_ovs, base_vm):
@@ -335,9 +335,9 @@ def test_vm_with_max_vnics_attached_during_boot(base_vm, guest_os, nic_arg, boot
 
     destination_host = vm_helper.get_dest_host_for_live_migrate(vm_id=vm_under_test)
     if destination_host:
-        LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live-migrate --force'))
-        vm_helper.live_migrate_vm(vm_id=vm_under_test, destination_host=destination_host, force=True)
-        _ping_vm_data(vm_under_test, base_vm_id, action='live migrate --force')
+        # LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live-migrate --force'))
+        # vm_helper.live_migrate_vm(vm_id=vm_under_test, destination_host=destination_host, force=True)
+        # _ping_vm_data(vm_under_test, base_vm_id, action='live migrate --force')
 
         LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'live-migrate'))
         vm_helper.live_migrate_vm(vm_id=vm_under_test)

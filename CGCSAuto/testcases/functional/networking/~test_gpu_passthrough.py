@@ -3,7 +3,7 @@ import time
 from pytest import fixture
 from utils.tis_log import LOG
 
-from consts.cgcs import VMStatus, FlavorSpec, GuestImages, DevClassID
+from consts.cgcs import FlavorSpec, GuestImages, DevClassID
 from keywords import network_helper, nova_helper, vm_helper, glance_helper, system_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -18,10 +18,10 @@ def setup_alias(request):
     def revert_alias_setup():
 
         service = 'nova'
-        gpu_uuid = system_helper.get_service_parameter_values \
-                                                (rtn_value='uuid', service=service, section='pci_alias', name='gpu')[0]
-        user_uuid = system_helper.get_service_parameter_values \
-                                                (rtn_value='uuid', service=service, section='pci_alias', name='user')[0]
+        gpu_uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service,
+                                                              section='pci_alias', name='gpu')[0]
+        user_uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service,
+                                                               section='pci_alias', name='user')[0]
         LOG.fixture_step("Delete service parameter uuid {} ".format(gpu_uuid))
         system_helper.delete_service_parameter(uuid=gpu_uuid)
         LOG.fixture_step("Delete service parameter uuid {} ".format(user_uuid))
@@ -57,7 +57,7 @@ def test_gpu_passthrough(setup_alias):
 
     nova_gpu_alias, nova_usb_alias = setup_alias
 
-    #initialize parameter for basic operation
+    # initialize parameter for basic operation
     name = 'gpu_passthrough'
     guest_os = 'centos_gpu'
     pf = 1
@@ -85,7 +85,8 @@ def test_gpu_passthrough(setup_alias):
     nics = [mgmt_nic, tenant_nic]
 
     LOG.tc_step("Boot a vm  {} with pci-alias and flavor ".format(nova_gpu_alias, flavor_id))
-    vm_id = vm_helper.boot_vm(name, flavor=flavor_id, source='image', source_id=image_id, nics=nics, cleanup='function')[1]
+    vm_id = vm_helper.boot_vm(name, flavor=flavor_id, source='image', source_id=image_id, nics=nics,
+                              cleanup='function')[1]
 
     actual_gpu_pfs_used = _calculate_pf_used(nova_gpu_alias)
     expected_gpu_pfs_used = initial_gpu_pfs_used + pf
@@ -99,10 +100,12 @@ def test_gpu_passthrough(setup_alias):
     vm_helper.delete_vms(vms=vm_id, stop_first=False)
 
     actual_gpu_pfs_used = _calculate_pf_used(nova_gpu_alias)
-    assert actual_gpu_pfs_used == initial_gpu_pfs_used, "actual gpu pci pfs is not equal to expected pci pfs after vm delete"
+    assert actual_gpu_pfs_used == initial_gpu_pfs_used, \
+        "actual gpu pci pfs is not equal to expected pci pfs after vm delete"
 
     actual_usb_pfs_used = _calculate_pf_used(nova_usb_alias)
-    assert actual_usb_pfs_used == initial_usb_pfs_used, "actual usb pci pfs is not equal to expected pci pfs after vm delete"
+    assert actual_usb_pfs_used == initial_usb_pfs_used, \
+        "actual usb pci pfs is not equal to expected pci pfs after vm delete"
 
     LOG.tc_step("Deleting nova service parameter service parameters for gpu & usb")
 
@@ -124,6 +127,3 @@ def _calculate_pf_used(nova_pci_alias):
     pf_used = network_helper.get_pci_device_list_values(field='pci_pfs_used', **{'PCI Alias': nova_pci_alias})[0]
     LOG.info("Initial {} pci_pfs_used: {}".format(nova_pci_alias, pf_used))
     return pf_used
-
-
-
