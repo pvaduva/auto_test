@@ -4,14 +4,13 @@ import time
 
 from pytest import skip
 
+import setups
 from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \
     keystone_helper
 from utils import cli
-
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
-from setups import initialize_server
 from consts.auth import Tenant
 from consts.timeout import InstallTimeout
 from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState
@@ -165,7 +164,8 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
     if not load_path.endswith("/"):
         load_path += "/"
     if not sys_version:
-        sys_version = ProjVar.get_var('SW_VERSION')[0]
+        sys_version = ProjVar.get_var('SW_VERSION')
+        sys_version = sys_version[0] if sys_version else 'default'
 
     if guest_path is None or guest_path == BuildServerPath.DEFAULT_GUEST_IMAGE_PATH:
         guest_path = set_guest_image_var(sys_version=sys_version)
@@ -994,7 +994,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     servers = list({file_server, iso_host, patch_server, guest_server})
     LOG.fixture_step("Establishing connection to {}".format(servers))
 
-    bld_server = initialize_server(build_server)
+    bld_server = setups.initialize_server(build_server)
     dc_float_ip = None
     install_sub = None
     if subcloud:
@@ -1018,20 +1018,20 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         if file_server == bld_server.name:
             file_server_obj = bld_server
         else:
-            file_server_obj = initialize_server(file_server)
+            file_server_obj = setups.initialize_server(file_server)
 
     if iso_host == bld_server.name:
         iso_host_obj = bld_server
     else:
-        iso_host_obj = initialize_server(iso_host)
+        iso_host_obj = setups.initialize_server(iso_host)
     if patch_server == bld_server.name:
         patch_server = bld_server
     else:
-        patch_server = initialize_server(patch_server)
+        patch_server = setups.initialize_server(patch_server)
     if guest_server == bld_server.name:
         guest_server_obj = bld_server
     else:
-        guest_server_obj = initialize_server(guest_server)
+        guest_server_obj = setups.initialize_server(guest_server)
 
     set_preinstall_projvars(build_dir=build_dir, build_server=bld_server)
 

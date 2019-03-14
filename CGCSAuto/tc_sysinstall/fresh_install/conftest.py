@@ -8,6 +8,7 @@ from utils.jenkins_utils import build_info
 from consts.proj_vars import InstallVars, ProjVar
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from tc_sysinstall.fresh_install import fresh_install_helper
+from keywords import host_helper
 
 ########################
 # Command line options #
@@ -149,6 +150,16 @@ def pytest_configure(config):
             print("{:<20}: {}".format(var, value))
     print("{:<20}: {}".format('LOG_DIR', ProjVar.get_var('LOG_DIR')))
     print('')
+
+    if resume_install and int(resume_install) >= 4:
+        try:
+            con0_ip = install_vars.get('LAB', {}).get('controller-0 ip')
+            if con0_ip:
+                with host_helper.ssh_to_host(con0_ip, timeout=60) as con0_ssh:
+                    setups.set_build_info(con_ssh=con0_ssh)
+                    setups.set_session(con_ssh=con0_ssh)
+        except:
+            LOG.warning("Unable to ssh to controller-0")
 
 
 def pytest_runtest_teardown(item):
