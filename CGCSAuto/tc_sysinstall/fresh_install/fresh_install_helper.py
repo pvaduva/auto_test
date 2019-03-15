@@ -486,7 +486,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
             host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400,
                                     check_hypervisor_up=False, check_webservice_up=False)
         else:
-            host_helper.unlock_hosts(hostnames, con_ssh=con_ssh)
+            host_helper.unlock_hosts(hostnames, con_ssh=con_ssh, fail_ok=False)
         kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=3600)
 
     if LOG.test_step == final_step or test_step == final_step:
@@ -540,14 +540,11 @@ def clear_post_install_alarms(con_ssh=None):
 def attempt_to_run_post_install_scripts(controller0_node=None):
     test_step = "Attempt to run post install scripts"
     LOG.tc_step(test_step)
-    if do_step(test_step):
-        rc, msg = install_helper.post_install(controller0_node=controller0_node)
-        LOG.info(msg)
-        assert rc >= 0, msg
-
-    # TODO Workaround for kubernetes install
-    # if InstallVars.get_install_var("KUBERNETES"):
-    #     kubernetes_post_install()
+    LOG.info("Skipping step")
+    # if do_step(test_step):
+    #     rc, msg = install_helper.post_install(controller0_node=controller0_node)
+    #     LOG.info(msg)
+    #     assert rc >= 0, msg
 
     reset_global_vars()
 
