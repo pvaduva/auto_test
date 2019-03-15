@@ -440,12 +440,46 @@ def pull_docker_image(name, tag=None, digest=None, con_ssh=None, timeout=300, fa
     return 0, image_id
 
 
-def push_docker_image(name, tag=None, con_ssh=None, timeout=300, fail_ok=False):
+def login_to_docker(registry=None, user=None, password=None, con_ssh=None, fail_ok=False):
+    """
+    Login to docker registry
+    Args:
+        registry (str|None): default docker registry will be used when None
+        user (str|None): admin user will be used when None
+        password (str|None): admin password will be used when None
+        con_ssh (SSHClient|None):
+        fail_ok (bool):
+
+    Returns (tuple):
+        (0, <cmd_args>(str))    # login succeeded
+        (1, <std_err>(str))     # login failed
+
+    """
+    if not user:
+        user = 'admin'
+    if not password:
+        password = Tenant.get('admin').get('password')
+
+    if not registry:
+        registry = get_docker_reg_addr(con_ssh=con_ssh)
+
+    args = '-u {} -p {} {}'.format(user, password, registry)
+    LOG.info("Login to docker registry {}".format(registry))
+    code, out = exec_docker_cmd('login', args, timeout=60, fail_ok=fail_ok, con_ssh=con_ssh)
+    if code != 0:
+        return 1, out
+
+    LOG.info('Logged into docker registry successfully: {}'.format(registry))
+    return 0, args
+
+
+def push_docker_image(name, tag=None, login_registry=None, con_ssh=None, timeout=300, fail_ok=False):
     """
     Push docker image via docker image push.
     Args:
         name:
         tag:
+        login_registry (str|None): when set, login to given docker registry before push
         con_ssh:
         timeout:
         fail_ok:
@@ -459,7 +493,10 @@ def push_docker_image(name, tag=None, con_ssh=None, timeout=300, fail_ok=False):
     if tag:
         args += ':{}'.format(tag)
 
-    LOG.info("Push docker image {}".format(args))
+    if login_registry:
+        login_to_docker(registry=login_registry, con_ssh=con_ssh)
+
+    LOG.info("Push docker image: {}".format(args))
     code, out = exec_docker_cmd('image push', args, timeout=timeout, fail_ok=fail_ok, con_ssh=con_ssh)
     if code != 0:
         return 1, out

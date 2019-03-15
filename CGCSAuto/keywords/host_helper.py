@@ -1982,9 +1982,9 @@ def modify_host_cpu(host, cpu_function, timeout=CMDTimeout.HOST_CPU_MODIFY, fail
 
     LOG.info("Post action check for host-cpu-modify...")
     table_ = table_parser.table(output)
-    table_ = table_parser.filter_table(table_, assigned_function=cpu_function)
+    threads = len(set(table_parser.get_column(table_, 'thread')))
 
-    threads = get_host_threads_count(host, con_ssh=con_ssh)
+    table_ = table_parser.filter_table(table_, assigned_function=cpu_function)
 
     for proc, num in final_args.items():
         num = int(num)
@@ -2339,30 +2339,6 @@ def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_s
         rtns.append(len(cores_on_proc))
 
     return rtns
-
-
-def get_host_threads_count(host, con_ssh=None):
-    """
-    Return number of threads for specific host.
-    Notes: when hyperthreading is disabled, the number is usually 1; when enabled, the number is usually 2.
-
-    Args:
-        host (str): hostname
-        con_ssh (SSHClient):
-
-    Returns (int): number of threads
-
-    """
-    if con_ssh is None:
-        con_ssh = ControllerClient.get_active_controller()
-
-    code, output = con_ssh.exec_sudo_cmd('''vm-topology --show topology | grep --color='never' "{}.*Threads/Core="'''.
-                                         format(host))
-    if code != 0:
-        raise exceptions.SSHExecCommandFailed("CMD stderr: {}".format(output))
-
-    pattern = r"Threads/Core=(\d),"
-    return int(re.findall(pattern, output)[0])
 
 
 def get_host_procs(hostname, con_ssh=None):
@@ -2885,12 +2861,13 @@ def get_thread_num_for_cores(log_cores, host, con_ssh=None):
                                    "{}".format(log_cores, core_thread_dict))
 
 
-def get_logcore_siblings(host, con_ssh=None):
+def get_logcore_siblings(host, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get cpu pairs for given host.
     Args:
         host (str): such as compute-1
         con_ssh (SSHClient):
+        auth_info (dict)
 
     Returns (list): list of log_core_siblings(tuple). Output examples:
         - HT enabled: [[0, 20], [1, 21], ..., [19, 39]]
@@ -2899,25 +2876,15 @@ def get_logcore_siblings(host, con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    host_topology = con_ssh.exec_sudo_cmd("vm-topology --show topology | awk '/{}/, /^[ ]*$/'".format(host),
-                                          fail_ok=False)[1]
-    table_ = table_parser.table(host_topology)
+    table_ = system_helper.get_host_cpu_list_table(host=host, con_ssh=con_ssh, auth_info=auth_info)
+    phy_cores = sorted([int(i) for i in set(table_parser.get_column(table_, 'phy_core'))])
 
-    siblings_tab = table_parser.filter_table(table_, cpu_id='sibling_id')
-    cpu_ids = [int(cpu_id) for cpu_id in siblings_tab['headers'][1:]]
-    sibling_ids = siblings_tab['values'][0][1:]
+    sibling_pairs = []
+    for phy_core in phy_cores:
+        log_cores = table_parser.get_values(table_, **{'phy_core': str(phy_core)})
+        sibling_pairs.append(log_cores)
 
-    if sibling_ids[0] == '-':
-        LOG.warning("{} has no sibling cores. Hyper-threading needs to be enabled to have sibling cores.".format(host))
-        return [[cpu_id] for cpu_id in cpu_ids]
-
-    sibling_ids = [int(sibling_id) for sibling_id in sibling_ids]
-    # find pairs and sort the cores in pair and convert to tuple (set() cannot be applied to item as list)
-    sibling_pairs = [tuple(sorted(sibling_pair)) for sibling_pair in list(zip(cpu_ids, sibling_ids))]
-    sibling_pairs = sorted(list(set(sibling_pairs)))       # remove dup pairs and sort it to start from smallest number
-    sibling_pairs = [list(sibling_pair) for sibling_pair in sibling_pairs]
-
-    LOG.info("Sibling cores for {} from vm-topology: {}".format(host, sibling_pairs))
+    LOG.info("Sibling cores for {}: {}".format(host, sibling_pairs))
     return sibling_pairs
 
 

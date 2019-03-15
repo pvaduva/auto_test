@@ -1740,7 +1740,7 @@ def get_host_cpu_list_table(host, con_ssh=None, auth_info=Tenant.get('admin')):
     Returns (dict): output of system host-cpu-list <host> parsed by table_parser
 
     """
-    output = cli.system('host-cpu-list', host, ssh_client=con_ssh, auth_info=auth_info)
+    output = cli.system('host-cpu-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info)
     table_ = table_parser.table(output)
     return table_
 

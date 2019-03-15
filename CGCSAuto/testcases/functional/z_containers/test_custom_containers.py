@@ -196,8 +196,8 @@ def test_push_docker_image_to_local_registry(controller):
         LOG.tc_step("Tag image with local registry")
         container_helper.tag_docker_image(source_image=image_id, target_name=target_name, con_ssh=con_ssh)
 
-        LOG.tc_step("Push test image to local registry from {} controller {}".format(controller, host))
-        container_helper.push_docker_image(target_name, con_ssh=con_ssh)
+        LOG.tc_step("Login to local docker registry and push test image from {} controller {}".format(controller, host))
+        container_helper.push_docker_image(target_name, login_registry=reg_addr, con_ssh=con_ssh)
 
         LOG.tc_step("Remove cached test images and pull from local registry on {}".format(host))
         remove_cache_and_pull(con_ssh=con_ssh, name=target_name)

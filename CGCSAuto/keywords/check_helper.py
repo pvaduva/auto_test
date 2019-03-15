@@ -109,7 +109,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
     if numa_num is None:
         numa_num = 1
 
-    is_ht_host = system_helper.is_hyperthreading_enabled(vm_host)
+    is_ht_host = True if len(log_cores_siblings[0]) > 1 else False
 
     if expt_increase is None:
         pcpus = vcpus
@@ -186,11 +186,11 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
     current_vcpus = vcpus if current_vcpus is None else current_vcpus
     max_vcpus = vcpus
 
-    if is_ht is None:
-        is_ht = system_helper.is_hyperthreading_enabled(vm_host)
-
     if not host_log_core_siblings:
         host_log_core_siblings = host_helper.get_logcore_siblings(host=vm_host, con_ssh=con_ssh)
+
+    if is_ht is None:
+        is_ht = True if len(host_log_core_siblings[0]) > 1 else False
 
     expt_cpu_pol = 'sha' if cpu_pol is None or 'sha' in cpu_pol else 'ded'
     instance_topology = vm_helper.get_instance_topology(vm_id, con_ssh=con_ssh)
