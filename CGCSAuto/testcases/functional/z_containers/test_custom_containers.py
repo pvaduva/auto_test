@@ -197,7 +197,8 @@ def test_push_docker_image_to_local_registry(controller):
         container_helper.tag_docker_image(source_image=image_id, target_name=target_name, con_ssh=con_ssh)
 
         LOG.tc_step("Login to local docker registry and push test image from {} controller {}".format(controller, host))
-        container_helper.push_docker_image(target_name, login_registry=reg_addr, con_ssh=con_ssh)
+        container_helper.login_to_docker(registry=reg_addr, con_ssh=con_ssh)
+        container_helper.push_docker_image(target_name, con_ssh=con_ssh)
 
         LOG.tc_step("Remove cached test images and pull from local registry on {}".format(host))
         remove_cache_and_pull(con_ssh=con_ssh, name=target_name)
@@ -206,8 +207,9 @@ def test_push_docker_image_to_local_registry(controller):
         if controllers:
             other_host = controllers[0]
             with host_helper.ssh_to_host(other_host, con_ssh=con_ssh) as other_ssh:
-                LOG.tc_step( "Remove cached test images on the other controller {} if exists and pull from local "
+                LOG.tc_step("Remove cached test images on the other controller {} if exists and pull from local "
                              "registry".format(other_host))
+                container_helper.login_to_docker(registry=reg_addr, con_ssh=other_ssh)
                 remove_cache_and_pull(con_ssh=other_ssh, name=target_name, fail_ok=True)
                 container_helper.remove_docker_images(images=(target_name,), con_ssh=other_ssh)
 
