@@ -687,6 +687,10 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None, use
     Returns (str): image_id
 
     """
+    # TODO: temp workaround
+    if guest_os in ['opensuse_12', 'win_2016']:
+        skip('Skip test with 20G+ virtual size image for now - CGTS-10776')
+
     nat_name = ProjVar.get_var('NATBOX').get('name')
     if nat_name == 'localhost' or nat_name.startswith("128.224"):
         if re.search('win|rhel|opensuse', guest_os):

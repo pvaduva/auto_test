@@ -901,7 +901,7 @@ def wait_for_tasks_affined(host, timeout=180, fail_ok=False, con_ssh=None, auth_
 
 def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con_ssh=None,
                  auth_info=Tenant.get('admin'), check_hypervisor_up=False, check_webservice_up=False,
-                 use_telnet=False, con_telnet=None):
+                 check_nodes_ready=True, use_telnet=False, con_telnet=None):
 
     """
     Unlock given hosts. Please use unlock_host() keyword if only one host needs to be unlocked.
@@ -913,6 +913,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         auth_info (dict):
         check_hypervisor_up (bool): Whether to check if host is up in nova hypervisor-list
         check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
+        check_nodes_ready (bool)
         use_telnet
         con_telnet
 
@@ -1038,9 +1039,11 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
                 # res[host] = 7,
         # hosts_avail = list(set(hosts_avail) - set(hosts_affine_incomplete))
 
-    if hosts_avail and not use_telnet:
+    if check_nodes_ready and (hosts_avail or hosts_degrd) and not use_telnet:
         from keywords.kube_helper import wait_for_nodes_ready
-        hosts_not_ready = wait_for_nodes_ready(hosts=hosts_avail, timeout=30, con_ssh=con_ssh, fail_ok=fail_ok)[1]
+        hosts_to_wait = list(hosts_avail)
+        hosts_to_wait += hosts_degrd
+        hosts_not_ready = wait_for_nodes_ready(hosts=hosts_to_wait, timeout=120, con_ssh=con_ssh, fail_ok=fail_ok)[1]
         if hosts_not_ready:
             hosts_avail = list(set(hosts_avail) - set(hosts_not_ready))
             for host in hosts_not_ready:
@@ -2798,8 +2801,8 @@ def get_hypervisor_info(hosts, rtn_val='status', con_ssh=None, auth_info=Tenant.
 
     hosts_vals = {}
     for host in hosts:
-        table_ = table_parser.table(cli.openstack('hypervisor show', host, ssh_client=con_ssh, auth_info=auth_info),
-                                    combine_multiline_entry=True)
+        table_ = table_parser.table(cli.openstack('hypervisor show --fit-width', host, ssh_client=con_ssh,
+                                                  auth_info=auth_info), combine_multiline_entry=True)
         vals = []
         for field_ in rtn_val:
             val = table_parser.get_value_two_col_table(table_, field=field_, strict=True, merge_lines=True)

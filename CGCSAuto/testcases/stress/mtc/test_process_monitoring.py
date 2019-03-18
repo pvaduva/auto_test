@@ -859,7 +859,7 @@ class MonitoredProcess:
             sleep_time = (retries + 1) * wait_after_each_kill
             if IS_SIMPLEX and expected['operational'] == 'Disabled':
                 LOG.info("Simplex system - check ssh disconnected")
-                reached = host_helper.wait_for_ssh_disconnect(fail_ok=True, timeout=sleep_time + 120)
+                reached = host_helper.wait_for_ssh_disconnect(fail_ok=True, timeout=sleep_time + 300)
 
                 if reached:
                     host_helper.recover_simplex(fail_ok=True)

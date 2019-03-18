@@ -1,4 +1,5 @@
-import random, time
+import random
+import time
 
 from pytest import mark, fixture, skip
 
@@ -19,6 +20,7 @@ def id_gen(val):
         return '-'.join(val)
 
 
+# TODO: remove test for now due to flavor spec validation is unavailable upstream.
 @mark.parametrize(('cpu_policy', 'cpu_thread_policy', 'shared_vcpu', 'min_vcpus', 'expt_err'), [
     mark.p1((None, 'isolate', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR')),
     mark.p1((None, 'require', None, None, 'CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR')),
@@ -41,7 +43,7 @@ def id_gen(val):
     # mark.p2(('dedicated', 'require', None, '2', 'CPUThreadErr.UNSET_MIN_VCPUS')),    # Deprecated. vcpu scale
 
 ])
-def test_cpu_thread_flavor_set_negative(cpu_policy, cpu_thread_policy, shared_vcpu, min_vcpus, expt_err):
+def _test_cpu_thread_flavor_set_negative(cpu_policy, cpu_thread_policy, shared_vcpu, min_vcpus, expt_err):
     """
     Test cpu thread flavor spec cannot be set due to conflict with other flavor specs in same cli
     Args:
@@ -88,11 +90,12 @@ def test_cpu_thread_flavor_set_negative(cpu_policy, cpu_thread_policy, shared_vc
     assert expt_err_eval in output
 
 
+# TODO: remove test for now due to flavor spec validation is unavailable upstream.
 @mark.parametrize(('specs_preset', 'specs_to_set', 'expt_err'), [
     mark.p2(({FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.CPU_THREAD_POLICY: 'isolate'}, {FlavorSpec.SHARED_VCPU: '1'}, 'CPUThreadErr.UNSET_SHARED_VCPU')),
     mark.p2(({FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.SHARED_VCPU: '0'}, {FlavorSpec.CPU_THREAD_POLICY: 'require'}, 'CPUThreadErr.UNSET_SHARED_VCPU')),
 ])
-def test_cpu_thread_flavor_add_negative(specs_preset, specs_to_set, expt_err):
+def _test_cpu_thread_flavor_add_negative(specs_preset, specs_to_set, expt_err):
     """
     Test cpu thread flavor cannot be set due to conflict with existing flavor specs
 
@@ -133,13 +136,14 @@ def test_cpu_thread_flavor_add_negative(specs_preset, specs_to_set, expt_err):
     assert expt_err_eval in output
 
 
+# TODO: remove test for now due to flavor spec validation is unavailable upstream.
 @mark.p1
 @mark.parametrize('cpu_thread_policy', [
     'isolate',
     'require',
     'prefer',
 ])
-def test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
+def _test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
     """
     Test cpu policy spec cannot be deleted from flavor when cpu thread policy is also set
 
