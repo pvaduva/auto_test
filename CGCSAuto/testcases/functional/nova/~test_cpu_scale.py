@@ -57,7 +57,7 @@ def test_flavor_min_vcpus_invalid(vcpu_num, cpu_policy, min_vcpus, expected_err)
 
 @fixture(scope='module')
 def ht_and_nonht_hosts():
-    LOG.fixture_step("Look for hyper-threading enabled and disabled hosts, get VMs cores for each host")
+    LOG.fixture_step("Look for hyper-threading enabled and disabled hypervisors, get VMs cores for each host")
     storage_backing, target_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
     ht_hosts = {}
     non_ht_hosts = {}

@@ -2282,7 +2282,7 @@ def get_host_cpu_cores_for_function(hostname, func='vSwitch', core_type='log_cor
         e.g., {0: [1, 2], 1: [21, 22]}
 
     """
-    table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = system_helper.get_host_cpu_list_table(hostname, con_ssh=con_ssh, auth_info=auth_info)
     procs = list(set(table_parser.get_values(table_, 'processor', thread=thread))) if rtn_dict_per_proc else [None]
     res = {}
 
@@ -2294,7 +2294,8 @@ def get_host_cpu_cores_for_function(hostname, func='vSwitch', core_type='log_cor
     for proc in procs:
         funcs_cores = []
         for func_ in func:
-            func_ = 'Applications' if func_.lower() == 'vms' else func_
+            if func_:
+                func_ = 'Applications' if func_.lower() == 'vms' else func_
             cores = table_parser.get_values(table_, core_type, processor=proc, assigned_function=func_, thread=thread)
             funcs_cores.append(sorted([int(item) for item in cores]))
 
@@ -2311,7 +2312,7 @@ def get_host_cpu_cores_for_function(hostname, func='vSwitch', core_type='log_cor
     return res
 
 
-def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_ssh=None):
+def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get number of logical cores on given processor on thread 0.
 
@@ -2321,11 +2322,12 @@ def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_s
         thread (str|list): '0' or ['0', '1']
         con_ssh:
         functions (list|str)
+        auth_info
 
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))
+    table_ = system_helper.get_host_cpu_list_table(host=host, con_ssh=con_ssh, auth_info=auth_info)
     table_ = table_parser.filter_table(table_, thread=thread)
 
     rtns = []
@@ -2341,9 +2343,8 @@ def get_logcores_counts(host, proc_ids=(0, 1), thread='0', functions=None, con_s
     return rtns
 
 
-def get_host_procs(hostname, con_ssh=None):
-    table_ = table_parser.table(cli.system('host-cpu-list', hostname, ssh_client=con_ssh,
-                                           auth_info=Tenant.get('admin')))
+def get_host_procs(hostname, con_ssh=None, auth_info=Tenant.get('admin')):
+    table_ = system_helper.get_host_cpu_list_table(host=hostname, con_ssh=con_ssh, auth_info=auth_info)
     procs = table_parser.get_column(table_, 'processor')
     return sorted(list(set(procs)))
 
@@ -2722,13 +2723,35 @@ def wait_for_total_allocated_vcpus_update_in_log(host, prev_cpus=None, expt_cpus
         raise exceptions.HostTimeout(msg)
 
 
-def get_vcpus_for_computes(hosts=None, rtn_val='vcpus_used', numa_node=None, con_ssh=None):
-    """
+def get_vcpus_per_proc(hosts=None, thread=None, con_ssh=None, auth_info=Tenant.get('admin')):
+    if not hosts:
+        hosts = get_up_hypervisors(con_ssh=con_ssh)
+    elif isinstance(hosts, str):
+        hosts = [hosts]
 
+    vcpus_per_proc = {}
+    for host in hosts:
+        vcpus_per_proc[host] = {}
+        cpus_per_proc = get_host_cpu_cores_for_function(host, func='Applications', thread=thread,
+                                                        auth_info=auth_info, con_ssh=con_ssh)
+        with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+            cmd = """ps-sched.sh|grep qemu|grep " CPU" |awk '{{print $10";}}'"""
+            cores = host_ssh.exec_cmd(cmd)[1]
+            cores = [int(core.strip()) for core in cores.splitlines()]
+
+        for proc, total_vcpus_per_proc in cpus_per_proc:
+            used_cores = list(set(total_vcpus_per_proc) & set(cores))
+            vcpus_per_proc[proc] = (used_cores, total_vcpus_per_proc)
+
+    return vcpus_per_proc
+
+
+def get_vcpus_for_computes(hosts=None, rtn_val='vcpus_used', con_ssh=None):
+    """
+    Get vcpus info for given computes via openstack hypervisor show
     Args:
         hosts:
-        rtn_val (str): valid values: vcpus_used, vcpus, vcpu_avail
-        numa_node (int|str)
+        rtn_val (str): valid values: vcpus_used, vcpus, vcpus_avail
         con_ssh:
 
     Returns (dict): host(str),cpu_val(float with 4 digits after decimal point) pairs as dictionary
@@ -2744,40 +2767,22 @@ def get_vcpus_for_computes(hosts=None, rtn_val='vcpus_used', numa_node=None, con
 
     if 'avail' not in rtn_val:
         hosts_cpus = get_hypervisor_info(hosts=hosts, rtn_val=rtn_val, con_ssh=con_ssh)
-    elif numa_node is None:
+    else:
         cpus_info = get_hypervisor_info(hosts=hosts, rtn_val=('vcpus', 'vcpus_used'), con_ssh=con_ssh)
         hosts_cpus = {}
         for host in hosts:
             total_cpu, used_cpu = cpus_info[host]
             hosts_cpus[host] = float(total_cpu) - float(used_cpu)
-    else:
-        numa_node = str(numa_node)
-        compute_table = system_helper.get_vm_topology_tables('computes', con_ssh=con_ssh)[0]
-
-        hosts_cpus = {}
-        for host in hosts:
-            numa_index = None
-            host_values = {}
-            for field in ('node', 'pcpus', 'U:dedicated', 'U:shared'):
-                values = table_parser.get_values(table_=compute_table, target_header=field, host=host)[0]
-                if isinstance(values, str):
-                    values = [values]
-                if field == 'node':
-                    numa_index = values.index(numa_node)
-                    continue
-                host_values[field] = float(values[numa_index])
-
-            hosts_cpus[host] = host_values['pcpus'] - host_values['U:dedicated'] - host_values['U:shared']
 
     return hosts_cpus
 
 
-def get_hypervisor_info(hosts, rtn_val='id', con_ssh=None, auth_info=Tenant.get('admin')):
+def get_hypervisor_info(hosts, rtn_val='status', con_ssh=None, auth_info=Tenant.get('admin')):
     """
-    Get info from nova hypervisor-show for specified field
+    Get info from openstack hypervisor show for specified field
     Args:
         hosts (str|list): hostname(s)
-        rtn_val (str|list|tuple): a field in hypervisor-show
+        rtn_val (str|list|tuple): field(s) in hypervisor show table
         con_ssh:
         auth_info:
 
@@ -2791,19 +2796,16 @@ def get_hypervisor_info(hosts, rtn_val='id', con_ssh=None, auth_info=Tenant.get(
         rtn_val = [rtn_val]
         convert_to_str = True
 
-    hosts_info = get_hypervisor_list_info(hosts=hosts, con_ssh=con_ssh)
     hosts_vals = {}
     for host in hosts:
-        host_uuid = hosts_info[host]['id']
-        table_ = table_parser.table(cli.nova('hypervisor-show', host_uuid, ssh_client=con_ssh, auth_info=auth_info),
+        table_ = table_parser.table(cli.openstack('hypervisor show', host, ssh_client=con_ssh, auth_info=auth_info),
                                     combine_multiline_entry=True)
-
         vals = []
         for field_ in rtn_val:
             val = table_parser.get_value_two_col_table(table_, field=field_, strict=True, merge_lines=True)
             try:
                 val = eval(val)
-            except:
+            except NameError:
                 pass
             vals.append(val)
         if convert_to_str:
@@ -2833,8 +2835,8 @@ def get_hypervisor_list_info(hosts=None, con_ssh=None):
     return table_dict
 
 
-def _get_host_logcores_per_thread(host, con_ssh=None):
-    table_ = table_parser.table(cli.system('host-cpu-list', host, ssh_client=con_ssh))
+def _get_host_logcores_per_thread(host, con_ssh=None, auth_info=Tenant.get('admin')):
+    table_ = system_helper.get_host_cpu_list_table(host=host, con_ssh=con_ssh, auth_info=auth_info)
     threads = list(set(table_parser.get_column(table_, 'thread')))
     cores_per_thread = {}
     for thread in threads:
@@ -2881,7 +2883,7 @@ def get_logcore_siblings(host, con_ssh=None, auth_info=Tenant.get('admin')):
 
     sibling_pairs = []
     for phy_core in phy_cores:
-        log_cores = table_parser.get_values(table_, **{'phy_core': str(phy_core)})
+        log_cores = table_parser.get_values(table_, 'log_core', **{'phy_core': str(phy_core)})
         sibling_pairs.append(log_cores)
 
     LOG.info("Sibling cores for {}: {}".format(host, sibling_pairs))
@@ -2970,8 +2972,8 @@ def get_vcpus_for_instance_via_virsh(host_ssh, instance_name, rtn_list=False):
     vcpus = {}
     for line in vcpu_lines:
         # line example: '  0: 8'
-        key, pcpus = line.strip().split(sep=': ')
-        vcpus[int(key)] = common.parse_cpus_list(pcpus.strip())
+        key, host_cpus = line.strip().split(sep=': ')
+        vcpus[int(key)] = common.parse_cpus_list(host_cpus.strip())
 
     if rtn_list:
         all_cpus = []
@@ -4093,16 +4095,17 @@ def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False, con_
     raise exceptions.HostTimeout(err_msg)
 
 
-def get_host_cpu_model(host, con_ssh=None):
+def get_host_cpu_model(host, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get cpu model for a given host. e.g., Intel(R) Xeon(R) CPU E5-2680 v2 @ 2.80GHz
     Args:
         host (str): e.g., compute-0
         con_ssh (SSHClient):
+        auth_info
 
     Returns (str):
     """
-    table_ = table_parser.table(cli.system('host-cpu-list --nowrap', host, ssh_client=con_ssh))
+    table_ = system_helper.get_host_cpu_list_table(host=host, con_ssh=con_ssh, auth_info=auth_info)
     cpu_model = table_parser.get_column(table_, 'processor_model')[0]
 
     LOG.info("CPU Model for {}: {}".format(host, cpu_model))

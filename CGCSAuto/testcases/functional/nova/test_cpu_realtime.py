@@ -311,18 +311,18 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
         assert vm_host in hosts_with_shared_cpu
 
     numa_num = 1 if numa_nodes is None else numa_nodes
-    check_helper._check_vm_topology_via_vm_topology(vm_id, vcpus, 'dedicated', cpu_thread, numa_num, vm_host)
+    check_helper.check_topology_of_vm(vm_id, vcpus, cpu_pol='dedicated', cpu_thr_pol=cpu_thread, vm_host=vm_host)
 
     expt_current_cpu = vcpus
-    if min_vcpus is not None:
-        GuestLogs.add(vm_id)
-        LOG.tc_step("Scale down cpu once")
-        vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-
-        LOG.tc_step("Check current vcpus in nova show is reduced after scale down")
-        expt_current_cpu -= 1
-        check_helper.check_vm_vcpus_via_nova_show(vm_id, min_vcpus, expt_current_cpu, vcpus)
+    # if min_vcpus is not None:
+    #     GuestLogs.add(vm_id)
+    #     LOG.tc_step("Scale down cpu once")
+    #     vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
+    #     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    #
+    #     LOG.tc_step("Check current vcpus in nova show is reduced after scale down")
+    #     expt_current_cpu -= 1
+    #     check_helper.check_vm_vcpus_via_nova_show(vm_id, min_vcpus, expt_current_cpu, vcpus)
 
     for actions in [['suspend', 'resume'], ['stop', 'start'], ['live_migrate'], ['cold_migrate'], ['rebuild']]:
         LOG.tc_step("Perform {} on vm and check realtime cpu policy".format(actions))
@@ -338,8 +338,9 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
             assert vm_host_post_action in hosts_with_shared_cpu
 
         LOG.tc_step("Check cpu thread policy in vm topology and vcpus in nova show after {}".format(actions))
-        check_helper._check_vm_topology_via_vm_topology(vm_id, vcpus, 'dedicated', cpu_thread, numa_num,
-                                                        vm_host_post_action, current_vcpus=expt_current_cpu)
+        check_helper.check_topology_of_vm(vm_id, vcpus, cpu_pol='dedicated', cpu_thr_pol=cpu_thread, numa_num=numa_num,
+                                          vm_host=vm_host_post_action, current_vcpus=expt_current_cpu)
+
         check_virsh = True
         offline_cpu = None
         if min_vcpus is not None:

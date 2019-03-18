@@ -173,7 +173,7 @@ def test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
 
 @fixture(scope='module')
 def ht_and_nonht_hosts():
-    LOG.fixture_step("Look for hyper-threading enabled and disabled hosts")
+    LOG.fixture_step("Look for hyper-threading enabled and disabled hypervisors")
     nova_hosts = host_helper.get_up_hypervisors()
     ht_hosts = []
     non_ht_hosts = []
@@ -1112,11 +1112,12 @@ class TestHTDisabled:
         if expt_err:
             assert 1 == code, "Boot vm cli is not rejected. Details: {}".format(msg)
 
-            LOG.tc_step("Check expected fault message displayed in nova show")
-            fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
-            flavor_pol = "u'{}'".format(cpu_thread_policy) if cpu_thread_policy is not None else None
-            requested_thread_pols = '[{}, None]'.format(flavor_pol)
-            assert eval(expt_err).format(requested_thread_pols) in fault_msg
+            # TODO: Remove error message checking. Upstream error msg is very generic. i.e., No valid host was found
+            # LOG.tc_step("Check expected fault message displayed in nova show")
+            # fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
+            # flavor_pol = "u'{}'".format(cpu_thread_policy) if cpu_thread_policy is not None else None
+            # requested_thread_pols = '[{}, None]'.format(flavor_pol)
+            # assert eval(expt_err).format(requested_thread_pols) in fault_msg
         else:
             assert 0 == code, "Boot vm with isolate policy was unsuccessful. Details: {}".format(msg)
 

@@ -315,9 +315,8 @@ def get_cpu_count(hosts_with_backing):
     compute_space_dict = {}
 
     vm_host = hosts_with_backing[0]
-    numa0_avail_cpus = host_helper.get_vcpus_for_computes(hosts=hosts_with_backing, rtn_val='vcpus_avail',
-                                                          numa_node=0)[vm_host]
-    numa0_avail_cpus = math.floor(numa0_avail_cpus)
+    numa0_used_cpus, numa0_total_cpus = host_helper.get_vcpus_per_proc(vm_host)[vm_host][0]
+    numa0_avail_cpus = len(numa0_total_cpus) - len(numa0_used_cpus)
     for host in hosts_with_backing:
         free_space = get_disk_avail_least(host)
         compute_space_dict[host] = free_space

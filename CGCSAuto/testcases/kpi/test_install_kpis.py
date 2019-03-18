@@ -235,6 +235,12 @@ def test_idle_kpi(collect_kpi):
     # Average:    105130499  26616873     20.20    203707    782956  63556293     48.24  24702756    529517       579
 
     lines = output.splitlines()
+    start_index = 0
+    for i in range(len(lines)):
+        if lines(i).startswith('Average:'):
+            start_index = i
+            break
+    lines = lines[start_index:]
 
     # Parse mem usage stats
     mem_vals = lines.pop(-1).split()

@@ -745,8 +745,8 @@ class TestSharedCpuEnabled:
 
         # get the available vcpus on the selected numa node
         LOG.tc_step("Check how many vCPUs are available on the selected node")
-        available_vcpus = int(host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='vcpu_avail',
-                                                                 numa_node=numa_node0)[vm_host])
+        numa0_used_cpus, numa0_total_cpus = host_helper.get_vcpus_per_proc(vm_host)[vm_host][0]
+        available_vcpus = len(numa0_total_cpus) - len(numa0_used_cpus)
 
         # create a flavor with no shared vcpu
         LOG.tc_step("Create a flavor with enough vcpus to fill the diff")
@@ -763,8 +763,8 @@ class TestSharedCpuEnabled:
 
         # get the available vcpus on the selected numa node
         LOG.tc_step("Check how many vCPUs are available on the selected node")
-        available_vcpus = int(host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='vcpu_avail',
-                                                                 numa_node=numa_node0)[vm_host])
+        numa0_used_cpus, numa0_total_cpus = host_helper.get_vcpus_per_proc(vm_host)[vm_host][0]
+        available_vcpus = len(numa0_total_cpus) - len(numa0_used_cpus)
         assert available_vcpus == vcpus-1
 
         prev_total_vcpus = host_helper.get_vcpus_for_computes()

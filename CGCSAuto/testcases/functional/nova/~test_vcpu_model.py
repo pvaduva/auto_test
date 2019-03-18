@@ -363,8 +363,8 @@ def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy, cpu_models_supp
         assert 0 == code, "VM is not launched successfully"
         check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model)
         vm_host = nova_helper.get_vm_host(vm)
-        check_helper._check_vm_topology_via_vm_topology(vm_id=vm, vcpus=2, cpu_pol='dedicated',
-                                                        cpu_thr_pol=thread_policy, numa_num=1, vm_host=vm_host)
+        check_helper.check_topology_of_vm(vm_id=vm, vcpus=2, cpu_pol='dedicated',
+                                          cpu_thr_pol=thread_policy, numa_num=1, vm_host=vm_host)
 
 
 # TC5140

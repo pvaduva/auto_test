@@ -3461,6 +3461,43 @@ def get_proc_nums_from_vm(vm_ssh):
     return total_cores, online_cores, offline_cores
 
 
+def get_vcpu_cpu_map(instance_names=None, host_ssh=None, host=None, con_ssh=None):
+    """
+    Get vm(s) vcpu cpu map on given host
+    Args:
+        instance_names (str|tuple|list|None):
+        host_ssh (SSHClient|None):
+        host (str|None):
+        con_ssh:
+
+    Returns (dict): {<instance_name>: {0: <host_log_core0>, 1: <host_log_core1>, ...}, ...}
+
+    """
+    if not host and not host_ssh:
+        raise ValueError('host or host_ssh has to be specified')
+
+    extra_grep = ''
+    if instance_names:
+        if isinstance(instance_names, str):
+            instance_names = (instance_names, )
+        extra_grep = '|grep -E "{}"'.format('|'.join(instance_names))
+    cmd = """ps-sched.sh|grep qemu{}|grep " CPU" |awk '{{print $10" "$12" "$15 ;}}'""".format(extra_grep)
+
+    if host_ssh:
+        output = host_ssh.exec_cmd(cmd)[1]
+    else:
+        with host_helper.ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+            output = host_ssh.exec_cmd(cmd)[1]
+    vcpu_cpu_map = {}
+    for line in output.splitlines():
+        cpu, vcpu, instance_name = line.split()
+        instance_name = instance_name.split(sep=',')[0].split(sep='=')[1]
+        if instance_name not in vcpu_cpu_map:
+            vcpu_cpu_map[instance_name] = {}
+        vcpu_cpu_map[instance_name][int(vcpu.split(sep='/')[0])] = int(cpu)
+    return vcpu_cpu_map
+
+
 def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=None, con_ssh=None):
     """
     cpu affinity list for vm via taskset -pc
@@ -3486,7 +3523,7 @@ def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None, instance_name=No
         vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
         instance_name = nova_helper.get_vm_instance_name(vm_id, con_ssh=con_ssh)
 
-        with host_helper.ssh_to_host(vm_host) as host_ssh:
+        with host_helper.ssh_to_host(vm_host, con_ssh=con_ssh) as host_ssh:
             output = host_ssh.exec_cmd(cmd.format(instance_name))[1]
 
     # Sample output:

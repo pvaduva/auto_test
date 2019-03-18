@@ -64,7 +64,7 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
                 expt_vswitch_map, actual_vswitch_map)
 
 
-def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=None, cpu_pol=None, cpu_thr_pol=None,
+def check_topology_of_vm(vm_id, vcpus, prev_total_cpus=None, numa_num=None, vm_host=None, cpu_pol=None, cpu_thr_pol=None,
                          expt_increase=None, min_vcpus=None, current_vcpus=None, prev_siblings=None, shared_vcpu=None,
                          con_ssh=None, guest=None):
     """
@@ -92,69 +92,70 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus, numa_num=None, vm_host=N
     """
     LOG.tc_step("Check topology of vm {} on controller, hypervisor and vm".format(vm_id))
     cpu_pol = cpu_pol if cpu_pol else 'shared'
-    min_vcpus = vcpus if min_vcpus is None else min_vcpus
-    current_vcpus = vcpus if current_vcpus is None else current_vcpus
-    max_vcpus = vcpus
-
-    actual_vcpus = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))
-    expt_vcpus_all = [min_vcpus, current_vcpus, max_vcpus]
-    assert expt_vcpus_all == actual_vcpus, "Actual min/current/max vcpus in nova show: {}; Expected: {}".\
-        format(actual_vcpus, expt_vcpus_all)
+    # # vcpu scale - deprecated
+    # min_vcpus = vcpus if min_vcpus is None else min_vcpus
+    # current_vcpus = vcpus if current_vcpus is None else current_vcpus
+    # max_vcpus = vcpus
+    #
+    # actual_vcpus = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))
+    # expt_vcpus_all = [min_vcpus, current_vcpus, max_vcpus]
+    # assert expt_vcpus_all == actual_vcpus, "Actual min/current/max vcpus in nova show: {}; Expected: {}".\
+    #     format(actual_vcpus, expt_vcpus_all)
 
     if vm_host is None:
         vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
 
     log_cores_siblings = host_helper.get_logcore_siblings(host=vm_host, con_ssh=con_ssh)
 
-    if numa_num is None:
-        numa_num = 1
+    if prev_total_cpus is not None:
+        if numa_num is None:
+            numa_num = 1
 
-    is_ht_host = True if len(log_cores_siblings[0]) > 1 else False
+        is_ht_host = True if len(log_cores_siblings[0]) > 1 else False
+        if expt_increase is None:
+            pcpus = vcpus
+            if shared_vcpu is not None:
+                pcpus = vcpus - 1
 
-    if expt_increase is None:
-        pcpus = vcpus
-        if shared_vcpu is not None:
-            pcpus = vcpus - 1
+            if cpu_pol == 'dedicated':
+                expt_increase = pcpus * 2 if (cpu_thr_pol == 'isolate' and is_ht_host) else pcpus
+            else:
+                expt_increase = pcpus
 
-        if cpu_pol == 'dedicated':
-            expt_increase = pcpus * 2 if (cpu_thr_pol == 'isolate' and is_ht_host) else pcpus
+        LOG.info("{}Check total vcpus for vm host is increased by {} via 'nova hypervisor-show'".format(SEP, expt_increase))
+        expt_used_vcpus = prev_total_cpus + expt_increase
+        end_time = time.time() + 70
+        while time.time() < end_time:
+            post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='vcpus_used')
+            if expt_used_vcpus == post_hosts_cpus[vm_host]:
+                break
+            time.sleep(10)
         else:
-            expt_increase = pcpus / 16
+            post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')
+            assert expt_used_vcpus == post_hosts_cpus[vm_host], "Used vcpus on host {} is not as expected. " \
+                "Expected: {}; Actual: {}".format(vm_host, expt_used_vcpus, post_hosts_cpus[vm_host])
 
-    LOG.info("{}Check total vcpus for vm host is increased by {} via 'nova hypervisor-show'".format(SEP, expt_increase))
-    expt_used_cpus = round(prev_total_cpus + expt_increase, 4)
-    end_time = time.time() + 60
-    while time.time() < end_time:
-        post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')
-        if expt_used_cpus == post_hosts_cpus[vm_host]:
-            break
-
-    else:
-        post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')
-        assert expt_used_cpus == post_hosts_cpus[vm_host], "Used vcpus on host {} is not as expected. " \
-            "Expected: {}; Actual: {}".format(vm_host, expt_used_cpus, post_hosts_cpus[vm_host])
-
-    LOG.info('{}Check vm topology, vcpus, pcpus, siblings, cpu policy, cpu threads policy, via vm-topology and nova '
-             'show'.format(SEP))
-    pcpus_total, siblings_total, shared_pcpus = _check_vm_topology_via_vm_topology(
-            vm_id, vcpus=vcpus, cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol, vm_host=vm_host,
-            numa_num=numa_num, con_ssh=con_ssh, host_log_core_siblings=log_cores_siblings, is_ht=is_ht_host,
-            current_vcpus=current_vcpus, shared_vcpu=shared_vcpu)
+    # LOG.info('{}Check vm topology, vcpus, pcpus, siblings, cpu policy, cpu threads policy, via vm-topology and nova '
+    #          'show'.format(SEP))
+    # pcpus_total, siblings_total, shared_pcpus = _check_vm_topology_via_vm_topology(
+    #         vm_id, vcpus=vcpus, cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol, vm_host=vm_host,
+    #         numa_num=numa_num, con_ssh=con_ssh, host_log_core_siblings=log_cores_siblings, is_ht=is_ht_host,
+    #         current_vcpus=current_vcpus, shared_vcpu=shared_vcpu)
 
     LOG.info("{}Check vm vcpus, pcpus on vm host via nova-compute.log and virsh vcpupin".format(SEP))
     # Note: floating vm pcpus will not be checked via virsh vcpupin
-    _check_vm_topology_on_host(vm_id, vcpus=vcpus, vm_pcpus=pcpus_total, prev_total_cpus=prev_total_cpus,
-                               expt_increase=expt_increase, vm_host=vm_host, cpu_pol=cpu_pol,
-                               cpu_thr_pol=cpu_thr_pol, host_log_core_siblings=log_cores_siblings,
-                               vm_shared_pcpus=shared_pcpus, shared_vcpu=shared_vcpu)
+    vm_host_cpus, vm_siblings = _check_vm_topology_on_host(
+        vm_id, vcpus=vcpus, vm_host=vm_host, cpu_pol=cpu_pol, cpu_thr_pol=cpu_thr_pol,
+        host_log_core_siblings=log_cores_siblings,
+        shared_vcpu=shared_vcpu)
 
     LOG.info("{}Check vm vcpus, siblings on vm via /sys/devices/system/cpu/<cpu>/topology/thread_siblings_list".
              format(SEP))
     check_sibling = True if shared_vcpu is None else False      # JIRA when shared vcpu is set
-    _check_vm_topology_on_vm(vm_id, vcpus=vcpus, siblings_total=siblings_total, current_vcpus=current_vcpus,
+    _check_vm_topology_on_vm(vm_id, vcpus=vcpus, siblings_total=vm_siblings, current_vcpus=current_vcpus,
                              prev_siblings=prev_siblings, guest=guest, check_sibling=check_sibling)
 
-    return pcpus_total, siblings_total
+    return vm_host_cpus, vm_siblings
 
 
 def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_num, vm_host,
@@ -344,14 +345,13 @@ def _check_vm_topology_via_vm_topology(vm_id, vcpus, cpu_pol, cpu_thr_pol, numa_
     return pcpus_total, siblings_total, shared_pcpu_total
 
 
-def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total_cpus, vm_host, cpu_pol, cpu_thr_pol,
-                               host_log_core_siblings, shared_vcpu, vm_shared_pcpus):
+def _check_vm_topology_on_host(vm_id, vcpus, vm_host, cpu_pol, cpu_thr_pol,
+                               host_log_core_siblings=None, shared_vcpu=None, shared_host_cpus=None):
     """
 
     Args:
         vm_id (str):
         vcpus (int):
-        vm_pcpus (list):
         expt_increase (int):
         prev_total_cpus (int|float):
         vm_host (str):
@@ -359,29 +359,59 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
         cpu_thr_pol (str):
         host_log_core_siblings (list|None):
         shared_vcpu (int|None):
-        vm_shared_pcpus (list|None):
+        shared_host_cpus (None|list)
 
     Returns: None
 
     """
+    if not host_log_core_siblings:
+        host_log_core_siblings = host_helper.get_logcore_siblings(host=vm_host)
 
-    # Check host side info such as nova-compute.log and virsh pcpupin
-    LOG.info('======= Check vm topology from vm_host via: nova-compute.log, virsh vcpupin, taskset')
+    if shared_vcpu and not shared_host_cpus:
+        shared_cpus_ = host_helper.get_host_cpu_cores_for_function(func='Shared', hostname=vm_host, thread=None)
+        shared_host_cpus = []
+        for proc, shared_cores in shared_cpus_.items():
+            shared_host_cpus += shared_cores
+
+    LOG.info('======= Check vm topology from vm_host via: virsh vcpupin, taskset')
     instance_name = nova_helper.get_vm_instance_name(vm_id)
+
+    # TODO: remove numa checking for now
     # procs = host_helper.get_host_procs(hostname=vm_host)
     # numa_nodes = list(range(len(procs)))
-    vm_host_, numa_nodes = vm_helper.get_vm_host_and_numa_nodes(vm_id)
-    assert vm_host == vm_host_, "VM is on {} instead of {}".format(vm_host_, vm_host)
-
-    LOG.info("{}Check total allocated vcpus increased by {} from nova-compute log for {}".
-             format(SEP, expt_increase, vm_host))
-    expt_total = round(prev_total_cpus + expt_increase, 4)
-    post_total_log = host_helper.wait_for_total_allocated_vcpus_update_in_log(vm_host, prev_cpus=prev_total_cpus,
-                                                                              expt_cpus=expt_total, fail_ok=True)
-    assert expt_total == post_total_log, 'vcpus increase in nova-compute.log is not as expected. ' \
-                                         'Expected: {}. Actual: {}'.format(expt_total, post_total_log)
+    # vm_host_, numa_nodes =  nova_helper.get_vm_host(vm_id)
+    # assert vm_host == vm_host_, "VM is on {} instead of {}".format(vm_host_, vm_host)
 
     with host_helper.ssh_to_host(vm_host) as host_ssh:
+        vcpu_cpu_map = vm_helper.get_vcpu_cpu_map(host_ssh=host_ssh)
+        used_host_cpus = []
+        vm_host_cpus = []
+        vcpus_list = list(range(vcpus))
+        for instance_name_, instance_map in vcpu_cpu_map.items():
+            for vcpu in vcpus_list:
+                used_host_cpus.append(instance_map[vcpu])
+                if instance_name_ == instance_name:
+                    vm_host_cpus.append(instance_map[vcpu])
+        used_host_cpus = list(set(used_host_cpus))
+        vm_siblings = None
+        # Check vm sibling pairs
+        if 'ded' in cpu_pol and cpu_thr_pol in ('isolate', 'require'):
+            if len(host_log_core_siblings[0]) == 1:
+                assert cpu_thr_pol != 'require', "cpu_thread_policy 'require' must be used on a HT host"
+                vm_siblings = [[vcpu_] for vcpu_ in vcpus_list]
+            else:
+                vm_siblings = []
+                for vcpu_index in vcpus_list:
+                    vm_host_cpu = vm_host_cpus[vcpu_index]
+                    for host_sibling in host_log_core_siblings:
+                        if vm_host_cpu in host_sibling:
+                            other_cpu = host_sibling[0] if vm_host_cpu == host_sibling[1] else host_sibling[1]
+                            if cpu_thr_pol == 'require':
+                                assert other_cpu in vm_host_cpus, "'require' vm uses only 1 of the sibling cores"
+                                vm_siblings.append(sorted([vcpu_index, vm_host_cpus.index(other_cpu)]))
+                            else:
+                                assert other_cpu not in used_host_cpus, "sibling core was not reserved for 'isolate' vm"
+                                vm_siblings.append([vcpu_index])
 
         LOG.info("{}Check vcpus for vm via sudo virsh vcpupin".format(SEP))
         vcpu_pins = host_helper.get_vcpu_pins_for_instance_via_virsh(host_ssh=host_ssh,
@@ -389,55 +419,38 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_pcpus, expt_increase, prev_total
         assert vcpus == len(vcpu_pins), 'Actual vm cpus number - {} is not as expected - {} in sudo virsh vcpupin'\
             .format(len(vcpu_pins), vcpus)
 
-        if vm_pcpus:
-            pinned_pcpus = []
-            for vcpu_pin in vcpu_pins:
-                vcpu = int(vcpu_pin['vcpu'])
-                pcpu = int(vcpu_pin['cpuset'])
-                if vcpu == shared_vcpu:
-                    assert pcpu == vm_shared_pcpus[0]
-                else:
-                    pinned_pcpus.append(pcpu)
-
-            assert sorted(vm_pcpus) == sorted(pinned_pcpus), 'pcpus from vm-topology - {} is different than ' \
-                                                             'virsh vcpupin - {}'.format(sorted(vm_pcpus),
-                                                                                         sorted(pinned_pcpus))
-        else:
-            LOG.warning('Skip pcpus check in virsh vcpupin for floating vm')
-
-        LOG.info("{}Get cpu affinity list for vm via taskset -pc".format(SEP))
-        affined_cpus = vm_helper.get_affined_cpus_for_vm(vm_id, host_ssh=host_ssh, vm_host=vm_host,
-                                                         instance_name=instance_name)
+        virsh_cpus_sets = []
+        for vcpu_pin in vcpu_pins:
+            vcpu = int(vcpu_pin['vcpu'])
+            cpu_set = common.parse_cpus_list(vcpu_pin['cpuset'])
+            virsh_cpus_sets += cpu_set
+            if shared_vcpu is not None and vcpu == shared_vcpu:
+                assert len(cpu_set) == 1, "shared vcpu is pinned to more than 1 host cpu"
+                assert cpu_set[0] in shared_host_cpus, "shared vcpu is not pinned to shared host cpu"
 
         if 'ded' in cpu_pol:
-
-            LOG.info("{}Check affined cpus for dedicated vm is the same as its pcpus shown in vm-topology".format(SEP))
-            expt_affined_cpus = vm_pcpus + vm_shared_pcpus
-            assert len(affined_cpus) <= len(expt_affined_cpus) + 2
-            # affined cpus was a single core. expected a core and its sibling
-            assert set(expt_affined_cpus) <= set(affined_cpus)
-
+            assert set(vm_host_cpus) == set(virsh_cpus_sets), "pinned cpus in virsh cpupin is not the same as ps"
         else:
-            LOG.info("{}Check affined cpus for floating vm is the same as unpinned cpus on vm host".format(SEP))
-            cpus_info = host_helper.get_vcpus_info_in_log(host_ssh=host_ssh, rtn_list=True, numa_nodes=numa_nodes)
-            unpinned_cpus = []
+            assert set(vm_host_cpus) < set(virsh_cpus_sets), "floating vm should be affined to all available host cpus"
 
-            for vcpu_pin in cpus_info:
-                unpinned_cpus_for_numa = vcpu_pin['unpinned_cpulist']
-                unpinned_cpus += unpinned_cpus_for_numa
-            unpinned_cpus = sorted(unpinned_cpus)
-
-            err_msg = "Affined cpus for vm: {}, Unpinned cpus on vm host: {}".format(affined_cpus, unpinned_cpus)
-            assert affined_cpus == unpinned_cpus, 'Affined cpus for floating vm are different than unpinned cpus ' \
-                                                  'on vm host {} numa {}\n{}'.format(vm_host, numa_nodes, err_msg)
+        LOG.info("{}Get cpu affinity list for vm via taskset -pc".format(SEP))
+        ps_affined_cpus = vm_helper.get_affined_cpus_for_vm(vm_id, host_ssh=host_ssh, vm_host=vm_host,
+                                                            instance_name=instance_name)
+        assert set(ps_affined_cpus) == set(virsh_cpus_sets), "Actual affined cpu in taskset is different than virsh"
+        return vm_host_cpus, vm_siblings
 
 
-def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_siblings=None, guest=None,
+def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus=None, prev_siblings=None, guest=None,
                              check_sibling=True):
-    siblings_total_ = copy.deepcopy(siblings_total)
+    siblings_total_ = None
+    if siblings_total:
+        siblings_total_ = copy.deepcopy(siblings_total)
     # Check from vm in /proc/cpuinfo and /sys/devices/.../cpu#/topology/thread_siblings_list
     if not guest:
         guest = ''
+    if not current_vcpus:
+        current_vcpus = int(vcpus)
+
     LOG.info('=== Check vm topology from within the vm via: /sys/devices/system/cpu')
     actual_sibs = []
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -465,7 +478,7 @@ def _check_vm_topology_on_vm(vm_id, vcpus, siblings_total, current_vcpus, prev_s
         assert expt_total_cores in [present_cores_count, 512], \
             "Number of present cores: {}. online+offline cores: {}".format(vcpus, expt_total_cores)
 
-        if check_sibling and online_cores_count == present_cores_count:
+        if check_sibling and siblings_total_ and online_cores_count == present_cores_count:
             expt_sibs_list = [[vcpu] for vcpu in range(present_cores_count)] if not siblings_total_ \
                 else siblings_total_
 

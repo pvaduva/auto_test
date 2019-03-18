@@ -91,11 +91,9 @@ def test_horizon_host_inventory_display(host_inventory_pg):
             horizon_val = horizon_vals[horizon_header]
             if field == 'uptime':
                 # Extract the time value(int) from time string, eg: '2 days, 8 hours' --> [2, 8]
-                horizon_t = [int(s) for s in horizon_val.split() if s.isdigit()]
-                cli_t = [int(s) for s in expt_val.split() if s.isdigit()]
-                if 0 in cli_t:
-                    cli_t.remove(0)
-                assert horizon_t == cli_t, 'Uptime display incorrectly'
+                horizon_t = [int(s) for s in horizon_val.split() if s.isdigit()][0]
+                cli_t = [int(s) for s in expt_val.split() if s.isdigit() and int(s) != 0][0]
+                assert horizon_t + 6 >= cli_t, 'Uptime display incorrectly'
             else:
                 assert expt_val.upper() in horizon_val.upper(),\
                     '{} display incorrectly, expect: {} actual: {}'.format(horizon_header, expt_val, horizon_val)
