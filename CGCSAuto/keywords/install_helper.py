@@ -4072,7 +4072,12 @@ def update_pxeboot_ks_files(lab, tuxlab_conn, feed_path):
         if re.search(r"-0\d$", lab_name):
             lab_name = lab_name.replace('-0', '-')
             feed_url = "http://128.224.151.254/umalab/{}_feed".format(lab_name)
-            if urlopen(feed_url).getcode() != 200:
+            msg = "The tuxlab feed url {} is not valid for lab {}".format(feed_url, lab['short_name'])
+            try:
+                url_code = urlopen(feed_url).getcode()
+            except:
+                url_code = 404
+            if url_code != 200:
                 raise exceptions.InstallError(msg)
         else:
             raise exceptions.InstallError(msg)

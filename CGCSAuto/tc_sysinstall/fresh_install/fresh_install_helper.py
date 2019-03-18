@@ -254,7 +254,7 @@ def set_guest_image_var(sys_version=None):
 
 
 def configure_controller(controller0_node, config_file='TiS_config.ini_centos', lab_setup_conf_file=None,
-                         lab=None, final_step=None):
+                         lab=None, banner=True, branding=True, final_step=None):
 
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
@@ -265,7 +265,8 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
     LOG.tc_step(test_step)
     if do_step(test_step):
         install_helper.controller_system_config(lab=lab, config_file=config_file,
-                                                con_telnet=controller0_node.telnet_conn, kubernetes=kubernetes)
+                                                con_telnet=controller0_node.telnet_conn, kubernetes=kubernetes,
+                                                banner=banner, branding=branding)
 
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
