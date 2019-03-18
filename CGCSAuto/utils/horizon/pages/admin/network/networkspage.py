@@ -7,10 +7,8 @@ class NetworksTable(tables.TableRegion):
     name = "networks"
 
     CREATE_NETWORK_FORM_FIELDS = (("name", "tenant_id", "network_type",
-                                   "admin_state", "qos", "vlan_transparent",
-                                   'shared', "external", "with_subnet",
-                                   "physical_network_flat", "physical_network_vlan",
-                                   "physical_network_vxlan", "segmentation_id"),
+                                   "physical_network", "segmentation_id", "admin_state",
+                                   'shared', "external", "with_subnet"),
                                   ("subnet_name", "cidr", "ip_version",
                                    "gateway_ip", "no_gateway"),
                                   ("enable_dhcp", "allocation_pools",
@@ -69,13 +67,13 @@ class NetworksPage(basepage.BasePage):
         create_network_form.tenant_id.text = project
         create_network_form.network_type.value = provider_network_type
         if provider_network_type == 'vlan':
-            create_network_form.physical_network_vlan.value = physical_network
+            create_network_form.physical_network.text = physical_network
             if segmentation_id is not None:
-                create_network_form.segmentation_id = segmentation_id
+                create_network_form.segmentation_id.text = segmentation_id
         if provider_network_type == 'vxlan':
-            create_network_form.physical_network_vxlan.value = physical_network
+            create_network_form.physical_network.value = physical_network
         if provider_network_type == 'flat':
-            create_network_form.physical_network_flat.value = physical_network
+            create_network_form.physical_network.value = physical_network
         if enable_admin_state is True:
             create_network_form.admin_state.mark()
         if enable_admin_state is False:

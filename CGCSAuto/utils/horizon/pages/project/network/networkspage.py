@@ -5,7 +5,8 @@ from utils.horizon.regions import tables
 
 class NetworksTable(tables.TableRegion):
     name = "networks"
-    CREATE_NETWORK_FORM_FIELDS = (("net_name", "admin_state", "qos", "vlan_transparent", "with_subnet"),
+    CREATE_NETWORK_FORM_FIELDS = (("net_name", "admin_state",
+                                   "with_subnet", "az_hints"),
                                   ("subnet_name", "cidr", "ip_version",
                                    "gateway_ip", "no_gateway"),
                                   ("enable_dhcp", "allocation_pools",

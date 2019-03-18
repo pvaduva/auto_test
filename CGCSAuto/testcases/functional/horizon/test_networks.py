@@ -118,6 +118,7 @@ def test_horizon_network_subnet_create_admin(get_pnet, admin_networks_pg):
                                      project=Tenant.get_primary()['tenant'],
                                      provider_network_type=pnet_type,
                                      physical_network=pnet_name,
+                                     segmentation_id=300,
                                      subnet_name=subnet_name,
                                      network_address='192.168.0.0/24')
     assert admin_networks_pg.find_message_and_dismiss(messages.SUCCESS)
