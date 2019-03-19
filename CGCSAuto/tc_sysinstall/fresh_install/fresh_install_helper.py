@@ -498,7 +498,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
-        
+
 
 def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step

@@ -4019,7 +4019,7 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None,  tuxlab_conn=None, i
     cfg_link = tuxlab_conn.exec_cmd("readlink pxeboot.cfg")[1]
     if cfg_link != "pxeboot.cfg.gpt":
         LOG.info("Changing pxeboot.cfg symlink to pxeboot.cfg.gpt")
-        tuxlab_conn.exec_cmd("ln -s pxeboot.cfg.gpt pxeboot.cfg")
+        tuxlab_conn.exec_cmd("rm pxeboot.cfg; ln -s pxeboot.cfg.gpt pxeboot.cfg")
 
     # LOG.info("Installing Centos load to feed path: {}".format(feed_path))
     # bld_server_conn.exec_cmd("cd " + load_path)
