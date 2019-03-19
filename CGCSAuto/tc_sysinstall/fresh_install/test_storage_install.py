@@ -100,7 +100,7 @@ def test_storage_install(install_setup):
         fresh_install_helper.configure_subcloud(controller0_node, lab_files_server, subcloud=install_subcloud,
                                                 final_step=final_step)
     else:
-        fresh_install_helper.configure_controller(controller0_node)
+        fresh_install_helper.configure_controller(controller0_node, banner=False, branding=False)
 
     controller0_node.telnet_conn.hostname = "controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
