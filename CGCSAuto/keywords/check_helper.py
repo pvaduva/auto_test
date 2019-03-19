@@ -90,7 +90,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus=None, numa_num=None, vm_h
         guest (str|None): guest os. e.g., ubuntu_14. Default guest is assumed when None.
 
     """
-    LOG.tc_step("Check topology of vm {} on controller, hypervisor and vm".format(vm_id))
+    LOG.info("------ Check topology of vm {} on controller, hypervisor and vm".format(vm_id))
     cpu_pol = cpu_pol if cpu_pol else 'shared'
     # # vcpu scale - deprecated
     # min_vcpus = vcpus if min_vcpus is None else min_vcpus
@@ -111,18 +111,11 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus=None, numa_num=None, vm_h
         if numa_num is None:
             numa_num = 1
 
-        is_ht_host = True if len(log_cores_siblings[0]) > 1 else False
         if expt_increase is None:
-            pcpus = vcpus
-            if shared_vcpu is not None:
-                pcpus = vcpus - 1
+            expt_increase = vcpus
 
-            if cpu_pol == 'dedicated':
-                expt_increase = pcpus * 2 if (cpu_thr_pol == 'isolate' and is_ht_host) else pcpus
-            else:
-                expt_increase = pcpus
-
-        LOG.info("{}Check total vcpus for vm host is increased by {} via 'nova hypervisor-show'".format(SEP, expt_increase))
+        LOG.info("{}Check total vcpus for vm host is increased by {} via 'openstack hypervisor show'".format(
+            SEP, expt_increase))
         expt_used_vcpus = prev_total_cpus + expt_increase
         end_time = time.time() + 70
         while time.time() < end_time:

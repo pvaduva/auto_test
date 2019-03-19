@@ -10,6 +10,7 @@ from keywords import nova_helper, vm_helper, host_helper, common, glance_helper,
 from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 
+# TODO: Remove flavor spec valication tests for now due to feature unavailable upstream.
 @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_rt', 'rt_mask', 'shared_vcpu', 'expt_err'), [
     (2, 'dedicated', 'yes', None, None, 'CpuRtErr.RT_AND_ORD_REQUIRED'),
     (2, 'shared', 'yes', '^0', None, 'CpuRtErr.DED_CPU_POL_REQUIRED'),
@@ -21,7 +22,7 @@ from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
     (4, 'dedicated', 'yes', '^0-3', '2', 'CpuRtErr.RT_AND_ORD_REQUIRED'),
     # (4, 'dedicated', 'yes', '^1-4', None, 'CpuRtErr.RT_AND_ORD_REQUIRED')     # Invalid range is not checked
 ])
-def test_flavor_cpu_realtime_negative(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, expt_err):
+def _test_flavor_cpu_realtime_negative(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, expt_err):
     """
 
     Args:
@@ -149,8 +150,8 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
             if expt_rt_cpus:
                 assert sorted(emulator_cpus) == sorted(expt_ord_cpus), "Emulator cpus is not a subset of ordinary cpus"
             else:
-                assert emulator_cpus == sorted(expt_ord_cpus)[:1], "Emulator cpu is not the first vcpu when " \
-                                                                   "no realtime cpu or shared cpu set"
+                assert set(emulator_cpus) <= set(expt_ord_cpus), "Emulator cpu is not a subset of ordinary cpus when " \
+                                                                 "no realtime cpu or shared cpu set"
 
         comm_pattern = 'CPU [{}]/KVM'
         LOG.info("------ Check actual vm realtime cpu scheduler via ps")

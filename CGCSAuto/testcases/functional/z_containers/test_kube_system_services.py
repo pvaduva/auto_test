@@ -40,9 +40,17 @@ def test_kube_system_services(controller):
                                                      type_names=('pod', 'service', 'deployment.apps'),
                                                      keep_type_prefix=False)
         LOG.tc_step("Check kube-system pods status on {}".format(controller))
+        # allow max 1 coredns pending on aio-sx
+        coredns_pending = False if system_helper.is_simplex() else True
         for pod_info in kube_system_info['pod']:
-            assert PodStatus.RUNNING == pod_info['status'], "Pod {} status is {} instead of {}".\
-                format(pod_info['name'], pod_info['status'], PodStatus.RUNNING)
+            pod_status = pod_info['status']
+            pod_name = pod_info['name']
+            if not coredns_pending and 'coredns-' in pod_name and pod_status == PodStatus.PENDING:
+                coredns_pending = True
+                continue
+
+            assert PodStatus.RUNNING == pod_status, "Pod {} status is {} instead of {}".\
+                format(pod_name, pod_status, PodStatus.RUNNING)
 
         services = ('calico-typha', 'kube-dns', 'tiller-deploy')
         LOG.tc_step("Check kube-system services on {}: {}".format(controller, services))

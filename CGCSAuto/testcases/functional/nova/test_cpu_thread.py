@@ -6,7 +6,7 @@ from pytest import mark, fixture, skip
 from utils.tis_log import LOG
 
 from consts.reasons import SkipHypervisor, SkipHyperthreading
-from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus
+from consts.cgcs import FlavorSpec, ImageMetadata
 # Do not remove used imports below as they are used in eval()
 from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigErr, CPUPolicyErr, ScaleErr
 
@@ -177,7 +177,7 @@ def _test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
 
 @fixture(scope='module')
 def ht_and_nonht_hosts():
-    LOG.fixture_step("Look for hyper-threading enabled and disabled hypervisors")
+    LOG.fixture_step("(Module) Get hyper-threading enabled and disabled hypervisors")
     nova_hosts = host_helper.get_up_hypervisors()
     ht_hosts = []
     non_ht_hosts = []
@@ -187,8 +187,7 @@ def ht_and_nonht_hosts():
         else:
             non_ht_hosts.append(host)
 
-    LOG.fixture_step('Hyper-threading enabled hosts: {}; Hyper-threading disabled hosts: {}'.
-                     format(ht_hosts, non_ht_hosts))
+    LOG.info('-- Hyper-threading enabled hosts: {}; Hyper-threading disabled hosts: {}'.format(ht_hosts, non_ht_hosts))
     return ht_hosts, non_ht_hosts
 
 
@@ -203,15 +202,63 @@ class TestHTEnabled:
 
         return ht_hosts, non_ht_hosts
 
+    def test_isolate_vm_on_ht_host(self, ht_hosts_, add_admin_role_func):
+        """
+        Test isolate vms take the host log_core sibling pair for each vcpu when HT is enabled.
+        Args:
+            ht_hosts_:
+            add_admin_role_func:
+
+        Pre-conditions: At least on hypervisor has HT enabled
+
+        Test Steps:
+            - Launch VM with isolate thread policy and 4 vcpus, until all Application cores on thread-0 are taken
+            - Attempt to launch another vm on same host, and ensure it fails
+
+        """
+        ht_hosts, non_ht_hosts = ht_hosts_
+        vcpu_count = 4
+        cpu_thread_policy = 'isolate'
+        LOG.tc_step("Create flavor with {} vcpus and {} thread policy".format(vcpu_count, cpu_thread_policy))
+        flavor_id = nova_helper.create_flavor(name='cpu_thread_{}'.format(cpu_thread_policy), vcpus=vcpu_count,
+                                              cleanup='function')[1]
+        specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.CPU_THREAD_POLICY: cpu_thread_policy}
+        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+
+        LOG.tc_step("Get used vcpus for vm host before booting vm, and ensure sufficient instance and core quotas")
+        host = ht_hosts[0]
+        vms = nova_helper.get_vms_on_hypervisor(hostname=host)
+        vm_helper.delete_vms(vms=vms)
+        log_core_counts = host_helper.get_logcores_counts(host, thread='0', functions='Applications')
+        max_vm_count = int(log_core_counts[0]/vcpu_count) + int(log_core_counts[1]/vcpu_count)
+        vm_helper.ensure_vms_quotas(vms_num=max_vm_count+10, cores_num=4*(max_vm_count+2)+10)
+
+        LOG.tc_step("Boot {} isolate 4vcpu vms on a HT enabled host, and check topology of vm on host and vms".
+                    format(max_vm_count))
+        for i in range(max_vm_count):
+            name = '4vcpu_isolate-{}'.format(i)
+            LOG.info("Launch VM {} on {} and check it's topology".format(name, host))
+            prev_cpus = host_helper.get_vcpus_for_computes(hosts=[host], rtn_val='used_now')[host]
+            vm_id = vm_helper.boot_vm(name=name, flavor=flavor_id, vm_host=host,
+                                      cleanup='function')[1]
+
+            check_helper.check_topology_of_vm(vm_id, vcpus=vcpu_count, prev_total_cpus=prev_cpus, cpu_pol='dedicated',
+                                              cpu_thr_pol=cpu_thread_policy, vm_host=host)
+
+        LOG.tc_step("Attempt to boot another vm on {}, and ensure it fails due to no free sibling pairs".format(host))
+        code = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy), flavor=flavor_id, vm_host=host,
+                                 fail_ok=True, cleanup='function')[0]
+        assert code > 0, "VM is still scheduled even though all sibling pairs should have been occupied"
+
     @mark.parametrize(('vcpus', 'cpu_thread_policy', 'min_vcpus'), [
         # mark.p1((5, 'isolate', 2)),       # Deprecated. vcpu scale
-        mark.p1((4, 'isolate', None)),
+        # mark.p1((4, 'isolate', None)),    # Already covered by new test_isolate_vm_on_ht_host
         mark.p1((4, 'require', None)),
         mark.p1((3, 'require', None)),
         mark.p2((3, 'prefer', None)),
         # mark.p2((2, 'prefer', 1)),
         # mark.p2((3, None, 1)),          # Deprecated. vcpu scale # should default to prefer policy behaviour
-        mark.p2((2, None, None)),       # should default to prefer policy behaviour
+        # mark.p2((2, None, None)),       # Already covered by many other test cases with default settings
     ])
     def test_boot_vm_cpu_thread_positive(self, vcpus, cpu_thread_policy, min_vcpus, ht_hosts_):
         """
@@ -265,12 +312,11 @@ class TestHTEnabled:
                                   cleanup='function')[1]
 
         vm_host = nova_helper.get_vm_host(vm_id)
-
         if cpu_thread_policy == 'require':
             assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
+        LOG.tc_step("Check topology of the {}vcpu {} vm on hypervisor and on vm".format(vcpus, cpu_thread_policy))
         prev_cpus = pre_hosts_cpus[vm_host]
-
         check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus, cpu_pol='dedicated',
                                           cpu_thr_pol=cpu_thread_policy, min_vcpus=min_vcpus, vm_host=vm_host)
 
@@ -817,7 +863,7 @@ class TestHTEnabled:
         mark.domain_sanity((3, 'dedicated', 'require', 'image', 'strict', 'volume', ['suspend', 'resume', 'rebuild'])),
     ], ids=id_gen)
     def test_cpu_thread_vm_topology_nova_actions(self, vcpus, cpu_pol, cpu_thr_pol, flv_or_img, vs_numa_affinity,
-                                                       boot_source, nova_actions, ht_hosts_):
+                                                 boot_source, nova_actions, ht_hosts_):
         ht_hosts, non_ht_hosts = ht_hosts_
         if 'mig' in nova_actions:
             if len(ht_hosts) + len(non_ht_hosts) < 2:
@@ -863,9 +909,10 @@ class TestHTEnabled:
             LOG.tc_step("Check vm is booted on a HT host")
             assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
-        if vs_numa_affinity == 'strict':
-            LOG.tc_step("Check VM is booted on vswitch numa node, when vswitch numa affinity set to strict")
-            check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
+        # TODO: Remove vswitch numa affinity checking for now due to feature unavailable yet
+        # if vs_numa_affinity == 'strict':
+        #     LOG.tc_step("Check VM is booted on vswitch numa node, when vswitch numa affinity set to strict")
+        #     check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
 
         prev_cpus = pre_hosts_cpus[vm_host]
         prev_siblings = check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=prev_cpus,
@@ -898,9 +945,10 @@ class TestHTEnabled:
         check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=pre_action_cpus, cpu_pol=cpu_pol,
                                           cpu_thr_pol=cpu_thr_pol, vm_host=post_vm_host, prev_siblings=prev_siblings)
 
-        if vs_numa_affinity == 'strict':
-            LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
-            check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
+        # TODO: Remove vswitch affinity checking for now
+        # if vs_numa_affinity == 'strict':
+        #     LOG.tc_step("Check VM is still on vswitch numa nodes, when vswitch numa affinity set to strict")
+        #     check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
 
     @fixture(scope='class')
     def _add_hosts_to_cgcsauto(self, request, ht_hosts_, add_cgcsauto_zone):
@@ -944,7 +992,6 @@ class TestHTEnabled:
             cpu_thr_source:
             vs_numa_affinity:
             boot_source:
-            ht_hosts_:
 
         Skip condition:
             - More than one HT host available
@@ -1017,9 +1064,10 @@ class TestHTEnabled:
         vm_host = nova_helper.get_vm_host(vm_id)
         assert vm_host in ht_hosts, "VM host {} is not hyper-threading enabled.".format(vm_host)
 
-        if vs_numa_affinity == 'strict':
-            LOG.tc_step("Check VM is booted on vswitch numa nodes, when vswitch numa affinity set to strict")
-            check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
+        # TODO: remove vswitch affinity checking for now
+        # if vs_numa_affinity == 'strict':
+        #     LOG.tc_step("Check VM is booted on vswitch numa nodes, when vswitch numa affinity set to strict")
+        #     check_helper.check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True)
 
         prev_cpus = pre_hosts_cpus[vm_host]
 

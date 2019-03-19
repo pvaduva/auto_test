@@ -17,7 +17,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None, ephemeral=None, swap=None,
                   is_public=None, rxtx_factor=None, guest_os=None, fail_ok=False, auth_info=Tenant.get('admin'),
-                  con_ssh=None, storage_backing=None, rtn_id=True, cleanup=None):
+                  con_ssh=None, storage_backing=None, rtn_id=True, cleanup=None, add_extra_specs=True):
     """
     Create a flavor with given criteria.
 
@@ -40,6 +40,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
             Valid values: 'local_image', 'remote'
         rtn_id (bool): return id or name
         cleanup (str|None): cleanup scope. function, class, module, or session
+        add_extra_specs (False): Whether to automatically add extra specs that are needed to launch vm
 
     Returns (tuple): (rtn_code (int), flavor_id/err_msg (str))
         (0, <flavor_id/name>): flavor created successfully
@@ -89,7 +90,7 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
     if cleanup:
         ResourceCleanup.add('flavor', flavor_id, scope=cleanup)
 
-    if storage_backing:
+    if storage_backing and add_extra_specs:
         sys_inst_backing = ProjVar.get_var('INSTANCE_BACKING')
         if not sys_inst_backing:
             hosts_per_backing = host_helper.get_hosts_per_storage_backing(up_only=False, auth_info=auth_info,
@@ -124,13 +125,14 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         if [storage_backing] == sys_inst_backing:
             storage_backing = None
 
-    # extra_specs = {FlavorSpec.MEM_PAGE_SIZE: 'any'}
-    extra_specs = {FlavorSpec.MEM_PAGE_SIZE: '2048'}
-    if storage_backing:
-        extra_specs[FlavorSpec.STORAGE_BACKING] = storage_backing
+    if add_extra_specs:
+        # extra_specs = {FlavorSpec.MEM_PAGE_SIZE: 'any'}
+        extra_specs = {FlavorSpec.MEM_PAGE_SIZE: '2048'}
+        if storage_backing:
+            extra_specs[FlavorSpec.STORAGE_BACKING] = storage_backing
 
-    LOG.info("Setting flavor specs: {}".format(extra_specs))
-    set_flavor_extra_specs(flavor_id, con_ssh=con_ssh, auth_info=auth_info, **extra_specs)
+        LOG.info("Setting flavor specs: {}".format(extra_specs))
+        set_flavor_extra_specs(flavor_id, con_ssh=con_ssh, auth_info=auth_info, **extra_specs)
 
     flavor = flavor_id if rtn_id else flavor_name
     return 0, flavor, storage_backing

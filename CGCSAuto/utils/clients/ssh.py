@@ -1007,7 +1007,7 @@ class SSHFromSSH(SSHClient):
         # self.logpath = self.parent.logpath
         # self._session.logfile = self.parent._session.logfile
 
-    def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
+    def connect(self, retry=False, retry_interval=10, retry_timeout=300, prompt=None,
                 use_current=True, use_password=True, timeout=None):
         """
 

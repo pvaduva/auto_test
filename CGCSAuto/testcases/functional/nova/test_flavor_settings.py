@@ -23,7 +23,7 @@ def test_flavor_default_specs():
        - Check "aggregate_instance_extra_specs:storage": "local_image" is included in extra specs of the flavor
     """
     LOG.tc_step("Create flavor with minimal input.")
-    flavor = nova_helper.create_flavor(cleanup='function')[1]
+    flavor = nova_helper.create_flavor(cleanup='function', add_extra_specs=False)[1]
 
     extra_specs = nova_helper.get_flavor_extra_specs(flavor=flavor)
     LOG.tc_step("Check local_image storage is by default included in flavor extra specs")
@@ -65,8 +65,9 @@ def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):
         assert post_extra_spec[extra_spec_name] == value, "Actual flavor extra specs: {}".format(post_extra_spec)
 
 
+# Deprecated - flavor spec validation
 # TC6497
-def test_create_flavor_with_excessive_vcpu_negative():
+def _test_create_flavor_with_excessive_vcpu_negative():
 
     """
     Test that flavor creation fails and sends a human-readable error message if a flavor with >128 vCPUs is attempted
