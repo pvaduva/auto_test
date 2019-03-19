@@ -79,6 +79,15 @@ def test_reapply_stx_openstack_no_change(check_stx_openstack, controller):
         host_helper.swact_host()
         time.sleep(60)
 
+    LOG.info("helm list before reapply after swact")
+    from utils.clients.ssh import ControllerClient
+    con_ssh = ControllerClient.get_active_controller()
+    end_time = time.time() + 600
+    while time.time() < end_time:
+        code = con_ssh.exec_cmd('helm list', expect_timeout=300)
+        if code == 0:
+            break
+
     LOG.tc_step("Re-apply stx-openstack application")
     container_helper.apply_app(app_name='stx-openstack')
 

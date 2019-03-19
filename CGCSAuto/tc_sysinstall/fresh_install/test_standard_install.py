@@ -115,11 +115,7 @@ def test_standard_install(install_setup):
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
     fresh_install_helper.bulk_add_hosts(lab=lab, con_ssh=controller0_node.ssh_conn)
-
     fresh_install_helper.boot_hosts(boot_device)
-    fresh_install_helper.wait_for_hosts_to_be_online([host for host in hosts if controller0_node.name not in host],
-                                                     lab=lab)
-
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     # Unlock controller-1

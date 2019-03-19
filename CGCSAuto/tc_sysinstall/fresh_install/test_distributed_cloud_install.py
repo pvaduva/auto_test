@@ -144,7 +144,8 @@ def test_distributed_cloud_install(install_setup):
     LOG.info("Booting standby controller host...")
 
     # TODO: get controller-1 hostname
-    fresh_install_helper.boot_hosts(boot_device, hostnames=['controller-1'], lab=central_region_lab)
+    fresh_install_helper.boot_hosts(boot_device, hostnames=['controller-1'], lab=central_region_lab,
+                                    wait_for_online=False)
     host_helper.wait_for_hosts_ready([host for host in hosts if controller0_node.name not in host],
                                      con_ssh=controller0_node.ssh_conn)
 

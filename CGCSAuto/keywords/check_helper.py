@@ -15,7 +15,7 @@ from consts.auth import Tenant
 from consts.cgcs import MELLANOX_DEVICE, GuestImages, EventLogID
 from consts.reasons import SkipStorageSpace
 from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
-    glance_helper, storage_helper, kube_helper, container_helper
+    glance_helper, storage_helper
 
 SEP = '\n------------------------------------ '
 
@@ -64,9 +64,9 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
                 expt_vswitch_map, actual_vswitch_map)
 
 
-def check_topology_of_vm(vm_id, vcpus, prev_total_cpus=None, numa_num=None, vm_host=None, cpu_pol=None, cpu_thr_pol=None,
-                         expt_increase=None, min_vcpus=None, current_vcpus=None, prev_siblings=None, shared_vcpu=None,
-                         con_ssh=None, guest=None):
+def check_topology_of_vm(vm_id, vcpus, prev_total_cpus=None, numa_num=None, vm_host=None, cpu_pol=None,
+                         cpu_thr_pol=None, expt_increase=None, min_vcpus=None, current_vcpus=None,
+                         prev_siblings=None, shared_vcpu=None, con_ssh=None, guest=None):
     """
     Check vm has the correct topology based on the number of vcpus, cpu policy, cpu threads policy, number of numa nodes
 
@@ -345,8 +345,6 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_host, cpu_pol, cpu_thr_pol,
     Args:
         vm_id (str):
         vcpus (int):
-        expt_increase (int):
-        prev_total_cpus (int|float):
         vm_host (str):
         cpu_pol (str):
         cpu_thr_pol (str):

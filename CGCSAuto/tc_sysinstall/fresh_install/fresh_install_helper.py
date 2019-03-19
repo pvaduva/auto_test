@@ -386,7 +386,7 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None):
+def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None, wait_for_online=True):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Boot"
 
@@ -436,6 +436,9 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None)
                                                                   close_telnet_conn=True))
         for thread in threads:
             thread.join(timeout=InstallTimeout.INSTALL_LOAD)
+
+        if wait_for_online:
+            wait_for_hosts_to_be_online(hosts=hostnames, lab=lab)
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -678,7 +681,7 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml", con_ssh=subcloud_controller0.ssh_conn)
     boot_device = lab['boot_device_dict']
     hostnames = [node.host_name for node in subcloud_nodes if node.host_name != 'controller-0']
-    boot_hosts(boot_device, hostnames=hostnames)
+    boot_hosts(boot_device, hostnames=hostnames, wait_for_online=False)
     host_helper.wait_for_hosts_ready(hostnames,  con_ssh=subcloud_controller0.ssh_conn.ssh_conn)
 
     run_lab_setup(conf_file=lab_setup_filename, con_ssh=subcloud_controller0.ssh_conn)

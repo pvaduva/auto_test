@@ -7,37 +7,14 @@ from consts.cgcs import GuestImages
 from consts.filepaths import TestServerPath, WRSROOT_HOME, TiSPath
 from consts.proj_vars import ProjVar
 from keywords import host_helper, system_helper, common
-from utils import table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 generated_vm_dict = {}
 
 
-def check_vm_topology_mismatch(vm_name):
-
-    """
-
-    Checks if a vm appears in the servers table of vm-topology but not libvirt (confirms that it is an orphan vm)
-
-    """
-
-    nova_tab, libvirt_tab = system_helper.get_vm_topology_tables('servers', 'libvirt')
-
-    nova_vm_list = table_parser.get_column(nova_tab, 'instance_name')
-    libvirt_vm_list = table_parser.get_column(libvirt_tab, 'instance_name')
-
-    assert vm_name in libvirt_vm_list, 'VM not in libvirt list'
-    assert vm_name not in nova_vm_list, 'VM in nova list'
-
-
 def create_simple_orphan(host_ssh, vm_host, vm_name):
-
-    """
-
-        Creates a simple orphan out of the orphan_guest.xml file and the given vm_host and vm_name
-
-    """
+    """ Creates a simple orphan out of the orphan_guest.xml file and the given vm_host and vm_name"""
 
     global generated_vm_dict
     define_xml_cmd = "virsh define orphan_guest.xml"
@@ -72,14 +49,10 @@ def wait_for_deletion(compute_ssh, vm_name):
 
 @fixture(scope='module')
 def orphan_audit_setup(request):
-    """
+    """ SCPs files to setup test orphan audit test """
 
-        SCPs files to setup test orphan audit test
-
-    """
-
-    control_ssh = ControllerClient.get_active_controller()
-    vm_host = host_helper.get_hypervisors(state='up', status='enabled')[0]
+    con_ssh = ControllerClient.get_active_controller()
+    vm_host = host_helper.get_up_hypervisors()[0]
 
     LOG.fixture_step("SCP orphan_guest.xml to active controller")
     source_file = TestServerPath.USER_DATA + 'orphan_guest.xml'
@@ -92,12 +65,12 @@ def orphan_audit_setup(request):
 
     if nat_name == 'localhost' or nat_name.startswith('128.224.'):
         LOG.info("Changing domain type in xml to qemu")
-        control_ssh.exec_sudo_cmd("sed -i 's/kvm/qemu/g' orphan_guest.xml")
-        control_ssh.exec_sudo_cmd("sed -i 's/qemu-qemu/qemu-kvm/g' orphan_guest.xml")
+        con_ssh.exec_sudo_cmd("sed -i 's/kvm/qemu/g' orphan_guest.xml")
+        con_ssh.exec_sudo_cmd("sed -i 's/qemu-qemu/qemu-kvm/g' orphan_guest.xml")
 
     if GuestImages.DEFAULT_GUEST != 'tis-centos-guest':
         LOG.info("Update xml files to use default image")
-        control_ssh.exec_sudo_cmd("sed -i 's/tis-centos-guest/{}/g' orphan_guest.xml".format(GuestImages.DEFAULT_GUEST))
+        con_ssh.exec_sudo_cmd("sed -i 's/tis-centos-guest/{}/g' orphan_guest.xml".format(GuestImages.DEFAULT_GUEST))
 
     # Check if system is AIO, skip scp to computes if it is
     if not system_helper.is_small_footprint():
@@ -108,19 +81,17 @@ def orphan_audit_setup(request):
 
         def teardown():
             LOG.fixture_step("Delete all files scp'd over")
-            with host_helper.ssh_to_host(vm_host) as host_ssh:
-                host_ssh.exec_cmd('rm -rf images/{}.img'.format(GuestImages.DEFAULT_GUEST))
-                host_ssh.exec_cmd('rm orphan_guest.xml')
-
+            with host_helper.ssh_to_host(vm_host) as host_ssh_:
+                host_ssh_.exec_cmd('rm -rf images/{}.img'.format(GuestImages.DEFAULT_GUEST))
+                host_ssh_.exec_cmd('rm orphan_guest.xml')
         request.addfinalizer(teardown)
 
         # copy Default guest img and XML file over to compute
         img_path = TiSPath.IMAGES + GuestImages.IMAGE_FILES.get(GuestImages.DEFAULT_GUEST)[2]
-
-        control_ssh.scp_on_source(WRSROOT_HOME + 'orphan_guest.xml', HostLinuxCreds.get_user(), vm_host, WRSROOT_HOME,
-                                  HostLinuxCreds.get_password(), timeout=60)
-        control_ssh.scp_on_source(img_path, HostLinuxCreds.get_user(), vm_host, TiSPath.IMAGES,
-                                  HostLinuxCreds.get_password(), timeout=300)
+        con_ssh.scp_on_source(WRSROOT_HOME + 'orphan_guest.xml', HostLinuxCreds.get_user(), vm_host, WRSROOT_HOME,
+                              HostLinuxCreds.get_password(), timeout=60)
+        con_ssh.scp_on_source(img_path, HostLinuxCreds.get_user(), vm_host, TiSPath.IMAGES,
+                              HostLinuxCreds.get_password(), timeout=300)
 
     else:
         vm_host = system_helper.get_active_controller_name()
@@ -130,12 +101,7 @@ def orphan_audit_setup(request):
 
 @fixture(scope='function')
 def clear_virsh_vms(request):
-    """
-
-    Clears leftover vms made by tests
-
-    """
-
+    """ Clears leftover vms made by tests """
     def teardown():
         global generated_vm_dict
         for host in generated_vm_dict:
@@ -149,34 +115,32 @@ def clear_virsh_vms(request):
 
 # TC2990
 def test_orphan_audit(orphan_audit_setup, clear_virsh_vms):
-    global generated_vm_dict
+    """
+    Tests the orphan audit by booting an instance directly on compute node to bypass nova, wait for 5 minutes and
+    ensure that it gets cleaned up (TC2990 on rally)
+
+    Test setup:
+        - SCP two files to a compute node:
+        - The DEFAULT_GUEST image currently on the controller node
+        - An XML file that is on the test server (orphan_guest.xml) that will be used to define an start a VM
+          with virsh
+        - Change domain type in XML file to qemu if the test is being ran in a vbox
+
+    Test steps:
+        - Change the vm name in the XML file to an auto-generated name
+        - SSH onto the node hosting the VM and run virsh define orphan_guest.xml and then virsh start Orphan_VM
+          to start the VM
+            - Assert that vm creation was successful by checking output of virsh start. Output of virsh list is logged
+          as well
+        - Check virsh list output to make sure that openstack has automatically cleaned up the orphan instance by
+          5.5 minutes. This check is periodically done every 10 seconds to a maximum of 5.5 minutes. The test
+          immediately passes if any of the checks reports the abscence of the orphan_vm and fails if the vm is
+          still present in the list after 5.5 minutes.
+
+    Test Teardown:
+        - Delete created VMs
 
     """
-        Tests the orphan audit by booting an instance directly on compute node to bypass nova, wait for 5 minutes and
-        ensure that it gets cleaned up (TC2990 on rally)
-
-        Test setup:
-            - SCP two files to a compute node:
-                - The DEFAULT_GUEST image currently on the controller node
-                - An XML file that is on the test server (orphan_guest.xml) that will be used to define an start a VM
-                  with virsh
-                - Change domain type in XML file to qemu if the test is being ran in a vbox
-
-        Test steps:
-            - Change the vm name in the XML file to an auto-generated name
-            - SSH onto the node hosting the VM and run virsh define orphan_guest.xml and then virsh start Orphan_VM
-              to start the VM
-                - Assert that vm creation was successful by checking output of virsh start. Output of virsh list is logged
-              as well
-            - Check virsh list output to make sure that openstack has automatically cleaned up the orphan instance by
-              5.5 minutes. This check is periodically done every 10 seconds to a maximum of 5.5 minutes. The test
-              immediately passes if any of the checks reports the abscence of the orphan_vm and fails if the vm is
-              still present in the list after 5.5 minutes.
-
-        Test Teardown:
-            - Delete created VMs
-
-        """
     vm_host = orphan_audit_setup
 
     # Create standalone vm
@@ -189,11 +153,6 @@ def test_orphan_audit(orphan_audit_setup, clear_virsh_vms):
         LOG.tc_step("Create a simple orphan vm")
         create_simple_orphan(host_ssh, vm_host, vm_name)
 
-    # Verify that the improperly created vm appears in libvirt list of vm-topology but not nova
-    check_vm_topology_mismatch(vm_name)
-
-    with host_helper.ssh_to_host(vm_host) as host_ssh:
-        
         list_cmd = 'virsh list --all'
         host_ssh.exec_sudo_cmd(list_cmd)
 
@@ -201,8 +160,5 @@ def test_orphan_audit(orphan_audit_setup, clear_virsh_vms):
         LOG.tc_step("Check for deletion of vm")
         assert wait_for_deletion(host_ssh, vm_name), "{} is still in virsh list after 330 seconds".format(vm_name)
 
+    global generated_vm_dict
     generated_vm_dict[vm_host].remove(vm_name)
-
-    libvirt_tab = system_helper.get_vm_topology_tables('libvirt', con_ssh=None)[0]
-    libvirt_vm_list = table_parser.get_column(libvirt_tab, 'instance_name')
-    assert vm_name not in libvirt_vm_list, 'VM in libvirt list'

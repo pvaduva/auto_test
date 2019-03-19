@@ -127,7 +127,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
         host_ssh.send(cmd)
         host_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
         host_ssh.send(password)
-        con_ssh.expect(timeout=120)
+        con_ssh.expect(timeout=300)
 
     # reconnect to lab and wait for system up if rebooting active controller
     if reboot_active:
@@ -137,7 +137,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
             time.sleep(time_to_sleep)
 
         LOG.info("Rebooting active controller: {}".format(active_con))
-        con_ssh.send('sudo reboot -f')
+        con_ssh.send(cmd)
         index = con_ssh.expect(['.*[pP]assword:.*', 'Rebooting'])
         if index == 0:
             con_ssh.send(password)
@@ -154,7 +154,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
             _wait_for_openstack_cli_enable(con_ssh=con_ssh)
 
     if not wait_for_offline and not is_simplex:
-        msg = "Hosts reboot -f cmd sent"
+        msg = "{} cmd sent".format(cmd)
         LOG.info(msg)
         return -1, msg
 
