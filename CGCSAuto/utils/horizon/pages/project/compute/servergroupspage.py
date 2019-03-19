@@ -1,3 +1,7 @@
+import time
+
+from selenium.webdriver.common import by
+
 from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
@@ -5,17 +9,19 @@ from utils.horizon.regions import tables
 
 class ServerGroupsTable(tables.TableRegion):
 
-    name = "server_groups"
+    name = "OS::Nova::ServerGroup"
 
-    CREATE_SERVER_GROUP_FORM_FIELDS = ("name", "policy", "is_best_effort", "group_size")
+    CREATE_SERVER_GROUP_FORM_FIELDS = ("name", "policy")
 
-    @tables.bind_table_action('create')
+    @tables.bind_table_action('btn-default', attribute_search='class')
     def create_server_group(self, create_button):
         create_button.click()
+        time.sleep(5)
         self.wait_till_spinner_disappears()
+
         return forms.FormRegion(self.driver, field_mappings=self.CREATE_SERVER_GROUP_FORM_FIELDS)
 
-    @tables.bind_table_action('delete')
+    @tables.bind_table_action('btn-danger', attribute_search='class')
     def delete_server_group(self, delete_button):
         delete_button.click()
         return forms.BaseFormRegion(self.driver)
@@ -25,11 +31,14 @@ class ServerGroupsTable(tables.TableRegion):
         delete_button.click()
         return forms.BaseFormRegion(self.driver)
 
+    def _table_locator(self, table_name):
+        return by.By.CSS_SELECTOR, 'hz-resource-table[resource-type-name="%s"]' % table_name
+
 
 class ServerGroupsPage(basepage.BasePage):
 
     PARTIAL_URL = 'project/server_groups'
-    GROUP_TABLE_NAME_COLUMN = 'Group Name'
+    GROUP_TABLE_NAME_COLUMN = 'Name'
 
     @property
     def server_groups_table(self):
@@ -42,7 +51,7 @@ class ServerGroupsPage(basepage.BasePage):
         create_form = self.server_groups_table.create_server_group()
         create_form.name.text = name
         if policy is not None:
-            create_form.policy.text = policy
+            create_form.policy.value = policy
         if is_best_effort:
             create_form.is_best_effort.mark()
         if group_size is not None:

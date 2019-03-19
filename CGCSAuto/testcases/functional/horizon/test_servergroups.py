@@ -1,3 +1,5 @@
+import time
+
 from pytest import fixture, mark
 
 from consts import horizon
@@ -24,6 +26,7 @@ def server_groups_pg(tenant_home_pg_container, request):
         if instances_pg.is_instance_present(instance_name):
             instances_pg.delete_instance_by_row(instance_name)
         groups_pg.go_to_target_page()
+        time.sleep(5)
         if groups_pg.is_server_group_present(group_name):
             groups_pg.delete_server_group(name=group_name)
 
@@ -31,14 +34,12 @@ def server_groups_pg(tenant_home_pg_container, request):
     return groups_pg, group_name, instance_name
 
 
-@mark.parametrize(('policy', 'best_effort', 'group_size'), [
-    ('affinity', 'best_effort', 10),
-    ('anti-affinity', None, None)
+@mark.parametrize('policy', [
+    'affinity',
+    'anti-affinity'
 ])
 def test_horizon_create_delete_server_group(server_groups_pg,
-                                    policy,
-                                    best_effort,
-                                    group_size):
+                                            policy):
     """
     Tests the server group creation and deletion functionality:
 
@@ -61,12 +62,10 @@ def test_horizon_create_delete_server_group(server_groups_pg,
     """
     server_groups_pg, group_name, instance_name = server_groups_pg
 
-    is_best_effort = True if best_effort == 'best_effort' else False
+    # is_best_effort = True if best_effort == 'best_effort' else False
     LOG.tc_step('Create a new server group')
     server_groups_pg.create_server_group(name=group_name,
-                                         policy=policy,
-                                         is_best_effort=is_best_effort,
-                                         group_size=group_size)
+                                         policy='string:' + policy)
     assert not server_groups_pg.find_message_and_dismiss(messages.ERROR), \
         '{} creation error'.format(group_name)
 

@@ -351,7 +351,7 @@ class FormRegion(BaseFormRegion):
     FIELDS = None
     _header_locator = (by.By.CSS_SELECTOR, 'div.modal-header > h3')
     _side_info_locator = (by.By.CSS_SELECTOR, 'div.right')
-    _fields_locator = (by.By.CSS_SELECTOR, 'fieldset')
+    _fields_locator = (by.By.CSS_SELECTOR, 'fieldset,form')
 
     # private methods
     def __init__(self, driver, src_elem=None, field_mappings=None):
