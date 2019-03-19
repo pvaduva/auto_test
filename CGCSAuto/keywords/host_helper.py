@@ -1041,9 +1041,11 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
 
     if check_nodes_ready and (hosts_avail or hosts_degrd) and not use_telnet:
         from keywords.kube_helper import wait_for_nodes_ready
+
         hosts_to_wait = list(hosts_avail)
         hosts_to_wait += hosts_degrd
-        hosts_not_ready = wait_for_nodes_ready(hosts=hosts_to_wait, timeout=120, con_ssh=con_ssh, fail_ok=fail_ok)[1]
+        hosts_not_ready = wait_for_nodes_ready(hosts=hosts_to_wait, timeout=180, con_ssh=con_ssh, fail_ok=fail_ok)[1]
+
         if hosts_not_ready:
             hosts_avail = list(set(hosts_avail) - set(hosts_not_ready))
             for host in hosts_not_ready:

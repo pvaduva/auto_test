@@ -275,6 +275,10 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
     # WK Touch .this_didnt_work to avoid using heat for kubernetes
     controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
 
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        reset_global_vars()
+        skip("stopping at install step: {}".format(LOG.test_step))
+
     LOG.info("Run lab_setup after config controller")
     run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
 
@@ -343,7 +347,6 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
         LOG.info("Running config for subcloud {} ... ".format(subcloud))
         install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
         LOG.info("Run lab_setup after config controller")
-
         run_lab_setup(con_ssh=subcloud_controller0_node.ssh_conn)
         if do_step("unlock_active_controller"):
             LOG.info("unlocking {}".format(subcloud_controller0_node.name))
@@ -487,12 +490,12 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
             host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400,
                                     check_hypervisor_up=False, check_webservice_up=False)
         else:
-            host_helper.unlock_hosts(hostnames, con_ssh=con_ssh, check_nodes_ready=False)
-        kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=3600)
+            host_helper.unlock_hosts(hostnames, con_ssh=con_ssh, fail_ok=False)
+        kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=1800)
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
-
+        
 
 def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
