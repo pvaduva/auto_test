@@ -3389,7 +3389,19 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             con_telnet.exec_cmd("""echo '{}'>> {}""".format(histime_format_cmd, bashrc_path))
             con_telnet.exec_cmd("source {}".format(bashrc_path))
         con_telnet.exec_cmd("export USER=wrsroot")
-        con_telnet.exec_cmd("test -f {}".format(config_file), fail_ok=False)
+        config_file_found = False
+        if con_telnet.exec_cmd("test -f {}".format(config_file))[0] == 0:
+            config_file_found = True
+        else:
+            if re.search(r'_centos$', config_file):
+                config_file_ = config_file.replace('_centos', '')
+                if con_telnet.exec_cmd("test -f {}".format(config_file_))[0] == 0:
+                    config_file = config_file_
+                    config_file_found = True
+        if not config_file_found:
+            msg = "The controller configuration file {}  not found in {}".format(config_file, WRSROOT_HOME)
+            raise exceptions.InstallError(msg)
+
         config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") \
             else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '') if not subcloud \
             else "config_subcloud"
