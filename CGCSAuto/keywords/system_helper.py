@@ -3,6 +3,7 @@ import re
 import time
 import copy
 
+import configparser
 from pytest import skip
 
 from consts.auth import Tenant, HostLinuxCreds
@@ -13,7 +14,7 @@ from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from testfixtures.fixture_resources import ResourceCleanup
-from keywords import common
+from keywords import common, container_helper, kube_helper
 
 
 def get_buildinfo(con_ssh=None, use_telnet=False, con_telnet=None):
@@ -1164,6 +1165,132 @@ def get_system_value(field='name', auth_info=Tenant.get('admin'), con_ssh=None, 
 
     value = table_parser.get_value_two_col_table(table_, field=field)
     return value
+
+
+def set_retention_period_k8s(period, name='metering_time_to_live', fail_ok=True, check_first=True, con_ssh=None,
+                         auth_info=Tenant.get('admin')):
+    """
+    Sets the PM retention period in K8S settings
+    Args:
+        period (int): the length of time to set the retention period (in seconds)
+        name
+        fail_ok: True or False
+        check_first: True or False
+        con_ssh (SSHClient):
+        auth_info (dict): could be Tenant.get('admin'),Tenant.TENANT1,Tenant.TENANT2
+
+    Returns (tuple): (rtn_code (int), msg (str))
+        (-1, "Retention period not specified")
+        (-1, "The retention period is already set to that")
+        (0, "Current retention period is: <retention_period>")
+        (1, "Current retention period is still: <retention_period>")
+
+    US100247
+    US99793
+    system helm-override-update --reset-values panko database --set conf.panko.database.event_time_to_live=45678
+    system application-apply stx-openstack
+
+    """
+    if not isinstance(period, int):
+        raise ValueError("Retention period has to be an integer. Value provided: {}".format(period))
+    if check_first:
+        retention = get_retention_period(name=name)
+        if period == retention:
+            msg = "The retention period is already set to {}".format(period)
+            LOG.info(msg)
+            return -1, msg
+
+    app_name = 'stx-openstack'
+    section = 'database'
+
+    if name in 'metering_time_to_live':
+        skip("Ceilometer metering_time_to_live is no longer available in 'system service-parameter-list'")
+        name = 'metering_time_to_live'
+        service = 'ceilometer'
+    elif name == 'alarm_history_time_to_live':
+        skip("Skip for now on containerized load")
+        service = 'aodh'
+    elif name == 'event_time_to_live':
+        service = 'panko'
+        section = 'openstack'
+        name = 'conf.panko.database.event_time_to_live'
+    else:
+        raise ValueError("Unknown name: {}".format(name))
+
+    container_helper.update_helm_override(chart=service, namespace=section, reset_vals=False, kv_pairs={name: period})
+
+    override_info = container_helper.get_helm_override_info(
+        chart=service, namespace=section, fields='user_overrides')
+    LOG.debug('override_info:{}'.format(override_info))
+
+    container_helper.apply_app(app_name=app_name, check_first=False, applied_timeout=1800)
+
+    LOG.info("Start post check after applying new value for {}".format(name))
+
+    verified = verify_config_changed(service, namespace=section, kv_pairs={name: period})
+
+    return verified, "{} {} is successfully set to: {}".format(service, name, 'should be the new value')
+
+
+def get_openstack_pods_by_name(name, component, namespace='openstack', path=None):
+    LOG.info('Searching pods servicing {} in namespace, type:{}, under:{}'.format(name, namespace, component, path))
+    command = 'get pod'
+
+    options = '-n {}'.format(namespace)
+    options += ' -o jsonpath=\''
+    options += '{range .items[?(@.metadata.labels.application=="' + name + '")]}'
+    options += '[{.metadata.name},{.metadata.labels.component}]'
+    options += r'{"\n"}{end}'
+    options += '\'; echo'
+    
+    code, output = kube_helper.exec_kube_cmd(command, args=options)
+    LOG.info('code={}, output={}, cmd={}, options={}'.format(code, output, command, options))
+
+    if not output:
+        LOG.info('No pods matching {} found'.format(options))
+        return []
+
+    matching = []
+    for line in output.splitlines():
+        pod_id, component_name = line.strip('][').split(',')
+        if component_name == component:
+            LOG.info('Found matching pods:{} of component:{}'.format(pod_id, component_name))
+            matching.append(pod_id)
+
+    return matching
+
+
+def verify_config_changed(chart, app_name='', component='api', namespace='openstack', fail_ok=False, **expected):
+    LOG.info('Verifying changes for chart:{}, namespace:{}, expecting new changes:{}'.format(
+        chart, namespace, expected))
+
+    name = app_name or chart
+    pods = get_openstack_pods_by_name(name, component)
+
+    if not pods:
+        msg = 'No pods found for {} in namespace:{}'.format(name, namespace)
+        LOG.warn(msg)
+        assert fail_ok, msg
+        return False
+
+    cmd = 'cat /etc/panko/panko.conf; echo'
+
+    for pod in pods:
+        LOG.debug('Verifying config changes inside pod:{}'.format(pod))
+        code, output = kube_helper.exec_cmd_in_container(cmd, pod, namespace='openstack', fail_ok=False)
+        LOG.debug('output:{}, cmd:{}'.format(output, cmd))
+        settings = configparser.ConfigParser()
+        settings.read_string(output)
+        for expected_key, expected_value in expected.items():
+            if settings.getint('database', expected_key) != expected_value:
+                msg = 'for {}, value is not set to expected:{}, actual:{}'.format(
+                    expected_key, expected_value, settings.getint('database', expected_key))
+                assert fail_ok, msg
+                return False
+
+        LOG.debug('Value was correctly changed to:{} for {}'.format(expected_value, expected_key))
+
+    return True
 
 
 def set_retention_period(period, name='metering_time_to_live', fail_ok=True, check_first=True, con_ssh=None,
