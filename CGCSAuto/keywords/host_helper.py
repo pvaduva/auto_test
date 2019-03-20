@@ -2740,13 +2740,13 @@ def get_vcpus_per_proc(hosts=None, thread=None, con_ssh=None, auth_info=Tenant.g
         cpus_per_proc = get_host_cpu_cores_for_function(host, func='Applications', thread=thread,
                                                         auth_info=auth_info, con_ssh=con_ssh)
         with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
-            cmd = """ps-sched.sh|grep qemu|grep " CPU" |awk '{{print $10";}}'"""
+            cmd = """ps-sched.sh|grep qemu|grep " CPU" |awk '{{print $10;}}'"""
             cores = host_ssh.exec_cmd(cmd)[1]
             cores = [int(core.strip()) for core in cores.splitlines()]
 
-        for proc, total_vcpus_per_proc in cpus_per_proc:
+        for proc, total_vcpus_per_proc in cpus_per_proc.items():
             used_cores = list(set(total_vcpus_per_proc) & set(cores))
-            vcpus_per_proc[proc] = (used_cores, total_vcpus_per_proc)
+            vcpus_per_proc[host][proc] = (used_cores, total_vcpus_per_proc)
 
     return vcpus_per_proc
 

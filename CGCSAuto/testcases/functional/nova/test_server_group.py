@@ -251,15 +251,15 @@ def check_server_group_messaging_disabled(vms):
             assert code > 0
 
 
-# Deprecated - align with upstream.
+# Deprecated - align with upstream. Remove test to reduce upstream test. anti_affinity with max count will fail.
 # TC2913, TC2915
 @mark.parametrize(('policy', 'min_count', 'max_count'), [
-    # ('soft_affinity', 3, 4),  TODO: add after cutover to stein
+    # ('soft_affinity', 3, 4),  # TODO: add after cutover to stein
     ('affinity', 3, 4),
-    # ('soft_anti_affinity', 3, None),  TODO: add after cutover to stein
+    # ('soft_anti_affinity', 3, None),  # TODO: add after cutover to stein
     ('anti_affinity', 1, 3),
 ])
-def test_server_group_launch_vms_in_parallel(policy, min_count, max_count, check_system):
+def _test_server_group_launch_vms_in_parallel(policy, min_count, max_count, check_system):
     """
     Test launch vms with server group in parallel using min_count, max_count param in nova boot
 

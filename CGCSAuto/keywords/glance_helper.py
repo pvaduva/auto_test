@@ -688,7 +688,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None, use
 
     """
     # TODO: temp workaround
-    if guest_os in ['opensuse_12', 'win_2016']:
+    if guest_os in ['opensuse_12', 'win_2016', 'win_2012']:
         skip('Skip test with 20G+ virtual size image for now - CGTS-10776')
 
     nat_name = ProjVar.get_var('NATBOX').get('name')

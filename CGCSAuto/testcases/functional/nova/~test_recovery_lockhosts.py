@@ -38,6 +38,7 @@ def target_host():
     return target_host
 
 
+# Deprecated - guest heartbeat. reboot with only host is covered by other test.
 @mark.p1
 def _test_vm_autorecovery_reboot_host(target_host):
     """

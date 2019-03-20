@@ -170,6 +170,7 @@ class TestPrioritizedVMEvacuation:
             skip('Not supported action:{}'.format(action))
         LOG.info('OK, triggered evacuation by {} host:{}'.format(self.operation, self.current_host))
 
+    # Remove. nova semantic check not available upstream
     @mark.parametrize(('operation', 'priority', 'expt_error'), [
         ('set', -2, 'error'),
         ('set', 10, None),
@@ -178,7 +179,7 @@ class TestPrioritizedVMEvacuation:
         ('set', 'random', 'error'),
         ('delete', '', 'error'),
     ])
-    def test_setting_evacuate_priority(self, operation, priority, expt_error):
+    def _test_setting_evacuate_priority(self, operation, priority, expt_error):
         LOG.tc_step('Launch VM for test')
 
         if not hasattr(TestPrioritizedVMEvacuation, 'vm_id'):
