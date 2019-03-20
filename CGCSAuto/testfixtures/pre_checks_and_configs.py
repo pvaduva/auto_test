@@ -168,7 +168,12 @@ def collect_kpi(request):
 @fixture(scope='session')
 def ixia_supported():
     if 'ixia_ports' not in ProjVar.get_var("LAB"):
-        skip("this lab is not configured with ixia_ports.")
+        skip("This system is not configured with ixia_ports")
+
+    try:
+        from IxNetwork import IxNet, IxNetError
+    except ImportError:
+        skip('IxNetwork modules unavailable')
 
 
 @fixture(scope='session')

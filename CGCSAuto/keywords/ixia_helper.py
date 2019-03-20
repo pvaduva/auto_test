@@ -1,27 +1,15 @@
 import time
 
-# from testfixtures.fixture_resources import ResourceCleanup
-
 from keywords import common, host_helper
-
 from utils.tis_log import LOG
-from consts.cgcs import IxiaServerIP
 from utils.exceptions import IxiaError
+from consts.cgcs import IxiaServerIP
 
 try:
-    import IxNetwork
-except ImportError as err:
-    LOG.warning(str(err))
-    LOG.warning("keywords/ixia_helper is not available")
-
-    class ImportFailedModule(object):
-        def __init__(self, imp_err):
-            self._exception = imp_err
-
-        def __getattr__(self, name):
-            raise self._exception
-
-    IxNetwork = ImportFailedModule(err)
+    from IxNetwork import IxNet, IxNetError
+except ImportError:
+    LOG.warning("IxNetwork modules unavailable")
+    IxNet = IxNetError = None
 
 
 class IxiaResource(object):
@@ -86,7 +74,7 @@ class IxiaSession(object):
     """
 
     def __init__(self):
-        self._ixnet = IxNetwork.IxNet()
+        self._ixnet = IxNet()
         self._connected = False
         self._connected_remote = None
         self._chassis = None
@@ -457,7 +445,7 @@ class IxiaSession(object):
         # verify if the interface exists
         try:
             self._ixnet.execute('sendArpAndNS', interface)
-        except IxNetwork.IxNetError:
+        except IxNetError:
             if create_if_nonexistent:
                 LOG.warning("the specified interface does not exist, creating instead")
                 interface = self._ixnet.add(self._port_map[port_id], "interface")
