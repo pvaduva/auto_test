@@ -188,6 +188,3 @@ def ceph_precheck():
     osds = storage_helper.get_num_osds()
     LOG.info('System has {} OSDS'.format(osds))
     assert osds != 0, 'There are no OSDs assigned'
-
-    LOG.info('Query storage usage info')
-    storage_helper.get_storage_usage()

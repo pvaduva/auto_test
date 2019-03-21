@@ -99,7 +99,8 @@ def test_horizon_storage_overview_service_display(storage_overview_pg):
     horizon.test_result = True
 
 
-def test_horizon_storage_overview_usage_display(storage_overview_pg):
+# cmd obsolete
+def _test_horizon_storage_overview_usage_display(storage_overview_pg):
     """
     Tests the storage overview display:
 

@@ -302,10 +302,11 @@ def create_snapshot_from_instance(vm_id, name):
     return exit_code, output, snap_size
 
 
+# Obsolete for ceph.
 @mark.parametrize('inst_backing', [
     'local_image',
 ])
-def test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
+def _test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
     """
     Tests that the system rejects snapshot creation if there is not enough room for it and that an appropriate error
     message is written in the correct compute-log file for the host of the created VM
