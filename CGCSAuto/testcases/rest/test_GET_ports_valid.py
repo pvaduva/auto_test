@@ -6,7 +6,7 @@ from keywords import system_helper
 
 @pytest.fixture(scope='module')
 def sysinv_rest():
-    r = Rest('sysinv')
+    r = Rest('sysinv', platform=True)
     return r
 
 # @pytest.mark.parametrize(

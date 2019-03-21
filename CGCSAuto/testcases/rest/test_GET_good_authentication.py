@@ -7,7 +7,7 @@ from testcases.rest import rest_test_helper
 
 @pytest.fixture(scope='module')
 def sysinv_rest():
-    r = Rest('sysinv')
+    r = Rest('sysinv', platform=True)
     return r
 
 

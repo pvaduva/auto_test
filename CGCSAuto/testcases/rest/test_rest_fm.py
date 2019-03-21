@@ -7,7 +7,7 @@ from testcases.rest import rest_test_helper
 
 @fixture(scope='module')
 def fm_rest():
-    r = Rest('fm')
+    r = Rest('fm', platform=True)
     return r
 
 

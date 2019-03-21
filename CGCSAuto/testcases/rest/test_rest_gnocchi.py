@@ -7,7 +7,7 @@ from testcases.rest import rest_test_helper
 
 @pytest.fixture(scope='module')
 def gnocchi_rest():
-    r = Rest('gnocchi')
+    r = Rest('gnocchi', platform=False)
     return r
 
 

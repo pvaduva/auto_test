@@ -12,7 +12,7 @@ from utils.clients.local import RemoteCLIClient
 
 def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
              flags='', fail_ok=False, cli_dir='', auth_info=None, source_openrc=None, err_only=False,
-             timeout=CLI_TIMEOUT, rtn_list=False, force_source=False):
+             timeout=CLI_TIMEOUT, rtn_list=False, force_source=False, platform=None):
     """
 
     Args:
@@ -38,6 +38,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
         err_only:
         timeout:
         rtn_list (bool):
+        platform (None|bool)
 
     Returns:
         if command executed successfully: return command_output
@@ -86,7 +87,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
         flags = ''
     elif auth_info:
         # os auth url handling
-        if raw_cmd not in ('fm', 'system'):
+        if raw_cmd not in ('fm', 'system') and platform is not True:
             auth_info = dict(auth_info)
             auth_info['auth_url'] = 'http://keystone.openstack.svc.cluster.local/v3'
 
@@ -228,12 +229,14 @@ def nova(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli
 
 
 def openstack(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-              auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, source_openrc=False):
+              auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, source_openrc=False,
+              platform=False):
     flags += ' --os-identity-api-version 3'
 
     return exec_cli('openstack', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_openrc=source_openrc)
+                    err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_openrc=source_openrc,
+                    platform=platform)
 
 
 def system(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,

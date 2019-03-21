@@ -25,7 +25,7 @@ class Rest:
             put                      perform HTTP PUT
             post                     perform HTTP POST
     """
-    def __init__(self, serviceName):
+    def __init__(self, serviceName, platform=False):
         """
         Initiate an object for handling REST calls.
         Args:
@@ -38,11 +38,11 @@ class Rest:
         self.baseURL = keystone_helper.get_endpoints(rtn_val='URL',
                                                      service_name=serviceName,
                                                      interface="public",
-                                                     region=self.region)[0]
+                                                     region=self.region, platform=platform)[0]
         self.ksURL = keystone_helper.get_endpoints(rtn_val='URL',
                                                    service_name='keystone',
                                                    interface="public",
-                                                   region=self.region)[0]
+                                                   region=self.region, platform=platform)[0]
         self.cert_path = None
         self.verify = True
         self.is_https = CliAuth.get_var('HTTPS')

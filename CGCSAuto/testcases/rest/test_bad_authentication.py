@@ -5,7 +5,7 @@ from utils.rest import Rest
 
 @pytest.fixture(scope='module')
 def sysinv_rest():
-    r = Rest('sysinv')
+    r = Rest('sysinv', platform=True)
     return r
 
 

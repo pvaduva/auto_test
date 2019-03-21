@@ -886,7 +886,7 @@ def check_qat_service(vm_id, qat_devs, run_cpa=True, timeout=600):
 
 def check_rest_api():
     LOG.info("Check sysinv REST API")
-    sysinv_rest = Rest('sysinv')
+    sysinv_rest = Rest('sysinv', platform=True)
     resource = '/controller_fs'
     status_code, text = sysinv_rest.get(resource=resource, auth=True)
     message = "Retrieved: status_code: {} message: {}"
