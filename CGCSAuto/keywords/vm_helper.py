@@ -2816,10 +2816,39 @@ def scale_vm(vm_id, direction, resource='cpu', fail_ok=False, con_ssh=None, auth
     if code == 1:
         return 1, output
 
-    # TODO add checking
     succ_msg = "vm {} is successfully scaled {}".format(resource, direction)
     LOG.info(succ_msg)
     return 0, succ_msg
+
+
+def get_vm_numa_nodes_via_ps(vm_id=None, instance_name=None, host=None, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Get numa nodes VM is currently on
+    Args:
+        vm_id:
+        instance_name:
+        host:
+        con_ssh:
+        auth_info:
+
+    Returns (list): e.g., [0], [0, 1]
+
+    """
+    if not instance_name or not host:
+        if not vm_id:
+            raise ValueError('vm_id has to be provided')
+        instance_name, host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"],
+                                                                  strict=False, con_ssh=con_ssh, auth_info=auth_info)
+
+    with host_helper.ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+        vcpu_cpu_map = get_vcpu_cpu_map(instance_names=instance_name, host_ssh=host_ssh, con_ssh=con_ssh)[instance_name]
+        cpus = set(vcpu_cpu_map.values())
+        grep_str = ' '.join(['-e "processor.*{}"'.format(cpu) for cpu in cpus])
+        cmd = 'cat /proc/cpuinfo | grep -A 10 {} | grep --color=never "physical id"'.format(grep_str)
+        physical_ids = host_ssh.exec_cmd(cmd, fail_ok=False)[1].splitlines()
+        physical_ids = [int(proc.split(sep=':')[-1].strip()) for proc in physical_ids if 'physical' in proc]
+
+    return sorted(physical_ids)
 
 
 def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
