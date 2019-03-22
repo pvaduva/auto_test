@@ -3773,32 +3773,52 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
         node_obj.telnet_conn = open_telnet_session(node_obj)
 
     bios_boot_option = bios_option.name.encode()
+
     telnet_conn = node_obj.telnet_conn
     LOG.info('Waiting for BIOS boot option: {}'.format(bios_boot_option))
-    telnet_conn.expect([re.compile(bios_boot_option, re.IGNORECASE)], 300)
+    index = telnet_conn.expect([re.compile(bios_boot_option, re.IGNORECASE)], 300)
+    if index < 0:
+        msg = "BIOS boot option {} not found within 300 seconds".format(bios_boot_option)
+        raise exceptions.InstallError(msg)
+
     enter_bios_option(node_obj, bios_option, expect_prompt=False)
     LOG.info('BIOS option entered')
 
-    expt_prompts = [boot_device_menu.prompt]
-    if node_obj.name == pxe_host:
+    expt_prompts = []
+    if "hp" in node_obj.host_name and node_obj.name == pxe_host:
         expt_prompts.append(kickstart_menu.prompt)
+        LOG.info('In Kickstart menu expected prompts = {}'.format(expt_prompts))
 
-    index = telnet_conn.expect(expt_prompts, 360)
-    if index == 0:
-        LOG.info('In boot device menu')
-        select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
-        LOG.info('Boot device selected')
+        output = telnet_conn.read_until(b'Kickstart Boot', timeout=120)
+        if b"Kickstart Boot" in output:
+            select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
+                                  security=security, usb=usb, expect_prompt=False)
+        else:
+            msg = "{} not found after 300 seconds. Output = {}".format(kickstart_menu.prompt, output)
+            raise exceptions.InstallError(msg)
 
-        expt_prompts.pop(0)
+    else:
+        expt_prompts.append(boot_device_menu.prompt)
         if node_obj.name == pxe_host:
-            # expt_prompts.append("(\x1b\[0;1;36;44m\s{45,60})")
-            expt_prompts.append("\x1b.*\*{56,60}")
-        if len(expt_prompts) > 0:
-            LOG.info('In Kickstart menu expected promts = {}'.format(expt_prompts))
+            expt_prompts.append(kickstart_menu.prompt)
+
+        index = telnet_conn.expect(expt_prompts, 360)
+        LOG.info('In boot device menu index = {}'.format(index))
+        if index == 0:
+            LOG.info('In boot device menu')
+            select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb, expect_prompt=False)
+            LOG.info('Boot device selected')
+
+            expt_prompts.pop(0)
+            if node_obj.name == pxe_host:
+                expt_prompts.append("\x1b.*\*{56,60}")
+            if len(expt_prompts) > 0:
+                LOG.info('In Kickstart menu expected promts = {}'.format(expt_prompts))
 
             telnet_conn.read_until(kickstart_menu.prompt, timeout=360)
             select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
                                   security=security, usb=usb, expect_prompt=False)
+
     LOG.info('Kick start option selected')
 
     LOG.info("Waiting for {} to boot".format(node_obj.name))
