@@ -182,10 +182,10 @@ class TestConfigMempage:
                 LOG.info("1G and 4k hosts already configured and selected: {}".format(hosts_selected))
                 break
         else:
-            for i in hosts_selected:
+            for i in range(len(hosts_selected)):
                 if hosts_selected[i] is None:
                     hosts_selected[i] = hosts_to_configure[i] = list(set(candidates) - set(hosts_selected))[0]
-            LOG.info("Hosts selected: {}; To be configured:".format(hosts_selected, hosts_to_configure))
+            LOG.info("Hosts selected: {}; To be configured: {}".format(hosts_selected, hosts_to_configure))
 
         return hosts_selected, hosts_to_configure
 
