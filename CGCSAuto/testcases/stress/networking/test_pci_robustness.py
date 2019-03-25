@@ -343,7 +343,7 @@ class TestPcipt:
             vm_id = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='function')[1]
             vms.append(vm_id)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id, seg_id)
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id, seg_id, init_conf=True)
 
         # TODO: feature unavailable atm. Update required
         # pfs_use_post_boot = nova_helper.get_provider_net_info(pnet_id, field='pci_pfs_used')

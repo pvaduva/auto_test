@@ -1,11 +1,12 @@
+import copy
+
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, VMStatus
 from consts.reasons import SkipHostIf
-from consts.auth import Tenant
-from keywords import vm_helper, nova_helper, network_helper, check_helper, glance_helper, system_helper
+from keywords import vm_helper, nova_helper, network_helper, glance_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -52,7 +53,7 @@ def _boot_multiports_vm(flavor, mgmt_net_id, vifs, net_id, net_type, base_vm, pc
 
     if pcipt_seg_id:
         LOG.tc_step("Add vlan to pci-passthrough interface for VM.")
-        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_id)
+        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_id, init_conf=True)
 
     LOG.tc_step("Ping test_vm's own {} network ips".format(net_type))
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=net_type)
@@ -212,75 +213,78 @@ class TestMutiPortsPCI:
     @fixture(scope='class')
     def base_setup_pci(self):
         LOG.fixture_step("(class) Get an internal network that supports both pci-sriov and pcipt vif to boot vm")
-        avail_net = network_helper.get_pci_vm_network(pci_type=('pci-passthrough', 'pci-sriov'),
-                                                      net_name='internal0-net')
-        if not avail_net:
-            skip(SkipHostIf.PCI_IF_UNAVAIL)
-        LOG.info("Internal network(s) selected for pcipt and sriov: {}".format(avail_net))
-        LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
-        flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048)[1]
-        ResourceCleanup.add('flavor', flavor_id, scope='class')
+        avail_pcipt_nets, is_cx4 = network_helper.get_pci_vm_network(pci_type='pci-passthrough',
+                                                                     net_name='internal0-net', rtn_all=True)
+        avail_sriov_nets, _ = network_helper.get_pci_vm_network(pci_type='pci-sriov',
+                                                                net_name='internal0-net', rtn_all=True)
 
+        if not avail_pcipt_nets and not avail_sriov_nets:
+            skip(SkipHostIf.PCI_IF_UNAVAIL)
+
+        avail_nets = list(set(avail_pcipt_nets) & set(avail_sriov_nets))
+        extra_pcipt_net = avail_pcipt_net = avail_sriov_net = None
+        pcipt_seg_ids = {}
+        if avail_nets:
+            avail_net_name = avail_nets[-1]
+            avail_net, segment_id = network_helper.get_net_show_values(network=avail_net_name,
+                                                                       fields=('id', 'provider:segmentation_id'))
+            internal_nets = [avail_net]
+            pcipt_seg_ids[avail_net_name] = segment_id
+            avail_pcipt_net = avail_sriov_net = avail_net
+            LOG.info("Internal network(s) selected for pcipt and sriov: {}".format(avail_net_name))
+        else:
+            LOG.info("No internal network support both sriov and pcipt")
+            internal_nets = []
+            if avail_pcipt_nets:
+                avail_pcipt_net_name = avail_pcipt_nets[-1]
+                avail_pcipt_net, segment_id = network_helper.get_net_show_values(
+                    network=avail_pcipt_net_name, fields=('id', 'provider:segmentation_id'))
+                internal_nets.append(avail_pcipt_net)
+                pcipt_seg_ids[avail_pcipt_net_name] = segment_id
+                LOG.info("pci-passthrough net: {}".format(avail_pcipt_net_name))
+            if avail_sriov_nets:
+                avail_sriov_net_name = avail_sriov_nets[-1]
+                avail_sriov_net = network_helper.get_net_id_from_name(avail_sriov_net_name)
+                internal_nets.append(avail_sriov_net)
+                LOG.info("pci-sriov net: {}".format(avail_sriov_net_name))
+
+        mgmt_net_id = network_helper.get_mgmt_net_id()
+        tenant_net_id = network_helper.get_tenant_net_id()
+        base_nics = [{'net-id': mgmt_net_id}, {'net-id': tenant_net_id}]
+        nics = base_nics + [{'net-id': net_id} for net_id in internal_nets]
+
+        if avail_pcipt_nets and is_cx4:
+            extra_pcipt_net_name = avail_nets[0] if avail_nets else avail_pcipt_nets[0]
+            extra_pcipt_net, seg_id = network_helper.get_net_show_values(network=extra_pcipt_net_name,
+                                                                         fields=('id', 'provider:segmentation_id'))
+            if extra_pcipt_net not in internal_nets:
+                nics.append({'net-id': extra_pcipt_net})
+                pcipt_seg_ids[extra_pcipt_net_name] = seg_id
+
+        LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
+        flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048, cleanup='class')[1]
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'prefer'}
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
-        extra_pcipt_net = None
-        extra_pcipt_net_name = None
-        if isinstance(avail_net, list):
-            LOG.info("cx4 pcipt internal net(s): {}".format(avail_net))
-            avail_net, extra_pcipt_net_name = avail_net
-            extra_pcipt_net = network_helper.get_net_id_from_name(extra_pcipt_net_name)
-
-        internal_net_name = avail_net
-        mgmt_net_id = network_helper.get_mgmt_net_id()
-        tenant_net_id = network_helper.get_tenant_net_id()
-        internal_net_id = network_helper.get_internal_net_id(net_name=internal_net_name, strict=True)
-
-        vif_type = 'avp' if system_helper.is_avs() else 'virtio'
-        nics = [{'net-id': mgmt_net_id},
-                {'net-id': tenant_net_id},
-                {'net-id': internal_net_id},
-                {'net-id': internal_net_id, 'vif-model': 'pci-sriov'},
-                {'net-id': internal_net_id, 'vif-model': vif_type}, ]
-
-        if extra_pcipt_net:
-            nics.append({'net-id': extra_pcipt_net})
-
         LOG.fixture_step("(class) Boot a base pci vm with following nics: {}".format(nics))
-        base_vm_pci = vm_helper.boot_vm(name='multiports_pci_base', flavor=flavor_id, nics=nics, cleanup='class',
-                                        reuse_vol=False)[1]
-        LOG.fixture_step("(class) Ping base PCI vm from NatBox over management network.")
-        vm_helper.wait_for_vm_pingable_from_natbox(base_vm_pci, fail_ok=False)
+        base_vm_pci = vm_helper.boot_vm(name='multiports_pci_base', flavor=flavor_id, nics=nics, cleanup='class')[1]
 
-        LOG.fixture_step("(class) Ping base PCI vm from itself over data, and internal (vlan 0 only) networks")
+        LOG.fixture_step("(class) Ping base PCI vm interfaces")
+        vm_helper.wait_for_vm_pingable_from_natbox(base_vm_pci)
         vm_helper.ping_vms_from_vm(to_vms=base_vm_pci, from_vm=base_vm_pci, net_types=['data', 'internal'])
-        vm_helper.configure_vm_vifs_on_same_net(vm_id=base_vm_pci)
 
-        LOG.fixture_step("(class) Get seg_id for internal0-net1 to prepare for vlan tagging on pci-passthough "
-                         "device later.")
-        seg_id = network_helper.get_net_info(net_id=internal_net_id, field='segmentation_id', strict=False,
-                                             auto_info=Tenant.get('admin'))
-        assert seg_id, 'Segmentation id of internal0-net1 is not found'
-
-        if extra_pcipt_net:
-            extra_pcipt_seg_id = network_helper.get_net_info(net_id=extra_pcipt_net, field='segmentation_id',
-                                                             strict=False, auto_info=Tenant.get('admin'))
-            assert extra_pcipt_seg_id, 'Segmentation id of {} is not found'.format(extra_pcipt_net_name)
-
-            seg_id = {internal_net_name: seg_id,
-                      extra_pcipt_net_name: extra_pcipt_seg_id}
-
-        return base_vm_pci, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, \
-            extra_pcipt_net, extra_pcipt_net_name
+        return base_vm_pci, flavor_id, base_nics, avail_sriov_net, avail_pcipt_net, pcipt_seg_ids, extra_pcipt_net
 
     @mark.parametrize('vifs', [
-        mark.p2(('virtio', 'avp', 'pci-passthrough')),
+        # mark.p2(('virtio', 'avp', 'pci-passthrough')),
         # mark.p2(['virtio_x7', 'pci-sriov_x7']),       This test requires compute configured with 8+ sriov vif
         # mark.p2(['virtio_x6', 'avp_x6', 'pci-passthrough']),
-        mark.p2(('virtio_x7', 'avp_x5', 'pci-sriov')),
-        mark.p3(('pci-sriov', 'pci-passthrough')),
-        mark.domain_sanity(('avp', 'e1000', 'pci-passthrough', 'pci-sriov')),
-        mark.p3(('avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov')),
+        # mark.p2(('virtio_x5', 'avp_x5', 'pci-sriov_x2')),
+        mark.p3(('virtio', 'pci-sriov', 'pci-passthrough')),
+        mark.nightly(('pci-passthrough',)),   # Covered by test_pcipt_sriov.py
+        mark.nightly(('pci-sriov',)),  # Covered by test_pcipt_sriov.py
+        mark.domain_sanity(('virtio_x2', 'avp_x2', 'e1000_x2', 'pci-passthrough', 'pci-sriov_x2')),
+        # mark.p3(('avp', 'pci-passthrough', 'pci-sriov_x2')),
     ], ids=id_params)
     def test_multiports_on_same_network_pci_vm_actions(self, skip_for_ovs, base_setup_pci, vifs):
         """
@@ -314,21 +318,28 @@ class TestMutiPortsPCI:
             - Delete created vms and flavor
         """
 
-        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, extra_pcipt_net, \
-            extra_pcipt_net_name = base_setup_pci
+        base_vm_pci, flavor, base_nics, avail_sriov_net, avail_pcipt_net, pcipt_seg_ids, extra_pcipt_net, \
+            = base_setup_pci
 
         pcipt_included = False
+        internal_net_id = None
         for vif in vifs:
             if not isinstance(vif, str):
                 vif = vif[0]
             if 'pci-passthrough' in vif:
+                if not avail_pcipt_net:
+                    skip(SkipHostIf.PCIPT_IF_UNAVAIL)
+                internal_net_id = avail_pcipt_net
                 pcipt_included = True
-                break
+                continue
+            elif 'pci-sriov' in vif:
+                if not avail_sriov_net:
+                    skip(SkipHostIf.SRIOV_IF_UNAVAIL)
+                internal_net_id = avail_sriov_net
 
-        vif_type = 'avp' if system_helper.is_avs() else None
-        nics = [{'net-id': mgmt_net_id},
-                {'net-id': tenant_net_id, 'vif-model': vif_type}]
-        nics, glance_vif = _append_nics_for_net(vifs, net_id=internal_net_id, nics=nics)
+        assert internal_net_id, "test script error. Internal net should have been determined."
+
+        nics, glance_vif = _append_nics_for_net(vifs, net_id=internal_net_id, nics=base_nics)
         if pcipt_included and extra_pcipt_net:
             nics.append({'net-id': extra_pcipt_net, 'vif-model': 'pci-passthrough'})
 
@@ -336,53 +347,44 @@ class TestMutiPortsPCI:
         if glance_vif:
             img_id = glance_helper.create_image(name=glance_vif, hw_vif_model=glance_vif, cleanup='function')[1]
 
-        LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
+        LOG.tc_step("Boot a vm with following vifs on same internal net: {}".format(vifs))
         vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, cleanup='function',
                                           reuse_vol=False, image_id=img_id)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
         if pcipt_included:
             LOG.tc_step("Add vlan to pci-passthrough interface for VM.")
-            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_ids, init_conf=True)
 
         LOG.tc_step("Ping vm's own data and internal (vlan 0 only) network ips")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
 
-        LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
+        LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal networks")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
-        #
-        # LOG.tc_step("Verify vm pci address")
-        # check_helper.check_vm_pci_addr(vm_under_test, nics)
 
         for vm_actions in [['auto_recover'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
-
             if 'auto_recover' in vm_actions:
                 LOG.tc_step("Set vm to error state and wait for auto recovery complete, "
                             "then verify ping from base vm over management and internal networks")
                 vm_helper.set_vm_state(vm_id=vm_under_test, error_state=True, fail_ok=False)
                 vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE, fail_ok=False, timeout=600)
-
             else:
                 LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
                 for action in vm_actions:
                     vm_helper.perform_action_on_vm(vm_under_test, action=action)
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_under_test)
-
-            LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(vm_under_test))
-            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
+            if pcipt_included:
+                LOG.tc_step("Bring up vlan interface for pci-passthrough vm {}.".format(vm_under_test))
+                vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_ids)
 
             LOG.tc_step("Verify ping from base_vm to vm_under_test over management and internal networks still works "
                         "after {}".format(vm_actions))
-            vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'internal'],
-                                       vlan_zero_only=True)
+            vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'internal'])
 
-            # LOG.tc_step("Verify vm pci address after {}".format(vm_actions))
-            # check_helper.check_vm_pci_addr(vm_under_test, nics)
-
-    # @mark.skipif(True, reason='Evacuation JIRA CGTS-4917')
     @mark.parametrize('vifs', [
-        # (['pci-sriov', 'pci-passthrough']),
+        ('pci-sriov',),
+        ('pci-passthrough',),
         mark.domain_sanity(('avp', 'virtio', 'pci-passthrough', 'pci-sriov')),
         # (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
     ], ids=id_params)
@@ -412,29 +414,39 @@ class TestMutiPortsPCI:
         Teardown:
             - Delete created vms and flavor
         """
-        base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id, extra_pcipt_net, \
-            extra_pcipt_net_name = base_setup_pci
+        base_vm_pci, flavor, base_nics, avail_sriov_net, avail_pcipt_net, pcipt_seg_ids, extra_pcipt_net, \
+            = base_setup_pci
 
-        vif_type = 'avp' if system_helper.is_avs() else None
-        nics = [{'net-id': mgmt_net_id},
-                {'net-id': tenant_net_id, 'vif-model': vif_type}]
+        internal_net_id = None
+        pcipt_included = False
+        nics = copy.deepcopy(base_nics)
+        if 'pci-passthrough' in vifs:
+            if not avail_pcipt_net:
+                skip(SkipHostIf.PCIPT_IF_UNAVAIL)
+            pcipt_included = True
+            internal_net_id = avail_pcipt_net
+            if extra_pcipt_net:
+                nics.append({'net-id': extra_pcipt_net, 'vif-model': 'pci-passthrough'})
+        if 'pci-sriov' in vifs:
+            if not avail_sriov_net:
+                skip(SkipHostIf.SRIOV_IF_UNAVAIL)
+            internal_net_id = avail_sriov_net
+        assert internal_net_id, "test script error. sriov or pcipt has to be included."
+
         for vif in vifs:
             nics.append({'net-id': internal_net_id, 'vif-model': vif})
-
-        if extra_pcipt_net:
-            nics.append({'net-id': extra_pcipt_net, 'vif-model': 'pci-passthrough'})
 
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
         vm_under_test = vm_helper.boot_vm(name='multiports_pci_evac', nics=nics, flavor=flavor, cleanup='function',
                                           reuse_vol=False)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
-        LOG.tc_step("Add vlan to pci-passthrough interface.")
-        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
+        if pcipt_included:
+            LOG.tc_step("Add vlan to pci-passthrough interface.")
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_ids, init_conf=True)
 
         LOG.tc_step("Ping vm's own data and internal (vlan 0 only) network ips")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
-
         vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_under_test)
 
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
@@ -445,8 +457,9 @@ class TestMutiPortsPCI:
         LOG.tc_step("Reboot vm host {}".format(host))
         vm_helper.evacuate_vms(host=host, vms_to_check=vm_under_test, ping_vms=True)
 
-        LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(vm_under_test))
-        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=seg_id)
+        if pcipt_included:
+            LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(vm_under_test))
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_ids)
 
         LOG.tc_step("Verify ping from base_vm to vm_under_test over management and internal networks still works after "
                     "evacuation.")

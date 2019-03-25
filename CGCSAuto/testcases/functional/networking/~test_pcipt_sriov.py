@@ -4,8 +4,8 @@ import time
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
-from consts.auth import Tenant
 from consts.cgcs import FlavorSpec, VMStatus, DevClassID
+from consts.reasons import SkipHostIf
 from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 
 
@@ -14,77 +14,43 @@ def vif_model_check(request):
     vif_model = request.param
 
     LOG.fixture_step("Get a network that supports {} to boot vm".format(vif_model))
-    primary_tenant = Tenant.get_primary()
-    primary_tenant_name = common.get_tenant_name(primary_tenant)
-    other_tenant = Tenant.get_secondary()
-
-    tenant_net = "{}-net"
-    extra_pcipt_net = extra_pcipt_net_name = None
-    pci_net = network_helper.get_pci_vm_network(pci_type=vif_model)
+    pci_net = network_helper.get_pci_vm_network(pci_type=vif_model, net_name='internal0-net')
     if not pci_net:
-        skip("{} interface not found".format(vif_model))
+        skip(SkipHostIf.PCI_IF_UNAVAIL)
 
-    if isinstance(pci_net, list):
+    extra_pcipt_net_name = extra_pcipt_net = None
+    if not isinstance(pci_net, str):
         pci_net, extra_pcipt_net_name = pci_net
-        extra_pcipt_net = network_helper.get_net_id_from_name(extra_pcipt_net_name)
-
-    if not pci_net:
-        skip('No {} net found on up host(s)'.format(vif_model))
-
-    if 'mgmt' in pci_net:
-        skip("Only management networks have {} interface.".format(vif_model))
-
-    if 'internal' in pci_net:
-        net_type = 'internal'
-    else:
-        net_type = 'data'
-        if tenant_net.format(primary_tenant_name) not in pci_net:
-            Tenant.set_primary(other_tenant)
-
-            def revert_tenant():
-                Tenant.set_primary(primary_tenant)
-            request.addfinalizer(revert_tenant)
-
     LOG.info("PCI network selected to boot vm: {}".format(pci_net))
 
     LOG.fixture_step("Create a flavor with dedicated cpu policy")
     flavor_id = nova_helper.create_flavor(name='dedicated', ram=2048, cleanup='module')[1]
-
     extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
     nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
     LOG.fixture_step("Boot a base vm with above flavor and virtio nics")
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    pci_net_id = network_helper.get_networks(name=pci_net, strict=True)[0]
-    pnet_name = network_helper.get_net_info(net_id=pci_net_id, field='provider:physical_network')
+    pci_net_id, seg_id, pnet_name = network_helper.get_net_show_values(
+        network=pci_net, fields=('id', 'provider:segmentation_id', 'provider:physical_network'))
 
     nics = [{'net-id': mgmt_net_id}, {'net-id': pci_net_id}]
-    if extra_pcipt_net:
-        nics.append({'net-id': extra_pcipt_net})
+    nics_to_test = [{'net-id': mgmt_net_id}, {'net-id': pci_net_id, 'vif-model': vif_model}]
+    pcipt_seg_ids = {}
+    if vif_model == 'pci-passthrough':
+        pcipt_seg_ids[pci_net] = seg_id
+        if extra_pcipt_net_name:
+            extra_pcipt_net, seg_id = network_helper.get_net_show_values(network=extra_pcipt_net_name,
+                                                                         fields=('id', 'provider:segmentation_id'))
+            nics.append({'net-id': extra_pcipt_net})
+            nics_to_test.append({'net-id': extra_pcipt_net, 'vif-model': vif_model})
+            pcipt_seg_ids[extra_pcipt_net_name] = seg_id
 
     base_vm = vm_helper.boot_vm(flavor=flavor_id, nics=nics, cleanup='module')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(base_vm)
-    vm_helper.ping_vms_from_vm(base_vm, base_vm, net_types=['mgmt', net_type], vlan_zero_only=True)
+    vm_helper.ping_vms_from_vm(base_vm, base_vm, net_types=['mgmt', 'internal'])
 
-    if vif_model == 'pci-passthrough':
-        LOG.fixture_step("Get seg_id for {} to prepare for vlan tagging on pci-passthough device later".format(pci_net))
-        seg_id = network_helper.get_net_info(net_id=pci_net_id, field='segmentation_id', strict=False,
-                                             auto_info=Tenant.get('admin'))
-        assert seg_id, 'Segmentation id of pci net {} is not found'.format(pci_net)
-    else:
-        seg_id = None
-
-    nics_to_test = [{'net-id': mgmt_net_id},
-                    {'net-id': pci_net_id, 'vif-model': vif_model}]
-    if extra_pcipt_net:
-        nics_to_test.append({'net-id': extra_pcipt_net, 'vif-model': vif_model})
-        extra_pcipt_seg_id = network_helper.get_net_info(net_id=extra_pcipt_net, field='segmentation_id', strict=False,
-                                                         auto_info=Tenant.get('admin'))
-        seg_id = {pci_net: seg_id,
-                  extra_pcipt_net_name: extra_pcipt_seg_id}
-
-    return vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_name, extra_pcipt_net_name, extra_pcipt_net
+    return vif_model, base_vm, flavor_id, nics_to_test, pcipt_seg_ids, pnet_name, extra_pcipt_net
 
 
 @mark.p2
@@ -112,8 +78,7 @@ def test_evacuate_pci_vm(vif_model_check):
     Teardown:
         - Delete created vms and flavor
     """
-    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_name, extra_pcipt_net_name, extra_pcipt_net = \
-        vif_model_check
+    vif_model, base_vm, flavor_id, nics_to_test, seg_id, net_type, pnet_name, extra_pcipt_net = vif_model_check
 
     LOG.tc_step("Boot a vm with {} vif model on {} net".format(vif_model, net_type))
     res, vm_id, err, vol_id = vm_helper.boot_vm(name=vif_model, flavor=flavor_id, cleanup='function', nics=nics_to_test)
@@ -123,10 +88,10 @@ def test_evacuate_pci_vm(vif_model_check):
 
     if 'pci-passthrough' == vif_model:
         LOG.tc_step("Add vlan to pci-passthrough interface for VM.")
-        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_id, net_seg_id=seg_id)
+        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_id, net_seg_id=seg_id, init_conf=True)
 
     LOG.tc_step("Ping vm over mgmt and {} nets from base vm".format(net_type))
-    vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type], vlan_zero_only=True)
+    vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type])
 
     host = nova_helper.get_vm_host(vm_id)
 
@@ -143,12 +108,12 @@ def test_evacuate_pci_vm(vif_model_check):
         vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_id, net_seg_id=seg_id)
 
     LOG.tc_step("Check vm still pingable over mgmt, and {} nets after evacuation".format(net_type))
-    vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type], vlan_zero_only=True)
+    vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type])
 
     LOG.tc_step("Wait for rebooted host {} to recover and ensure vm are still reachable".format(host))
     host_helper.wait_for_hosts_ready(hosts=host)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
-    vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type], vlan_zero_only=True)
+    vm_helper.ping_vms_from_vm(from_vm=base_vm, to_vms=vm_id, net_types=['mgmt', net_type])
 
 
 # TODO: feature unavailable atm. Update required
@@ -243,16 +208,13 @@ class TestVmPCIOperations:
         numa_match = 0
         for host_ in hosts:
             LOG.info('PCI_NUMA_{}: {}; PCIIF_PROCS_{}: {}'.format(host_, hosts_pci_numa[host_], host_,
-                                                                      hosts_pciif_procs[host_]))
+                                                                  hosts_pciif_procs[host_]))
             if set(hosts_pci_numa[host_]).intersection(set(hosts_pciif_procs[host_])):
                 numa_match += 1
                 if numa_match == 2:
                     break
 
         return numa_match
-
-    NIC_PCI_TYPES = ['pci-passthrough', 'pci-sriov']
-    PCI_NUMA_AFFINITY_VALUES = ['strict', 'prefer']
 
     def get_numa_node(self):
         topology = self.vm_topology
@@ -265,20 +227,8 @@ class TestVmPCIOperations:
     def check_numa_affinity(self, msg_prefx='', retries=3, retry_interval=20):
 
         LOG.tc_step('Check PCIPT/SRIOV numa/irq-cpu-affinity/alias on VM afer {}'.format(msg_prefx))
-
-        numa_affinity = getattr(self, 'pci_numa_affinity', 'strict')
-
-        if numa_affinity is None:
-            # defaults to 'strict' for pci numa affinity
-            numa_affinity = 'strict'
-
-        assert numa_affinity in self.PCI_NUMA_AFFINITY_VALUES, \
-            'Invalid value for PCI Numa Affinity: {}, \n\tValid values:{}'.format(
-                numa_affinity, self.PCI_NUMA_AFFINITY_VALUES)
-
         vm_pci_infos, vm_topology = vm_helper.get_vm_pcis_irqs_from_hypervisor(self.vm_id)
-
-        assert len(vm_pci_infos) > 0, "No pci_devices info found"
+        assert vm_pci_infos > 0, "No pci_devices info found"
 
         # pci_addr_list = vm_pci_infos.pop('pci_addr_list')
         # LOG.debug('after {}: pci addr list for VM:\nVM ID={}\nPCI-ADDR-LIST:{}\n'.format(
@@ -369,7 +319,9 @@ class TestVmPCIOperations:
     def wait_check_vm_states(self, step='boot'):
         LOG.info('Check VM states after {}'.format(step))
         vm_helper.wait_for_vm_pingable_from_natbox(self.vm_id, fail_ok=False)
-        self.check_numa_affinity(msg_prefx=step)
+
+        # TODO Deprecated - numa affinity for pci devices. Replacement is under development.
+        # self.check_numa_affinity(msg_prefx=step)
 
     def create_flavor_for_pci(self, vcpus=4, ram=1024):
 
@@ -414,10 +366,10 @@ class TestVmPCIOperations:
 
     @mark.nics
     @mark.parametrize(('pci_numa_affinity', 'pci_irq_affinity_mask', 'pci_alias'), [
-        mark.nightly((None, None, None)),
-        mark.p1(('strict', None, None)),
+        # mark.nightly((None, None, None)), # Covered by test_multiple_ports.py
+        # mark.p1(('strict', None, None)),  TODO: numa affinity unavailable for now
         # mark.nightly(('strict', 'irqmask_1,3', None)),    # pci_irq_affinity is deprecated
-        mark.p1(('strict', None, 'pcialias_3')),
+        # mark.p1(('strict', None, 'pcialias_3')),  TODO: Remove since it's pure upstream feature
         # mark.p2(('strict', 'irqmask_1,3', 'pcialias_3')),     # pci_irq_affinity is deprecated
         # mark.p3(('prefer', '1,3', '3')),  # TODO: expt behavior on msi_irq > cpulist mapping unknown
         # mark.p3(('prefer', None, None)),  # TODO same as above
@@ -468,16 +420,15 @@ class TestVmPCIOperations:
             LOG.info('Check if PCI-Alias devices existing')
             self.is_pci_device_supported(pci_alias)
 
-        self.vif_model, self.base_vm, self.base_flavor_id, self.nics_to_test, self.seg_id, self.net_type, \
-            self.pnet_name, self.extra_pcipt_net_name, self.extra_pcipt_net = vif_model_check
+        self.vif_model, self.base_vm, self.base_flavor_id, self.nics_to_test, self.seg_id, \
+            self.pnet_name, self.extra_pcipt_net = vif_model_check
 
         LOG.tc_step("Create a flavor with specified extra-specs and dedicated cpu policy")
         flavor_id = self.create_flavor_for_pci()
 
         LOG.tc_step("Boot a vm with {} vif model on internal net".format(self.vif_model))
-        resource_param = 'pci_vfs_used' if 'sriov' in self.vif_model else 'pci_pfs_used'
-
         # TODO: feature unavailable atm. Update required
+        # resource_param = 'pci_vfs_used' if 'sriov' in self.vif_model else 'pci_pfs_used'
         # LOG.tc_step("Get resource usage for {} interface before booting VM(s)".format(self.vif_model))
         # pre_resource_value = nova_helper.get_provider_net_info(self.pnet_name, field=resource_param)
 
@@ -492,13 +443,13 @@ class TestVmPCIOperations:
 
         if 'pci-passthrough' == self.vif_model:
             LOG.tc_step("Add vlan to pci-passthrough interface for VM.")
-            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_id, net_seg_id=self.seg_id)
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_id, net_seg_id=self.seg_id, init_conf=True)
 
-        LOG.tc_step("Ping vm over mgmt and {} nets from base vm".format(self.net_type))
+        LOG.tc_step("Ping vm over mgmt and internal nets from base vm")
         vm_helper.ping_vms_from_vm(
-                from_vm=self.vm_id, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+                from_vm=self.vm_id, to_vms=self.vm_id, net_types=['mgmt', 'internal'])
         vm_helper.ping_vms_from_vm(
-                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', 'internal'])
 
         self.vm_topology = nova_helper.get_vm_nova_show_value(vm_id=self.vm_id, field='wrs-res:topology')
         vnic_type = 'direct' if self.vif_model == 'pci-sriov' else 'direct-physical'
@@ -517,21 +468,21 @@ class TestVmPCIOperations:
         LOG.tc_step('Pause/Unpause {} vm'.format(self.vif_model))
         vm_helper.pause_vm(self.vm_id)
         vm_helper.unpause_vm(self.vm_id)
-        LOG.tc_step("Check vm still pingable over mgmt and {} nets after pause/unpause".format(self.net_type))
+
+        LOG.tc_step("Check vm still pingable over mgmt and internal nets after pause/unpause")
         self.wait_check_vm_states(step='pause/unpause')
 
         LOG.tc_step('Suspend/Resume {} vm'.format(self.vif_model))
         vm_helper.suspend_vm(self.vm_id)
         vm_helper.resume_vm(self.vm_id)
-        self.wait_check_vm_states(step='suspend/resume')
 
+        LOG.tc_step("Check vm still pingable over mgmt and internal nets after suspend/resume")
+        self.wait_check_vm_states(step='suspend/resume')
         if 'pci-passthrough' == self.vif_model:
             LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(self.vm_id))
             vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=self.vm_id, net_seg_id=self.seg_id)
-
-        LOG.tc_step("Check vm still pingable over mgmt and {} nets after suspend/resume".format(self.net_type))
         vm_helper.ping_vms_from_vm(
-                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', 'internal'])
 
         LOG.tc_step('Cold migrate {} vm'.format(self.vif_model))
         code, msg = vm_helper.cold_migrate_vm(self.vm_id, fail_ok=migrate_forbidden)
@@ -539,42 +490,46 @@ class TestVmPCIOperations:
             assert code > 0, "Expect migrate fail due to no other host has pcipt/sriov and pci-alias on same numa. " \
                              "Actual: {}".format(msg)
         self.wait_check_vm_states(step='cold-migrate')
-
         if 'pci-passthrough' == self.vif_model:
             LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(self.vm_id))
             vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=self.vm_id, net_seg_id=self.seg_id)
 
-        LOG.tc_step("Check vm still pingable over mgmt and {} nets after cold migration".format(self.net_type))
+        LOG.tc_step("Check vm still pingable over mgmt and internal nets after cold migration")
         vm_helper.ping_vms_from_vm(
-                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', 'internal'])
 
         LOG.tc_step('Set vm to error and wait for it to be auto recovered')
         vm_helper.set_vm_state(vm_id=self.vm_id, error_state=True, fail_ok=False)
         vm_helper.wait_for_vm_values(vm_id=self.vm_id, status=VMStatus.ACTIVE, fail_ok=False, timeout=600)
 
-        LOG.tc_step("Check vm still pingable over mgmt and {} nets after auto recovery".format(self.net_type))
+        LOG.tc_step("Check vm still pingable over mgmt and internal nets after auto recovery")
         self.wait_check_vm_states(step='set-error-state-recover')
+        if 'pci-passthrough' == self.vif_model:
+            LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(self.vm_id))
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=self.vm_id, net_seg_id=self.seg_id)
         vm_helper.ping_vms_from_vm(
-                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', 'internal'])
 
         LOG.tc_step("Hard reboot {} vm".format(self.vif_model))
         vm_helper.reboot_vm(self.vm_id, hard=True)
-        LOG.tc_step("Check vm still pingable over mgmt and {} nets after nova reboot hard".format(self.net_type))
+        LOG.tc_step("Check vm still pingable over mgmt and internal nets after nova reboot hard")
         self.wait_check_vm_states(step='hard-reboot')
+        if 'pci-passthrough' == self.vif_model:
+            LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(self.vm_id))
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=self.vm_id, net_seg_id=self.seg_id)
         vm_helper.ping_vms_from_vm(
-                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', 'internal'])
 
-        LOG.fixture_step("Create a flavor with dedicated cpu policy")
-        resize_flavor = nova_helper.create_flavor(name='dedicated', ram=2048, cleanup='module')[1]
-
+        LOG.tc_step("Create a flavor with dedicated cpu policy and resize vm to new flavor")
+        resize_flavor = nova_helper.create_flavor(name='dedicated', ram=2048, cleanup='function')[1]
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
         nova_helper.set_flavor_extra_specs(flavor=resize_flavor, **extra_specs)
-
-        origin_host = nova_helper.get_vm_host(vm_id=vm_id)
-        LOG.info("Original host where VM {} hosted is {}".format(vm_id, origin_host))
-        LOG.tc_step("Resize the vm and verify if it becomes Active")
         vm_helper.resize_vm(self.vm_id, resize_flavor)
-        new_host = nova_helper.get_vm_host(self.vm_id)
-        LOG.info("New host where VM {} resized {}".format(vm_id, new_host))
+
+        LOG.tc_step("Check vm still reachable after resize")
+        self.wait_check_vm_states(step='resize')
+        if 'pci-passthrough' == self.vif_model:
+            LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(self.vm_id))
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=self.vm_id, net_seg_id=self.seg_id)
         vm_helper.ping_vms_from_vm(
-                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', self.net_type], vlan_zero_only=True)
+                from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', 'internal'])

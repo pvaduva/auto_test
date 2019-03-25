@@ -155,39 +155,40 @@ def test_vm_mem_pool_default_config(prepare_resource, mem_page_size):
         check_mempage_change(vm_id, host=hypervisor, prev_host_mems=prev_host_mems, mempage_size=mem_page_size)
 
 
+def get_hosts_to_configure(candidates):
+    hosts_selected = [None, None]
+    hosts_to_configure = [None, None]
+    max_4k, expt_p1_4k, max_1g, expt_p1_1g = 1.5*1048576/4, 2.5*1048576/4, 1, 2
+    for host in candidates:
+        host_mems = system_helper.get_host_mem_values(host, headers=MEMPAGE_HEADERS)
+        if 1 not in host_mems:
+            LOG.info("{} has only 1 processor".format(host))
+            continue
+
+        proc0_mems, proc1_mems = host_mems[0], host_mems[1]
+        p0_4k, p1_4k, p0_1g, p1_1g = proc0_mems[0], proc1_mems[0], proc0_mems[2], proc1_mems[2]
+
+        if p0_4k <= max_4k and p0_1g <= max_1g:
+            if not hosts_selected[1] and p1_4k >= expt_p1_4k and p1_1g <= max_1g:
+                hosts_selected[1] = host
+            elif not hosts_selected[0] and p1_4k <= max_4k and p1_1g >= expt_p1_1g:
+                hosts_selected[0] = host
+
+        if None not in hosts_selected:
+            LOG.info("1G and 4k hosts already configured and selected: {}".format(hosts_selected))
+            break
+    else:
+        for i in range(len(hosts_selected)):
+            if hosts_selected[i] is None:
+                hosts_selected[i] = hosts_to_configure[i] = list(set(candidates) - set(hosts_selected))[0]
+        LOG.info("Hosts selected: {}; To be configured: {}".format(hosts_selected, hosts_to_configure))
+
+    return hosts_selected, hosts_to_configure
+
+
 class TestConfigMempage:
 
     MEM_CONFIGS = [None, 'any', 'large', 'small', '2048', '1048576']
-
-    def _select_hosts(self, candidates):
-        hosts_selected = [None, None]
-        hosts_to_configure = [None, None]
-        max_4k, expt_p1_4k, max_1g, expt_p1_1g = 1.5 * 1048576 / 4, 2.5 * 1048576 / 4, 1, 2
-        for host in candidates:
-            host_mems = system_helper.get_host_mem_values(host, headers=MEMPAGE_HEADERS)
-            if 1 not in host_mems:
-                LOG.info("{} has only 1 processor".format(host))
-                continue
-
-            proc0_mems, proc1_mems = host_mems[0], host_mems[1]
-            p0_4k, p1_4k, p0_1g, p1_1g = proc0_mems[0], proc1_mems[0], proc0_mems[2], proc1_mems[2]
-
-            if p0_4k <= max_4k and p0_1g <= max_1g:
-                if not hosts_selected[1] and p1_4k >= expt_p1_4k and p1_1g <= max_1g:
-                    hosts_selected[1] = host
-                elif not hosts_selected[0] and p1_4k <= max_4k and p1_1g >= expt_p1_1g:
-                    hosts_selected[0] = host
-
-            if None not in hosts_selected:
-                LOG.info("1G and 4k hosts already configured and selected: {}".format(hosts_selected))
-                break
-        else:
-            for i in range(len(hosts_selected)):
-                if hosts_selected[i] is None:
-                    hosts_selected[i] = hosts_to_configure[i] = list(set(candidates) - set(hosts_selected))[0]
-            LOG.info("Hosts selected: {}; To be configured: {}".format(hosts_selected, hosts_to_configure))
-
-        return hosts_selected, hosts_to_configure
 
     @fixture(scope='class')
     def add_1g_and_4k_pages(self, request, config_host_class, skip_for_one_proc, add_cgcsauto_zone,
@@ -198,15 +199,14 @@ class TestConfigMempage:
             skip("Less than two up hosts have same storage backing")
 
         LOG.fixture_step("Check mempage configs for hypervisors and select host to use or configure")
-        hosts_selected, hosts_to_configure = self._select_hosts(candidate_hosts)
+        hosts_selected, hosts_to_configure = get_hosts_to_configure(candidate_hosts)
 
         if set(hosts_to_configure) != {None}:
             def _modify(host):
                 is_1g = True if hosts_selected.index(host) == 0 else False
-                if is_1g:
-                    kwargs = {'gib_1g': 0, 'gib_4k_range': (None, 2)}, {'gib_1g': 2, 'gib_4k_range': (None, 2)}
-                else:
-                    kwargs = {'gib_1g': 0, 'gib_4k_range': (None, 2)}, {'gib_1g': 0, 'gib_4k_range': (2, None)}
+                proc1_kwargs = {'gib_1g': 2, 'gib_4k_range': (None, 2)} if is_1g else \
+                    {'gib_1g': 0, 'gib_4k_range': (2, None)}
+                kwargs = {'gib_1g': 0, 'gib_4k_range': (None, 2)}, proc1_kwargs
 
                 actual_mems = host_helper._get_actual_mems(host=host)
                 LOG.fixture_step("Modify {} proc0 to have 0 of 1G pages and <2GiB of 4K pages".format(host))
@@ -222,7 +222,7 @@ class TestConfigMempage:
                     host_helper.wait_for_mempage_update(host=host_to_config)
 
             LOG.fixture_step("Check host memories for {} after mem config completed".format(hosts_selected))
-            _, hosts_unconfigured = self._select_hosts(hosts_selected)
+            _, hosts_unconfigured = get_hosts_to_configure(hosts_selected)
             assert not hosts_unconfigured[0], \
                 "Failed to configure {}. Expt: proc0:1g<2,4k<2gib;proc1:1g>=2,4k<2gib".format(hosts_unconfigured[0])
             assert not hosts_unconfigured[1], \
@@ -254,11 +254,7 @@ class TestConfigMempage:
         return image_id
 
     @fixture()
-    def check_alarms(self):
-        pass
-
-    @fixture()
-    def print_hosts_memories(self, add_1g_and_4k_pages):
+    def check_alarms(self, add_1g_and_4k_pages):
         hosts, storage_backing = add_1g_and_4k_pages
         host_helper.get_hypervisor_info(hosts=hosts)
         for host in hosts:

@@ -374,22 +374,23 @@ def get_net_info(net_id, field='status', strict=True, auto_info=Tenant.get('admi
     return value
 
 
-def get_net_show_values(net_id, fields, strict=True, rtn_dict=False, con_ssh=None, auth_info=None):
+def get_net_show_values(network, fields, strict=True, rtn_dict=False, con_ssh=None, auth_info=Tenant.get('admin')):
     if isinstance(fields, str):
         fields = [fields]
-    table_ = table_parser.table(cli.openstack('network show', net_id, ssh_client=con_ssh, auth_info=auth_info))
-    res = {}
+
+    table_ = table_parser.table(cli.openstack('network show', network, ssh_client=con_ssh, auth_info=auth_info))
+    vals = []
     for field in fields:
         val = table_parser.get_value_two_col_table(table_, field, strict=strict, merge_lines=True)
         if field == 'subnets':
             val = val.split(',')
             val = [val_.strip() for val_ in val]
-        res[field] = val
+        vals.append(val)
 
     if rtn_dict:
-        return res
-    else:
-        return list(res.values())
+        return {fields[i]: vals[i] for i in range(len(fields))}
+
+    return vals
 
 
 def set_network(net_id, name=None, enable=None, share=None, enable_port_security=None, external=None, default=None,

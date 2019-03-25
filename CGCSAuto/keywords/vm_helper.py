@@ -3192,8 +3192,8 @@ def get_vm_nics_info(vm_id, network=None, vnic_type=None, rtn_dict=False):
     """
     vm_ports, vm_macs, vm_ips_info = network_helper.get_ports(server=vm_id, network=network,
                                                               rtn_val=('ID', 'MAC Address', 'Fixed IP Addresses'))
-    vm_ips = []
     vm_subnets = []
+    vm_ips = []
     for ip_info in vm_ips_info:
         vm_ips.append(ip_info.get('ip_address'))
         vm_subnets.append(ip_info.get('subnet_id'))
@@ -3223,6 +3223,7 @@ def get_vm_nics_info(vm_id, network=None, vnic_type=None, rtn_dict=False):
             'network_id': vm_net_ids[i],
             'vnic_type': vnic_types[i],
             'mac_address': vm_macs[i],
+            'ip_address': vm_ips[i]
         }
         if rtn_dict:
             res_dict[vm_ports[i]] = port_dict
@@ -3260,7 +3261,7 @@ def get_vm_interfaces_via_virsh(vm_id, con_ssh=None):
     return vm_ifs
 
 
-def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, guest_os=None):
+def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, guest_os=None, init_conf=False):
     """
     Add vlan for vm pci-passthrough interface and restart networking service.
     Do nothing if expected vlan interface already exists in 'ip addr'.
@@ -3270,6 +3271,8 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, guest_os=None):
         net_seg_id (int|str|dict): such as 1792
         retry (int): max number of times to reboot vm to try to recover it from non-exit
         guest_os (str): guest os type. Default guest os assumed if None is given.
+        init_conf (bool): To workaround upstream bug where mac changes after migrate or resize
+            https://bugs.launchpad.net/nova/+bug/1617429
 
     Returns: None
 
@@ -3306,9 +3309,17 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, guest_os=None):
                 mac_addr = pcipt_nic['mac_address']
                 eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
                 if not eth_name:
-                    raise exceptions.VMNetworkError("Interface with mac {} is not listed in 'ip addr' in vm {}".
-                                                    format(mac_addr, vm_id))
-                elif 'rename' in eth_name:
+                    if not init_conf:
+                        LOG.warning("Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id))
+                        LOG.info("Try to get first eth with mac 90:...")
+                        eth_name = network_helper.get_eth_for_mac(mac_addr="90:", ssh_client=vm_ssh)
+                        if not eth_name:
+                            exceptions.VMNetworkError("No Mac starts with 90: in ip addr for vm {}".format(vm_id))
+                    else:
+                        raise exceptions.VMNetworkError("Interface with mac {} is not listed in 'ip addr' in vm {}".
+                                                        format(mac_addr, vm_id))
+
+                if 'rename' in eth_name:
                     LOG.warning("Retry {}: non-existing interface {} found on pci-passthrough nic in vm {}, "
                                 "reboot vm to try to recover".format(i + 1, eth_name, vm_id))
                     sudo_reboot_from_vm(vm_id=vm_id, vm_ssh=vm_ssh)
@@ -3328,63 +3339,74 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, guest_os=None):
                         LOG.info("{} already in ip addr. Skip.".format(vlan_name))
                         continue
 
+                    # Bring up pcipt interface and assign IP manually. Upstream bug causes dev name and MAC addr
+                    # change after reboot,migrate, making it impossible to use DHCP or configure permanant static IP.
+                    # https://bugs.launchpad.net/nova/+bug/1617429
+                    wait_for_interfaces_up(vm_ssh, eth_name, set_up=True)
                     # 'ip link add' works for all linux guests but it does not persists after network service restart
-                    # vm_ssh.exec_cmd('ip link add link {} name {} type vlan id {}'.format(eth_name, vlan_name,
-                    # net_seg_id))
-                    # vm_ssh.exec_cmd('ip link set {} up'.format(vlan_name))
+                    vm_ssh.exec_cmd('ip link add link {} name {} type vlan id {}'.format(eth_name, vlan_name,
+                                                                                         net_seg_id))
+                    vm_ssh.exec_cmd('ip link set {} up'.format(vlan_name))
+                    vnic_ip = pcipt_nic['ip_address']
+                    vm_ssh.exec_cmd('ip addr add {}/24 dev {}'.format(vnic_ip, vlan_name))
 
-                    wait_for_interfaces_up(vm_ssh, eth_name)
-
-                    if 'centos' in guest_os.lower() and 'centos_6' not in guest_os.lower():
-                        # guest based on centos7
-                        ifcfg_dir = VMPath.VM_IF_PATH_CENTOS
-                        ifcfg_eth = '{}ifcfg-{}'.format(ifcfg_dir, eth_name)
-                        ifcfg_vlan = '{}ifcfg-{}'.format(ifcfg_dir, vlan_name)
-
-                        output_pre = vm_ssh.exec_cmd('ls {}'.format(ifcfg_dir), fail_ok=False)[1]
-                        if ifcfg_vlan not in output_pre:
-                            LOG.info("Add {} ifcfg file".format(vlan_name))
-                            vm_ssh.exec_sudo_cmd('cp {} {}'.format(ifcfg_eth, ifcfg_vlan), fail_ok=False)
-                            vm_ssh.exec_sudo_cmd("sed -i 's/{}/{}/g' {}".format(eth_name, vlan_name, ifcfg_vlan),
-                                                 fail_ok=False)
-                            vm_ssh.exec_sudo_cmd(r"echo -e 'VLAN=yes' >> {}".format(ifcfg_vlan), fail_ok=False)
-
-                        # restart network service regardless since vlan_name was not in ip addr
-                        LOG.info("Restarting networking service for vm.")
-                        vm_ssh.exec_sudo_cmd('systemctl restart network', expect_timeout=180)
-
-                    else:
-                        # assume it's wrl or ubuntu
-                        output_pre = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
-                        if vlan_name not in output_pre:
-                            if eth_name not in output_pre:
-                                LOG.info("Append new interface {} to /etc/network/interfaces".format(eth_name))
-                                if_to_add = VMNetwork.NET_IF.format(eth_name, eth_name)
-                                vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
-                                                format(if_to_add), fail_ok=False)
-
-                            if '.' + net_seg_id in output_pre:
-                                LOG.info("Modify existing interface to {} in /etc/network/interfaces".format(vlan_name))
-                                vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\+\(.{}\)/{}\1/g' /etc/network/interfaces".
-                                                format(net_seg_id, eth_name), fail_ok=False)
-                            else:
-                                LOG.info("Append new interface {} to /etc/network/interfaces".format(vlan_name))
-                                if_to_add = VMNetwork.NET_IF.format(vlan_name, vlan_name)
-                                vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
-                                                format(if_to_add), fail_ok=False)
-
-                            output_post = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
-                            if vlan_name not in output_post:
-                                raise exceptions.VMNetworkError("Failed to add vlan to vm interfaces file")
-
-                        LOG.info("Restarting networking service for vm.")
-                        vm_ssh.exec_cmd("/etc/init.d/networking restart", expect_timeout=180)
+                    # Remove permanent configurations due to upstream bug.
+                    # if 'centos' in guest_os.lower() and 'centos_6' not in guest_os.lower():
+                    #     # guest based on centos7
+                    #     ifcfg_dir = VMPath.VM_IF_PATH_CENTOS
+                    #     ifcfg_eth = '{}ifcfg-{}'.format(ifcfg_dir, eth_name)
+                    #     ifcfg_vlan = '{}ifcfg-{}'.format(ifcfg_dir, vlan_name)
+                    #
+                    #     output_pre = vm_ssh.exec_cmd('ls {}'.format(ifcfg_dir), fail_ok=False)[1]
+                    #     if ifcfg_vlan not in output_pre:
+                    #         LOG.info("Add {} ifcfg file".format(vlan_name))
+                    #         vm_ssh.exec_sudo_cmd('cp {} {}'.format(ifcfg_eth, ifcfg_vlan), fail_ok=False)
+                    #         vm_ssh.exec_sudo_cmd("sed -i 's/{}/{}/g' {}".format(eth_name, vlan_name, ifcfg_vlan),
+                    #                              fail_ok=False)
+                    #         vm_ssh.exec_sudo_cmd(r"echo -e 'VLAN=yes' >> {}".format(ifcfg_vlan), fail_ok=False)
+                    #         vnic_ip = pcipt_nic['ip_address']
+                    #         if vnic_ip:
+                    #             vm_ssh.exec_sudo_cmd(r"echo -e 'IPADDR={}' >> {}".format(vnic_ip, ifcfg_vlan),
+                    #                                  fail_ok=False)
+                    #             vm_ssh.exec_sudo_cmd("sed -i 's/BOOTPROTO=dhcp/BOOTPROTO=static/g' {}".
+                    #                                  format(ifcfg_vlan), fail_ok=False)
+                    #
+                    #     # restart network service regardless since vlan_name was not in ip addr
+                    #     LOG.info("Restarting networking service for vm.")
+                    #     vm_ssh.exec_sudo_cmd('systemctl restart network', expect_timeout=180)
+                    #
+                    # else:
+                    #     # assume it's wrl or ubuntu
+                    #     output_pre = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
+                    #     if vlan_name not in output_pre:
+                    #         if eth_name not in output_pre:
+                    #             LOG.info("Append new interface {} to /etc/network/interfaces".format(eth_name))
+                    #             if_to_add = VMNetwork.NET_IF.format(eth_name, eth_name)
+                    #             vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
+                    #                             format(if_to_add), fail_ok=False)
+                    #
+                    #         if '.' + net_seg_id in output_pre:
+                    #             LOG.info("Modify existing interface to {} in /etc/network/interfaces".format(vlan_name))
+                    #             vm_ssh.exec_cmd(r"sed -i -e 's/eth[0-9]\+\(.{}\)/{}\1/g' /etc/network/interfaces".
+                    #                             format(net_seg_id, eth_name), fail_ok=False)
+                    #         else:
+                    #             LOG.info("Append new interface {} to /etc/network/interfaces".format(vlan_name))
+                    #             if_to_add = VMNetwork.NET_IF.format(vlan_name, vlan_name)
+                    #             vm_ssh.exec_cmd(r"echo -e '{}' >> /etc/network/interfaces".
+                    #                             format(if_to_add), fail_ok=False)
+                    #
+                    #         output_post = vm_ssh.exec_cmd('cat /etc/network/interfaces', fail_ok=False)[1]
+                    #         if vlan_name not in output_post:
+                    #             raise exceptions.VMNetworkError("Failed to add vlan to vm interfaces file")
+                    #
+                    #     LOG.info("Restarting networking service for vm.")
+                    #     vm_ssh.exec_cmd("/etc/init.d/networking restart", expect_timeout=180)
 
                     LOG.info("Check if vlan is added successfully with IP assigned")
                     output_post_ipaddr = vm_ssh.exec_cmd('ip addr', fail_ok=False)[1]
                     if vlan_name not in output_post_ipaddr:
-                        raise exceptions.VMNetworkError("vlan {} is not found in 'ip addr' after restarting networking "
-                                                        "service.".format(vlan_name))
+                        raise exceptions.VMNetworkError("{} is not found in 'ip addr' after adding vlan interface".
+                                                        format(vlan_name))
                     time.sleep(5)
                     if not is_ip_assigned(vm_ssh, eth_name=vlan_name):
                         msg = 'No IP assigned to {} vlan interface for VM {}'.format(vlan_name, vm_id)
@@ -3409,7 +3431,7 @@ def is_ip_assigned(vm_ssh, eth_name):
     return re.search('inet {}'.format(Networks.IPV4_IP), output)
 
 
-def wait_for_interfaces_up(vm_ssh, eth_names, check_interval=3, timeout=180):
+def wait_for_interfaces_up(vm_ssh, eth_names, check_interval=10, timeout=180, set_up=False):
     LOG.info("Waiting for vm interface(s) to be in UP state: {}".format(eth_names))
     end_time = time.time() + timeout
     if isinstance(eth_names, str):
@@ -3422,6 +3444,8 @@ def wait_for_interfaces_up(vm_ssh, eth_names, check_interval=3, timeout=180):
                 ifs_to_check.remove(eth)
                 continue
             else:
+                if set_up:
+                    vm_ssh.exec_cmd('ip link set {} up'.format(eth))
                 LOG.info("{} is not up - wait for {} seconds and check again".format(eth, check_interval))
                 break
 
