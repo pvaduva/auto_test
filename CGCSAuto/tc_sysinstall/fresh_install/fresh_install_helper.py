@@ -1320,6 +1320,8 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf', final_step
             active_node_ssh = install_helper.establish_ssh_connection(floating_ip)
             ControllerClient.set_active_controller(active_node_ssh)
 
+        storage_helper.wait_for_ceph_health_ok()
+
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
