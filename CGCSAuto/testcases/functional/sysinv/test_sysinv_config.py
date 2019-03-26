@@ -139,6 +139,7 @@ class TestRetentionPeriod:
         "new_retention_period", [
             -1,
             MIN_RETENTION_PERIOD - 1,
+            #random.randrange(MIN_RETENTION_PERIOD, MAX_RETENTION_PERIOD + 1),
             24828899,
             MAX_RETENTION_PERIOD + 1,
         ])
@@ -174,18 +175,36 @@ class TestRetentionPeriod:
         else:
             expect_fail = False
         LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
-        verified, msg = system_helper.set_retention_period_k8s(fail_ok=expect_fail, auth_info=Tenant.get('admin'),
-                                                           period=new_retention_period, name=name, check_first=False)
+        code, msg = system_helper.set_retention_period(fail_ok=expect_fail, auth_info=Tenant.get('admin'),
+                                                       period=new_retention_period, name=name, check_first=False)
 
         LOG.tc_step('Wait for {} seconds'.format(SysInvTimeout.RETENTION_PERIOD_SAVED))
         time.sleep(SysInvTimeout.RETENTION_PERIOD_SAVED)
 
         LOG.tc_step('Check if CLI succeeded')
         if expect_fail:
-            assert not verifed, msg
+            assert 1 == code, msg
             return  # we're done here when expecting failing
         else:
-            assert verified, 'Failed to change Retention Period to {}, messasge:{}'.format(new_retention_period, msg)
+            assert 0 == code, 'Failed to change Retention Period to {}'.format(new_retention_period)
+
+        LOG.tc_step('Verify the new value is saved into correct file:{}'.format(self.PM_SETTING_FILE))
+        controller_ssh = ControllerClient.get_active_controller()
+
+        cmd_get_saved_retention_periods = "fgrep --color='never' {} {}". \
+            format(self.SEARCH_KEY_FOR_RENTION_PERIOD, self.PM_SETTING_FILE)
+        code, output = controller_ssh.exec_sudo_cmd(cmd_get_saved_retention_periods, expect_timeout=20)
+
+        LOG.info('Cmd={}\nRetention periods in-use:\n{}'.format(cmd_get_saved_retention_periods, output))
+        assert 0 == code, 'Failed to get Retention Period from file: {}'.format(self.PM_SETTING_FILE)
+
+        for line in output.splitlines():
+            rec = line.strip()
+            if rec and not rec.startswith('#'):
+                saved_period = int(rec.split('=')[1])
+                assert new_retention_period == saved_period, \
+                    'Failed to update Retention Period for {}, expected:{}, saved in file:{} '. \
+                        format(rec.split('=')[0], new_retention_period, saved_period)
 
 
 @mark.p3
@@ -353,4 +372,3 @@ class TestDnsSettings:
                         old_dns_servers, output)
 
         LOG.info('OK, test setting DNS to "{}" passed'.format(ip_addr_list))
-
