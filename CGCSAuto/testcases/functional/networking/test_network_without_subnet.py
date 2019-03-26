@@ -1,6 +1,6 @@
 import random
 
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
@@ -10,25 +10,25 @@ from keywords import network_helper, nova_helper, vm_helper, system_helper
 @fixture(scope='module')
 def base_vm(setups):
     LOG.fixture_step("Create a network without subnet with port security disabled")
-    tenant_net_id = network_helper.create_network(name='net_without_subnet', port_security=False,
+    net_without_subnet = network_helper.create_network(name='net_without_subnet', port_security=False,
                                                   cleanup='module')[1]
-
-    mgmt_net_id = network_helper.get_mgmt_net_id()
-    mgmt_nic = {'net-id': mgmt_net_id}
-    tenant_net_nic = {'net-id': tenant_net_id}
-    nics = [mgmt_nic, tenant_net_nic]
+    
     LOG.fixture_step("Create a VM with one nic using network without subnet")
-    vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='module')[1]
+    mgmt_nic = {'net-id': network_helper.get_mgmt_net_id()}
+    vm_id = vm_helper.boot_vm(name='base_vm', nics=[mgmt_nic, {'net-id': net_without_subnet}], cleanup='module')[1]
 
     LOG.fixture_step("Assign an ip to the nic over network without subnet")
-    ports = network_helper.get_ports(server=vm_id, network=tenant_net_id)
+    ports = network_helper.get_ports(server=vm_id, network=net_without_subnet)
     _assign_ip_to_nic(vm_id, ports=ports)
 
-    return vm_id, mgmt_nic, tenant_net_id
+    return vm_id, mgmt_nic, net_without_subnet
 
 
 @fixture(scope='module')
 def setups(request):
+    if not system_helper.is_avs():
+        skip("Feature only supported by AVS")
+    
     LOG.fixture_step("Add port_security service parameter")
     system_helper.enable_port_security_param()
 
@@ -44,15 +44,15 @@ def setups(request):
 
 
 @mark.parametrize(('if_attach_param', 'vif_model'), [
-    ('port_id', 'virtio'),
-    ('net_id', 'avp')
+    ('net_id', 'virtio'),
+    ('port_id', 'avp')
 ])
 def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_param, vif_model):
     """
     Sample test case for Boot an instance with network without subnet
     Args:
         skip_for_ovs: skip test if avp is specified
-        base_vm (tuple): (base_vm_id, mgmt_nic, tenant_net_id)
+        base_vm (tuple): (base_vm_id, mgmt_nic, net_without_subnet)
         if_attach_param (str): whether to attach interface
         vif_model (str): vif_model to pass to interface-attach cli, or None
 
@@ -74,8 +74,8 @@ def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_param, vif_mod
         - Delete base vm, volume    (module)
 
     """
-    base_vm_id, mgmt_nic, tenant_net_id = base_vm
-    tenant_net_nic = {'net-id': tenant_net_id}
+    base_vm_id, mgmt_nic, net_without_subnet = base_vm
+    tenant_net_nic = {'net-id': net_without_subnet}
     if vif_model == 'avp':
         tenant_net_nic['vif-model'] = vif_model
 
@@ -83,12 +83,12 @@ def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_param, vif_mod
     vm_under_test = vm_helper.boot_vm(name='vm-net-without-subnet', nics=[mgmt_nic, tenant_net_nic],
                                       cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_under_test)
-    init_ports = network_helper.get_ports(network=tenant_net_id, server=vm_under_test)
+    init_ports = network_helper.get_ports(network=net_without_subnet, server=vm_under_test)
     init_ip = _assign_ip_to_nic(vm_under_test, init_ports, base_vm_id=base_vm_id)[0]
 
     for vm_actions in [['cold_migrate'], ['live_migrate'], ['suspend', 'resume'], ['stop', 'start']]:
         tenant_port_id, ip_addrs = _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model,
-                                                                      tenant_net_id, if_attach_param)
+                                                                      net_without_subnet, if_attach_param)
         if vm_actions[0] == 'auto_recover':
             LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
                         "base vm over management and data networks")
@@ -105,7 +105,7 @@ def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_param, vif_mod
                                             port_ip=ip_addrs[0], init_port_ip=init_ip)
 
 
-def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, tenant_net_id, attach_param):
+def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, net_without_subnet, attach_param):
 
     """
 
@@ -114,7 +114,7 @@ def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vi
         vm_under_test (str): vm id of instance to be tested
         vm_actions (list|tuple):
         vif_model (str):
-        tenant_net_id (str):
+        net_without_subnet (str):
         attach_param (str): port_id or net_id
 
     Returns tenant_port_id (str):
@@ -124,15 +124,14 @@ def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vi
                 format(vm_actions, vif_model, vm_under_test))
     if attach_param == 'port_id':
         LOG.tc_step("Create a port for network without subnet")
-        tenant_port_id = network_helper.create_port(tenant_net_id, 'port_without_subnet', cleanup='function',
+        tenant_port_id = network_helper.create_port(net_without_subnet, 'port_without_subnet', cleanup='function',
                                                     port_security=False)[1]
         attach_arg = {'port_id': tenant_port_id}
     else:
-        attach_arg = {'net_id': tenant_net_id}
+        attach_arg = {'net_id': net_without_subnet}
+        assert vif_model == 'virtio', "Test parameter error. vif_model has to be virtio when attach port via net_id"
 
-    # TODO Update vif model config. Right now vif model avp still under implementation
-    tenant_port_id = vm_helper.attach_interface(vm_under_test, vif_model=vif_model, **attach_arg)[1]
-
+    tenant_port_id = vm_helper.attach_interface(vm_under_test, **attach_arg)[1]
     ip_addrs = _assign_ip_to_nic(vm_under_test, ports=[tenant_port_id], base_vm_id=base_vm_id)
 
     return tenant_port_id, ip_addrs

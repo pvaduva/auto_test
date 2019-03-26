@@ -4,7 +4,6 @@ from utils.tis_log import LOG
 
 from consts.cgcs import VMStatus, GuestImages, Prompt
 from keywords import network_helper, nova_helper, vm_helper, glance_helper, cinder_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
 
 
 def id_gen(val):
@@ -86,13 +85,11 @@ def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_f
         glance_helper.set_image(image_id, hw_vif_model=glance_vif, new_name='{}_{}'.format(guest_os, glance_vif))
 
     LOG.tc_step("Create a flavor with 2 vcpus")
-    flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os)[1]
-    ResourceCleanup.add('flavor', flavor_id)
+    flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os, cleanup='function')[1]
 
     LOG.tc_step("Create a volume from {} image".format(guest_os))
     code, vol_id = cinder_helper.create_volume(name='vol-' + guest_os, image_id=image_id, guest_image=guest_os,
-                                               fail_ok=True)
-    ResourceCleanup.add('volume', vol_id)
+                                               fail_ok=True, cleanup='function')
     assert 0 == code, "Issue occurred when creating volume"
     source_id = vol_id
 

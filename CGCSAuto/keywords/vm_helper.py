@@ -1637,7 +1637,9 @@ def configure_vm_vifs_on_same_net(vm_id, vm_ips=None, ports=None, vm_prompt=None
             port_id = ports[i]
             vif_info = vm_interfaces_dict[port_id]
             vif_ip = vif_info['fixed ip addresses']
-            if not vif_ip:
+            if vif_ip and 'ip_address' in vif_ip:
+                vif_ip = re.findall("ip_address='(.*)'", vif_ip.split(sep=',')[0])[0]
+            else:
                 if not vm_ips:
                     raise ValueError("vm_ips for matching vnics has to be provided for ports without ip address "
                                      "listed in neutron port-list")

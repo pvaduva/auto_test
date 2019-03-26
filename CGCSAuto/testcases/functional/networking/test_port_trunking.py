@@ -1,4 +1,4 @@
-from pytest import fixture, mark
+from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 from keywords import vm_helper, network_helper, nova_helper, system_helper
@@ -7,6 +7,9 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 @fixture(scope='module', autouse=True)
 def update_net_quota(request):
+    if not system_helper.is_avs():
+        skip('Feature only supported by AVS')
+
     network_quota = network_helper.get_quota('network')
     network_helper.update_quotas(network=network_quota + 6)
 
