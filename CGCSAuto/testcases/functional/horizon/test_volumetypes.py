@@ -151,23 +151,23 @@ def test_horizon_qos_spec_edit_consumer(volume_qos_spec_action):
     cinder_consumer = 'back-end'
 
     LOG.tc_step('Edit consumer of created QoS Spec to {}'.format(nova_compute_consumer))
-    volume_qos_spec_action.edit_consumer(qos_spec_name, nova_compute_consumer)
-    assert volume_qos_spec_action.find_message_and_dismiss(messages.SUCCESS)
-    assert not volume_qos_spec_action.find_message_and_dismiss(messages.ERROR)
+    volume_types_pg.edit_consumer(qos_spec_name, nova_compute_consumer)
+    assert volume_types_pg.find_message_and_dismiss(messages.SUCCESS)
+    assert not volume_types_pg.find_message_and_dismiss(messages.ERROR)
     LOG.tc_step('Verify current consumer of the QoS Spec in the QoS Specs table')
-    assert volume_qos_spec_action.get_qos_spec_info(qos_spec_name, 'Consumer') == nova_compute_consumer
+    assert volume_types_pg.get_qos_spec_info(qos_spec_name, 'Consumer') == nova_compute_consumer
 
     LOG.tc_step('Edit consumer of created QoS Spec to {}'.format(both_consumers))
-    volume_qos_spec_action.edit_consumer(qos_spec_name, both_consumers)
-    assert volume_qos_spec_action.find_message_and_dismiss(messages.SUCCESS)
-    assert not volume_qos_spec_action.find_message_and_dismiss(messages.ERROR)
+    volume_types_pg.edit_consumer(qos_spec_name, both_consumers)
+    assert volume_types_pg.find_message_and_dismiss(messages.SUCCESS)
+    assert not volume_types_pg.find_message_and_dismiss(messages.ERROR)
     LOG.tc_step('Verify current consumer of the QoS Spec in the QoS Specs table')
-    assert volume_qos_spec_action.get_qos_spec_info(qos_spec_name, 'Consumer') == both_consumers
+    assert volume_types_pg.get_qos_spec_info(qos_spec_name, 'Consumer') == both_consumers
 
     LOG.tc_step('Edit consumer of created QoS Spec to {}'.format(cinder_consumer))
-    volume_qos_spec_action.edit_consumer(qos_spec_name, cinder_consumer)
-    assert volume_qos_spec_action.find_message_and_dismiss(messages.SUCCESS)
-    assert not volume_qos_spec_action.find_message_and_dismiss(messages.ERROR)
+    volume_types_pg.edit_consumer(qos_spec_name, cinder_consumer)
+    assert volume_types_pg.find_message_and_dismiss(messages.SUCCESS)
+    assert not volume_types_pg.find_message_and_dismiss(messages.ERROR)
     LOG.tc_step('Verify current consumer of the QoS Spec in the QoS Specs table')
-    assert volume_qos_spec_action.get_qos_spec_info(qos_spec_name, 'Consumer') == cinder_consumer
+    assert volume_types_pg.get_qos_spec_info(qos_spec_name, 'Consumer') == cinder_consumer
     horizon.test_result = True

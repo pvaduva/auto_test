@@ -62,8 +62,8 @@ def test_horizon_update_compute_defaults(defaults_pg):
     assert len(default_compute_quota_values) > 0
     for quota_name in default_compute_quota_values:
         assert defaults_pg.is_compute_quota_a_match(quota_name,
-                                            default_compute_quota_values[quota_name]
-                                            + add_up)
+                                                    default_compute_quota_values[quota_name]
+                                                    + add_up)
     LOG.tc_step('Updates default Compute Quotas back to original status')
     time.sleep(1)
     defaults_pg.update_compute_defaults(-add_up)
@@ -86,4 +86,3 @@ def test_horizon_update_compute_defaults(defaults_pg):
     time.sleep(1)
     defaults_pg.update_volume_defaults(-add_up)
     horizon.test_result = True
-

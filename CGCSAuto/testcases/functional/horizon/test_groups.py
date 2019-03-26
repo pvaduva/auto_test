@@ -80,7 +80,7 @@ def test_horizon_edit_group(groups_pg_action):
         - Create a new group
 
     Teardown:
-        - Delete the newly created flavor
+        - Delete the newly created group
         - Back to Groups page
         - Logout
 

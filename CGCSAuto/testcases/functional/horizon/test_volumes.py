@@ -233,7 +233,7 @@ def test_horizon_volume_extend(volumes_pg_action):
     """
     volumes_pg, volume_name = volumes_pg_action
     LOG.tc_step('Extend volume')
-    orig_size = int(volumes_pg_action.get_volume_info(volume_name, 'Size')[:-3])
+    orig_size = int(volumes_pg.get_volume_info(volume_name, 'Size')[:-3])
     volumes_pg.extend_volume(volume_name, str(orig_size + 1))
     assert volumes_pg.is_volume_status(volume_name, 'Available')
 
@@ -264,8 +264,8 @@ def test_horizon_volume_upload_to_image(volumes_pg_action):
         - Repeat actions for all disk formats
     """
     volumes_pg_action, volume_name = volumes_pg_action
-    all_formats = {"qcow2": u'QCOW2', "raw": u'Raw', "vdi": u'VDI',
-                   "vmdk": u'VMDK'}
+    all_formats = {"qcow2": u'QCOW2', "raw": u'RAW', "vdi": u'VDI',
+                   "vhd": u'VHD', "vmdk": u'VMDK', "vhdx":"VHDX"}
     for disk_format in all_formats:
         LOG.tc_step('Upload volume to image with disk format {}'.format(disk_format))
         image_name = helper.gen_resource_name('volume_image')
@@ -278,10 +278,11 @@ def test_horizon_volume_upload_to_image(volumes_pg_action):
         images_pg.go_to_target_page()
         assert images_pg.is_image_present(image_name)
         assert images_pg.is_image_active(image_name)
-        assert images_pg.get_image_info(image_name, 'Format') == all_formats[disk_format]
+        assert images_pg.get_image_info(image_name, 'Disk Format') == all_formats[disk_format]
 
         LOG.tc_step('Delete image {}'.format(image_name))
         images_pg.delete_image(image_name)
+        time.sleep(1)
         assert images_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not images_pg.find_message_and_dismiss(messages.ERROR)
         assert not (images_pg.is_image_present(image_name))
@@ -324,6 +325,7 @@ def test_horizon_volume_launch_as_instance(volumes_pg_action):
                                          flavor_name=flavor_name,
                                          network_names=[mgmt_net_name])
     LOG.tc_step('Check that instance is Active and attached by the volume')
+    time.sleep(5)
     instances_pg = instancespage.InstancesPage(volumes_pg_action.driver, volumes_pg_action.port)
     instances_pg.go_to_target_page()
     assert instances_pg.is_instance_active(instance_name)
@@ -336,7 +338,7 @@ def test_horizon_volume_launch_as_instance(volumes_pg_action):
     LOG.tc_step('Delete the instance')
     instances_pg.go_to_target_page()
     instances_pg.delete_instance(instance_name)
-    assert instances_pg.find_message_and_dismiss(messages.SUCCESS)
+    assert instances_pg.find_message_and_dismiss(messages.INFO)
     assert not instances_pg.find_message_and_dismiss(messages.ERROR)
     assert instances_pg.is_instance_deleted(instance_name)
     horizon.test_result = True

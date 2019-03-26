@@ -8,10 +8,10 @@ from utils.horizon.pages.identity import rolespage
 
 
 @fixture(scope='function')
-def roles_pg(admin_home_pg_container, request):
+def roles_pg(admin_home_pg, request):
     LOG.fixture_step('Go to Identity > Roles')
     role_name = helper.gen_resource_name('roles')
-    roles_pg = rolespage.RolesPage(admin_home_pg_container.driver, port=admin_home_pg_container.port)
+    roles_pg = rolespage.RolesPage(admin_home_pg.driver, port=admin_home_pg.port)
     roles_pg.go_to_target_page()
 
     def teardown():
@@ -22,7 +22,7 @@ def roles_pg(admin_home_pg_container, request):
     return roles_pg, role_name
 
 
-def test_horizon_create_edit_delete_role(roles_pg):
+def test_horizon_platform_create_edit_delete_role(roles_pg):
     """
     Tests the role creation/edit/deletion functionality:
 
@@ -49,14 +49,14 @@ def test_horizon_create_edit_delete_role(roles_pg):
     assert not roles_pg.find_message_and_dismiss(messages.ERROR)
     assert roles_pg.is_role_present(role_name)
 
-    newname = 'edit' + role_name
-    roles_pg.edit_role(role_name, newname)
+    new_name = 'edit' + role_name
+    roles_pg.edit_role(role_name, new_name)
     assert roles_pg.find_message_and_dismiss(messages.SUCCESS)
     assert not roles_pg.find_message_and_dismiss(messages.ERROR)
-    assert roles_pg.is_role_present(newname)
+    assert roles_pg.is_role_present(new_name)
 
-    roles_pg.delete_role(newname)
+    roles_pg.delete_role(new_name)
     assert roles_pg.find_message_and_dismiss(messages.SUCCESS)
     assert not roles_pg.find_message_and_dismiss(messages.ERROR)
-    assert not roles_pg.is_role_present(newname)
+    assert not roles_pg.is_role_present(new_name)
     horizon.test_result = True

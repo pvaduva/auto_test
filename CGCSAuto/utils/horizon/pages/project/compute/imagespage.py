@@ -1,3 +1,5 @@
+from selenium.webdriver.common import by
+
 from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
@@ -7,7 +9,7 @@ from time import sleep
 
 
 class ImagesTable(tables.TableRegion):
-    name = "images"
+    name = "OS::Glance::Image"
 
     CREATE_IMAGE_FORM_FIELDS = (
         "name", "description", "image_file",
@@ -24,14 +26,14 @@ class ImagesTable(tables.TableRegion):
         "minimum_ram", "public", "protected"
     )
 
-    @tables.bind_table_action('create')
+    @tables.bind_table_action('btn-default', attribute_search='class')
     def create_image(self, create_button):
         create_button.click()
         self.wait_till_spinner_disappears()
         return forms.FormRegion(self.driver,
                                 field_mappings=self.CREATE_IMAGE_FORM_FIELDS)
 
-    @tables.bind_table_action('delete')
+    @tables.bind_table_action('btn-danger', attribute_search='class')
     def delete_image(self, delete_button):
         delete_button.click()
         return forms.BaseFormRegion(self.driver)
@@ -70,6 +72,9 @@ class ImagesTable(tables.TableRegion):
     def go_to_image_description_page(self, row_link, row):
         row_link.click()
         return forms.ItemTextDescription(self.driver)
+
+    def _table_locator(self, table_name):
+        return by.By.CSS_SELECTOR, 'hz-resource-table[resource-type-name="%s"]' % table_name
 
 
 class ImagesPage(basepage.BasePage):
@@ -235,5 +240,3 @@ class ImagesPage(basepage.BasePage):
         instance_form.switch_to(3)
         instance_form.addelements('Network', network_names)
         instance_form.submit()
-
-

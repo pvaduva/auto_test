@@ -124,6 +124,10 @@ def test_horizon_create_volume_from_snapshot(volumes_pg):
     LOG.tc_step('Check the volume is created and has Available status')
     assert volumes_pg.is_volume_status(new_volume, 'Available')
 
+    LOG.tc_step('Delete volume {}'.format(new_volume))
+    volumes_pg.delete_volume(new_volume)
+    assert volumes_pg.is_volume_deleted(new_volume)
+
     volumes_snapshot_pg.go_to_target_page()
     time.sleep(1)
 
@@ -133,9 +137,4 @@ def test_horizon_create_volume_from_snapshot(volumes_pg):
     assert not volumes_snapshot_pg.find_message_and_dismiss(messages.ERROR)
     assert volumes_snapshot_pg.is_volume_snapshot_deleted(
         volume_snapshot_name)
-
-    LOG.tc_step('Delete volume {}'.format(new_volume))
-    volumes_pg.go_to_target_page()
-    volumes_pg.delete_volume(new_volume)
-    assert volumes_pg.is_volume_deleted(new_volume)
     horizon.test_result = True

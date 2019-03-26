@@ -72,7 +72,35 @@ def test_horizon_flavor_create(flavors_pg):
     horizon.test_result = True
 
 
-def test_horizon_flavor_update_info(flavors_pg_action):
+def test_horizon_flavor_update_metadata(flavors_pg_action):
+    """
+    Tests the flavor Edit row action functionality:
+
+    Setups:
+        - Login as Admin
+        - Go to Admin > Compute > Flavors
+        - Create a new flavor
+
+    Teardown:
+        - Delete the newly created flavor
+        - Back to Flavors Page
+        - Logout
+
+    Test Steps:
+        - Updates metadata and verifies it
+    """
+
+    flavors_pg, flavor_name = flavors_pg_action
+    LOG.tc_step('Update image metadata and Verify metadata updated successfully')
+    new_metadata = {'metadata1': "value1", 'metadata2': "value2"}
+    flavors_pg.add_custom_metadata(flavor_name, new_metadata)
+    assert not flavors_pg.find_message_and_dismiss(messages.ERROR)
+    assert flavors_pg.is_flavor_present(flavor_name)
+    horizon.test_result = True
+
+
+# Feature removed, flavor can no longer be updated
+def _test_horizon_flavor_update_info(flavors_pg_action):
     """
     Tests the flavor Edit row action functionality:
 
@@ -139,7 +167,8 @@ def test_horizon_flavor_update_info(flavors_pg_action):
     '''
 
 
-def test_horizon_create_flavor_with_excessive_vcpu_negative(flavors_pg):
+# Deprecated, no longer validates # of VCPUs
+def _test_horizon_create_flavor_with_excessive_vcpu_negative(flavors_pg):
     """
     Test that flavor creation fails:
 

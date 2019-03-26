@@ -236,7 +236,7 @@ class TableRegion(baseregion.BaseRegion):
         self.assertDictEqual(actual_table, expected_table_definition)
 
 
-def bind_table_action(action_name):
+def bind_table_action(action_name, attribute_search='id'):
     """Decorator to bind table region method to an actual table action button.
 
     Many table actions when started (by clicking a corresponding button
@@ -253,7 +253,9 @@ def bind_table_action(action_name):
         code.
     """
     _actions_locator = (by.By.CSS_SELECTOR, 'div.table_actions > button,'
-                                            ' div.table_actions > a')
+                                            'delete-image-selected > button,'
+                                            'actions > action-list:nth-child(1) > button,' 
+                                            'div.table_actions > a')
 
     def decorator(method):
         @functools.wraps(method)
@@ -262,7 +264,7 @@ def bind_table_action(action_name):
             action_element = None
             for action in actions:
                 target_action_id = '%s__action_%s' % (table.name, action_name)
-                if action.get_attribute('id') == target_action_id:
+                if action.get_attribute(attribute_search).endswith(action_name):
                     action_element = action
                     break
             if action_element is None:
@@ -274,7 +276,7 @@ def bind_table_action(action_name):
     return decorator
 
 
-def bind_row_action(action_name, attribute_search = 'id'):
+def bind_row_action(action_name, attribute_search='id'):
     """A decorator to bind table region method to an actual row action button.
 
     Many table actions when started (by clicking a corresponding button

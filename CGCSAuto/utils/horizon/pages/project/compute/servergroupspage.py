@@ -7,6 +7,10 @@ from utils.horizon.regions import forms
 from utils.horizon.regions import tables
 
 
+class ServerGroupsForm(forms.FormRegion):
+    _fields_locator = (by.By.CSS_SELECTOR, 'form')
+
+
 class ServerGroupsTable(tables.TableRegion):
 
     name = "OS::Nova::ServerGroup"
@@ -19,7 +23,7 @@ class ServerGroupsTable(tables.TableRegion):
         time.sleep(5)
         self.wait_till_spinner_disappears()
 
-        return forms.FormRegion(self.driver, field_mappings=self.CREATE_SERVER_GROUP_FORM_FIELDS)
+        return ServerGroupsForm(self.driver, field_mappings=self.CREATE_SERVER_GROUP_FORM_FIELDS)
 
     @tables.bind_table_action('btn-danger', attribute_search='class')
     def delete_server_group(self, delete_button):
@@ -75,5 +79,3 @@ class ServerGroupsPage(basepage.BasePage):
     def get_server_group_info(self, name, header):
         row = self._get_row_with_server_group_name(name)
         return row.cells[header].text
-
-

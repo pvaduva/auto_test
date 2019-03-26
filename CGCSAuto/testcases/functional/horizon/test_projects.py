@@ -24,17 +24,17 @@ def projects_pg(admin_home_pg_container, request):
 
 
 @fixture(scope='function')
-def projects_pg_action(self, admin_home_pg_container, request):
+def projects_pg_action(admin_home_pg_container, request):
     LOG.fixture_step('Go to Identity > Projects')
     project_name = helper.gen_resource_name('projects')
     projects_pg = projectspage.ProjectsPage(admin_home_pg_container.driver, port=admin_home_pg_container.port)
     projects_pg.go_to_target_page()
-    LOG.fixture_step('Create new project {}'.format(self.PROJECT_NAME))
-    projects_pg.create_project(self.PROJECT_NAME)
+    LOG.fixture_step('Create new project {}'.format(project_name))
+    projects_pg.create_project(project_name)
 
     def teardown():
         LOG.fixture_step('Delete the newly created project')
-        projects_pg.delete_project(self.PROJECT_NAME)
+        projects_pg.delete_project(project_name)
         LOG.fixture_step('Back to Groups page')
         projects_pg.go_to_target_page()
 
@@ -106,6 +106,6 @@ def test_horizon_add_member(projects_pg_action):
     assert not projects_pg.find_message_and_dismiss(messages.ERROR)
 
     LOG.tc_step('Verify the users are added to the project')
-    user_roles = projects_pg.get_member_roles_at_project(self.PROJECT_NAME, 'tenant1')
-    assert user_roles == {'_member_'}
+    user_roles = projects_pg.get_member_roles_at_project(project_name, 'tenant1')
+    assert user_roles == {'member'}
     horizon.test_result = True

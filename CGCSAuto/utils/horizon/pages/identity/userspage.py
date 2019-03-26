@@ -11,7 +11,7 @@ class UsersTable(tables.TableRegion):
 
     EDIT_USER_FORM_FIELDS = ("name", "description", "email", "project")
 
-    CHANGE_PASSWORLD_FORM_FIELDS = ("password", "confirm_password", "name")
+    CHANGE_PASSWORD_FORM_FIELDS = ("password", "confirm_password", "name")
 
     @tables.bind_table_action('create')
     def create_user(self, create_button):
@@ -42,7 +42,7 @@ class UsersTable(tables.TableRegion):
         change_password_button.click()
         self.wait_till_spinner_disappears()
         return forms.FormRegion(self.driver,
-                                field_mappings=self.CHANGE_PASSWORLD_FORM_FIELDS)
+                                field_mappings=self.CHANGE_PASSWORD_FORM_FIELDS)
 
     @tables.bind_row_action('toggle')
     def disable_user(self, disable_button, row):

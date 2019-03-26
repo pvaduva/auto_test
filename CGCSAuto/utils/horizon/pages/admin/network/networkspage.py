@@ -7,8 +7,9 @@ class NetworksTable(tables.TableRegion):
     name = "networks"
 
     CREATE_NETWORK_FORM_FIELDS = (("name", "tenant_id", "network_type",
-                                   "physical_network", "segmentation_id", "admin_state",
-                                   'shared', "external", "with_subnet"),
+                                   "physical_network", "segmentation_id",
+                                   "admin_state", "shared", "external",
+                                   "with_subnet"),
                                   ("subnet_name", "cidr", "ip_version",
                                    "gateway_ip", "no_gateway"),
                                   ("enable_dhcp", "allocation_pools",
@@ -170,5 +171,3 @@ class NetworksPage(basepage.BasePage):
 
     def go_to_qos_policies_tab(self):
         self.go_to_tab(1)
-
-

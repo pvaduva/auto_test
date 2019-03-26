@@ -20,6 +20,11 @@ class ComputeHostTable(tables.TableRegion):
         return forms.FormRegion(self.driver,
                                 field_mappings=self.DISABLE_SERVICE_FORM_FIELDS)
 
+    @tables.bind_row_action('enable')
+    def enable_service(self, enable_button, row):
+        enable_button.click()
+        self.wait_till_spinner_disappears()
+
 
 class HypervisorsPage(basepage.BasePage):
 
@@ -64,6 +69,10 @@ class HypervisorsPage(basepage.BasePage):
         if reason is not None:
             disable_service_form.reason.text = reason
         disable_service_form.submit()
+
+    def enable_service(self, name, reason=None):
+        row = self._get_row_with_compute_host_name(name)
+        self.compute_host_table.enable_service(row)
 
     def go_to_hypervisor_tab(self):
         self.go_to_tab(self.HYPERVISOR_TAB_INDEX)

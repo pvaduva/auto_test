@@ -101,4 +101,3 @@ class FloatingipsPage(basepage.BasePage):
         row = self._get_row_with_floatingip(floatingip)
         floatingip_form = self.floatingips_table.disassociate_ip(row)
         floatingip_form.submit()
-

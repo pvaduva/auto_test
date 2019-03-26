@@ -147,7 +147,7 @@ def test_horizon_floating_ip_associate_disassociate(instances_pg):
     LOG.tc_step('Delete instance {}'.format(instance_name))
     instances_pg.go_to_target_page()
     instances_pg.delete_instance(instance_name)
-    assert instances_pg.find_message_and_dismiss(messages.SUCCESS)
+    assert instances_pg.find_message_and_dismiss(messages.INFO)
     assert not instances_pg.find_message_and_dismiss(messages.ERROR)
     assert instances_pg.is_instance_deleted(instance_name)
     horizon.test_result = True

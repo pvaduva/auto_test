@@ -149,7 +149,7 @@ class VolumesPage(basepage.BasePage):
         row.mark()
         confirm_delete_volumes_form = self.volumes_table.delete_volume()
         confirm_delete_volumes_form.submit()
-        if not self.find_message_and_dismiss(messages.SUCCESS):
+        if not self.find_message_and_dismiss(messages.INFO):
             found_err = self.find_message_and_dismiss(messages.ERROR)
             if fail_ok and found_err:
                 err_msg = "Failed to delete volume {}".format(name)

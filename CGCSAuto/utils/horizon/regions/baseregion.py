@@ -66,4 +66,3 @@ class BaseRegion(basewebobject.BaseWebObject):
             return self.src_elem.find_elements(*locator)
         except StaleElementReferenceException:
             raise
-

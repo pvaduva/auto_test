@@ -1,4 +1,7 @@
+import netaddr
+
 from selenium.webdriver.common import by
+
 from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
@@ -9,7 +12,6 @@ from selenium.common import exceptions
 
 
 class LaunchInstanceForm(forms.TabbedFormRegion):
-
     _submit_locator = (by.By.XPATH, '//button[@class="btn btn-primary finish"]')
     _fields_locator = (by.By.XPATH, "//div[starts-with(@class,'step ng-scope')]")
     _tables_locator = (by.By.XPATH, ".//table")
@@ -50,7 +52,7 @@ class LaunchInstanceForm(forms.TabbedFormRegion):
     class AvailableTable(tables.TableRegion):
         _rows_locator = (by.By.CSS_SELECTOR, 'tbody>tr[class="ng-scope"]')
 
-#   server group's available table contains a inner table so use a different column names locator
+    #   server group's available table contains a inner table so use a different column names locator
     class ServerGrpAvailableTable(tables.TableRegion):
         _rows_locator = (by.By.CSS_SELECTOR, 'tbody>tr[class="ng-scope"]')
         _columns_names_locator = (by.By.CSS_SELECTOR, 'thead > tr:nth-child(2) > th')
@@ -283,7 +285,9 @@ class InstancesPage(basepage.BasePage):
     def get_fixed_ipv4(self, name):
         row = self._get_row_with_instance_name(name)
         ips = row.cells[self.INSTANCES_TABLE_IP_COLUMN].text
-        return ips.split()[1]
+        for ip in ips.split():
+            if netaddr.valid_ipv4(ip):
+                return ip
 
     def get_instance_info(self, name, header):
         row = self._get_row_with_instance_name(name)
@@ -394,15 +398,3 @@ class InstancesPage(basepage.BasePage):
         if disk_partition is not None:
             rebuild_instance_form.disk_config.text = disk_partition
         rebuild_instance_form.submit()
-
-
-
-
-
-
-
-
-        
-
-
-

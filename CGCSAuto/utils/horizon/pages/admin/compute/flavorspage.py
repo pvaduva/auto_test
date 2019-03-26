@@ -18,6 +18,7 @@ class FlavorsTable(tables.TableRegion):
                                 "disk_gb", "eph_gb", "swap_mb",
                                 "rxtx_factor"),
                                {"members": menus.MembershipMenuRegion})
+    UPDATE_METADATA_FORM_FIELD = "customItem"
 
     @tables.bind_table_action('create')
     def create_flavor(self, create_button):
@@ -36,6 +37,11 @@ class FlavorsTable(tables.TableRegion):
             self.driver,
             field_mappings=self.EDIT_FLAVOR_FORM_FIELDS
         )
+
+    @tables.bind_row_action('update_metadata')
+    def update_metadata(self, metadata_button, row):
+        metadata_button.click()
+        return forms.MetadataFormRegion(self.driver)
 
     @tables.bind_row_action('projects')
     def modify_access(self, modify_button, row):
@@ -149,6 +155,13 @@ class FlavorsPage(basepage.BasePage):
                 edit_flavor_form.members.deallocate_member(project)
         edit_flavor_form.submit()
 
+    def add_custom_metadata(self, name, metadata):
+        row = self._get_row_by_flavor_name(name)
+        update_metadata_form = self.flavors_table.update_metadata(row)
+        for field_name, value in metadata.items():
+            update_metadata_form.add_custom_field(field_name, value)
+        update_metadata_form.submit()
+
     def delete_flavor_by_row(self, name):
         row = self._get_row_by_flavor_name(name)
         confirm_delete_form = self.flavors_table.delete_flavor_by_row(row)
@@ -159,11 +172,3 @@ class FlavorsPage(basepage.BasePage):
         row.mark()
         confirm_delete_form = self.flavors_table.delete_flavor()
         confirm_delete_form.submit()
-
-
-
-
-
-
-
-

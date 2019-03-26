@@ -66,6 +66,7 @@ def test_horizon_securitygroup_create_delete(security_groups_pg):
     security_groups_pg.create_securitygroup(SEC_GROUP_NAME)
     assert security_groups_pg.find_message_and_dismiss(messages.SUCCESS)
     assert not security_groups_pg.find_message_and_dismiss(messages.ERROR)
+    security_groups_pg.go_to_target_page()
     assert security_groups_pg.is_securitygroup_present(SEC_GROUP_NAME)
 
     LOG.tc_step('Delete security group {} and Verify it does not appear in the table'
@@ -96,6 +97,8 @@ def test_horizon_managerules_create_delete(security_groups_pg_action):
         - Delete the newly created rule
         - Verify the rule does not appear in the table after deletion
     """
+    security_groups_pg_action.go_to_target_page()
+
     LOG.tc_step('Create new rule {}'.format(RULE_PORT))
     managerulespage = security_groups_pg_action.go_to_manage_rules(SEC_GROUP_NAME)
     managerulespage.create_rule(RULE_PORT)
@@ -135,6 +138,8 @@ def test_horizon_managerules_create_delete_by_table(security_groups_pg_action):
         - Delete the newly created rule
         - Verify the rule does not appear in the table after deletion
     """
+    security_groups_pg_action.go_to_target_page()
+
 
     LOG.tc_step('Create new rule {}'.format(RULE_PORT))
     managerulespage = security_groups_pg_action.go_to_manage_rules(SEC_GROUP_NAME)
