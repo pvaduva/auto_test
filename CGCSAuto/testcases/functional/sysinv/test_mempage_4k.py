@@ -3,7 +3,7 @@
 # Launch VMs using 4k-memory-pages, cold and live migrate the vm
 ###
 
-from pytest import fixture, mark, skip
+from pytest import fixture, mark, skip, param
 
 from consts.cgcs import FlavorSpec
 from keywords import nova_helper, vm_helper, host_helper, system_helper
@@ -91,10 +91,10 @@ def ensure_sufficient_4k_pages(request):
 
 
 @mark.parametrize(('ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
-    mark.p1((0, 0, None, 1, 'volume')),
-    mark.p2((1, 512, 'dedicated', 2, 'volume')),
-    mark.p1((0, 0, 'dedicated', 3, 'image')),
-    mark.p2((1, 512, None, 1, 'image')),
+    param(0, 0, None, 1, 'volume', marks=mark.p1),
+    param(1, 512, 'dedicated', 2, 'volume', marks=mark.p2),
+    param(0, 0, 'dedicated', 3, 'image', marks=mark.p1),
+    param(1, 512, None, 1, 'image', marks=mark.p2),
 ])
 def test_migrate_4k_vm_positive(ephemeral, swap, cpu_pol, vcpus, vm_type, ensure_sufficient_4k_pages):
     """
