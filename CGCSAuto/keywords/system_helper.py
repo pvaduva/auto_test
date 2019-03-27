@@ -2,6 +2,7 @@ import math
 import re
 import time
 import copy
+import configparser
 
 from pytest import skip
 
@@ -1199,13 +1200,11 @@ def set_retention_period_k8s(period, name='event_time_to_live', fail_ok=True, ch
         if period == retention:
             msg = "The retention period is already set to {}".format(period)
             LOG.info(msg)
-            return -1, msg
+            return 1, msg
 
     app_name = 'stx-openstack'
     section = 'database'
 
-    core_name = name
-    verify_cmd = ''
     if name in 'metering_time_to_live':
         skip("Ceilometer metering_time_to_live is no longer available in 'system service-parameter-list'")
         name = 'metering_time_to_live'
@@ -1217,24 +1216,27 @@ def set_retention_period_k8s(period, name='event_time_to_live', fail_ok=True, ch
         service = 'panko'
         section = 'openstack'
         name = 'conf.panko.database.event_time_to_live'
-        verify_cmd = 'cat /etc/panko/panko.conf; echo'
-
     else:
         raise ValueError("Unknown name: {}".format(name))
 
-    container_helper.update_helm_override(chart=service, namespace=section, reset_vals=False, kv_pairs={name: period})
+    code, output = container_helper.update_helm_override(
+        chart=service, namespace=section, reset_vals=False, kv_pairs={name: period})
+
+    assert code == 0 or fail_ok, 'Failed to update helm override unexpectedly, message:{}'.format(output)
+
+    if code != 0:
+        LOG.info('Update helm override failed as expected')
+        return code, output
 
     override_info = container_helper.get_helm_override_info(
         chart=service, namespace=section, fields='user_overrides')
     LOG.debug('override_info:{}'.format(override_info))
 
-    container_helper.apply_app(app_name=app_name, check_first=False, applied_timeout=1800, fail_ok=fail_ok)
+    code, output = container_helper.apply_app(app_name=app_name, check_first=False, applied_timeout=1800, fail_ok=False)
+    assert code == 0 or fail_ok, 'Failed to apply application:{0} unexpectedly, message:{1}'.format(app_name, output)
 
-    LOG.info("Start post check after applying new value for {}".format(name))
+    return code, output
 
-    verified = verify_config_changed(service, verify_cmd, section='database', **{core_name: period})
-
-    return verified, "{} {} is successfully set to: {}".format(service, name, 'should be the new value')
 
 
 def get_openstack_pods_by_name(name, component, namespace='openstack', path=None, fail_ok=False, con_ssh=None):

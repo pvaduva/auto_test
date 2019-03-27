@@ -110,10 +110,12 @@ class TestRetentionPeriod:
     Test modification of Retention Period of the TiS system
     """
 
-    PM_SETTING_FILE = '/etc/ceilometer/ceilometer.conf'  # file where the Retention Period is stored
+    # PM_SETTING_FILE = '/etc/ceilometer/ceilometer.conf'  # file where the Retention Period is stored
+    PM_SETTING_FILE = '/etc/panko/panko.conf'  # file where the Retention Period is stored
     MIN_RETENTION_PERIOD = 3600  # seconds of 1 hour, minimum value allowed
     MAX_RETENTION_PERIOD = 31536000  # seconds of 1 year, maximum value allowed
     SEARCH_KEY_FOR_RENTION_PERIOD = r'event_time_to_live'
+    retention_period = 0
 
     @fixture(scope='class', autouse=True)
     def backup_restore_rention_period(self, request):
@@ -125,12 +127,12 @@ class TestRetentionPeriod:
 
         """
         LOG.info('Backup Retention Period')
-        self.retention_period = system_helper.get_retention_period_k8s()
-        LOG.info('Current Retention Period is {}'.format(self.retention_period))
+        TestRetentionPeriod.retention_period = system_helper.get_retention_period_k8s()
+        LOG.info('Current Retention Period is {}'.format(TestRetentionPeriod.retention_period))
 
         def restore_retention_period():
-            LOG.info('Restore Retention Period to its orignal value {}'.format(self.retention_period))
-            system_helper.set_retention_period_k8s(int(self.retention_period), fail_ok=True)
+            LOG.info('Restore Retention Period to its orignal value {}'.format(TestRetentionPeriod.retention_period))
+            system_helper.set_retention_period_k8s(int(TestRetentionPeriod.retention_period), fail_ok=True)
 
         request.addfinalizer(restore_retention_period)
 
@@ -138,7 +140,7 @@ class TestRetentionPeriod:
         "new_retention_period", [
             -1,
             MIN_RETENTION_PERIOD - 1,
-            #random.randrange(MIN_RETENTION_PERIOD, MAX_RETENTION_PERIOD + 1),
+            # random.randrange(MIN_RETENTION_PERIOD, MAX_RETENTION_PERIOD + 1),
             24828899,
             MAX_RETENTION_PERIOD + 1,
         ])
@@ -166,43 +168,37 @@ class TestRetentionPeriod:
                 on hardcoded values
         """
         name = 'event_time_to_live'
-        if name == 'event_time_to_live':
-            self.PM_SETTING_FILE = '/etc/panko/panko.conf'
+
         LOG.tc_step('Check if the modification attempt will fail based on the input value')
         if new_retention_period < self.MIN_RETENTION_PERIOD or new_retention_period > self.MAX_RETENTION_PERIOD:
             expect_fail = True
         else:
             expect_fail = False
         LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
-        verified, msg = system_helper.set_retention_period_k8s(new_retention_period, fail_ok=expect_fail, name=name,
-                                                               check_first=False)
+        code, output = system_helper.set_retention_period_k8s(
+            new_retention_period, fail_ok=expect_fail, name=name, check_first=False)
+
+        if expect_fail:
+            assert code != 0, 'Expecting failed to change retention period, but the request went through'
+
         LOG.tc_step('Wait for {} seconds'.format(SysInvTimeout.RETENTION_PERIOD_SAVED))
         time.sleep(SysInvTimeout.RETENTION_PERIOD_SAVED)
 
-        LOG.tc_step('Check if CLI succeeded')
+        LOG.tc_step('Verify new value:{} was set for {}'.format(new_retention_period, name))
+        cmd = 'cat ' + self.PM_SETTING_FILE
+
+        changed = system_helper.verify_config_changed('panko', cmd, fail_ok=expect_fail, **{name: new_retention_period})
         if expect_fail:
-            assert not verified, msg
-            return  # we're done here when expecting failing
+            assert not changed, \
+                'Change request should be rejected, but actually not. old value:{0}, new value:{1} '.format(
+                    TestRetentionPeriod.retention_period, new_retention_period)
+            LOG.info('OK, the value for {0} did not change correctly, old value {1} remains'.format(
+                name, TestRetentionPeriod.retention_periodd))
         else:
-            assert 0 == code, 'Failed to change Retention Period to {}'.format(new_retention_period)
-
-        LOG.tc_step('Verify the new value is saved into correct file:{}'.format(self.PM_SETTING_FILE))
-        controller_ssh = ControllerClient.get_active_controller()
-
-        cmd_get_saved_retention_periods = "fgrep --color='never' {} {}". \
-            format(self.SEARCH_KEY_FOR_RENTION_PERIOD, self.PM_SETTING_FILE)
-        code, output = controller_ssh.exec_sudo_cmd(cmd_get_saved_retention_periods, expect_timeout=20)
-
-        LOG.info('Cmd={}\nRetention periods in-use:\n{}'.format(cmd_get_saved_retention_periods, output))
-        assert 0 == code, 'Failed to get Retention Period from file: {}'.format(self.PM_SETTING_FILE)
-
-        for line in output.splitlines():
-            rec = line.strip()
-            if rec and not rec.startswith('#'):
-                saved_period = int(rec.split('=')[1])
-                assert new_retention_period == saved_period, \
-                    'Failed to update Retention Period for {}, expected:{}, saved in file:{} '. \
-                        format(rec.split('=')[0], new_retention_period, saved_period)
+            assert changed, 'Retention period was successfully changed to {0}, old value {1}'.format(
+                new_retention_period, TestRetentionPeriod.retention_period)
+            LOG.info('OK, the value for {0} was successfully changed to {1}, old value {2}'.format(
+                name, new_retention_period, TestRetentionPeriod.retention_period))
 
 
 @mark.p3
