@@ -128,6 +128,7 @@ class InstallVars:
                          deploy_openstack=True,
                          ipv6_config=False,
                          helm_chart_path=None,
+                         helm_chart_server=None,
                          no_manage=False):
 
         cls.__var_dict = {
@@ -169,6 +170,7 @@ class InstallVars:
             'BOOT_IF_SETTINGS': boot_if_settings,
             'LAB_SETUP_PATH': lab_setup,
             'HELM_CHART_PATH': helm_chart_path,
+            'HELM_CHART_SERVER': helm_chart_server,
 
             # Generic
             'LICENSE': license_path,

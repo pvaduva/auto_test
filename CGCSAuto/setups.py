@@ -891,6 +891,9 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     patch_server = bs
     if patch_dir and ':/' in patch_dir:
         patch_server, patch_dir = patch_dir.split(':', 1)
+    helm_chart_server = None
+    if helm_chart_path and ':/' in helm_chart_path:
+        helm_chart_server, helm_chart_path = helm_chart_path.split(':', 1)
 
     InstallVars.set_install_vars(lab=lab_to_install,
                                  resume=resume,
@@ -928,6 +931,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                  deploy_openstack=not no_openstack,
                                  ipv6_config=ipv6_config,
                                  helm_chart_path=helm_chart_path,
+                                 helm_chart_server=helm_chart_server,
                                  no_manage=no_manage
                                  )
 

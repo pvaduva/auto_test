@@ -155,8 +155,8 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
 
 
 def download_lab_files(lab_files_server, build_server, guest_server, sys_version=None, sys_type=None,
-                       lab_files_dir=None, load_path=None, guest_path=None, license_path=None, lab=None,
-                       final_step=None):
+                       lab_files_dir=None, load_path=None, guest_path=None, helm_chart_server=None, license_path=None,
+                       lab=None,  final_step=None):
 
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if load_path is None:
@@ -202,7 +202,10 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
 
     LOG.info("WK: Downloading the helm charts to active controller ...")
     helm_chart_path = InstallVars.get_install_var("HELM_CHART_PATH")
-    install_helper.download_stx_helm_charts(lab, build_server, stx_helm_charts_path=helm_chart_path)
+    if not helm_chart_server:
+        helm_chart_server = build_server
+
+    install_helper.download_stx_helm_charts(lab, helm_chart_server, stx_helm_charts_path=helm_chart_path)
 
 
 def set_license_var(sys_version=None, sys_type=None):
@@ -996,9 +999,10 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     file_server = InstallVars.get_install_var("FILES_SERVER")
     iso_host = InstallVars.get_install_var("ISO_HOST")
     iso_path = InstallVars.get_install_var("ISO_PATH")
+    helm_chart_server = InstallVars.get_install_var("HELM_CHART_SERVER")
     patch_server = InstallVars.get_install_var("PATCH_SERVER")
     guest_server = InstallVars.get_install_var("GUEST_SERVER")
-    servers = list({file_server, iso_host, patch_server, guest_server})
+    servers = list({file_server, iso_host, patch_server, guest_server, helm_chart_server})
     LOG.fixture_step("Establishing connection to {}".format(servers))
 
     bld_server = setups.initialize_server(build_server)
@@ -1040,6 +1044,13 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     else:
         guest_server_obj = setups.initialize_server(guest_server)
 
+    if helm_chart_server == bld_server.name:
+        helm_chart_server = bld_server
+    elif helm_chart_server == iso_host:
+        helm_chart_server = iso_host_obj
+    else:
+        helm_chart_server = setups.initialize_server(helm_chart_server)
+
     set_preinstall_projvars(build_dir=build_dir, build_server=bld_server)
 
     boot_type = InstallVars.get_install_var("BOOT_TYPE")
@@ -1053,7 +1064,8 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
                "build": bld_server,
                "lab_files": file_server_obj,
                "patches": patch_server,
-               "guest": guest_server_obj
+               "guest": guest_server_obj,
+               "helm_charts": helm_chart_server
                }
 
     directories = {"build": build_dir,
