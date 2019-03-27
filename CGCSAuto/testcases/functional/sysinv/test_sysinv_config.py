@@ -124,16 +124,15 @@ class TestRetentionPeriod:
             request: request passed in to the fixture.
 
         """
-        name = 'event_time_to_live'
         LOG.info('Backup Retention Period')
-        self.retention_period = system_helper.get_retention_period(name=name)
+        self.retention_period = system_helper.get_retention_period_k8s()
         LOG.info('Current Retention Period is {}'.format(self.retention_period))
 
-        def restore_rention_period():
+        def restore_retention_period():
             LOG.info('Restore Retention Period to its orignal value {}'.format(self.retention_period))
-            system_helper.set_retention_period(fail_ok=True, period=int(self.retention_period), name=name)
+            system_helper.set_retention_period_k8s(int(self.retention_period), fail_ok=True)
 
-        request.addfinalizer(restore_rention_period)
+        request.addfinalizer(restore_retention_period)
 
     @mark.parametrize(
         "new_retention_period", [
@@ -175,15 +174,14 @@ class TestRetentionPeriod:
         else:
             expect_fail = False
         LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
-        code, msg = system_helper.set_retention_period(fail_ok=expect_fail, auth_info=Tenant.get('admin'),
-                                                       period=new_retention_period, name=name, check_first=False)
-
+        verified, msg = system_helper.set_retention_period_k8s(new_retention_period, fail_ok=expect_fail, name=name,
+                                                               check_first=False)
         LOG.tc_step('Wait for {} seconds'.format(SysInvTimeout.RETENTION_PERIOD_SAVED))
         time.sleep(SysInvTimeout.RETENTION_PERIOD_SAVED)
 
         LOG.tc_step('Check if CLI succeeded')
         if expect_fail:
-            assert 1 == code, msg
+            assert not verified, msg
             return  # we're done here when expecting failing
         else:
             assert 0 == code, 'Failed to change Retention Period to {}'.format(new_retention_period)

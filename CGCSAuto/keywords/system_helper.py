@@ -17,7 +17,7 @@ from keywords import common
 
 
 def get_buildinfo(con_ssh=None, use_telnet=False, con_telnet=None):
-    return _get_info_non_cli('cat /etc/build.info', con_ssh=con_ssh,  use_telnet=use_telnet,
+    return _get_info_non_cli('cat /etc/build.info', con_ssh=con_ssh, use_telnet=use_telnet,
                              con_telnet=con_telnet)
 
 
@@ -88,6 +88,7 @@ def is_two_node_cpe(con_ssh=None, use_telnet=False, con_telnet=None, auth_info=T
     Returns (bool):
 
     """
+
     sys_type = ProjVar.get_var('SYS_TYPE')
     if sys_type:
         if not (ProjVar.get_var('IS_DC') and auth_info and
@@ -95,11 +96,10 @@ def is_two_node_cpe(con_ssh=None, use_telnet=False, con_telnet=None, auth_info=T
             return SysType.AIO_DX == sys_type
     else:
         return is_small_footprint(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet) \
-           and len(get_controllers(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)) == 2
+               and len(get_controllers(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)) == 2
 
 
 def is_simplex(con_ssh=None, use_telnet=False, con_telnet=None, auth_info=Tenant.get('admin')):
-
     sys_type = ProjVar.get_var('SYS_TYPE')
     if sys_type:
         if not (ProjVar.get_var('IS_DC') and auth_info and
@@ -396,7 +396,7 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
         retry = 0
 
     output = None
-    for i in range(retry+1):
+    for i in range(retry + 1):
         code, output = cli.fm('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                               rtn_list=True, use_telnet=use_telnet, con_telnet=con_telnet)
         if code == 0:
@@ -490,7 +490,6 @@ def get_alarms(rtn_vals=('Alarm ID', 'Entity ID'), alarm_id=None, reason_text=No
 
 
 def get_suppressed_alarms(uuid=False, con_ssh=None, auth_info=Tenant.get('admin')):
-
     """
     Get suppressed alarms_and_events as dictionary
     Args:
@@ -522,7 +521,7 @@ def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.get('adm
     """
     LOG.info("Un-suppress all events")
     args = '--nowrap --nopaging'
-    code, output = cli.fm('event-unsuppress-all',  positional_args=args, ssh_client=ssh_con, fail_ok=fail_ok,
+    code, output = cli.fm('event-unsuppress-all', positional_args=args, ssh_client=ssh_con, fail_ok=fail_ok,
                           auth_info=auth_info, rtn_list=True)
 
     if code == 1:
@@ -606,7 +605,7 @@ def get_events(rtn_vals=('Event Log ID', 'Entity Instance ID'), limit=10, event_
 
     rtn_vals_list = []
     if isinstance(rtn_vals, str):
-        rtn_vals = (rtn_vals, )
+        rtn_vals = (rtn_vals,)
     for header in rtn_vals:
         vals = table_parser.get_column(table_, header)
         if not vals:
@@ -652,6 +651,7 @@ def get_events_table(limit=5, show_uuid=False, show_only=None, show_suppress=Fal
     Returns:
         dict: events table in format: {'headers': <headers list>, 'values': <list of table rows>}
     """
+
     args = '-l {}'.format(limit)
     if query_key is not None:
         if query_key in ['event_log_id', 'entity_type_id', 'entity_instance_id', 'severity', 'start', 'end']:
@@ -693,7 +693,7 @@ def get_events_table(limit=5, show_uuid=False, show_only=None, show_suppress=Fal
         args += ' --include_suppress'
 
     table_ = table_parser.table(cli.fm('event-list ', args, ssh_client=con_ssh, auth_info=auth_info,
-                                       use_telnet=use_telnet, con_telnet=con_telnet,))
+                                       use_telnet=use_telnet, con_telnet=con_telnet, ))
 
     if kwargs:
         table_ = table_parser.filter_table(table_, regex=regex, **kwargs)
@@ -831,7 +831,7 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.get
 
     undeleted_alarms = list(set(alarms) & set(post_alarms))
     if undeleted_alarms:
-        err_msg = "Some alarm(s) still exist on system after attempt to delete: {}\nAlarm delete results: {}".\
+        err_msg = "Some alarm(s) still exist on system after attempt to delete: {}\nAlarm delete results: {}". \
             format(undeleted_alarms, res)
 
         if fail_ok:
@@ -1007,7 +1007,7 @@ def wait_for_alarms_gone(alarms, timeout=120, check_interval=3, fail_ok=False, c
     Returns (tuple): (res(bool), remaining_alarms(list of tuple))
 
     """
-    pre_alarms = list(alarms)   # Don't update the original list
+    pre_alarms = list(alarms)  # Don't update the original list
     LOG.info("Waiting for alarms_and_events to disappear from fm alarm-list: {}".format(pre_alarms))
     alarms_to_check = pre_alarms.copy()
 
@@ -1158,12 +1158,206 @@ def modify_system(fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'), **k
 
 
 def get_system_value(field='name', auth_info=Tenant.get('admin'), con_ssh=None, use_telnet=False, con_telnet=None):
-
     table_ = table_parser.table(cli.system('show', ssh_client=con_ssh, use_telnet=use_telnet, auth_info=auth_info,
                                            con_telnet=con_telnet))
 
     value = table_parser.get_value_two_col_table(table_, field=field)
     return value
+
+
+def set_retention_period_k8s(period, name='event_time_to_live', fail_ok=True, check_first=True, con_ssh=None,
+                             auth_info=Tenant.get('admin')):
+    """
+    Sets the PM retention period in K8S settings
+    Args:
+        period (int): the length of time to set the retention period (in seconds)
+        name
+        fail_ok: True or False
+        check_first: True or False
+        con_ssh (SSHClient):
+        auth_info (dict): could be Tenant.get('admin'),Tenant.TENANT1,Tenant.TENANT2
+
+    Returns (tuple): (rtn_code (int), msg (str))
+        (-1, "Retention period not specified")
+        (-1, "The retention period is already set to that")
+        (0, "Current retention period is: <retention_period>")
+        (1, "Current retention period is still: <retention_period>")
+
+    US100247
+    US99793
+    system helm-override-update --reset-values panko database --set conf.panko.database.event_time_to_live=45678
+    system application-apply stx-openstack
+
+    """
+    from keywords import container_helper
+
+    if not isinstance(period, int):
+        raise ValueError("Retention period has to be an integer. Value provided: {}".format(period))
+
+    if check_first:
+        retention = get_retention_period_k8s(name=name, con_ssh=con_ssh)
+        if period == retention:
+            msg = "The retention period is already set to {}".format(period)
+            LOG.info(msg)
+            return -1, msg
+
+    app_name = 'stx-openstack'
+    section = 'database'
+
+    core_name = name
+    verify_cmd = ''
+    if name in 'metering_time_to_live':
+        skip("Ceilometer metering_time_to_live is no longer available in 'system service-parameter-list'")
+        name = 'metering_time_to_live'
+        service = 'ceilometer'
+    elif name == 'alarm_history_time_to_live':
+        skip("Skip for now on containerized load")
+        service = 'aodh'
+    elif name == 'event_time_to_live':
+        service = 'panko'
+        section = 'openstack'
+        name = 'conf.panko.database.event_time_to_live'
+        verify_cmd = 'cat /etc/panko/panko.conf; echo'
+
+    else:
+        raise ValueError("Unknown name: {}".format(name))
+
+    container_helper.update_helm_override(chart=service, namespace=section, reset_vals=False, kv_pairs={name: period})
+
+    override_info = container_helper.get_helm_override_info(
+        chart=service, namespace=section, fields='user_overrides')
+    LOG.debug('override_info:{}'.format(override_info))
+
+    container_helper.apply_app(app_name=app_name, check_first=False, applied_timeout=1800, fail_ok=fail_ok)
+
+    LOG.info("Start post check after applying new value for {}".format(name))
+
+    verified = verify_config_changed(service, verify_cmd, section='database', **{core_name: period})
+
+    return verified, "{} {} is successfully set to: {}".format(service, name, 'should be the new value')
+
+
+def get_openstack_pods_by_name(name, component, namespace='openstack', path=None, fail_ok=False, con_ssh=None):
+    from keywords import kube_helper
+    LOG.info(
+        'Searching pods servicing {} in namespace:{}, component:{}, under:{}'.format(name, namespace, component, path))
+    command = 'get pod'
+
+    options = '-n {}'.format(namespace)
+    options += ' -o jsonpath=\''
+    options += '{range .items[?(@.metadata.labels.application=="' + name + '")]}'
+    options += '[{.metadata.name},{.metadata.labels.component}]'
+    options += r'{"\n"}{end}'
+    options += '\'; echo'
+
+    code, output = kube_helper.exec_kube_cmd(command, args=options, fail_ok=fail_ok, con_ssh=con_ssh)
+
+    if not output:
+        LOG.info('No pods matching {} found'.format(options))
+        return []
+
+    matching = []
+    for line in output.splitlines():
+        pod_id, component_name = line.strip('][').split(',')
+        if component_name == component:
+            LOG.info('Found matching pods:{} of component:{}'.format(pod_id, component_name))
+            matching.append(pod_id)
+
+    if not matching:
+        LOG.debug('No pods found for: name={}, component={}, namespace={}, path={}'.format(
+            name, component, namespace, path))
+    return matching
+
+
+def verify_config_changed(chart, cmd, app_name='', component='api', section='database', fail_ok=False, **expected):
+    LOG.info('Verifying configs for chart:{}, section:{}, expecting new changes:{}'.format(
+        chart, section, expected))
+
+    actual_configs = get_configs(chart, cmd, app_name=app_name, component=component, fail_ok=fail_ok)
+
+    for pod in actual_configs:
+        LOG.debug('Verifying config changes inside pod:{}'.format(pod))
+        LOG.debug('- settings:{}, cmd:{}'.format(actual_configs[pod], cmd))
+        settings = actual_configs[pod]
+        for expected_key, expected_value in expected.items():
+            if int(settings.get(section, expected_key, fallback='0')) != expected_value:
+                msg = 'for {}, value is not set to expected:{}, actual:{}'.format(
+                    expected_key, expected_value, settings.get(section, expected_key, fallback=''))
+                assert fail_ok, msg
+                return False
+
+            LOG.info('Value was correctly changed to:{} for {} on pod {}'.format(expected_value, expected_key, pod))
+        if len(expected) > 1:
+            LOG.info('All Values were correctly changed on pod {}'.format(pod))
+
+    LOG.info('All Values were correctly changed on all pods'.format(actual_configs.keys()))
+
+    return True
+
+
+def get_config_value(chart, config_name, cmd, section='database', component='api', app_name='', fail_ok=False,
+                     con_ssh=None):
+    LOG.info(
+        'Getting config value of {} from chart:{}, sectionn:{}, using cmd:{}'.format(config_name, chart, section, cmd))
+    config_values = get_configs(chart, cmd, component=component, app_name=app_name, fail_ok=fail_ok, con_ssh=con_ssh)
+    if not config_values:
+        return None
+
+    values = []
+    for pod, settings in config_values.items():
+        value = settings.get(section, config_name, fallback='')
+        if value == '':
+            LOG.warn(
+                'Empty value for {} on pod:{}, section:{}, conf_values:{}'.format(config_name, pod, section, settings))
+        values.append(value)
+
+    unique_values = set(values)
+    if not unique_values:
+        LOG.warn('No value found for {}, values:{}'.format(config_name, values))
+    elif len(unique_values) > 1:
+        LOG.warn('Multiple values found for {}, values:{}'.format(config_name, values))
+
+    return values.pop()
+
+
+def get_configs(chart, cmd, component='api', app_name='', fail_ok=False, con_ssh=None):
+    LOG.info('Getting configs for chart:{}, component:{}'.format(chart, component))
+
+    chart_name = app_name or chart
+    pods = get_openstack_pods_by_name(chart_name, component, fail_ok=fail_ok, con_ssh=con_ssh)
+    return get_configs_from_pods(pods, cmd)
+
+
+def get_configs_from_pods(pods, cmd, fail_ok=False):
+    from keywords import kube_helper
+
+    LOG.info('Getting configs using cmd:{}, from pods:{}'.format(cmd, pods))
+
+    actual_configs = {}
+
+    if not pods:
+        msg = 'No pods'
+        LOG.warn(msg)
+        assert fail_ok, msg
+        return {}
+
+    for pod in pods:
+        LOG.debug('Getting configs inside pod:{}'.format(pod))
+
+        code, output = kube_helper.exec_cmd_in_container(cmd, pod, namespace='openstack', fail_ok=False)
+
+        settings = configparser.ConfigParser()
+        settings.read_string(output)
+
+        actual_configs[pod] = settings
+
+    if actual_configs:
+        LOG.info('All configs are retrived from inside of all pods:{}, using cmd:{}, actual_configs:{}'.format(
+            pods, cmd, actual_configs))
+    else:
+        LOG.waring('No configs retrived from inside of all pods, using cmd:{}'.format(pods, cmd))
+
+    return actual_configs
 
 
 def set_retention_period(period, name='metering_time_to_live', fail_ok=True, check_first=True, con_ssh=None,
@@ -1259,6 +1453,11 @@ def wait_for_file_update(file_path, grep_str, expt_val, timeout=300, fail_ok=Fal
     raise exceptions.SysinvError(msg)
 
 
+def get_retention_period_k8s(name='event_time_to_live', con_ssh=None):
+    LOG.info('Getting retention period')
+    return get_config_value('panko', name, 'cat /etc/panko/panko.conf', section='database', con_ssh=con_ssh)
+
+
 def get_retention_period(name='metering_time_to_live', con_ssh=None):
     """
     Returns the current retention period
@@ -1275,7 +1474,7 @@ def get_retention_period(name='metering_time_to_live', con_ssh=None):
     return int(ret_per)
 
 
-def get_dns_servers(auth_info=Tenant.get('admin'), con_ssh=None, use_telnet=False, con_telnet=None,):
+def get_dns_servers(auth_info=Tenant.get('admin'), con_ssh=None, use_telnet=False, con_telnet=None, ):
     """
     Get the DNS servers currently in-use in the System
 
@@ -1393,14 +1592,14 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
     """
     LOG.info("Setting 1G memory to: {}".format(hugepage_num))
     mem_vals = get_host_mem_values(
-            host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
-            proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)[int(proc_id)]
+        host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
+        proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)[int(proc_id)]
 
     pre_4k_total, pre_2m_total, pre_1g_total, pre_2m_avail, pre_mem_avail = [int(val) for val in mem_vals]
 
     # set max hugepage num if hugepage_num is unset
     if hugepage_num is None:
-        hugepage_num = int(pre_mem_avail/1024)
+        hugepage_num = int(pre_mem_avail / 1024)
 
     diff = hugepage_num - pre_1g_total
 
@@ -1493,8 +1692,7 @@ def unsuppress_event(alarm_id, check_first=False, fail_ok=False, con_ssh=None):
 
 def generate_event(event_id='300.005', state='set', severity='critical', reason_text='Generated for testing',
                    entity_id='CGCSAuto', unknown_text='unknown1', unknown_two='unknown2', con_ssh=None):
-
-    cmd = '''fmClientCli -c  "### ###{}###{}###{}###{}### ###{}### ###{}###{}### ###True###True###"'''.\
+    cmd = '''fmClientCli -c  "### ###{}###{}###{}###{}### ###{}### ###{}###{}### ###True###True###"'''. \
         format(event_id, state, reason_text, entity_id, severity, unknown_text, unknown_two)
 
     LOG.info("Generate system event: {}".format(cmd))
@@ -1525,14 +1723,14 @@ def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_i
     """
     LOG.info("Setting host {}'s proc_id {} to contain {} 4k pages".format(host, proc_id, smallpage_num))
     mem_vals = get_host_mem_values(
-            host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
-            proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)[proc_id]
+        host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
+        proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)[proc_id]
 
     page_4k_total, page_2m_total, page_1g_total, page_2m_avail, mem_avail = [int(val) for val in mem_vals]
 
     # set max smallpage num if smallpage_num is unset
     if smallpage_num is None:
-        smallpage_num = int(mem_avail*1024/4)
+        smallpage_num = int(mem_avail * 1024 / 4)
 
     diff_page = smallpage_num - page_4k_total
 
@@ -1540,7 +1738,7 @@ def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_i
     new_1g = None
 
     if diff_page > 0:
-        num_2m_avail_to_4k_page = int(page_2m_avail*2*256)
+        num_2m_avail_to_4k_page = int(page_2m_avail * 2 * 256)
         if num_2m_avail_to_4k_page < diff_page:
             # change all 2M page to smallpage and available 1G hugepage
             new_2m = 0
@@ -1685,6 +1883,7 @@ def create_storage_profile(host, profile_name='', con_ssh=None):
     uuid = table_parser.get_value_two_col_table(table_, 'uuid')
 
     return uuid
+
 
 #
 # def to_delete_apply_storage_profile(host, profile=None, con_ssh=None, fail_ok=False):
@@ -2375,7 +2574,6 @@ def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh
 
 
 def are_hosts_unlocked(con_ssh=None, auth_info=Tenant.get('admin')):
-
     table_ = table_parser.table(cli.system('host-list', ssh_client=con_ssh, auth_info=auth_info))
     return "locked" not in (table_parser.get_column(table_, 'administrative'))
 
@@ -2417,7 +2615,7 @@ def get_system_health_query_upgrade(con_ssh=None):
 
     if len(failed) == 0:
         LOG.info("system health is OK to start upgrade......")
-        return 0, None,  None
+        return 0, None, None
 
     actions = {"lock_unlock": [[], ''],
                "force_upgrade": [False, ''],
@@ -2475,13 +2673,12 @@ def get_system_health_query_upgrade(con_ssh=None):
         else:
             err_msg = "System health query upgrade failed: {}".format(failed)
             LOG.error(err_msg)
-            return 1, failed,  None
+            return 1, failed, None
 
     return 2, failed, actions
 
 
 def get_system_health_query(con_ssh=None):
-
     output = (cli.system('health-query', ssh_client=con_ssh, source_openrc=True, fail_ok=False)).splitlines()
     failed = []
     for line in output:
@@ -2536,7 +2733,6 @@ def system_upgrade_start(con_ssh=None, force=False, fail_ok=False):
 
 
 def system_upgrade_show(con_ssh=None):
-
     """
 
     Args:
@@ -2604,7 +2800,6 @@ def get_hosts_upgrade_status(con_ssh=None):
 
 
 def get_upgrade_state(con_ssh=None):
-
     output = cli.system('upgrade-show', ssh_client=con_ssh)
 
     if ("+" and "-" and "|") in output:
@@ -2626,7 +2821,7 @@ def wait_for_upgrade_activate_complete(timeout=300, check_interval=60, fail_ok=F
 
         time.sleep(check_interval)
 
-    err_msg = "Upgrade activation did not complete after waiting for {} seconds. Current state is {}".\
+    err_msg = "Upgrade activation did not complete after waiting for {} seconds. Current state is {}". \
         format(timeout, upgrade_state)
     if fail_ok:
         LOG.warning(err_msg)
@@ -2669,7 +2864,6 @@ def is_patch_current(con_ssh=None):
 
 
 def get_installed_build_info_dict(con_ssh=None, use_telnet=False, con_telnet=None):
-
     build_info_dict = {}
     build_info = get_buildinfo(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet)
     pattern = re.compile('(.*)="(.*)"')
@@ -2783,7 +2977,6 @@ def get_active_load_id(con_ssh=None, source_creden_=None):
 
 def get_software_loads(rtn_vals=('id', 'state', 'software_version'), sw_id=None, state=None, software_version=None,
                        strict=False, con_ssh=None, source_creden_=None):
-
     table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, source_openrc=source_creden_))
 
     kwargs_dict = {
@@ -2820,7 +3013,7 @@ def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False, source_
     if rc == 1:
         return 1, output
 
-    if not wait_for_delete_imported_load(load_id, con_ssh=con_ssh,  fail_ok=True):
+    if not wait_for_delete_imported_load(load_id, con_ssh=con_ssh, fail_ok=True):
         err_msg = "Unable to delete imported load {}".format(load_id)
         LOG.warning(err_msg)
         if fail_ok:
@@ -2831,7 +3024,6 @@ def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False, source_
 
 def wait_for_delete_imported_load(load_id, timeout=120, check_interval=5, fail_ok=False, con_ssh=None,
                                   auth_info=Tenant.get('admin')):
-
     LOG.info("Waiting for imported load  {} to be deleted from the load-list ".format(load_id))
     end_time = time.time() + timeout
     while time.time() < end_time:
@@ -2855,7 +3047,6 @@ def wait_for_delete_imported_load(load_id, timeout=120, check_interval=5, fail_o
 
 
 def install_license(license_path, timeout=30, con_ssh=None):
-
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
@@ -2911,7 +3102,7 @@ def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
     end_time = time.time() + timeout
     rc = 1
     while time.time() < end_time:
-        index = con_ssh.expect([con_ssh.prompt,  Prompt.YES_N_PROMPT], timeout=timeout)
+        index = con_ssh.expect([con_ssh.prompt, Prompt.YES_N_PROMPT], timeout=timeout)
         if index == 1:
             con_ssh.send('yes')
             index = con_ssh.expect([con_ssh.prompt, Prompt.CONFIRM_PROMPT], timeout=timeout)
@@ -2945,8 +3136,7 @@ def abort_upgrade(con_ssh=None, timeout=60, fail_ok=False):
 
 
 def get_controller_fs_values(con_ssh=None, auth_info=Tenant.get('admin')):
-
-    table_ = table_parser.table(cli.system('controllerfs-show',  ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('controllerfs-show', ssh_client=con_ssh, auth_info=auth_info))
 
     rows = table_parser.get_all_rows(table_)
     values = {}
@@ -3001,7 +3191,7 @@ def is_infra_network_configured(con_ssh=None, auth_info=Tenant.get('admin')):
         con_ssh = ControllerClient.get_active_controller()
     output = cli.system('infra-show', ssh_client=con_ssh, auth_info=auth_info)
     if "Infrastructure network not configured" in output:
-        return False,  None
+        return False, None
     table_ = table_parser.table(output)
     rows = table_parser.get_all_rows(table_)
     values = {}
@@ -3025,11 +3215,11 @@ def add_infra_network(infra_network_cidr=None, con_ssh=None, auth_info=Tenant.ge
     if infra_network_cidr is None:
         infra_network_cidr = Networks.INFRA_NETWORK_CIDR
 
-    output = cli.system('infra-add', infra_network_cidr,  ssh_client=con_ssh, auth_info=auth_info)
+    output = cli.system('infra-add', infra_network_cidr, ssh_client=con_ssh, auth_info=auth_info)
     if "Infrastructure network not configured" in output:
         msg = "Infra Network already configured in the system"
         LOG.info(msg)
-        return False,  None
+        return False, None
     table_ = table_parser.table(output)
     rows = table_parser.get_all_rows(table_)
     values = {}
@@ -3100,8 +3290,8 @@ def get_host_ifnames_by_address(host, rtn_val='ifname', address=None, id_=None, 
 
     """
 
-    table_ = table_parser.table(cli.system('host-addr-list', host,  ssh_client=con_ssh, auth_info=auth_info,
-                                fail_ok=fail_ok, rtn_list=True)[1])
+    table_ = table_parser.table(cli.system('host-addr-list', host, ssh_client=con_ssh, auth_info=auth_info,
+                                           fail_ok=fail_ok, rtn_list=True)[1])
     args_dict = {
         'uuid': id_,
         'address': address,
@@ -3132,8 +3322,8 @@ def get_host_addr_list(host, rtn_val='address', ifname=None, id_=None, con_ssh=N
 
     """
 
-    table_ = table_parser.table(cli.system('host-addr-list', host,  ssh_client=con_ssh, auth_info=auth_info,
-                                fail_ok=fail_ok, rtn_list=True)[1])
+    table_ = table_parser.table(cli.system('host-addr-list', host, ssh_client=con_ssh, auth_info=auth_info,
+                                           fail_ok=fail_ok, rtn_list=True)[1])
     args_dict = {
         'id': id_,
         'ifname': ifname,
@@ -3169,8 +3359,8 @@ def get_host_disks_table(host, con_ssh=None, use_telnet=False, con_telnet=None, 
     return table_
 
 
-def get_network_values(header='uuid', uuid=None, ntype=None, mtu=None, link_capacity=None,  dynamic=None, vlan=None,
-                       pool_uuid=None, auth_info=Tenant.get('admin'), con_ssh=None,  strict=True, regex=None, **kwargs):
+def get_network_values(header='uuid', uuid=None, ntype=None, mtu=None, link_capacity=None, dynamic=None, vlan=None,
+                       pool_uuid=None, auth_info=Tenant.get('admin'), con_ssh=None, strict=True, regex=None, **kwargs):
     """
     Get
     Args:
@@ -3190,8 +3380,8 @@ def get_network_values(header='uuid', uuid=None, ntype=None, mtu=None, link_capa
 
     Returns (list):
     """
-    table_ = table_parser.table(cli.system('network-list', 
-                                           ssh_client=con_ssh, 
+    table_ = table_parser.table(cli.system('network-list',
+                                           ssh_client=con_ssh,
                                            auth_info=auth_info))
     args_temp = {
         'uuid': uuid,
@@ -3768,10 +3958,10 @@ def is_avs(con_ssh=None):
     if vswitch_type is None:
         vswitch_type = get_system_value(field='vswitch_type', con_ssh=con_ssh)
         ProjVar.set_var(VSWITCH_TYPE=vswitch_type)
-    return 'ovs' not in vswitch_type    # 'avs' or '' for avs; 'ovs-dpdk' for ovs.
+    return 'ovs' not in vswitch_type  # 'avs' or '' for avs; 'ovs-dpdk' for ovs.
 
 
-def get_system_build_id(con_ssh=None, use_telnet=False, con_telnet=None,):
+def get_system_build_id(con_ssh=None, use_telnet=False, con_telnet=None, ):
     """
 
     Args:
@@ -3782,7 +3972,7 @@ def get_system_build_id(con_ssh=None, use_telnet=False, con_telnet=None,):
     Returns (str): e.g., 16.10
 
     """
-    build_info = get_buildinfo(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,)
+    build_info = get_buildinfo(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet, )
     build_line = [l for l in build_info.splitlines() if "BUILD_ID" in l]
     for line in build_line:
         if line.split("=")[0].strip() == 'BUILD_ID':
@@ -4247,7 +4437,7 @@ def get_data_networks(rtn_val='name', con_ssh=None, auth_info=Tenant.get('admin'
     return [table_parser.get_column(table_, header) for header in rtn_val]
 
 
-def get_data_network_values(datanetwork, fields=('uuid', ), fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_data_network_values(datanetwork, fields=('uuid',), fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get datanetwork values from system datanetwork-show table.
     Args:
@@ -4267,7 +4457,7 @@ def get_data_network_values(datanetwork, fields=('uuid', ), fail_ok=False, con_s
 
     table_ = table_parser.table(output)
     if isinstance(fields, str):
-        fields = (fields, )
+        fields = (fields,)
     return [table_parser.get_value_two_col_table(table_, field) for field in fields]
 
 
