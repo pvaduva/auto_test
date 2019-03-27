@@ -25,6 +25,7 @@ def id_params(val):
 
 def _append_nics_for_net(vifs, net_id, nics):
     glance_vif = None
+    nics = copy.deepcopy(nics)
     for vif in vifs:
         vif_ = vif.split(sep='_x')
         vif_model = vif_[0]

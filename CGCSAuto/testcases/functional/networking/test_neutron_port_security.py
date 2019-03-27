@@ -1,173 +1,141 @@
-import random
-
-from pytest import fixture
+from pytest import fixture, mark
 
 from utils.tis_log import LOG
-from keywords import network_helper, nova_helper, vm_helper, system_helper, common
+from keywords import network_helper, vm_helper, system_helper, common
 from consts.auth import Tenant
+from consts.filepaths import TiSPath, TestServerPath
 
 
-@fixture(scope='module', autouse=True)
+@fixture(scope='module')
 def setup_port_security():
-    LOG.fixture_step("Ensure neutron port security is enabled")
+
+    LOG.fixture_step("Copy userdata files from test server to active controller")
+    for i in (1, 2):
+        source = "{}/port_security/vm{}-userdata.txt".format(TestServerPath.USER_DATA, i)
+        common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=TiSPath.USERDATA)
+
+    LOG.fixture_step("Enable port security service parameter on system")
     system_helper.enable_port_security_param()
 
+    LOG.fixture_step("Select neutron networks to test")
+    internal_net_id = network_helper.get_internal_net_id()
+    nics = [{'net-id': network_helper.get_mgmt_net_id()},
+            {'net-id': internal_net_id}]
 
-def test_neutron_port_security():
+    return internal_net_id, nics
+
+
+@mark.parametrize('port_security', (
+    'enabled',
+    'disabled'
+))
+def test_neutron_port_security(setup_port_security, port_security):
     """
-    test neutron port security
+    Test neutron port security enabled/disabled with IP spoofing
 
     Args:
         n/a
 
-    Test Setups:
-        System should be have ml2 driver capable
-    Test Steps:
+    Pre-requisites:
+        - System should be have ml2 driver capable
+    Setups:
         - Enable Extension ml2 driver in system if its not already enabled
         - Enable Port Security in the network if its not already enabled
-        - Boot base VM & VM to test
-        - Verify IP Spoofing fails when port security is enabled
-        - Delete existing base vm & VM to test
-        - Disable Port security at network leve
-        - Boot base VM & VM to test
-        - Verify IP Spoofing works when port security is disabled
-    Test Teardown:
-        - Delete base vm & vm to test
-        - Revert system service parameter if it is added
-    """
+    Test Steps:
+        - Set port_security on existing neutron networks
+        - Boot 2 vms to test where userdata sets a static ip that is different than nova show
+        - Verify IP Spoofing fails when port security is enabled, and vise versa
+        - Delete spoofed vms
+        - Boot another 2 vms without userdata
+        - Verify ping between VMs work when without ip spoofing attach
+        - Change vm2 mac address and verify IP spoofing fails only when port security is enabled
+        - Revert vm2 mac address and verify ping between vms work again
+    Teardown:
+        - Delete created vms, volumes, etc
 
-    LOG.tc_step("Enable port_security for the system and update existing networks")
-    port_security = network_helper.get_net_show_values('external-net0', 'port_security_enabled')[0]
-    port_security = eval(port_security)
-    if not port_security:
+    """
+    internal_net_id, nics = setup_port_security
+
+    port_security_enabled = True if port_security == 'enabled' else False
+    LOG.tc_step("Ensure port security is {} on neutron networks".format(port_security))
+    internal_net_port_security = eval(network_helper.get_net_show_values(internal_net_id, 'port_security_enabled')[0])
+    if internal_net_port_security is not port_security_enabled:
+        LOG.info('Set port security to {} on existing neutron networks'.format(port_security))
         networks = network_helper.get_networks(auth_info=Tenant.get('admin'))
         for net in networks:
-            network_helper.set_network(net_id=net, enable_port_security=True)
+            network_helper.set_network(net_id=net, enable_port_security=port_security_enabled)
 
-    LOG.tc_step("Copy userdata file from test server to active controller")
-    source = "/home/svc-cgcsauto/userdata/port_security/tenant1-userdata.txt"
-    destination = "/home/wrsroot/userdata"
-    common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=destination)
-    source = "/home/svc-cgcsauto/userdata/port_security/tenant2-userdata.txt"
-    common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=destination)
+    # Test IP protection
+    LOG.tc_step("Launch two VMs with port security {} with mismatch IP in userdata than neutron port".
+                format(port_security))
+    vms = []
+    for i in (1, 2):
+        user_data = '{}/vm{}-userdata.txt'.format(TiSPath.USERDATA, i)
+        vm_name = 'vm{}_mismatch_ip_ps_{}'.format(i, port_security)
+        vm = vm_helper.boot_vm(name=vm_name, nics=nics, cleanup='function', user_data=user_data)[1]
+        vm_helper.wait_for_vm_pingable_from_natbox(vm)
+        vms.append(vm)
+    vm1, vm2 = vms
+    vm_helper.ping_vms_from_vm(to_vms=vm2, from_vm=vm1, net_types=['mgmt'], retry=10)
 
-    internal_net_id = network_helper.get_internal_net_id()
-    mgmt_net_id = network_helper.get_mgmt_net_id()
-    tenant_net_id = network_helper.get_tenant_net_id()
+    vm2_ip = '10.1.0.2'
+    expt_res = 'fails' if port_security_enabled else 'succeeds'
+    LOG.tc_step("With port security {}, verify ping over internal net {} with mismatch IPs".
+                format(port_security, expt_res))
+    packet_loss_rate = _ping_server(vm1, ip_addr=vm2_ip, fail_ok=port_security_enabled)
+    if port_security_enabled:
+        assert packet_loss_rate == 100, "IP spoofing succeeded when port security is enabled"
 
-    mgmt_nic = {'net-id': mgmt_net_id}
-    internal_nic = {'net-id': internal_net_id}
-    tenant_nic = {'net-id': tenant_net_id}
-    nics = [mgmt_nic, tenant_nic, internal_nic]
+    LOG.info("Delete VMs with mismatch IPs")
+    vm_helper.delete_vms(vms)
 
-    vm_ids = []
+    # Test MAC protection
+    LOG.tc_step("Launch two VMs without IP Spoofing and check ping between vms works")
+    vms = []
+    for i in (1, 2):
+        vm = vm_helper.boot_vm(name='vm{}_ps_{}'.format(i, port_security), nics=nics, cleanup='function')[1]
+        vm_helper.wait_for_vm_pingable_from_natbox(vm)
+        vms.append(vm)
+    vm1, vm2 = vms
+    vm_helper.ping_vms_from_vm(vm2, from_vm=vm1, net_types=['mgmt', 'internal'])
 
-    LOG.tc_step("Boot Base VM")
-    user_data1 = '/home/wrsroot/userdata/tenant1-userdata.txt'
-    base_vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='function', user_data=user_data1)[1]
+    LOG.tc_step("With port security {}, change VM mac address and ensure ping over internal net {}".
+                format(port_security, expt_res))
+    origin_mac_addr = network_helper.get_ports(server=vm2, network=internal_net_id, rtn_val='MAC Address')[0]
+    vm2_ip = network_helper.get_internal_ips_for_vms(vm2)[0]
+    new_mac_addr = _change_mac_address(vm2, origin_mac_addr)
+    packet_loss_rate = _ping_server(vm1, ip_addr=vm2_ip, fail_ok=port_security_enabled)
+    if port_security_enabled:
+        assert packet_loss_rate == 100, "IP spoofing succeeded when port security is enabled"
 
-    vm_ids.append(base_vm_id)
-
-    LOG.tc_step("Perform system service-parameter-list")
-    port_security_enabled = network_helper.get_net_info(tenant_net_id, field='port_security_enabled')
-
-    LOG.tc_step("Verify if Port Security Enabled in Network")
-    LOG.info("Port security enabled: {}".format(port_security_enabled))
-    assert port_security_enabled, "Port Security Not Enabled in Network"
-
-    LOG.tc_step("Boot vm to test port security")
-    user_data2 = '/home/wrsroot/userdata/tenant2-userdata.txt'
-    vm_under_test = vm_helper.boot_vm(name='if_attach_tenant', nics=nics, cleanup='function', user_data=user_data2)[1]
-    vm_ids.append(vm_under_test)
-
-    ip_addr = '10.1.0.2'
-
-    LOG.tc_step("Verify IP Spoofing fails, ping over internal networks should fails ")
-    _ping_server(base_vm_id, vm_under_test, ip_addr, True)
-
-    LOG.tc_step("Delete Base VM {} & VM under test {}".format(base_vm_id, vm_under_test))
-    vm_helper.delete_vms(vm_ids, delete_volumes=True)
-
-    LOG.tc_step("Disable port_security on existing Networks")
-    networks = network_helper.get_networks(auth_info=Tenant.get('admin'))
-    for net in networks:
-        network_helper.set_network(net_id=net, enable_port_security=False)
-    port_security_enabled = network_helper.get_net_info(tenant_net_id, field='port_security_enabled')
-    LOG.tc_step("Verify if Port Security Disabled in Network")
-    LOG.info("Port security enabled: {}".format(port_security_enabled))
-    assert port_security_enabled, "Port Security Still Enabled in Network"
-
-    LOG.tc_step("Boot Base VM & VM under test")
-    base_vm_id = vm_helper.boot_vm(name='base_vm', nics=nics, cleanup='function', user_data=user_data1)[1]
-    vm_under_test = vm_helper.boot_vm(name='if_attach_tenant', nics=nics, cleanup='function', user_data=user_data2)[1]
-
-    LOG.tc_step("Verify IP Spoofing works, ping over internal networks should work ")
-    _ping_server(base_vm_id, vm_under_test, ip_addr, False)
-
-    LOG.tc_step("Generate new mac address")
-    new_mac_addr = _gen_mac_addr()
-    mac_addr = network_helper.get_ports(server=vm_under_test, network=internal_net_id, rtn_val='MAC Address')[0]
-    eth_name = _find_eth_for_mac(vm_under_test, mac_addr)
-
-    LOG.tc_step("Change mac addr to random {}".format(new_mac_addr))
-    _change_mac_address(vm_under_test, new_mac_addr, eth_name)
-
-    LOG.tc_step("Verify mac filtering works, ping over internal networks should work even after changing mac address ")
-    _ping_server(base_vm_id, vm_under_test, ip_addr, False)
-
-    LOG.tc_step("Revert change mac addr to orig {}".format(mac_addr))
-    _change_mac_address(vm_under_test, mac_addr, eth_name)
-
-    LOG.tc_step("Verify IP Spoofing works, ping over internal networks should work ")
-    _ping_server(base_vm_id, vm_under_test, ip_addr, False)
+    LOG.tc_step("With port security {}, revert VM mac address and ensure ping over internal net succeeds".
+                format(port_security))
+    _change_mac_address(vm2, new_mac_addr, origin_mac_addr)
+    _ping_server(vm1, ip_addr=vm2_ip, fail_ok=False)
 
 
-def _find_eth_for_mac(vm_id, mac_addr):
-    """
-    ip link set <dev> up, and dhclient <dev> to bring up the interface of last nic for given VM
-    Args:
-        vm_id (str):
-        mac_addr (str)
-    """
-    with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        eth_name = network_helper.get_eth_for_mac(mac_addr=mac_addr, ssh_client=vm_ssh)
-        LOG.info("mac addr {}, eth_name {}".format(mac_addr, eth_name))
-        assert eth_name, "Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id)
-    return eth_name
-
-
-def _change_mac_address(vm_id, mac_addr, eth_name):
+def _change_mac_address(vm_id, prev_mac_addr, new_mac_addr=None):
     """
     ip link set <dev> up, and dhclient <dev> to bring up the interface of last nic for given VM
     Args:
         vm_id (str):
     """
+    if not new_mac_addr:
+        new_mac_addr = prev_mac_addr[:-1] + ('2' if prev_mac_addr.endswith('1') else '1')
+
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
+        eth_name = network_helper.get_eth_for_mac(mac_addr=prev_mac_addr, ssh_client=vm_ssh)
         vm_ssh.exec_cmd('ip addr')
-        vm_ssh.exec_sudo_cmd('ifconfig {} down'.format(eth_name))
-        vm_ssh.exec_sudo_cmd('sudo ifconfig {} hw ether {}'.format(eth_name, mac_addr))
-        vm_ssh.exec_sudo_cmd('ifconfig {} up'.format(eth_name))
-
-
-def _gen_mac_addr():
-
-    myhexdigits = []
-    for x in range(6):
-        # x will be set to the values 0 to 5
-        a = random.randint(0, 255)
-        # a will be some 8-bit quantity
-        hex = '%02x' % a
-        # hex will be 2 hexadecimal digits with a leading 0 if necessary
-        # you need 2 hexadecimal digits to represent 8 bits
-        myhexdigits.append(hex)
-    new_mac_addr = ':'.join(myhexdigits)
-    LOG.info("Generated new mac address {}".format(new_mac_addr))
+        vm_ssh.exec_sudo_cmd('ifconfig {} down'.format(eth_name), fail_ok=False)
+        vm_ssh.exec_sudo_cmd('sudo ifconfig {} hw ether {}'.format(eth_name, new_mac_addr), fail_ok=False)
+        vm_ssh.exec_sudo_cmd('ifconfig {} up'.format(eth_name), fail_ok=False)
+        vm_ssh.exec_cmd('ip addr | grep --color=never -B 1 -A 1 {}'.format(new_mac_addr), fail_ok=False)
 
     return new_mac_addr
 
 
-def _ping_server(base_vm_id, vm_under_test, ip_addr, fail_ok):
-    LOG.tc_step("Verify IP Spoofing fails, ping over internal networks should fails ")
-    vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_id, net_types=['mgmt'], retry=10)
-    with vm_helper.ssh_to_vm_from_natbox(vm_id=base_vm_id) as vm_ssh:
-        network_helper.ping_server(ip_addr, ssh_client=vm_ssh, fail_ok=fail_ok)
+def _ping_server(vm_id, ip_addr, fail_ok):
+    with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_id) as vm_ssh:
+        packet_loss_rate = network_helper.ping_server(ip_addr, ssh_client=vm_ssh, fail_ok=fail_ok, retry=10)[0]
+
+    return packet_loss_rate
