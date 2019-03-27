@@ -83,6 +83,7 @@ def test_duplex_install(install_setup):
     guest_server = install_setup["servers"]["guest"]
     install_subcloud = install_setup.get("install_subcloud")
     lab_files_server = install_setup["servers"]["lab_files"]
+    helm_chart_server = install_setup["servers"]["helm_charts"]
 
     if final_step == '0' or final_step == "setup":
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -98,7 +99,8 @@ def test_duplex_install(install_setup):
                                             guest_server=guest_server,
                                             load_path=InstallVars.get_install_var("TIS_BUILD_DIR"),
                                             license_path=InstallVars.get_install_var("LICENSE"),
-                                            guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
+                                            guest_path=InstallVars.get_install_var('GUEST_IMAGE'),
+                                            helm_chart_server=helm_chart_server)
 
     if install_subcloud:
         fresh_install_helper.configure_subcloud(controller0_node, lab_files_server, subcloud=install_subcloud,

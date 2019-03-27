@@ -1044,10 +1044,12 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     else:
         guest_server_obj = setups.initialize_server(guest_server)
 
-    if helm_chart_server == bld_server.name:
+    if helm_chart_server and helm_chart_server == bld_server.name:
         helm_chart_server = bld_server
-    elif helm_chart_server == iso_host:
+    elif helm_chart_server and helm_chart_server == iso_host:
         helm_chart_server = iso_host_obj
+    elif not helm_chart_server:
+        helm_chart_server = bld_server
     else:
         helm_chart_server = setups.initialize_server(helm_chart_server)
 
