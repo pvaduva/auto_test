@@ -2400,7 +2400,7 @@ def get_eth_for_mac(ssh_client, mac_addr, timeout=VMTimeout.IF_ADD, vshell=False
         if not vshell:
             if mac_addr in ssh_client.exec_cmd('ip addr'.format(mac_addr))[1]:
 
-                code, output = ssh_client.exec_cmd('ip addr | grep -B 1 {}'.format(mac_addr))
+                code, output = ssh_client.exec_cmd('ip addr | grep --color=never -B 1 "{}"'.format(mac_addr))
                 # sample output:
                 # 7: eth4: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN qlen 1000
                 # link/ether 90:e2:ba:60:c8:08 brd ff:ff:ff:ff:ff:ff

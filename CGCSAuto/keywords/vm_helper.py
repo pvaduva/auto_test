@@ -3314,7 +3314,7 @@ def add_vlan_for_vm_pcipt_interfaces(vm_id, net_seg_id, retry=3, guest_os=None, 
                     if not init_conf:
                         LOG.warning("Interface with mac {} is not listed in 'ip addr' in vm {}".format(mac_addr, vm_id))
                         LOG.info("Try to get first eth with mac 90:...")
-                        eth_name = network_helper.get_eth_for_mac(mac_addr="90:", ssh_client=vm_ssh)
+                        eth_name = network_helper.get_eth_for_mac(mac_addr="link/ether 90:", ssh_client=vm_ssh)
                         if not eth_name:
                             exceptions.VMNetworkError("No Mac starts with 90: in ip addr for vm {}".format(vm_id))
                     else:
