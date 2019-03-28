@@ -84,7 +84,7 @@ def test_reapply_stx_openstack_no_change(check_stx_openstack, controller):
     con_ssh = ControllerClient.get_active_controller()
     end_time = time.time() + 600
     while time.time() < end_time:
-        code = con_ssh.exec_cmd('helm list', expect_timeout=60)
+        code = con_ssh.exec_cmd('helm list', expect_timeout=60)[0]
         if code == 0:
             break
         time.sleep(30)
