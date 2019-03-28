@@ -1,14 +1,14 @@
-import netaddr
+import time
+import re
 
+from selenium.common import exceptions
 from selenium.webdriver.common import by
 
 from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
 from utils.horizon.regions import menus
-from time import sleep
-import six
-from selenium.common import exceptions
+from consts.cgcs import Networks
 
 
 class LaunchInstanceForm(forms.TabbedFormRegion):
@@ -230,7 +230,7 @@ class InstancesPage(basepage.BasePage):
         instance_form.switch_to(1)
         if boot_source_type is not None:
             instance_form.fields['boot-source-type'].text = boot_source_type
-        sleep(1)
+        time.sleep(1)
         instance_form._init_tab_fields(1)
         if create_new_volume is True:
             instance_form.fields['Create New Volume'].click_yes()
@@ -286,7 +286,7 @@ class InstancesPage(basepage.BasePage):
         row = self._get_row_with_instance_name(name)
         ips = row.cells[self.INSTANCES_TABLE_IP_COLUMN].text
         for ip in ips.split():
-            if netaddr.valid_ipv4(ip):
+            if re.match(Networks.IPV4_IP, ip):
                 return ip
 
     def get_instance_info(self, name, header):

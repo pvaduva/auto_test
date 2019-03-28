@@ -118,6 +118,7 @@ class GuestImages:
 
 
 class Networks:
+    INFRA_NETWORK_CIDR = "192.168.205.0/24"
     MGMT_NET_NAME = r'tenant\d-mgmt-net'
     DATA_NET_NAME = r'tenant\d-net'
     INTERNAL_NET_NAME = 'internal'
@@ -139,10 +140,6 @@ class Networks:
         'internal': INTERNAL_IP,
         'external': EXT_IP
     }
-    INFRA_NETWORK_CIDR = "192.168.205.0/24"
-
-    IP_VER4 = 'ipv4'
-    IP_VER6 = 'ipv6'
 
     @classmethod
     def mgmt_net_name_pattern(cls):

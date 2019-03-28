@@ -16,7 +16,6 @@ from selenium.common import exceptions
 from selenium.webdriver.common import by
 
 from utils.horizon.regions import baseregion
-from time import sleep
 NORMAL_COLUMN_CLASS = 'normal_column'
 
 
@@ -300,17 +299,13 @@ def bind_row_action(action_name, attribute_search='id'):
     # both with *. Also primary action could be single as well, do not use
     # .btn-group because of that
     primary_action_locator = (
-        by.By.CSS_SELECTOR,
-        'td.actions_column *.btn:nth-child(1)'
-    )
+        by.By.CSS_SELECTOR, 'td.actions_column *.btn:nth-child(1)')
     secondary_actions_opener_locator = (
         by.By.CSS_SELECTOR,
-        'td.actions_column > .btn-group > *.btn:nth-child(2)'
-    )
+        'td.actions_column > .btn-group > *.btn:nth-child(2)')
     secondary_actions_locator = (
         by.By.CSS_SELECTOR,
-        'td.actions_column > .btn-group > ul.row_actions > li > a, button'
-    )
+        'td.actions_column > .btn-group > ul.row_actions > li > a, button')
 
     def decorator(method):
         @functools.wraps(method)
