@@ -25,6 +25,7 @@ def wait_for_log(ssh_client, patterns, log_path, start_time, timeout=30, interva
 
     LOG.tc_step("Waiting for expected logs in {}: {}".format(log_path, patterns))
     end_time = time.time() + timeout
+    start_time = start_time[:-3] + '000'
 
     found = []
     while time.time() < end_time:
@@ -91,7 +92,7 @@ def test_auth_log_sudo_cmd():
 
 
 @mark.p2
-def test_auth_log_postgress():
+def test_auth_log_postgres():
     """
     TC5204 Test postgres login and logout logs
 
@@ -106,9 +107,9 @@ def test_auth_log_postgress():
     LOG.tc_step("Checking the logs for postgress entries")
     start_time = con_ssh.exec_cmd("tail -1 {} | awk '{{print $1}}'".format(log_path))[1]
 
-    searching_for = ["notice \(to postgres\) root on none",
-                     "info pam_unix\(su:session\): session opened for user postgres by \(uid=0\)",
-                     "info pam_unix\(su:session\): session closed for user postgres"]
+    searching_for = [
+                     r'info pam_unix\(runuser:session\): session opened for user postgres by \(uid=0\)',
+                     r'info pam_unix\(runuser:session\): session closed for user postgres']
 
     found = wait_for_log(con_ssh, searching_for, log_path=log_path, start_time=start_time, timeout=45, interval=10)
 
