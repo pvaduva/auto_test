@@ -299,12 +299,12 @@ class TestMutiPortsPCI:
             - Create a flavor with dedicated cpu policy (class)
             - Choose management net, one tenant net, and internal0-net1 to be used by test (class)
             - Boot a base pci-sriov vm - vm1 with above flavor and networks, ping it from NatBox (class)
-            - Ping vm1 from itself over data, and internal (vlan 0 only) networks
+            - Ping vm1 from itself over data, and internal networks
 
         Test Steps:
             - Boot a vm under test - vm2 with above flavor and with multiple ports on same tenant network with vm1,
                 and ping it from NatBox
-            - Ping vm2's own data and internal (vlan 0 only) network ips
+            - Ping vm2's own data and internal network ips
             - Ping vm2 from vm1 to verify management and data networks connection
             - Perform one of the following actions on vm2
                 - set to error/ wait for auto recovery
@@ -357,7 +357,7 @@ class TestMutiPortsPCI:
             LOG.tc_step("Add vlan to pci-passthrough interface for VM.")
             vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_ids, init_conf=True)
 
-        LOG.tc_step("Ping vm's own data and internal (vlan 0 only) network ips")
+        LOG.tc_step("Ping vm's own data and internal network ips")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
 
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal networks")
@@ -446,11 +446,11 @@ class TestMutiPortsPCI:
             LOG.tc_step("Add vlan to pci-passthrough interface.")
             vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_ids, init_conf=True)
 
-        LOG.tc_step("Ping vm's own data and internal (vlan 0 only) network ips")
+        LOG.tc_step("Ping vm's own data and internal network ips")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
         vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_under_test)
 
-        LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal (vlan 0 only) networks")
+        LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal networks")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
 
         host = nova_helper.get_vm_host(vm_under_test)
