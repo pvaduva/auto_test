@@ -129,6 +129,7 @@ class InstallVars:
                          ipv6_config=False,
                          helm_chart_path=None,
                          helm_chart_server=None,
+                         set_install_vars=None,
                          no_manage=False):
 
         cls.__var_dict = {

@@ -295,7 +295,18 @@ def get_non_controller_system_hosts():
 
 
 def open_telnet_session(node_obj):
-    _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port), hostname=node_obj.name)
+
+    log_dir = ProjVar.get_var('LOG_DIR')
+    if log_dir:
+        log_dir = '{}/telnet'.format(log_dir)
+        os.makedirs(log_dir, exist_ok=True)
+        console_log_file = log_dir + '/telnet_' + node_obj.name + "_console.log"
+    else:
+        console_log_file = None
+
+    _telnet_conn = TelnetClient(host=node_obj.telnet_ip, port=int(node_obj.telnet_port), hostname=node_obj.name,
+                                vt100query=node_obj.telnet_vt100query, negotiate=node_obj.telnet_negotiate,
+                                console_log_file=console_log_file)
     # if node_obj.telnet_login_prompt:
     _telnet_conn.write(b"\r\n")
     try:
@@ -309,7 +320,7 @@ def open_telnet_session(node_obj):
     except exceptions.TelnetError as e:
         if "Unable to login to {} credential {}/{}".format(node_obj.name, HostLinuxCreds.get_user(),
                                                            HostLinuxCreds.get_password()) in e.message:
-            _telnet_conn.login(reset=True)
+            _telnet_conn.login(handle_init_login=True)
 
     return _telnet_conn
 
@@ -3792,7 +3803,8 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
 
             output = telnet_conn.read_until(b'Kickstart Boot', timeout=120)
             if b"Kickstart Boot" in output:
-                select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
+                hp380_menu = menu.HP380BootMenu()
+                select_install_option(node_obj, hp380_menu, small_footprint=small_footprint, low_latency=low_latency,
                                       security=security, usb=usb, expect_prompt=False)
             else:
                 msg = "{} not found after 300 seconds. Output = {}".format(kickstart_menu.prompt, output)
@@ -3821,7 +3833,6 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
                 telnet_conn.read_until(kickstart_menu.prompt, timeout=360)
                 select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
                                       security=security, usb=usb, expect_prompt=False)
-
                 LOG.info('Kick start option selected')
 
     LOG.info("Waiting for {} to boot".format(node_obj.name))

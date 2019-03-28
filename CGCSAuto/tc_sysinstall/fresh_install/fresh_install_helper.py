@@ -156,7 +156,7 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
 
 def download_lab_files(lab_files_server, build_server, guest_server, sys_version=None, sys_type=None,
                        lab_files_dir=None, load_path=None, guest_path=None, helm_chart_server=None, license_path=None,
-                       lab=None,  final_step=None):
+                       lab=None, final_step=None):
 
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if load_path is None:
@@ -1327,7 +1327,7 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf', final_step
                                                     con_ssh=active_node_ssh)
 
             LOG.info("Unlocking host {} after adding ceph osds ..".format(host))
-            host_helper.unlock_host(host, con_ssh=active_node_ssh)
+            host_helper.unlock_host(host, con_ssh=active_node_ssh, check_containers=False)
             host_helper.swact_host(active_node.name, con_ssh=active_node_ssh)
             active_node = lab[host]
             active_node_ssh.close()

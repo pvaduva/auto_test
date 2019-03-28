@@ -199,7 +199,8 @@ class KickstartMenu(Menu):
                 self.index = self.options[i].index
         return super().get_current_option()
 
-    def find_options(self, telnet_conn, end_of_menu=r"[A|a]utomatic(ally)?( boot)? in|Press (\[Tab\]|\'e\') to edit".encode(),
+    def find_options(self, telnet_conn,
+                     end_of_menu=r"[A|a]utomatic(ally)?( boot)? in|Press (\[Tab\]|\'e\') to edit".encode(),
                      option_identifier=r"(\dm?\)\s[\w]+)|Boot from hard drive\s+|([\w]+\s)+\s+> ".encode(),
                      newline=r'(\x1b\[\d+;\d+H)+'.encode()):
 
@@ -207,6 +208,7 @@ class KickstartMenu(Menu):
                              newline=newline)
         # TODO: this is a wasteful way to initialize the Options.
         self.options = [KickstartOption(name=option.name, index=option.index, key=option.key) for option in self.options]
+
         for option in self.options:
             # TODO: would like to make this more general, but it's impossible to determine the prompt
             #LOG.info("Kickstart option before match: {}".format(option.name))
@@ -252,6 +254,7 @@ class KickstartMenu(Menu):
                     LOG.info("Kickstart sub menu added: {}".format( console_sub_menu.name))
 
         current_option = self.get_current_option(telnet_conn)
+        LOG.info("Current option = {} index = {}".format(current_option.name, current_option.index))
         self.index = current_option.index
 
     def find_options_(self, telnet_conn, end_of_menu=r"[A|a]utomatic(ally)?( boot)? in|Press \[Tab\] to edit".encode(),
@@ -372,6 +375,38 @@ class PXEISOBootMenu(KickstartMenu):
 
         LOG.debug("{} options are: {}".format(self.name, [option.name for option in self.options]))
 
+
+class HP380BootMenu(KickstartMenu):
+    def __init__(self, host_name=None):
+
+        super().__init__(name="HP380 boot menu", kwargs=bios.BootMenus.Kickstart.PXE_Boot)
+
+        LOG.info("HP380 sub menu added: {}".format( [sub_.name for sub_ in self.sub_menus] ))
+
+    def find_options(self, telnet_conn,
+                     end_of_menu=r"(utomatic(ally)?( boot)? in)".encode(),
+                     option_identifier=r"[A-Z][A-Za-z]".encode(), newline=r'(\x1b\[\d+;\d+H)+'.encode()):
+
+        output = telnet_conn.read_until(end_of_menu, 5)
+        self.options = [KickstartOption(name="Boot from hard drive", index=0),
+                        KickstartOption(name="WRL Serial Controller Install", index=1),
+                        KickstartOption(name="CentOS Serial Controller Install", index=2),
+                        KickstartOption(name="WRL Serial CPE Install", index=3),
+                        KickstartOption(name="CentOS Serial CPE Install", index=4),
+                        KickstartOption(name="Security Profile Enabled Boot Options", index=4)]
+        current_option = self.options[0]
+        security_type = InstallVars.get_install_var("SECURITY")
+        if security_type == 'extended':
+            security_menu = KickstartMenu(name="PXE Security Menu", kwargs=bios.BootMenus.Kickstart.Security)
+            self.sub_menus.append(security_menu)
+            self.sub_menus.options = [KickstartOption(name="CentOS Serial Controller Install", index=0),
+                                             KickstartOption(name="CentOS Serial CPE Install", index=1)]
+            LOG.info("HP380 sub menu added: {}".format( self.sub_menus[0].name))
+
+        LOG.info("HP380 current option: {}; index {}".format(current_option.name, current_option.index))
+        self.index = current_option.index
+
+        LOG.debug("{} options are: {}".format(self.name, [option.name for option in self.options]))
 
 
 class USBBootMenu(KickstartMenu):

@@ -1,7 +1,7 @@
 import os
 import re
 import time
-from telnetlib import Telnet
+from telnetlib import Telnet, theNULL, DO, DONT, WILL, WONT, NOOPT, IAC, SGA, ECHO, SE, SB
 
 from consts.auth import HostLinuxCreds
 from consts.cgcs import DATE_OUTPUT, Prompt
@@ -30,11 +30,16 @@ TELNET_LOGIN_PROMPT = re.compile(r'^(?![L|l]ast).*[L|l]ogin:[ ]?$'.encode(), re.
 NEWPASSWORD_PROMPT = ''
 LOGGED_IN_REGEX = re.compile(r'^(.*-[\d]+):~\$ '.encode(), re.MULTILINE)
 
+# VT100 values
+ESC = bytes([27]) # Escape character
+VT100_DEVICE_STATUS = bytes([27,91,53,110]) # Device Status Query
+VT100_DEVICE_OK = bytes([27,91,48,110]) # Device OK
+
 
 class TelnetClient(Telnet):
 
     def __init__(self, host, prompt=None, port=0, timeout=30, hostname=None, user=HostLinuxCreds.get_user(),
-                 password=HostLinuxCreds.get_password()):
+                 password=HostLinuxCreds.get_password(), negotiate=False, vt100query=False, console_log_file=None):
 
         self.logger = LOG
         super(TelnetClient, self).__init__(host=host, port=port, timeout=timeout)
@@ -49,6 +54,14 @@ class TelnetClient(Telnet):
         if not prompt:
             prompt = r':~\$ '
 
+        #-- mod begins
+        self.console_log_file = self.get_log_file(console_log_file)
+        self.negotiate = negotiate
+        self.vt100query = vt100query
+        if self.vt100query:
+            self.vt100querybuffer = b'' # Buffer for VT100 queries
+        #-- mod ends
+
         self.flush(timeout=1)
         self.logger = telnet_logger(hostname) if hostname else telnet_logger(host + ":" + str(port))
         self.hostname = hostname
@@ -58,7 +71,9 @@ class TelnetClient(Telnet):
         self.timeout = timeout
         self.user = user
         self.password = password
+
         self.logger.info('Telnet connection to {}:{} ({}) is established'.format(host, port, hostname))
+
 
     def connect(self, timeout=None, login=True, login_timeout=10, fail_ok=False):
         timeout_arg = {'timeout': timeout} if timeout else {}
@@ -341,3 +356,152 @@ class TelnetClient(Telnet):
     #     # if not is_closed:
     #     #     self.logger.info("Closing telnet socket")
     #     super(TelnetClient, self).close()
+
+
+    def process_rawq(self):
+        """Transfer from raw queue to cooked queue.
+
+        Set self.eof when connection is closed.  Don't block unless in
+        the midst of an IAC sequence.
+
+        """
+        buf = [b'', b'']
+        try:
+            while self.rawq:
+                c = self.rawq_getchar()
+                if not self.iacseq:
+                    if c == theNULL:
+                        continue
+                    if c == b"\021":
+                        continue
+                        #-- mod begins
+                    # deal with vt100 escape sequences
+                    if self.vt100query:
+                        if self.vt100querybuffer:
+                           self.vt100querybuffer += c
+                           if len(self.vt100querybuffer) > 10:
+                               self.vt100querybuffer = b'' # too long, ignore
+                           elif self.vt100querybuffer == VT100_DEVICE_STATUS:
+                               self.sock.sendall(VT100_DEVICE_OK)
+                               self.vt100querybuffer = b''
+                        if not self.vt100querybuffer and c == ESC:
+                           self.vt100querybuffer += c
+                    # deal with IAC sequences
+                    #-- mod ends
+                    if c != IAC:
+                        buf[self.sb] = buf[self.sb] + c
+                        continue
+                    else:
+                        self.iacseq += c
+                elif len(self.iacseq) == 1:
+                    # 'IAC: IAC CMD [OPTION only for WILL/WONT/DO/DONT]'
+                    if c in (DO, DONT, WILL, WONT):
+                        self.iacseq += c
+                        continue
+
+                    self.iacseq = b''
+                    if c == IAC:
+                        buf[self.sb] = buf[self.sb] + c
+                    else:
+                        if c == SB: # SB ... SE start.
+                            self.sb = 1
+                            self.sbdataq = b''
+                        elif c == SE:
+                            self.sb = 0
+                            self.sbdataq = self.sbdataq + buf[1]
+                            buf[1] = b''
+                        if self.option_callback:
+                            # Callback is supposed to look into
+                            # the sbdataq
+                            self.option_callback(self.sock, c, NOOPT)
+                        else:
+                            # We can't offer automatic processing of
+                            # suboptions. Alas, we should not get any
+                            # unless we did a WILL/DO before.
+                            self.msg('IAC %d not recognized' % ord(c))
+                elif len(self.iacseq) == 2:
+                    cmd = self.iacseq[1:2]
+                    self.iacseq = b''
+                    opt = c
+                    if cmd in (DO, DONT):
+                        self.msg('IAC %s %d',
+                            cmd == DO and 'DO' or 'DONT', ord(opt))
+                        if self.option_callback:
+                            self.option_callback(self.sock, cmd, opt)
+                        else:
+                            #-- mod begins
+                            if self.negotiate:
+                                # do some limited logic to use SGA if asked
+                                if cmd == DONT and opt == SGA:
+                                   self.sock.sendall(IAC + WILL + opt)
+                                elif cmd == DO and opt == SGA:
+                                   self.sock.sendall(IAC + WILL + opt)
+                                else:
+                                   self.sock.sendall(IAC + WONT + opt)
+                            else:
+                                #-- mod ends
+                                self.sock.sendall(IAC + WONT + opt)
+                    elif cmd in (WILL, WONT):
+                        self.msg('IAC %s %d',
+                            cmd == WILL and 'WILL' or 'WONT', ord(opt))
+                        if self.option_callback:
+                            self.option_callback(self.sock, cmd, opt)
+                        else:
+                            #-- mod begins
+                            if self.negotiate:
+                                # do some limited logic to use SGA if asked
+                                if cmd == WONT and opt == SGA:
+                                   self.sock.sendall(IAC + DO + opt)
+                                elif cmd == WILL and opt == SGA:
+                                   self.sock.sendall(IAC + DO + opt)
+                                elif cmd == WILL and opt == ECHO:
+                                   self.sock.sendall(IAC + DO + opt)
+                                else:
+                                   self.sock.sendall(IAC + DONT + opt)
+                            else:
+                                #-- mod ends
+                                self.sock.sendall(IAC + DONT + opt)
+        except EOFError: # raised by self.rawq_getchar()
+            self.iacseq = b'' # Reset on EOF
+            self.sb = 0
+            pass
+        self.cookedq = self.cookedq + buf[0]
+        #-- mod begins
+        self.log_write(buf[0])
+        #-- mod ends
+        self.sbdataq = self.sbdataq + buf[1]
+
+    def log_write(self, text):
+        if not text:
+            return
+
+        try:
+            if not isinstance(text,str):
+                text = text.decode('utf-8','ignore')
+        except AttributeError as e:
+            print ('log_write exception: ', e)
+            pass
+
+        if self.console_log_file:
+            try:
+                self.console_log_file.write(text)
+                self.console_log_file.flush()
+                #self.logger.info(text)
+
+            except UnicodeEncodeError:
+                # Commented out to prevent the log from filling up with
+                # these messages when a node is being installed
+                #print(' following text caused a UNICODE ENCODE ERROR ')
+                pass
+                #-- mod ends
+
+                #-- new functions begin
+
+    def get_log_file(self, log_dir):
+
+        if log_dir:
+            logfile = open(log_dir, 'a')
+        else:
+            logfile = None
+
+        return logfile
