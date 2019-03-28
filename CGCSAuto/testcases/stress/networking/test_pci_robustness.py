@@ -205,7 +205,7 @@ class TestSriov:
         LOG.tc_step("Create a flavor with dedicated cpu policy and {} vcpus".format(vm_vcpus))
         flavor_id = nova_helper.create_flavor(name='dedicated_{}vcpu'.format(vm_vcpus), ram=1024, vcpus=vm_vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id, scope='module')
-        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'prefer'}
+        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'preferred'}
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
         # Boot vms with 2 {} vifs each, and wait for pingable
@@ -332,7 +332,7 @@ class TestPcipt:
         LOG.fixture_step("Create a flavor with dedicated cpu policy and {} vcpus".format(vm_vcpus))
         flavor_id = nova_helper.create_flavor(name='dedicated_{}vcpu'.format(vm_vcpus), ram=1024, vcpus=vm_vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id, scope='module')
-        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'prefer'}
+        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'preferred'}
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
         # Boot vms with 2 {} vifs each, and wait for pingable

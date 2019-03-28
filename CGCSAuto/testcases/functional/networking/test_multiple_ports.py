@@ -264,7 +264,7 @@ class TestMutiPortsPCI:
 
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
         flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048, cleanup='class')[1]
-        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'prefer'}
+        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'preferred'}
         nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
 
         LOG.fixture_step("(class) Boot a base pci vm with following nics: {}".format(nics))

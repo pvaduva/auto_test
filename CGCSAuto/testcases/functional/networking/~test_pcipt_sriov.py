@@ -235,7 +235,7 @@ class TestVmPCIOperations:
         #     msg_prefx, self.vm_id, pci_addr_list))
 
         # pci_numa_affinity pci_irq_affinity_mask', 'pci_alias'
-        if self.pci_numa_affinity == 'strict' and \
+        if self.pci_numa_affinity == 'required' and \
                 (self.pci_irq_affinity_mask is not None or self.pci_alias is not None):
 
             numa_nodes_for_pcis = sorted(list(set([v['node'] for v in vm_pci_infos.values()])))
@@ -367,12 +367,12 @@ class TestVmPCIOperations:
     @mark.nics
     @mark.parametrize(('pci_numa_affinity', 'pci_irq_affinity_mask', 'pci_alias'), [
         # mark.nightly((None, None, None)), # Covered by test_multiple_ports.py
-        # mark.p1(('strict', None, None)),  TODO: numa affinity unavailable for now
-        # mark.nightly(('strict', 'irqmask_1,3', None)),    # pci_irq_affinity is deprecated
-        # mark.p1(('strict', None, 'pcialias_3')),  TODO: Remove since it's pure upstream feature
-        # mark.p2(('strict', 'irqmask_1,3', 'pcialias_3')),     # pci_irq_affinity is deprecated
-        # mark.p3(('prefer', '1,3', '3')),  # TODO: expt behavior on msi_irq > cpulist mapping unknown
-        # mark.p3(('prefer', None, None)),  # TODO same as above
+        # mark.p1(('required', None, None)),  TODO: numa affinity unavailable for now
+        # mark.nightly(('required', 'irqmask_1,3', None)),    # pci_irq_affinity is deprecated
+        # mark.p1(('required', None, 'pcialias_3')),  TODO: Remove since it's pure upstream feature
+        # mark.p2(('required', 'irqmask_1,3', 'pcialias_3')),     # pci_irq_affinity is deprecated
+        # mark.p3(('preferred', '1,3', '3')),  # TODO: expt behavior on msi_irq > cpulist mapping unknown
+        # mark.p3(('preferred', None, None)),  # TODO same as above
     ])
     def test_pci_vm_nova_actions(self, pci_numa_affinity, pci_irq_affinity_mask, pci_alias, vif_model_check,
                                  pci_dev_numa_nodes):
@@ -403,7 +403,7 @@ class TestVmPCIOperations:
         pci_irq_affinity_mask, pci_alias = _convert_irqmask_pcialias(pci_irq_affinity_mask, pci_alias)
         boot_forbidden = False
         migrate_forbidden = False
-        if pci_numa_affinity == 'strict' and pci_alias is not None:
+        if pci_numa_affinity == 'required' and pci_alias is not None:
             host_count = pci_dev_numa_nodes
             if host_count == 0:
                 boot_forbidden = True
