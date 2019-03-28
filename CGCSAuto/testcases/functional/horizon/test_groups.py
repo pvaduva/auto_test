@@ -30,10 +30,10 @@ def groups_pg_action(groups_pg, request):
 
     def teardown():
         LOG.fixture_step('Delete group {}'.format(group_name))
-        groups_pg.delete_group(group_name)
+        groups_pg.delete_group(group_name, strict=False)
 
     request.addfinalizer(teardown)
-    return groups_pg
+    return groups_pg, group_name
 
 
 def test_horizon_create_delete_group(groups_pg):

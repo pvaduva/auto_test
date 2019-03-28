@@ -1,7 +1,6 @@
 from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
-from time import sleep
 
 
 class GroupsTable(tables.TableRegion):
@@ -45,8 +44,8 @@ class GroupsPage(basepage.BasePage):
     def groups_table(self):
         return GroupsTable(self.driver)
 
-    def _get_row_with_group_name(self, name):
-        return self.groups_table.get_row(self.GROUPS_TABLE_NAME_COLUMN, name)
+    def _get_row_with_group_name(self, name, strict=True):
+        return self.groups_table.get_row(self.GROUPS_TABLE_NAME_COLUMN, name, exact_match=strict)
 
     def create_group(self, name, description=None):
         create_form = self.groups_table.create_group()
@@ -55,8 +54,8 @@ class GroupsPage(basepage.BasePage):
             create_form.description.text = description
         create_form.submit()
 
-    def delete_group(self, name):
-        row = self._get_row_with_group_name(name)
+    def delete_group(self, name, strict=True):
+        row = self._get_row_with_group_name(name, strict=strict)
         row.mark()
         confirm_delete_form = self.groups_table.delete_group()
         confirm_delete_form.submit()
