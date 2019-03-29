@@ -36,6 +36,7 @@ def compare_cores_to_configure(host, func, p0, p1):
 
 @fixture(scope='class')
 def skip_for_ovs():
+    return
     if not system_helper.is_avs():
         skip('VSwitch numa affinity unsupported by OVS')
 
@@ -361,7 +362,7 @@ def _create_flavor(vcpus, storage_backing, vswitch_numa_affinity=None, numa_0=No
 
 @fixture(scope='module')
 def get_hosts(host_to_config):
-    host0, ht_enabled, is_cpe, host1, storage_backing = host_to_config
+    host0, proc_ids, ht_enabled, is_cpe, host1, storage_backing = host_to_config
     if not host1:
         storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
         if len(hosts) < 2:
@@ -545,7 +546,7 @@ class TestNovaSchedulerAVS:
         'prefer',
         None,
     ])
-    def test_vswitch_numa_affinity_sched_vms_two_hosts_avail(self, cal_vm_cores_two_hosts, vswitch_numa_affinity):
+    def _test_vswitch_numa_affinity_sched_vms_two_hosts_avail(self, cal_vm_cores_two_hosts, vswitch_numa_affinity):
         """
 
         Args:
@@ -884,7 +885,7 @@ class TestNovaSchedulerAVS:
 
 
 # Deprecated. numa pinning is removed. VM cannot be on two numa nodes.
-class _TestSpanNumaNodes:
+class TestSpanNumaNodes:
     @fixture(scope='class')
     def span_numa_hosts(self, skip_for_ovs, get_hosts, config_host_class):
         host0, host1, storage_backing, ht_enabled = get_hosts

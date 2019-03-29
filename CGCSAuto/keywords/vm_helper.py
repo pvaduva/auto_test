@@ -2823,7 +2823,8 @@ def scale_vm(vm_id, direction, resource='cpu', fail_ok=False, con_ssh=None, auth
     return 0, succ_msg
 
 
-def get_vm_numa_nodes_via_ps(vm_id=None, instance_name=None, host=None, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_vm_numa_nodes_via_ps(vm_id=None, instance_name=None, host=None, con_ssh=None, auth_info=Tenant.get('admin'),
+                             per_vcpu=False):
     """
     Get numa nodes VM is currently on
     Args:
@@ -2832,6 +2833,7 @@ def get_vm_numa_nodes_via_ps(vm_id=None, instance_name=None, host=None, con_ssh=
         host:
         con_ssh:
         auth_info:
+        per_vcpu (bool): if True, return per vcpu, e.g., if vcpu=0,1,2, returned list will have same length [0,1,0]
 
     Returns (list): e.g., [0], [0, 1]
 
@@ -2844,39 +2846,51 @@ def get_vm_numa_nodes_via_ps(vm_id=None, instance_name=None, host=None, con_ssh=
 
     with host_helper.ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
         vcpu_cpu_map = get_vcpu_cpu_map(instance_names=instance_name, host_ssh=host_ssh, con_ssh=con_ssh)[instance_name]
-        cpus = set(vcpu_cpu_map.values())
-        grep_str = ' '.join(['-e "processor.*{}"'.format(cpu) for cpu in cpus])
+        cpus = []
+        for i in range(len(vcpu_cpu_map)):
+            cpus.append(vcpu_cpu_map[i])
+
+        cpu_non_dup = sorted(list(set(cpus)))
+        grep_str = ' '.join(['-e "processor.*: {}$"'.format(cpu) for cpu in cpu_non_dup])
         cmd = 'cat /proc/cpuinfo | grep -A 10 {} | grep --color=never "physical id"'.format(grep_str)
         physical_ids = host_ssh.exec_cmd(cmd, fail_ok=False)[1].splitlines()
         physical_ids = [int(proc.split(sep=':')[-1].strip()) for proc in physical_ids if 'physical' in proc]
+        if per_vcpu:
+            physical_ids = [physical_ids[cpu_non_dup.index(cpu)] for cpu in cpus]
 
-    return sorted(physical_ids)
+    return physical_ids
 
 
-def get_vm_host_and_numa_nodes(vm_id, con_ssh=None):
+def get_vm_host_and_numa_nodes(vm_id, con_ssh=None, per_vcpu=False):
     """
     Get vm host and numa nodes used for the vm on the host
     Args:
         vm_id (str):
         con_ssh (SSHClient):
+        per_vcpu (bool): if True, return numa nodes per vcpu, e.g., vcpu=0,1,2, returned list can be: [0,1,0]
 
     Returns (tuple): (<vm_hostname> (str), <numa_nodes> (list of integers))
 
     """
-    nova_tab = system_helper.get_vm_topology_tables('servers', con_ssh=con_ssh)[0]
-    nova_tab = table_parser.filter_table(nova_tab, ID=vm_id)
-
-    host = table_parser.get_column(nova_tab, 'host')[0]
-    instance_topology = table_parser.get_column(nova_tab, 'instance_topology')[0]
-    if isinstance(instance_topology, str):
-        instance_topology = [instance_topology]
-
-    # Each numa node will have an entry for given instance, thus number of entries should be the same as number of
-    # numa nodes for the vm
-    actual_node_vals = []
-    for actual_node_info in instance_topology:
-        actual_node_val = int(re.findall(InstanceTopology.NODE, actual_node_info)[0])
-        actual_node_vals.append(actual_node_val)
+    instance_name, host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"],
+                                                                 strict=False)
+    actual_node_vals = get_vm_numa_nodes_via_ps(vm_id=vm_id, instance_name=instance_name, host=host, con_ssh=con_ssh,
+                                                per_vcpu=per_vcpu)
+    #
+    # nova_tab = system_helper.get_vm_topology_tables('servers', con_ssh=con_ssh)[0]
+    # nova_tab = table_parser.filter_table(nova_tab, ID=vm_id)
+    #
+    # host = table_parser.get_column(nova_tab, 'host')[0]
+    # instance_topology = table_parser.get_column(nova_tab, 'instance_topology')[0]
+    # if isinstance(instance_topology, str):
+    #     instance_topology = [instance_topology]
+    #
+    # # Each numa node will have an entry for given instance, thus number of entries should be the same as number of
+    # # numa nodes for the vm
+    # actual_node_vals = []
+    # for actual_node_info in instance_topology:
+    #     actual_node_val = int(re.findall(InstanceTopology.NODE, actual_node_info)[0])
+    #     actual_node_vals.append(actual_node_val)
 
     return host, actual_node_vals
 
