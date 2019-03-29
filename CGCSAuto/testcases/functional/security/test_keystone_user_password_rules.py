@@ -367,12 +367,14 @@ def verify_login(user_name, password, is_admin=True, expecting_pass=True):
     auth_info = get_user_auth_info(user_name, password, in_admin_project=is_admin)
 
     if is_admin:
-        command = 'system show'
-        code, output = system('show', auth_info=auth_info, fail_ok=True, rtn_list=True)
+        # command = 'system show'
+        command = 'endpoint list'
+        # code, output = system('show', auth_info=auth_info, fail_ok=True, rtn_list=True)
+        code, output = openstack(command, fail_ok=False, rtn_list=True)
     else:
-        command = 'openstack user show {}'.format(user_name)
-        LOG.info('TODO: command:{}\n'.format(command))
-        code, output = openstack('user show {}'.format(user_name), auth_info=auth_info, fail_ok=True)
+        command = 'user show {}'.format(user_name)
+        LOG.info('TODO: command:openstack {}\n'.format(command))
+        code, output = openstack(command, auth_info=auth_info, fail_ok=True)
 
     message = 'expecting:{}, command=\n{}\nas user:{}, password:{}\nauth_info:{}\ncode:{}, output:{}\n'.format(
         expecting_pass, command, user_name, password, auth_info, code, output)
