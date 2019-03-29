@@ -1210,28 +1210,29 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     LOG.info("Cold migrating VM {} from {}...".format(vm_id, before_host))
     exitcode, output = cli.nova('migrate --poll', vm_id, ssh_client=con_ssh, auth_info=auth_info,
-                                timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=True, rtn_list=True)
+                                timeout=VMTimeout.COLD_MIGRATE_CONFIRM, fail_ok=fail_ok, rtn_list=True)
 
     if exitcode == 1:
-        vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
-        if not vm_storage_backing:
-            vm_storage_backing = host_helper.get_host_instance_backing(before_host, con_ssh=con_ssh)
-
-        if len(host_helper.get_hosts_in_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
-            LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
-                     "migrate to.".format(vm_id))
-            return 1, output
-        elif fail_ok:
-            LOG.warning("Cold migration of vm {} is rejected.".format(vm_id))
-            return 2, output
-        else:
-            raise exceptions.VMOperationFailed(output)
-
-    if 'Finished' not in output:
-        if fail_ok:
-            LOG.warning("Cold migration is not finished.")
-            return 3, output
-        raise exceptions.VMPostCheckFailed("Failed to cold migrate vm. Output: {}".format(output))
+        return 1, output
+    #     vm_storage_backing = nova_helper.get_vm_storage_type(vm_id=vm_id, con_ssh=con_ssh)
+    #     if not vm_storage_backing:
+    #         vm_storage_backing = host_helper.get_host_instance_backing(before_host, con_ssh=con_ssh)
+    #
+    #     if len(host_helper.get_hosts_in_storage_backing(vm_storage_backing, con_ssh=con_ssh)) < 2:
+    #         LOG.info("Cold migration of vm {} rejected as expected due to no host with valid storage backing to cold "
+    #                  "migrate to.".format(vm_id))
+    #         return 1, output
+    #     elif fail_ok:
+    #         LOG.warning("Cold migration of vm {} is rejected.".format(vm_id))
+    #         return 2, output
+    #     else:
+    #         raise exceptions.VMOperationFailed(output)
+    #
+    # if 'Finished' not in output:
+    #     if fail_ok:
+    #         LOG.warning("Cold migration is not finished.")
+    #         return 3, output
+    #     raise exceptions.VMPostCheckFailed("Failed to cold migrate vm. Output: {}".format(output))
 
     LOG.info("Waiting for VM status change to {}".format(VMStatus.VERIFY_RESIZE))
 
@@ -2872,11 +2873,10 @@ def get_vm_host_and_numa_nodes(vm_id, con_ssh=None, per_vcpu=False):
     Returns (tuple): (<vm_hostname> (str), <numa_nodes> (list of integers))
 
     """
-    instance_name, host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"],
-                                                                 strict=False)
+    instance_name, host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"], strict=False)
     actual_node_vals = get_vm_numa_nodes_via_ps(vm_id=vm_id, instance_name=instance_name, host=host, con_ssh=con_ssh,
                                                 per_vcpu=per_vcpu)
-    #
+
     # nova_tab = system_helper.get_vm_topology_tables('servers', con_ssh=con_ssh)[0]
     # nova_tab = table_parser.filter_table(nova_tab, ID=vm_id)
     #
