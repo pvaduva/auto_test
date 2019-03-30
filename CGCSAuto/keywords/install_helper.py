@@ -3886,9 +3886,24 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
     if usb_device:
         LOG.info("Burning the system cloned image iso file to usb flash drive {}".format(usb_device))
 
-        iso_host.ssh_conn.rsync(iso_full_path, controller0_node.host_ip, iso_dest_path,
-                                dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
-                                timeout=600,)
+        iso_rsynced = False
+        for i in range (0, 3):
+            rc, output = iso_host.ssh_conn.rsync(iso_full_path, controller0_node.host_ip, iso_dest_path,
+                                                 dest_user=HostLinuxCreds.get_user(),
+                                                 dest_password=HostLinuxCreds.get_password(), timeout=300, fail_ok=True)
+            if rc == 0:
+                LOG.info(" The iso image file from {}:{} is copied to controller-0: {}"
+                         .format(iso_host.name, iso_full_path, iso_dest_path))
+                iso_rsynced = True
+                break
+
+        if not iso_rsynced:
+            err_msg = "Failed to rsync the iso image  file from {}:{} to controller-0: {}; error_msg = {}"\
+                .format(iso_host.name, iso_full_path, iso_dest_path, output)
+            if fail_ok:
+                return 3, err_msg
+            else:
+                raise exceptions.BackupSystem(err_msg)
 
         # Write the ISO to USB
         cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync"\
