@@ -3896,6 +3896,7 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
                          .format(iso_host.name, iso_full_path, iso_dest_path))
                 iso_rsynced = True
                 break
+            time.sleep(1)
 
         if not iso_rsynced:
             err_msg = "Failed to rsync the iso image  file from {}:{} to controller-0: {}; error_msg = {}"\

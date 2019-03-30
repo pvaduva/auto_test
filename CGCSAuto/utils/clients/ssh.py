@@ -516,7 +516,7 @@ class SSHClient:
 
         if index == 1:
             self.send(dest_password)
-            self.expect(timeout=timeout, searchwindowsize=100)
+            self.expect(timeout=timeout, searchwindowsize=100, fail_ok=fail_ok)
 
         code, output = self._process_exec_result(cmd, rm_date=True)
         if code != 0 and not fail_ok:
