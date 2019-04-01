@@ -96,7 +96,7 @@ def _vlm_getattr(barcode, attr='all'):
     return local_client().exec_cmd(cmd)
 
 
-def _vlm_exec_cmd(action, barcode, reserve=True, fail_ok=False, client=None):
+def _vlm_exec_cmd(action, barcode, reserve=True, fail_ok=False, client=None, count=1):
     if action not in VLM_CMDS:
         msg = '"{}" is an invalid action.'.format(action)
         msg += " Valid actions: {}".format(str(VLM_CMDS))
@@ -115,7 +115,13 @@ def _vlm_exec_cmd(action, barcode, reserve=True, fail_ok=False, client=None):
 
     if not client:
         client = local_client()
-    output = client.exec_cmd('{} {} -t {}'.format(VLM, action, barcode))[1]
+
+    output = None
+    for i in range(count):
+        output = client.exec_cmd('{} {} -t {}'.format(VLM, action, barcode))[1]
+        if i < count:
+            time.sleep(1)
+
     if output != "1":
         msg = 'Failed to execute "{}" on target {}. Output: {}'.format(action, barcode, output)
         LOG.error(msg)
@@ -232,13 +238,14 @@ def reserve_hosts(hosts, val='hostname', lab=None):
             raise exceptions.VLMError(err_msg)
 
 
-def power_off_hosts(hosts, lab=None, reserve=True):
+def power_off_hosts(hosts, lab=None, reserve=True, count=1):
     """
     Power off given hosts
     Args:
         hosts (str|list): hostname(s)
         lab (str|None)
         reserve (bool): whether to reserve first
+        count (int): how many times to perform the action
 
     Returns:
 
@@ -246,11 +253,11 @@ def power_off_hosts(hosts, lab=None, reserve=True):
     if isinstance(hosts, str):
         hosts = [hosts]
 
-    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNOFF, reserve=reserve, lab=lab)
+    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNOFF, reserve=reserve, lab=lab, count=count)
 
 
 def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
-                   hosts_to_check=None, con_ssh=None, region=None):
+                   hosts_to_check=None, con_ssh=None, region=None, count=1):
     """
 
     Args:
@@ -262,6 +269,7 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
         hosts_to_check (list|str|None): host(s) to perform post check after power-on. when None, hosts_to_check=hosts
         con_ssh (SSHClient):
         region:
+        count (int): how many times to perform the action
 
     Returns:
 
@@ -273,7 +281,7 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
     lab = None
     if region and ProjVar.get_var('IS_DC'):
         lab = ProjVar.get_var('LAB')[region]
-    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, lab=lab, reserve=reserve)
+    _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, lab=lab, reserve=reserve, count=count)
 
     if post_check:
         if con_ssh is None:
@@ -315,7 +323,7 @@ def reboot_hosts(hosts, lab=None, reserve=True, post_check=True, reconnect=True,
         host_helper.wait_for_hosts_ready(hosts_to_check, con_ssh=con_ssh)
 
 
-def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, lab=None, reserve=True, fail_ok=False):
+def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, lab=None, reserve=True, fail_ok=False, count=1):
     if isinstance(hosts, str):
         hosts = [hosts]
 
@@ -325,7 +333,7 @@ def _perform_vlm_action_on_hosts(hosts, action=VlmAction.VLM_TURNON, lab=None, r
         barcode = barcodes[i]
 
         LOG.info("{} {} {}".format(action, host, barcode))
-        _vlm_exec_cmd(action, barcode, reserve=reserve, fail_ok=fail_ok)
+        _vlm_exec_cmd(action, barcode, reserve=reserve, fail_ok=fail_ok, count=count)
 
 
 def power_off_hosts_simultaneously(hosts=None, region=None):
@@ -342,7 +350,7 @@ def power_off_hosts_simultaneously(hosts=None, region=None):
 
         client = local_client()
         if power_off_event_.wait(timeout=timeout_):
-            rc, output = _vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode_, reserve=False, client=client)
+            rc, output = _vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode_, reserve=False, client=client, count=2)
             rtn = (rc, output)
 
         else:

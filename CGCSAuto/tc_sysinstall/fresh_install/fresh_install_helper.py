@@ -144,7 +144,7 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
     test_step = "Install Controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        vlm_helper.power_off_hosts(lab["hosts"], lab=lab)
+        vlm_helper.power_off_hosts(lab["hosts"], lab=lab, count=2)
         install_helper.boot_controller(lab=lab, small_footprint=is_cpe, boot_usb=usb, security=security,
                                        low_latency=low_latency, patch_dir_paths=patch_dir,
                                        bld_server_conn=patch_server_conn, init_global_vars=init_global_vars)

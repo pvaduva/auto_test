@@ -13,7 +13,7 @@ from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unrese
 def power_off_and_on(barcode, power_off_event, timeout):
 
     if power_off_event.wait(timeout=timeout):
-        rc, output = vlm_helper._vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode, reserve=False)
+        rc, output = vlm_helper._vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode, reserve=False, count=2)
         assert 0 == rc, "Failed to turn off target"
         LOG.info("{} powered off successfully".format(barcode))
         return
