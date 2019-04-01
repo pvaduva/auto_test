@@ -50,6 +50,7 @@ def __login_base(request, driver, auth_info=None, container=False):
 
     user = auth_info['user']
     password = auth_info['password']
+    project = auth_info['tenant']
     port = 31000 if container else None
 
     gmttime = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
@@ -63,6 +64,7 @@ def __login_base(request, driver, auth_info=None, container=False):
         login_pg = loginpage.LoginPage(driver, port=port)
         login_pg.go_to_target_page()
         home_pg = login_pg.login(user=user, password=password)
+        home_pg.change_project(name=project)
     finally:
         def teardown():
             if home_pg:
