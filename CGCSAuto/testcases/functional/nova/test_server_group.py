@@ -41,7 +41,7 @@ def create_flavor_and_server_group(storage_backing=None, policy=None):
 # server group messaging is removed since STX
 @mark.parametrize(('policy', 'vms_num'), [
     mark.priorities('nightly', 'domain_sanity', 'sx_nightly')(('affinity', 2)),
-    ('soft_anti_affinity', 3),    # TODO add after cutover
+    ('soft_anti_affinity', 3),
     mark.priorities('nightly', 'domain_sanity')(('anti_affinity', 2)),   # For system with 2+ hypervisors
     # ('soft_affinity', 3),     TODO add after cutover
 ])
@@ -61,14 +61,8 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
         - Boot vm(s) with above server group
         - Verify vm(s) booted successfully and is a member of the server group
         - Verify that all vms have the server group listed in nova show
-        - If server_group_messaging is on, then verify
-            - vms receive srv grp msg sent from other vm
-            - vms receive notification when other vm is paused
-        - Attempt to delete the server group and make sure if fails due to having members
-        - If server group messaging is off, verify server_group_app is not included in vm
-        - If server group has enough hosts, check migrations
-            - Try to live/cold migrate one of the vms, and check they succeed/fail based on server group setting
-            - If server group message enabled, check server group message still works after migration
+        - If more than 1 hypervisor available:
+            - Attempt to live/cold migrate one of the vms, and check they succeed/fail based on server group setting
 
     Teardown:
         - Delete created vms, flavor, server group
