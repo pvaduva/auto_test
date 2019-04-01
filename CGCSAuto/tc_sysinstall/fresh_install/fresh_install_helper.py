@@ -925,8 +925,10 @@ def is_dcloud_system_controller_ipv6(controller0_node):
 
     if controller0_node.ssh_conn._is_connected():
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
-        urls = keystone_helper.get_endpoints(rtn_val='URL', service_name='sysinv', service_type='platform', enabled='True',
-                                      interface='admin', region='SystemController', con_ssh=controller0_node.ssh_conn)
+        urls = keystone_helper.get_endpoints(rtn_val='URL', service_name='sysinv',
+                                             service_type='platform', enabled='True',
+                                             interface='admin', region='SystemController',
+                                             con_ssh=controller0_node.ssh_conn)
 
         if len(urls) > 0:
             ip_addr = urls[0].strip().split('//')[1].split('/')[0].rsplit(':', 1)[0]
@@ -1005,7 +1007,9 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     servers = list({file_server, iso_host, patch_server, guest_server, helm_chart_server})
     LOG.fixture_step("Establishing connection to {}".format(servers))
 
-    bld_server = setups.initialize_server(build_server)
+    servers_map = {server_: setups.initialize_server(server_) for server_ in servers}
+    bs_obj = servers_map.get(build_server)
+
     dc_float_ip = None
     install_sub = None
     if subcloud:
@@ -1026,34 +1030,9 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         InstallVars.set_install_var(ipv6_config=ipv6_config)
         add_subclouds(file_server_obj, name=install_sub, ip_ver=6 if ipv6_config else 4)
     else:
-        if file_server == bld_server.name:
-            file_server_obj = bld_server
-        else:
-            file_server_obj = setups.initialize_server(file_server)
+        file_server_obj = servers_map.get(file_server, bs_obj)
 
-    if iso_host == bld_server.name:
-        iso_host_obj = bld_server
-    else:
-        iso_host_obj = setups.initialize_server(iso_host)
-    if patch_server == bld_server.name:
-        patch_server = bld_server
-    else:
-        patch_server = setups.initialize_server(patch_server)
-    if guest_server == bld_server.name:
-        guest_server_obj = bld_server
-    else:
-        guest_server_obj = setups.initialize_server(guest_server)
-
-    if helm_chart_server and helm_chart_server == bld_server.name:
-        helm_chart_server = bld_server
-    elif helm_chart_server and helm_chart_server == iso_host:
-        helm_chart_server = iso_host_obj
-    elif not helm_chart_server:
-        helm_chart_server = bld_server
-    else:
-        helm_chart_server = setups.initialize_server(helm_chart_server)
-
-    set_preinstall_projvars(build_dir=build_dir, build_server=bld_server)
+    set_preinstall_projvars(build_dir=build_dir, build_server=bs_obj)
 
     boot_type = InstallVars.get_install_var("BOOT_TYPE")
     if "usb" in boot_type:
@@ -1063,12 +1042,13 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
             controller0_node.host_nic = install_helper.get_nic_from_config(conf_server=file_server_obj)
 
     servers = {
-               "build": bld_server,
+               "build": bs_obj,
                "lab_files": file_server_obj,
-               "patches": patch_server,
-               "guest": guest_server_obj,
-               "helm_charts": helm_chart_server
+               "patches": servers_map.get(patch_server, bs_obj),
+               "guest": servers_map.get(guest_server, bs_obj),
+               "helm_charts": servers_map.get(helm_chart_server, bs_obj)
                }
+    iso_host_obj = servers_map.get(iso_host, bs_obj)
 
     directories = {"build": build_dir,
                    "boot": TuxlabServerPath.DEFAULT_BARCODES_DIR,
@@ -1118,7 +1098,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         elif 'feed' in boot["boot_type"] and 'feed' not in skip_list:
             load_path = directories["build"]
             skip_cfg = "pxeboot" in skip_list
-            install_helper.set_network_boot_feed(bld_server.ssh_conn, load_path, lab=lab_dict, skip_cfg=skip_cfg)
+            install_helper.set_network_boot_feed(bs_obj.ssh_conn, load_path, lab=lab_dict, skip_cfg=skip_cfg)
 
         if InstallVars.get_install_var("WIPEDISK"):
             LOG.fixture_step("Attempting to wipe disks")
@@ -1171,6 +1151,7 @@ def wait_for_hosts_ready(hosts,  lab=None, timeout=120):
     Args:
         hosts:
         lab:
+        timeout (int)
 
     Returns:
 
@@ -1255,6 +1236,7 @@ def add_ceph_ceph_mon_to_host(active_controller_node, host, final_step=None):
     Args:
         active_controller_node
         host
+        final_step
 
     Returns:
 
@@ -1278,6 +1260,7 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf', final_step
     Args:
         lab:
         conf_file:
+        final_step
 
     Returns:
 
