@@ -552,6 +552,7 @@ def collect_software_logs(con_ssh=None):
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
     LOG.info("Collecting all hosts logs...")
+    con_ssh.exec_cmd('source /etc/platform/openrc', get_exit_code=False)
     con_ssh.send('collect all')
 
     expect_list = ['.*password for wrsroot:', 'collecting data.', con_ssh.prompt]
