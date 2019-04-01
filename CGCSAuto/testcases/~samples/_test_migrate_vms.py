@@ -98,7 +98,7 @@ def test_live_migrate_v1(vm_boot_type, vm_storage, vm_interface, block_migrate, 
 
     # Verify test results using assert
     LOG.tc_step("Verify test result")
-    assert return_code in [0, 1], message
+    assert return_code in [0, 2], message
     # Can also add asserts to check the exact error message for negative test cases, i.e., return_code is 1
 
     # Mark test end
@@ -195,7 +195,7 @@ def tes_live_migrate_v2(prepare_hosts, storage, interface, with_block):
     if migrate_allowed and prepare_hosts[0] == storage:
         expected_code = 0           # live migrate should fail regardless of hosts storage backing
     else:
-        expected_code = 1
+        expected_code = 2
 
     LOG.step("Attempt to live migrate {}".format(vm_id))
     actual_code, message = vm_helper.live_migrate_vm(vm_id, fail_ok=True)

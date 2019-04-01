@@ -168,7 +168,7 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
 
         LOG.tc_step("Attempting  live migration; vm id = {}; vm_name = {} ....".format(vm_id, vm['display_name']))
 
-        code, msg = vm_helper.live_migrate_vm(vm_id=vm_id,  fail_ok=True)
+        code, msg = vm_helper.live_migrate_vm(vm_id=vm_id,  fail_ok=False)
         LOG.tc_step("Verify live migration succeeded...")
         assert code == 0, "Expected return code 0. Actual return code: {}; details: {}".format(code,  msg)
 

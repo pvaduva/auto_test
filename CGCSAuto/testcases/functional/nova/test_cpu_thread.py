@@ -1076,11 +1076,11 @@ class TestHTEnabled:
 
         LOG.tc_step("Attempt to live migrate vm and ensure it's rejected due to no other HT host")
         code, output = vm_helper.live_migrate_vm(vm_id, fail_ok=True)
-        assert 2 == code, "Expect live migration request to be rejected. Actual: {}".format(output)
+        assert 1 == code, "Expect live migration request to be rejected. Actual: {}".format(output)
 
         LOG.tc_step("Attempt to cold migrate vm and ensure it's rejected due to non other HT host")
         code, output = vm_helper.cold_migrate_vm(vm_id, fail_ok=True)
-        assert 2 == code, "Expect cold migration request to be rejected. Actual: {}".format(output)
+        assert 1 == code, "Expect cold migration request to be rejected. Actual: {}".format(output)
 
         expt_pol_str = "u'{}'".format(cpu_thr_pol)
         if cpu_thr_source == 'flavor':
@@ -1285,7 +1285,7 @@ class TestVariousHT:
 
         else:
             LOG.tc_step("Check cold migration is rejected due to no other ht host available for require vm")
-            assert 2 == code, "Cold migrate result unexpected. Details: {}".format(output)
+            assert 1 == code, "Cold migrate result unexpected. Details: {}".format(output)
 
             expt_flv_str = "u'{}'".format(cpu_thread_policy)
             expt_err = ColdMigErr.HT_HOST_REQUIRED.format(expt_flv_str, None)

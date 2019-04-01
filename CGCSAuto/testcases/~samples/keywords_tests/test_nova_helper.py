@@ -26,4 +26,4 @@ def test_boot_vm_on_host(add_host_to_zone):
 
     res, msg = vm_helper.cold_migrate_vm(vm_id=vm_id, fail_ok=True)
 
-    assert 2 == res, "Expect cold migration reject due to no other host in cgcsauto zone, actual result: {}".format(msg)
+    assert 1 == res, "Expect cold migration reject due to no other host in cgcsauto zone, actual result: {}".format(msg)

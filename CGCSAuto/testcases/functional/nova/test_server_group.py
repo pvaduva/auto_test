@@ -134,7 +134,7 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
             for vm in members:
                 code, output = vm_helper.perform_action_on_vm(vm, action=action, fail_ok=True)
                 if expt_fail:
-                    assert 2 == code, "{} was not rejected. {}".format(action, output)
+                    assert 1 == code, "{} was not rejected. {}".format(action, output)
                 else:
                     assert 0 == code, "{} failed. {}".format(action, output)
                 vm_host = nova_helper.get_vm_host(vm)

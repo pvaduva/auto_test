@@ -287,7 +287,7 @@ def test_migrate_vm_negative_no_other_host(hosts_per_stor_backing, storage_backi
 
     LOG.tc_step("Attempt to live migrate VM and verify request rejected due to no matching storage backing")
     code, output = vm_helper.live_migrate_vm(vm_id=vm_id, fail_ok=True)
-    assert 1 == code, "Expect live mig to fail due to no matching storage backing. Actual: {}".format(output)
+    assert 2 == code, "Expect live mig to fail due to no matching storage backing. Actual: {}".format(output)
 
     LOG.tc_step("Ensure vm is pingable from NatBox after live migration rejected")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

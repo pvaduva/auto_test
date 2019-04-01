@@ -1105,12 +1105,12 @@ def live_migrate_vm(vm_id, destination_host='', con_ssh=None, block_migrate=None
         if _is_live_migration_allowed(vm_id, vm_host=before_host, block_migrate=block_migrate) and \
                 (destination_host or get_dest_host_for_live_migrate(vm_id)):
             if fail_ok:
-                return 2, "Unknown live migration failure"
+                return 1, "Unknown live migration failure"
             else:
                 raise exceptions.VMPostCheckFailed("Unexpected failure of live migration!")
         else:
             LOG.debug("System does not allow live migrating vm {} as expected.".format(vm_id))
-            return 1, "Live migration failed as expected"
+            return 2, "Live migration failed as expected"
 
     LOG.info("VM {} successfully migrated from {} to {}".format(vm_id, before_host, after_host))
     return 0, "Live migration is successful."
@@ -1190,8 +1190,8 @@ def cold_migrate_vm(vm_id, revert=False, con_ssh=None, fail_ok=False, auth_info=
 
     Returns (tuple): (rtn_code, message)
         (0, success_msg) # Cold migration and confirm/revert succeeded. VM is back to original state or Active state.
-        (1, <stderr>) # cold migration cli rejected as expected
-        (2, <stderr>) # Cold migration cli command rejected. <stderr> is the err message returned by cli cmd.
+        (1, <stderr>) # cold migration cli rejected
+        # (2, <stderr>) # Cold migration cli command rejected. <stderr> is the err message returned by cli cmd.
         (3, <stdout>) # Cold migration cli accepted, but not finished. <stdout> is the output of cli cmd.
         (4, timeout_message] # Cold migration command ran successfully, but timed out waiting for VM to reach
             'Verify Resize' state or Error state.

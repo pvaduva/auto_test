@@ -898,7 +898,7 @@ class TestMixSharedCpu:
         LOG.tc_step("Perform third live migration onto a disabled shared cpu host, expect failure")
         code = vm_helper.live_migrate_vm(vm_id, destination_host=disable_shared_cpu_host, fail_ok=True)[0]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        assert code != 0, "Migrate not rejected as expected"
+        assert code > 0, "Migrate not rejected as expected"
         assert nova_helper.get_vm_host(vm_id) == dest_host, "VM not on same compute node"
 
         LOG.tc_step("Verify second live migration failed via nova-scheduler.log")

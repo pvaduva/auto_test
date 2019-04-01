@@ -36,7 +36,6 @@ def compare_cores_to_configure(host, func, p0, p1):
 
 @fixture(scope='class')
 def skip_for_ovs():
-    return
     if not system_helper.is_avs():
         skip('VSwitch numa affinity unsupported by OVS')
 
@@ -121,15 +120,15 @@ class TestVSwitchCPUReconfig:
     @mark.p3
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required'), [
         # (None, None, None, None),           # Test without reconfig
-        ((1, 0), (1, 1), None, 'nonAIO'),      # Standard lab only
-        ((2, 0), (1, 1), None, 'AIO'),       # CPE only
+        # ((1, 0), (1, 1), None, 'nonAIO'),      # Standard lab only
+        # ((2, 0), (1, 1), None, 'AIO'),       # CPE only
         ((1, 2), (3, 2), None, None),
-        ((1, 2), (2, 2), None, None),
+        # ((1, 2), (2, 2), None, None),     # Unnecessary test
         ((2, 0), (0, 0), None, None),       # Shared vswitch core feature, which allows 0 dedicated vswitch core
         ((1, 0), (1, 0), 'nonHT', 'nonAIO'),     # Standard lab only
         ((2, 0), (1, 0), 'nonHT', 'AIO'),      # CPE only
         # ((2, 0), (2, 0), None, True),       # CPE only    # remove - covered by other test
-        ((1, 0), (2, 0), None, 'nonAIO'),      # Standard lab only
+        # ((1, 0), (2, 0), None, 'nonAIO'),      # Standard lab only
     ], ids=id_params_cores)
     def test_vswitch_cpu_reconfig_positive(self, host_to_config, flavor_, platform, vswitch, ht_required, cpe_required):
         """
@@ -815,7 +814,7 @@ class TestNovaSchedulerAVS:
         mark.p2(('prefer', 'confirm')),
         mark.p2(('prefer', 'revert'))
     ])
-    def test_vswitch_affinity_resize_insufficient_cores_on_vswitch_node(self, get_target_host_and_flavors,
+    def _test_vswitch_affinity_resize_insufficient_cores_on_vswitch_node(self, get_target_host_and_flavors,
                                                                         vswitch_numa_affinity, resize_revert):
         """
         Test vswitch numa affinity when attempt to resize with insufficient cores on vswitch node
@@ -1064,7 +1063,7 @@ class TestSpanNumaNodes:
             vm_host, vm_numa = vm_helper.get_vm_host_and_numa_nodes(vm_id)
 
             if vswitch_affinity == 'strict':
-                assert 2 == code, "{} is not rejected. Details: {}".format(action, output)
+                assert 1 == code, "{} is not rejected. Details: {}".format(action, output)
                 assert host_span == vm_host
             else:
                 assert 0 == code, "VM is not {}d successfully even though vswitch affinity is prefer".format(action)
