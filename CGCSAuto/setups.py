@@ -884,14 +884,12 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     elif ':/' in guest_image:
         guest_server, guest_image = guest_image.split(':', 1)
 
-    iso_server = bs
+    iso_server = patch_server = helm_chart_server = bs
     iso_path = iso_path if iso_path else os.path.join(host_build_dir, BuildServerPath.ISO_PATH)
     if ':/' in iso_path:
         iso_server, iso_path = iso_path.split(':', 1)
-    patch_server = bs
     if patch_dir and ':/' in patch_dir:
         patch_server, patch_dir = patch_dir.split(':', 1)
-    helm_chart_server = None
     if helm_chart_path and ':/' in helm_chart_path:
         helm_chart_server, helm_chart_path = helm_chart_path.split(':', 1)
 
