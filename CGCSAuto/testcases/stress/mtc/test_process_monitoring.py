@@ -47,6 +47,14 @@ PROCESSES = {
         'cmd': 'rmon', 'impact': 'enabled-degraded', 'severity': 'major',
         'interval': 10, 'process_type': 'pmon', 'conf_file': '/etc/pmon.d/rmon.conf'},
 
+    'kubelet': {
+        'cmd': 'kubelet', 'impact': 'enabled-degraded', 'severity': 'critical','debounce': 20,
+        'interval': 5, 'process_type': 'pmon', 'conf_file': '/etc/pmon.d/kubelet.conf'},
+
+    'docker': {
+        'cmd': 'docker', 'impact': 'enabled-degraded', 'severity': 'critical','debounce': 20,
+        'interval': 5, 'process_type': 'pmon', 'conf_file': '/etc/pmon.d/docker.conf'},
+
     'fsmond': {
         'cmd': 'fsmon', 'impact': 'enabled-degraded', 'severity': 'major',
         'interval': 5, 'process_type': 'pmon', 'conf_file': '/etc/pmon.d/fsmon.conf'},
@@ -1002,7 +1010,9 @@ class MonitoredProcess:
 @mark.parametrize('process_name', [
     mark.p1('sm'),
     # TODO CGTS-6451
-    mark.p1('rmond'),
+   # mark.p1('rmond'),
+    mark.p0('docker'),
+    mark.p0('kubelet'),
     mark.p1('fsmond'),
     mark.priorities('p1', 'sx_nightly')('hbsClient'),
     mark.p1('mtcClient'),
@@ -1023,13 +1033,13 @@ class MonitoredProcess:
     mark.p1('logmgmt'),
     mark.p1('guestServer'),
     mark.p1('host_agent'),
-    mark.p1('libvirtd'),
+   # mark.p1('libvirtd'),
     mark.p1('neutron-avr-agent'),
     mark.p1('neutron-avs-agent'),
     mark.p1('neutron-dhcp-agent'),
     mark.p1('neutron-metadata-agent'),
     mark.p1('neutron-sriov-nic-agent'),
-    mark.p1('nova-compute'),
+   # mark.p1('nova-compute'),
     mark.p1('vswitch'),
 
     # mark.p1(('postgres')),    # Bin recommend not to test this. Whole system down when kill this.
@@ -1043,31 +1053,31 @@ class MonitoredProcess:
     mark.p1('dnsmasq'),
     mark.p1('fm-mgr'),
     mark.p1('keystone'),
-    mark.p1('glance-registry'),
+    #mark.p1('glance-registry'),
     # major
-    mark.p1('glance-api'),
-    mark.p1('neutron-server'),
-    mark.p1('nova-api'),
-    mark.p1('nova-scheduler'),
-    mark.p1('nova-conductor'),
-    # mark.p1(('nova-cert')),       # Removed in pike
-    mark.p1('nova-console-auth'),
-    # minor
-    mark.p1('nova-novnc'),
-    # major
-    mark.p1('cinder-api'),
-    mark.p1('cinder-scheduler'),
-    mark.p1('cinder-volume'),   # retries = 32
+   # mark.p1('glance-api'),
+  #  mark.p1('neutron-server'),
+  # mark.p1('nova-api'),
+  # mark.p1('nova-scheduler'),
+  # mark.p1('nova-conductor'),
+  # mark.p1(('nova-cert')),       # Removed in pike
+ #   mark.p1('nova-console-auth'),
+  # minor
+  #  mark.p1('nova-novnc'),
+  # major
+  #  mark.p1('cinder-api'),
+  #  mark.p1('cinder-scheduler'),
+  #  mark.p1('cinder-volume'),   # retries = 32
     # mark.p1('ceilometer-collector'),
     # mark.p1('ceilometer-api'),
-    mark.p1('ceilometer-agent-notification'),
-    mark.p1('gnocchi-metricd'),
-    mark.p1('gnocchi-api'),
-    # mark.p1('ceilometer-api'),
-    mark.priorities('p1', 'sx_nightly')('heat-api'),
-    mark.p1('heat-api-cfn'),
-    mark.p1('heat-api-cloudwatch'),
-    mark.p1('heat-engine'),
+  #  mark.p1('ceilometer-agent-notification'),
+  #  mark.p1('gnocchi-metricd'),
+  #  mark.p1('gnocchi-api'),
+   # mark.p1('ceilometer-api'),
+   # mark.priorities('p1', 'sx_nightly')('heat-api'),
+   # mark.p1('heat-api-cfn'),
+   # mark.p1('heat-api-cloudwatch'),
+   # mark.p1('heat-engine'),
     mark.p1('snmp'),
 
     # TODO CGTS-6426
@@ -1080,17 +1090,17 @@ class MonitoredProcess:
     # mark.p1(('gunicorn')), changed to horizon
     # mark.p1(('patch-alarm-manager')),     ???
 
-    mark.p1('vim-api'),
-    mark.p1('vim'),
+ #   mark.p1('vim-api'),
+ #   mark.p1('vim'),
     # minor
-    mark.p1('vim-webserver'),
+ #   mark.p1('vim-webserver'),
     mark.p1('guest-agent'),
-    mark.p1('nova-api-proxy'),
+ #  mark.p1('nova-api-proxy'),
     mark.p1('haproxy'),
-    mark.p1('aodh-api'),
-    mark.p1('aodh-evaluator'),
-    mark.p1('aodh-listener'),
-    mark.p1('aodh-notifier'),
+ #   mark.p1('aodh-api'),
+ #   mark.p1('aodh-evaluator'),
+ #   mark.p1('aodh-listener'),
+ #   mark.p1('aodh-notifier'),
 ])
 def test_process_monitoring(process_name, con_ssh=None):
     """
