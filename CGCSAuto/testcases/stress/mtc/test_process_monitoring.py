@@ -51,8 +51,8 @@ PROCESSES = {
         'cmd': 'kubelet', 'impact': 'enabled-degraded', 'severity': 'critical','debounce': 20,
         'interval': 5, 'process_type': 'pmon', 'conf_file': '/etc/pmon.d/kubelet.conf'},
 
-    'docker': {
-        'cmd': 'docker', 'impact': 'enabled-degraded', 'severity': 'critical','debounce': 20,
+    'dockerd': {
+        'cmd': 'dockerd', 'impact': 'enabled-degraded', 'severity': 'critical','debounce': 20,
         'interval': 5, 'process_type': 'pmon', 'conf_file': '/etc/pmon.d/docker.conf'},
 
     'fsmond': {
@@ -117,7 +117,7 @@ PROCESSES = {
     # Note: name differs from cmd
     'syslog-ng': {
         'cmd': 'syslog', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
-        'interval': 10, 'retries': 10, 'process_type': 'pmon', 'override': True},
+        'interval': 2, 'retries': 10, 'process_type': 'pmon', 'override': True},
 
     'io-monitor-manager': {
         'cmd': 'io-monitor-manager', 'impact': 'log', 'severity': 'minor', 'debounce': 20,
@@ -1011,7 +1011,7 @@ class MonitoredProcess:
     mark.p1('sm'),
     # TODO CGTS-6451
    # mark.p1('rmond'),
-    mark.p0('docker'),
+    mark.p0('dockerd'),
     mark.p0('kubelet'),
     mark.p1('fsmond'),
     mark.priorities('p1', 'sx_nightly')('hbsClient'),
