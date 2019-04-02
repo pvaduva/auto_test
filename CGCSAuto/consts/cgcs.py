@@ -273,10 +273,12 @@ class FlavorSpec:
     DISK_TOTAL_BYTES = 'quota:disk_total_bytes_sec'
     DISK_TOTAL_IOPS = 'quota:disk_total_iops_sec'
     NUMA_NODES = 'hw:numa_nodes'
-    NUMA_0 = 'hw:numa_node.0'
-    NUMA_1 = 'hw:numa_node.1'
+    # NUMA_0 = 'hw:numa_node.0'
+    # NUMA_1 = 'hw:numa_node.1'
     NUMA0_CPUS = 'hw:numa_cpus.0'
     NUMA1_CPUS = 'hw:numa_cpus.1'
+    NUMA_0 = NUMA0_CPUS
+    NUMA_1 = NUMA1_CPUS
     NUMA0_MEM = 'hw:numa_mem.0'
     NUMA1_MEM = 'hw:numa_mem.1'
     VSWITCH_NUMA_AFFINITY = 'hw:wrs:vswitch_numa_affinity'

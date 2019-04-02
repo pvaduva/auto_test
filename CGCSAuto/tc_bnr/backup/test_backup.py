@@ -39,15 +39,13 @@ def collect_logs(msg):
 
     Returns:
     """
-
+    LOG.info('collecting logs: ' + msg)
+    active_controller = ControllerClient.get_active_controller()
     try:
-        LOG.info('collecting logs: ' + msg)
-        active_controller = ControllerClient.get_active_controller()
         collect_tis_logs(active_controller)
     except pexpect.exceptions.TIMEOUT:
         active_controller.flush()
         active_controller.exec_cmd('cat /etc/buid.info')
-        pass
 
 
 @fixture(scope='function')
