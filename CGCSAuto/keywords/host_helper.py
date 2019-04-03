@@ -3055,7 +3055,7 @@ def get_coredumps_and_crashreports(move=True):
     con_dir = '{}/coredumps_and_crashreports/'.format(WRSROOT_HOME)
     con_ssh.exec_cmd('mkdir -p {}'.format(con_dir))
     scp_to_local = False
-    ls_cmd = 'ls -l --time-style=+%Y-%d-%m_%H-%M-%S {} | cat'
+    ls_cmd = 'ls -l --time-style=+%Y-%m-%d_%H-%M-%S {} | cat'
     core_dump_dir = '/var/lib/systemd/coredump/'
     crash_report_dir = '/var/crash/'
     for host in hosts_to_check:

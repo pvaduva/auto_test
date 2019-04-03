@@ -95,20 +95,20 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         if not sys_inst_backing:
             hosts_per_backing = host_helper.get_hosts_per_storage_backing(up_only=False, auth_info=auth_info,
                                                                           con_ssh=con_ssh)
-            for inst_backing in hosts_per_backing:
-                if hosts_per_backing[inst_backing]:
-                    sys_inst_backing.append(inst_backing)
-
-            if len(sys_inst_backing) > 1:
+            ProjVar.set_var(INSTANCE_BACKING=sys_inst_backing)
+            if len([backing for backing in sys_inst_backing if sys_inst_backing[backing]]) > 1:
                 aggregates = get_aggregates(con_ssh=con_ssh, auth_info=auth_info)
                 for inst_backing in hosts_per_backing:
                     expt_hosts = sorted(hosts_per_backing[inst_backing])
                     aggregate_name = STORAGE_AGGREGATE[inst_backing]
                     if aggregate_name not in aggregates:
                         create_aggregate(name=aggregate_name, check_first=False, con_ssh=con_ssh, auth_info=auth_info)
-                    properties, hosts_in_aggregate = get_aggregate_values(aggregate_name,
-                                                                          fields=('properties', 'hosts'),
-                                                                          con_ssh=con_ssh, auth_info=auth_info)
+                        properties = {}
+                        hosts_in_aggregate = []
+                    else:
+                        properties, hosts_in_aggregate = get_aggregate_values(aggregate_name,
+                                                                              fields=('properties', 'hosts'),
+                                                                              con_ssh=con_ssh, auth_info=auth_info)
                     if FlavorSpec.STORAGE_BACKING not in properties:
                         set_aggregate(aggregate_name, properties={FlavorSpec.STORAGE_BACKING: inst_backing},
                                       con_ssh=con_ssh, auth_info=auth_info)
@@ -122,7 +122,9 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
                         if hosts_to_remove:
                             remove_hosts_from_aggregate(aggregate=aggregate_name, hosts=hosts_to_remove,
                                                         check_first=False, con_ssh=con_ssh, auth_info=auth_info)
-        if [storage_backing] == sys_inst_backing:
+
+        configured_backings = [backing for backing in sys_inst_backing if sys_inst_backing[backing]]
+        if [storage_backing] == configured_backings:
             storage_backing = None
 
     if add_extra_specs:

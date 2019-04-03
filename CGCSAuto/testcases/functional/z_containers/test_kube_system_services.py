@@ -1,4 +1,4 @@
-from pytest import mark, skip, fixture
+from pytest import mark, skip
 
 from keywords import kube_helper, system_helper, host_helper
 from consts.cgcs import PodStatus, HostAvailState
@@ -65,5 +65,3 @@ def test_kube_system_services(controller):
         existing_deployments = [deployment['name'] for deployment in existing_deployments]
         for deployment in deployments:
             assert deployment in existing_deployments, "{} not in kube-system deployment.apps table".format(deployment)
-
-

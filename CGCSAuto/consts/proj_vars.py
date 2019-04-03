@@ -35,7 +35,7 @@ class ProjVar:
                   'PRIMARY_SUBCLOUD': None,
                   'BUILD_INFO': None,
                   'TEMP_DIR': '',
-                  'INSTANCE_BACKING': [],
+                  'INSTANCE_BACKING': {},
                   'OPENSTACK_DEPLOYED': None,
                   }
 
