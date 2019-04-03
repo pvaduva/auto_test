@@ -16,7 +16,7 @@ from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
 from consts.vlm import VlmAction
-from consts.bios import NODES_WITH_KERNEL_BOOT_OPTION_SPACING
+from consts.bios import NODES_WITH_KERNEL_BOOT_OPTION_SPACING, TerminalKeys
 from consts.build_server import Server
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common, network_helper, \
     vlm_helper
@@ -3683,6 +3683,10 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
                     LOG.info("Selecting for  {}".format(sub_menu.name))
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     pattern=security.upper() if not index else None)
+                    if boot_type == 'pxe_iso':
+                        output = node_obj.telnet_conn.read_until("vmlinuz".encode(), 10)
+                        if b'vmlinux' not in output:
+                            node_obj.telnet_conn.write(TerminalKeys.Keys['Enter'].encode())
 
                 elif sub_menu.name == "PXE Security Menu":
 
