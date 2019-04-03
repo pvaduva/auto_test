@@ -367,10 +367,9 @@ def verify_login(user_name, password, is_admin=True, expecting_pass=True):
     auth_info = get_user_auth_info(user_name, password, in_admin_project=is_admin)
 
     if is_admin:
-        # command = 'system show'
         command = 'endpoint list'
-        # code, output = system('show', auth_info=auth_info, fail_ok=True, rtn_list=True)
-        code, output = openstack(command, fail_ok=False, rtn_list=True)
+        LOG.debug('auth_info={}'.format(auth_info))
+        code, output = openstack(command, auth_info=auth_info, fail_ok=True, rtn_list=True)
     else:
         command = 'user show {}'.format(user_name)
         LOG.info('TODO: command:openstack {}\n'.format(command))
@@ -410,7 +409,7 @@ def add_role(user_name, password, project=Tenant.get('admin')):
     if project == 'admin':
         role_name = 'admin'
     else:
-        role_name = '_member_'
+        role_name = 'member'
 
     project_id = keystone_helper.get_tenant_ids(project)[0]
 
