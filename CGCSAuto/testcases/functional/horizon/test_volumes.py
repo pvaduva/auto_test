@@ -265,7 +265,7 @@ def test_horizon_volume_upload_to_image(volumes_pg_action):
     """
     volumes_pg_action, volume_name = volumes_pg_action
     all_formats = {"qcow2": u'QCOW2', "raw": u'RAW', "vdi": u'VDI',
-                   "vhd": u'VHD', "vmdk": u'VMDK', "vhdx":"VHDX"}
+                   "vhd": u'VHD', "vmdk": u'VMDK', "vhdx": u"VHDX"}
     for disk_format in all_formats:
         LOG.tc_step('Upload volume to image with disk format {}'.format(disk_format))
         image_name = helper.gen_resource_name('volume_image')
@@ -285,7 +285,7 @@ def test_horizon_volume_upload_to_image(volumes_pg_action):
         time.sleep(1)
         assert images_pg.find_message_and_dismiss(messages.SUCCESS)
         assert not images_pg.find_message_and_dismiss(messages.ERROR)
-        assert not (images_pg.is_image_present(image_name))
+        assert not images_pg.is_image_present(image_name)
         volumes_pg_action.go_to_target_page()
     horizon.test_result = True
 

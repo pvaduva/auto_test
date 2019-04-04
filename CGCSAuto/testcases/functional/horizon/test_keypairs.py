@@ -49,6 +49,7 @@ def test_horizon_keypair(keypairs_pg):
 
     LOG.tc_step('Create new key pair {} and verify it appears in the list'.format(KEYPAIR_NAME))
     keypairs_pg.create_keypair(KEYPAIR_NAME)
+    assert keypairs_pg.find_message_and_dismiss(messages.SUCCESS)
     assert not keypairs_pg.find_message_and_dismiss(messages.ERROR)
     assert keypairs_pg.is_keypair_present(KEYPAIR_NAME)
 

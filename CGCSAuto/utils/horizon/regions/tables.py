@@ -253,7 +253,7 @@ def bind_table_action(action_name, attribute_search='id'):
     """
     _actions_locator = (by.By.CSS_SELECTOR, 'div.table_actions > button,'
                                             'delete-image-selected > button,'
-                                            'actions > action-list:nth-child(1) > button,' 
+                                            'actions > action-list > button,' 
                                             'div.table_actions > a')
 
     def decorator(method):

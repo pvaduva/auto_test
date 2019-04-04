@@ -1,7 +1,8 @@
+from selenium.webdriver.common import by
+
 from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
-from time import sleep
 
 
 class KeypairForm:
@@ -15,7 +16,7 @@ class KeypairForm:
         submit_btn.click()
 
     def done(self):
-        submit_btn = self.driver.find_elements_by_css_selector("button.btn.btn-primary")[2]
+        submit_btn = self.driver.find_elements_by_css_selector("button[class='btn btn-primary ng-binding']")
         submit_btn.click()
 
     def __init__(self, driver):
@@ -23,40 +24,41 @@ class KeypairForm:
 
 
 class KeypairsTable(tables.TableRegion):
-    name = "keypairs"
-    CREATE_KEY_PAIR_FORM_FIELDS = ('name',)
+    name = "OS::Nova::Keypair"
+    CREATE_KEY_PAIR_FORM_FIELDS = 'name'
+    _rows_locator = (by.By.CSS_SELECTOR, 'tbody > tr[class="ng-scope"]')
 
-    @tables.bind_table_action('create-keypair-ng')
+    @tables.bind_table_action('btn-default', attribute_search='class')
     def create_keypair(self, create_button):
         create_button.click()
-        sleep(3)
         return KeypairForm(self.driver)
 
-    @tables.bind_row_action('delete')
+    @tables.bind_row_action('btn-danger', attribute_search='class')
     def delete_keypair_by_row(self, delete_button, row):
         delete_button.click()
         return forms.BaseFormRegion(self.driver)
 
-    @tables.bind_table_action('delete')
+    @tables.bind_table_action('btn-danger', attribute_search='class')
     def delete_keypair(self, delete_button):
         delete_button.click()
         return forms.BaseFormRegion(self.driver)
 
+    def _table_locator(self, table_name):
+        return by.By.CSS_SELECTOR, 'hz-resource-table[resource-type-name="%s"]' % table_name
 
 class KeypairsPage(basepage.BasePage):
     PARTIAL_URL = 'project/key_pairs'
 
     KEY_PAIRS_TABLE_ACTIONS = ("create", "import", "delete")
     KEY_PAIRS_TABLE_ROW_ACTION = "delete"
-    KEY_PAIRS_TABLE_NAME_COLUMN = 'Key Pair Name'
+    KEY_PAIRS_TABLE_NAME_COLUMN = 'Name'
 
     def __init__(self, driver, port=None):
         super(KeypairsPage, self).__init__(driver, port=port)
-        self._page_title = "Access & Security"
+        self._page_title = "Key Pairs"
 
     def _get_row_with_keypair_name(self, name):
-        return self.keypairs_table.get_row(self.KEY_PAIRS_TABLE_NAME_COLUMN,
-                                           name)
+        return self.keypairs_table.get_row(self.KEY_PAIRS_TABLE_NAME_COLUMN, name)
 
     @property
     def keypairs_table(self):
@@ -64,7 +66,7 @@ class KeypairsPage(basepage.BasePage):
 
     @property
     def delete_keypair_form(self):
-        return forms.BaseFormRegion(self.driver, None)
+        return forms.BaseFormRegion(self.driver)
 
     def is_keypair_present(self, name):
         return bool(self._get_row_with_keypair_name(name))
@@ -76,14 +78,11 @@ class KeypairsPage(basepage.BasePage):
     def create_keypair(self, keypair_name):
         create_keypair_form = self.keypairs_table.create_keypair()
         create_keypair_form.setname(keypair_name)
-        sleep(1)
         create_keypair_form.submit()
-        sleep(1)
-        create_keypair_form.done()
 
     def delete_keypair_by_row(self, name):
         row = self._get_row_with_keypair_name(name)
-        delete_keypair_form = self.keypairs_table.delete_keypair(row)
+        delete_keypair_form = self.keypairs_table.delete_keypair_by_row(row)
         delete_keypair_form.submit()
 
     def delete_keypair(self, name):

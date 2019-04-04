@@ -5,11 +5,15 @@ from utils.horizon.regions import forms
 from utils.horizon.regions import tables
 from utils.horizon.pages.project.compute import instancespage
 from utils.horizon.pages.project.volumes.volumespage import VolumesPage
-from time import sleep
+
+
+class ImagesForm(forms.FormRegion):
+    _fields_locator = (by.By.CSS_SELECTOR, 'ng-include')
 
 
 class ImagesTable(tables.TableRegion):
     name = "OS::Glance::Image"
+    _rows_locator = (by.By.CSS_SELECTOR, 'tbody > tr[class="ng-scope"]')
 
     CREATE_IMAGE_FORM_FIELDS = (
         "name", "description", "image_file",
@@ -30,8 +34,8 @@ class ImagesTable(tables.TableRegion):
     def create_image(self, create_button):
         create_button.click()
         self.wait_till_spinner_disappears()
-        return forms.FormRegion(self.driver,
-                                field_mappings=self.CREATE_IMAGE_FORM_FIELDS)
+        return ImagesForm(self.driver,
+                          field_mappings=self.CREATE_IMAGE_FORM_FIELDS)
 
     @tables.bind_table_action('btn-danger', attribute_search='class')
     def delete_image(self, delete_button):
@@ -81,7 +85,7 @@ class ImagesPage(basepage.BasePage):
 
     PARTIAL_URL = 'project/images'
 
-    IMAGES_TABLE_NAME_COLUMN = 'Image Name'
+    IMAGES_TABLE_NAME_COLUMN = 'Name'
     IMAGES_TABLE_STATUS_COLUMN = 'Status'
 
     def _get_row_with_image_name(self, name):
@@ -221,7 +225,6 @@ class ImagesPage(basepage.BasePage):
         instance_form.switch_to(1)
         if boot_source_type is not None:
             instance_form.fields['boot-source-type'].text = boot_source_type
-        sleep(1)
         instance_form._init_tab_fields(1)
         if create_new_volume is True:
             instance_form.fields['Create New Volume'].click_yes()
