@@ -130,8 +130,7 @@ class InstallVars:
                          helm_chart_path=None,
                          helm_chart_server=None,
                          set_install_vars=None,
-                         no_manage=False,
-                         deploy_openstack_from_controller_1=False):
+                         no_manage=False):
 
         cls.__var_dict = {
             'LAB': lab,
@@ -145,7 +144,6 @@ class InstallVars:
             'OVS': ovs,
             "KUBERNETES": kubernetes,
             "DEPLOY_OPENSTACK": deploy_openstack,
-            "DEPLOY_OPENSTACK_FROM_CONTROLLER1": deploy_openstack_from_controller_1,
             "IPV6_CONFIG": ipv6_config,
             # TIS BUILD info
             'BUILD_SERVER': build_server,

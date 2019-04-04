@@ -113,7 +113,7 @@ class BiosMenus:
         "options": [{"name": "System Setup", "index": 0, 'key': ['ESC', '2']},
                     {"name": "Lifecycle Controller", "index": 1, "key": ['ESC', '0']},
                     {"name": "Boot Manager", "index": 2, "key": ['ESC', '!']},
-                    {"name": "PXE (B|b)oot", "index": 3, "key": ['ESC', '@'], 'tag': 'boot menu'}],
+                    {"name": "PXE boot", "index": 3, "key": ['ESC', '@'], 'tag': 'boot menu'}],
         "wrap_around": False
     }
 
@@ -122,7 +122,7 @@ class BiosMenus:
         "options": [{'name': 'System\x1b\[\d;\d+HSetup', 'index': 0, 'key': 'F2'},
                     {'name': 'Lifecycle\x1b\[\d;\d+HController', 'index': 1, 'key': 'F10'},
                     {'name': 'BIOS\x1b\[\d;\d+HBoot\x1b\[\d;\d+HManager', 'index': 2, 'key': 'F11'},
-                    {"name": "PXE(\x1b\[\d;\d+H)?\s+Boot", "index": 0, "key": 'F12', 'tag': 'boot menu'}],
+                    {"name": "PXE\x1b\[\d;\d+HBoot", "index": 0, "key": 'F12', 'tag': 'boot menu'}],
         "wrap_around": False
     }
 
