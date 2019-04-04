@@ -192,7 +192,7 @@ def __convert_multilines_values(values, merge_lines=False):
                 else:
                     # convert column value to string if list len is 1
                     entry = [item if len(item) > 1 else ' '.join(item) for item in entry_combined]
-                LOG.debug("Multi-row entry found: {}".format(entry))
+                LOG.debug("Multi-row entry found for: {}".format(entry[0]))
 
             entries.append(entry)
             start_index = i + 1  # start_index for next entry
@@ -834,7 +834,7 @@ def row_dict_table(table_, key_header, unique_key=True, eliminate_keys=None, low
 
         rtn_dict[header_val] = values
 
-    LOG.debug("Converted table: {}".format(rtn_dict))
+    LOG.debug("Converted table to dict with keys: {}".format(list(rtn_dict.keys())))
     return rtn_dict
 
 

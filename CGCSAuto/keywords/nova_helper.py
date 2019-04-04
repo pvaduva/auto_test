@@ -92,13 +92,17 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
 
     if storage_backing and add_extra_specs:
         sys_inst_backing = ProjVar.get_var('INSTANCE_BACKING')
-        if not sys_inst_backing:
+        if sys_inst_backing:
+            configured_backings = [backing for backing in sys_inst_backing if sys_inst_backing[backing]]
+        else:
             hosts_per_backing = host_helper.get_hosts_per_storage_backing(up_only=False, auth_info=auth_info,
                                                                           con_ssh=con_ssh)
+            sys_inst_backing = hosts_per_backing
             ProjVar.set_var(INSTANCE_BACKING=sys_inst_backing)
-            if len([backing for backing in sys_inst_backing if sys_inst_backing[backing]]) > 1:
+            configured_backings = [backing for backing in sys_inst_backing if sys_inst_backing[backing]]
+            if len(configured_backings) > 1:
                 aggregates = get_aggregates(con_ssh=con_ssh, auth_info=auth_info)
-                for inst_backing in hosts_per_backing:
+                for inst_backing in configured_backings:
                     expt_hosts = sorted(hosts_per_backing[inst_backing])
                     aggregate_name = STORAGE_AGGREGATE[inst_backing]
                     if aggregate_name not in aggregates:
@@ -123,7 +127,8 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
                             remove_hosts_from_aggregate(aggregate=aggregate_name, hosts=hosts_to_remove,
                                                         check_first=False, con_ssh=con_ssh, auth_info=auth_info)
 
-        configured_backings = [backing for backing in sys_inst_backing if sys_inst_backing[backing]]
+        LOG.debug("configured backing:{} sys inst backing: {} storage backing: {}".
+                  format(configured_backings, sys_inst_backing, storage_backing))
         if [storage_backing] == configured_backings:
             storage_backing = None
 

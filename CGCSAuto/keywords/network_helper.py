@@ -2637,7 +2637,7 @@ def get_pci_vm_network(pci_type='pci-sriov', net_name=None, strict=False, con_ss
         auth_info:
         rtn_all
 
-    Returns (None|str|tuple|list): None if no network for given pci type; 2 nets(list) if CX nics; 1 net otherwise.
+    Returns (tuple|list): None if no network for given pci type; 2 nets(list) if CX nics; 1 net otherwise.
 
     """
     if isinstance(pci_type, str):
@@ -2647,8 +2647,8 @@ def get_pci_vm_network(pci_type='pci-sriov', net_name=None, strict=False, con_ss
                                                                     con_ssh=con_ssh, auth_info=auth_info)
     if not hosts_and_pnets:
         if rtn_all:
-            return None, None
-        return None
+            return [], None
+        return []
 
     # print("hosts and pnets: {}".format(hosts_and_pnets))
 
@@ -2679,7 +2679,7 @@ def get_pci_vm_network(pci_type='pci-sriov', net_name=None, strict=False, con_ss
 
         nets_list_all_types.append(nets_for_type)
 
-    final_nets = None
+    final_nets = []
     cx_for_pcipt = False
     if nets_list_all_types:
         final_nets = set(nets_list_all_types[0])
