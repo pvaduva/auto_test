@@ -196,10 +196,10 @@ def test_patch_orch_process(patch_orchestration_setup, patch_function_check, tes
 @mark.parametrize('storage_apply_type, compute_apply_type, max_parallel_computes, instance_action, test_patch', [
     ('serial', 'serial', 2, 'migrate', 'INSVC_COMPUTE'),
     ('serial', 'serial', 2, 'stop_start', 'INSVC_ALLNODES'),
-    ('serial', 'parallel', 2, 'migrate', 'INSVC_NOVA'),
+    # ('serial', 'parallel', 2, 'migrate', 'INSVC_NOVA'),
     ('serial', 'parallel', 2, 'migrate', 'RR_COMPUTE'),
     ('serial', 'parallel', 4, 'stop_start', 'INSVC_COMPUTE'),
-    ('serial', 'parallel', 4, 'stop_start', 'RR_NOVA'),
+    # ('serial', 'parallel', 4, 'stop_start', 'RR_NOVA'),
     ('parallel', 'parallel', 2, 'migrate', 'INSVC_ALLNODES'),
 ])
 def test_patch_orch_strategy(patch_orchestration_setup, storage_apply_type, patch_function_check,

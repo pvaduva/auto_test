@@ -198,7 +198,7 @@ def test_patch_dependency(patching_setup, patch_function_check):
 @mark.parametrize('patch_type', [
     'INSVC_ALLNODES',
     'INSVC_CONTROLLER',
-    'INSVC_NOVA',
+    # 'INSVC_NOVA',
     'RR_COMPUTE',
     'RR_STORAGE',
     'LARGE'
@@ -272,7 +272,7 @@ def test_patch_process(patching_setup, patch_function_check, patch_type, install
 
     LOG.tc_step("Install patch(es): {}".format(patch_ids))
     async = True if install_type == 'async' else False
-    patching_helper.install_patches(async=async)
+    patching_helper.install_patches(async_=async)
 
     LOG.tc_step("Check vms are in good state after install patches: {}".format(patch_ids))
     check_vms(vms)

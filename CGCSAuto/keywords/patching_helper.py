@@ -82,9 +82,7 @@ PATCH_CMDS = {
     },
 }
 
-PATCH_ALARM_ID = '900.001'
 
-IMPACTED_PROCESS_INVC_NOVA = ['nova-conductor', 'nova-scheduler', 'nova-consoleauth']
 BASE_LOG_DIR = '/var/log'
 LOG_RECORDS = {
     'upload': {
@@ -96,13 +94,6 @@ LOG_RECORDS = {
         'patching.log': [
             r'sw-patch-controller-daemon.*INFO: (.+) .*has been deleted'
         ]
-    }
-}
-
-IMPACTS_ON_SYSTEM = {
-    'INSVC_NOVA': {
-        'processes': ['nova-scheduler', 'nova-conductor', 'nova-consoleauth'],
-        'log_record': r'Starting (\w+) node \(version (.*)\)'
     }
 }
 
@@ -118,7 +109,7 @@ def get_log_records(action='upload', con_ssh=None, start_time=None, max_lines=10
         commands = []
         for log_file, patterns in record_patterns.items():
             log_file = os.path.join(BASE_LOG_DIR, log_file)
-            search_command = '\egrep -H \'{}\' {} 2>/dev/null | tail -n {}'.format(
+            search_command = r'\egrep -H \'{}\' {} 2>/dev/null | tail -n {}'.format(
                 r'\|'.join(patterns), log_file, max_lines)
             commands.append(search_command)
 
@@ -1181,12 +1172,12 @@ def wait_for_host_installed(host, timeout=600, check_interval=10, fail_ok=False,
                                           "Current states: {}".format(host, host_state))
 
 
-def install_patches(async=False, remove=False, fail_ok=False, force_lock=False, con_ssh=None):
+def install_patches(async_=False, remove=False, fail_ok=False, force_lock=False, con_ssh=None):
     """
     Installs patches on all impacted hosts
 
         Args:
-            async (bool)
+            async_ (bool)
             remove (bool): whether to install hosts after remove. Failed-installed hosts will be installed if remove.
             con_ssh
             fail_ok
@@ -1199,13 +1190,13 @@ def install_patches(async=False, remove=False, fail_ok=False, force_lock=False, 
 
     install_failed_hosts = []
     installed_hosts = []
-    cmd = 'host-install-async' if async else 'host-install'
+    cmd = 'host-install-async' if async_ else 'host-install'
     active = system_helper.get_active_controller_name(con_ssh=con_ssh)
     hosts = system_helper.get_hostnames(con_ssh=con_ssh)
     hosts.remove(active)
     hosts.append(active)
-    cmd_timeout = 120 if async else 1200
-    state_timeout = 1200 if async else 60
+    cmd_timeout = 120 if async_ else 1200
+    state_timeout = 1200 if async_ else 60
     for host in hosts:
         host_patch_states = hosts_patch_states[host]
         patch_current = host_patch_states['patch-current']
@@ -1332,7 +1323,7 @@ def remove_patches(patch_ids, con_ssh=None, fail_ok=False):
 def parse_patch_file_name(patch_file_name):
     LOG.info('patch_file_name:{}'.format(patch_file_name))
     patch_info = {}
-    name_pattern = re.compile('(20\d\d-\d\d-\d\d_\d\d-\d\d-\d\d)_(.+)')
+    name_pattern = re.compile(r'(20\d\d-\d\d-\d\d_\d\d-\d\d-\d\d)_(.+)')
     m = name_pattern.match(patch_file_name)
     if m and len(m.groups()) == 2:
         LOG.info('matched={}'.format(m))
@@ -1375,7 +1366,7 @@ def check_patch_version(file_name='', con_ssh=None):
         LOG.info('Cannot get build-date from file name:{}'.format(file_name))
         return
 
-    build_id = run_cmd('\grep BUILD_ID /etc/build.info 2>/dev/null | \grep "^BUILD_ID" |  cut -d= -f2',
+    build_id = run_cmd(r'\grep BUILD_ID /etc/build.info 2>/dev/null | \grep "^BUILD_ID" |  cut -d= -f2',
                        fail_ok=False, con_ssh=con_ssh)[1]
     build_id = build_id.strip('"')
     assert file_date == build_id, \
