@@ -1,44 +1,52 @@
+from selenium.webdriver.common import by
+
 from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
 
 
+class RolesForm(forms.FormRegion):
+    _fields_locator = (by.By.CSS_SELECTOR, 'form')
+
+
 class RolesTable(tables.TableRegion):
-
-    name = "roles"
-
+    name = "OS::Keystone::Role"
+    _rows_locator = (by.By.CSS_SELECTOR, 'tbody > tr[class="ng-scope"]')
     MODIFY_ROLE_FORM_FIELDS = ('name',)
 
-    @tables.bind_table_action('create')
+    @tables.bind_table_action('btn-default', attribute_search='class')
     def create_role(self, create_button):
         create_button.click()
         self.wait_till_spinner_disappears()
-        return forms.FormRegion(self.driver, field_mappings=self.MODIFY_ROLE_FORM_FIELDS)
+        return RolesForm(self.driver, field_mappings=self.MODIFY_ROLE_FORM_FIELDS)
 
-    @tables.bind_table_action('delete')
+    @tables.bind_table_action('btn-danger', attribute_search='class')
     def delete_role(self, delete_button):
         delete_button.click()
         self.wait_till_spinner_disappears()
         return forms.BaseFormRegion(self.driver)
 
-    @tables.bind_row_action('delete')
+    @tables.bind_row_action('danger', attribute_search='class')
     def delete_role_by_row(self, delete_button, row):
         delete_button.click()
         self.wait_till_spinner_disappears()
         return forms.BaseFormRegion(self.driver)
 
-    @tables.bind_row_action('edit')
+    @tables.bind_row_action('btn-default', attribute_search='class')
     def edit_role(self, edit_button, row):
         edit_button.click()
         self.wait_till_spinner_disappears()
-        return forms.FormRegion(self.driver, field_mappings=self.MODIFY_ROLE_FORM_FIELDS)
+        return RolesForm(self.driver, field_mappings=self.MODIFY_ROLE_FORM_FIELDS)
+
+    def _table_locator(self, table_name):
+        return by.By.CSS_SELECTOR, 'hz-resource-table[resource-type-name="%s"]' % table_name
 
 
 class RolesPage(basepage.BasePage):
 
     PARTIAL_URL = 'identity/roles'
 
-    ROLES_TABLE_NAME_COLUMN = "Role Name"
+    ROLES_TABLE_NAME_COLUMN = "Name"
 
     @property
     def roles_table(self):
