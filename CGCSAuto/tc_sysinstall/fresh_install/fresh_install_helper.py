@@ -11,7 +11,7 @@ from utils import cli
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
-from consts.auth import Tenant
+from consts.auth import Tenant, HostLinuxCreds
 from consts.timeout import InstallTimeout, HostTimeout
 from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState
 from consts.filepaths import BuildServerPath, WRSROOT_HOME, TuxlabServerPath
@@ -199,6 +199,12 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
     if not InstallVars.get_install_var("DEPLOY_OPENSTACK"):
         controller0_node = lab['controller-0']
         controller0_node.telnet_conn.exec_cmd("touch .no_opentack_install")
+
+    controller1_node =  lab.get('controller-1')
+
+    if controller1_node and InstallVars.get_install_var("DEPLOY_OPENSTACK_FROM_CONTROLLER1"):
+        controller0_node = lab['controller-0']
+        controller0_node.telnet_conn.exec_cmd("touch .deploy_opentack_from_controller_1")
 
     LOG.info("WK: Downloading the helm charts to active controller ...")
     helm_chart_path = InstallVars.get_install_var("HELM_CHART_PATH")
@@ -442,6 +448,18 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
 
         if wait_for_online:
             wait_for_hosts_to_be_online(hosts=hostnames, lab=lab)
+
+    if InstallVars.get_install_var("DEPLOY_OPENSTACK_FROM_CONTROLLER1") and 'controller-1' in controllers:
+        controller0_node = lab['controller-0']
+        if not controller0_node.ssh_conn:
+            controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+        pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+
+        controller0_node.ssh_conn.rsync(WRSROOT_HOME + '*', 'controller-1', WRSROOT_HOME,
+                                        dest_user=HostLinuxCreds.get_user(),
+                                        dest_password=HostLinuxCreds.get_password(),
+                                        pre_opts=pre_opts)
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))

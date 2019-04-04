@@ -586,7 +586,7 @@ def pytest_addoption(parser):
     ipv6_install_help = 'flag for ipv6 install or not; default is false.'
     helm_chart_path_help = 'Full path to Helm charts files. Default is <build-dir>/std/build-helm/stx'
     unmanaged_install_help = 'flag to leave subcloud as unmanaged after install.'
-
+    deploy_openstack_from_controller_1_help = ""
 
     # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',
@@ -612,6 +612,8 @@ def pytest_addoption(parser):
                      help=ipv6_install_help)
     parser.addoption('--helm-chart-path', '--helmchartpath', '--helm_chart_path', dest='helm_chart_path',
                      action='store', default=None,  help=helm_chart_path_help)
+    parser.addoption('--deploy-openstack-from-controller-1', dest='deploy_openstack_from_controller_1',
+                     action='store_true', default=False, help=deploy_openstack_from_controller_1_help)
     parser.addoption('--no-manage',  dest='no_manage', action='store_true', default=False,
                      help=unmanaged_install_help)
 
