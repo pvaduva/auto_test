@@ -395,7 +395,9 @@ def test_cmds_login_as_ldap_user(user_name, sudo_type):
     mark.p1('admin'),
     # mark.p1(('operator', 'operator', 'controller-0')),
 ])
-def test_telnet_ldap_admin_access(user_name):
+# TODO: disable for now and re-evaluate later when the features
+#  regarding 'admin' user are ready
+def _test_telnet_ldap_admin_access(user_name):
     """
     Args:
         user_name: username of the ldap user should be admin for thist test
@@ -419,11 +421,11 @@ def test_telnet_ldap_admin_access(user_name):
     password = "admin"
     new_password = "Li69nux*"
 
-    telnet = TelnetClient(host=controller_node.telnet_ip, port=controller_node.telnet_port, hostname=hostname,
-                          user=user_name, password=password, timeout=10)
+    telnet = TelnetClient(controller_node.telnet_ip, port=controller_node.telnet_port, hostname=hostname,
+                          user=user_name, password=new_password, timeout=10)
     try:
         LOG.tc_step("Telnet to lab as {} user with password {}".format(user_name, password))
-        telnet.login(new_password, handle_init_login=True)
+        telnet.login(expect_prompt_timeout=30, handle_init_login=True)
 
         code, output = telnet.exec_cmd('ls {}'.format(WRSROOT_HOME), fail_ok=False)
         LOG.info('output from test {}'.format(output))

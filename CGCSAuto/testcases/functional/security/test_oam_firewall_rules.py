@@ -52,7 +52,8 @@ def test_status_firewall_reboot():
             assert 'active' in output, "iptables service did not start after reboot on host {}".format(controller)
 
 
-def test_firewall_rules_default():
+# TODO: Disable the test case because filewall is disabled now (CGTS-10759)
+def _test_firewall_rules_default():
     """
     Verify default ports are open.
 
@@ -220,7 +221,8 @@ def remove_custom_firewall(get_custom_firewall_rule, request):
 
 
 @mark.dc
-def test_firewall_rules_custom(remove_custom_firewall):
+# TODO: Disable the test case because filewall is disabled now (CGTS-10759)s
+def _test_firewall_rules_custom(remove_custom_firewall):
     """
     Verify specified ports from the custom firewall rules are open and non-specified ports are closed.
 

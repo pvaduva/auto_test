@@ -30,7 +30,7 @@ def service_params(request):
 
 
 @mark.p2
-def test_token_expiry(service_params):
+def _test_token_expiry(service_params):
     """
     Verify that token expiry time can be changed using service parameters
 
