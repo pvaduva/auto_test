@@ -583,6 +583,7 @@ def pytest_addoption(parser):
                 "( default: {} )".format(BuildServerPath.HEAT_TEMPLATES_PREV)
     dcfloatip_help = " The distributed cloud central region floating ip if subcloud is specified."
     openstack_install_help = 'flag for openstack install or not; default is false.'
+    deploy_openstack_from_controller_1_help = ''
     ipv6_install_help = 'flag for ipv6 install or not; default is false.'
     helm_chart_path_help = 'Full path to Helm charts files. Default is <build-dir>/std/build-helm/stx'
     unmanaged_install_help = 'flag to leave subcloud as unmanaged after install.'
@@ -608,6 +609,8 @@ def pytest_addoption(parser):
                      help=dcfloatip_help)
     parser.addoption('--no-openstack', '--no-openstack-install',  dest='no_openstack',
                      action='store_true', default=False, help=openstack_install_help)
+    parser.addoption('--deploy-openstack-from-controller-1',  dest='deploy_openstack_from_controller_1',
+                     action='store_true', default=False, help=deploy_openstack_from_controller_1_help)
     parser.addoption('--ipv6',  dest='ipv6', action='store_true', default=False,
                      help=ipv6_install_help)
     parser.addoption('--helm-chart-path', '--helmchartpath', '--helm_chart_path', dest='helm_chart_path',

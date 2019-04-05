@@ -126,6 +126,7 @@ class InstallVars:
                          dc_float_ip=None,
                          install_subcloud=None,
                          deploy_openstack=True,
+                         deploy_openstack_from_controller_1=False,
                          ipv6_config=False,
                          helm_chart_path=None,
                          helm_chart_server=None,
@@ -144,6 +145,7 @@ class InstallVars:
             'OVS': ovs,
             "KUBERNETES": kubernetes,
             "DEPLOY_OPENSTACK": deploy_openstack,
+            "DEPLOY_OPENSTACK_FROM_CONTROLLER1": deploy_openstack_from_controller_1,
             "IPV6_CONFIG": ipv6_config,
             # TIS BUILD info
             'BUILD_SERVER': build_server,

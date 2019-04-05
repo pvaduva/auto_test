@@ -113,7 +113,7 @@ class BiosMenus:
         "options": [{"name": "System Setup", "index": 0, 'key': ['ESC', '2']},
                     {"name": "Lifecycle Controller", "index": 1, "key": ['ESC', '0']},
                     {"name": "Boot Manager", "index": 2, "key": ['ESC', '!']},
-                    {"name": "PXE boot", "index": 3, "key": ['ESC', '@'], 'tag': 'boot menu'}],
+                    {"name": "PXE (B|b)oot", "index": 3, "key": ['ESC', '@'], 'tag': 'boot menu'}],
         "wrap_around": False
     }
 

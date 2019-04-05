@@ -88,8 +88,8 @@ class TelnetClient(Telnet):
 
     def login(self, expect_prompt_timeout=10, fail_ok=False, handle_init_login=False):
         self.write(b'\r\n')
-        index = self.expect([TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout, fail_ok=fail_ok,
-                            searchwindowsize=50)
+        index = self.expect(blob_list=[TELNET_LOGIN_PROMPT, self.prompt], timeout=expect_prompt_timeout,
+                            fail_ok=fail_ok, searchwindowsize=50)
         self.flush()
         code = 0
         if index == 0:

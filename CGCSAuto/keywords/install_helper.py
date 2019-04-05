@@ -3835,9 +3835,11 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
                 LOG.info('In Kickstart menu expected promts = {}'.format(expt_prompts))
 
                 telnet_conn.read_until(kickstart_menu.prompt, timeout=360)
-                select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
-                                      security=security, usb=usb, expect_prompt=False)
-                LOG.info('Kick start option selected')
+
+        if node_obj.name == pxe_host:
+            select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint, low_latency=low_latency,
+                                  security=security, usb=usb, expect_prompt=False)
+            LOG.info('Kick start option selected')
 
     LOG.info("Waiting for {} to boot".format(node_obj.name))
     node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)

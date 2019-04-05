@@ -11,7 +11,7 @@ from utils import cli
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
-from consts.auth import Tenant
+from consts.auth import Tenant, HostLinuxCreds
 from consts.timeout import InstallTimeout, HostTimeout
 from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState
 from consts.filepaths import BuildServerPath, WRSROOT_HOME, TuxlabServerPath
@@ -431,8 +431,10 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
         test_step += " other lab hosts"
 
     threads = []
+
     LOG.tc_step(test_step)
     if do_step(test_step):
+        hosts_online = False
         for hostname in hostnames:
             threads.append(install_helper.open_vlm_console_thread(hostname, lab=lab, boot_interface=boot_device_dict,
                                                                   wait_for_thread=False, vlm_power_on=True,
@@ -442,6 +444,29 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
 
         if wait_for_online:
             wait_for_hosts_to_be_online(hosts=hostnames, lab=lab)
+            hosts_online = True
+
+        if InstallVars.get_install_var("DEPLOY_OPENSTACK_FROM_CONTROLLER1") and 'controller-1' in hostnames \
+                and hosts_online:
+            controller0_node = lab['controller-0']
+            controller1_node = lab['controller-1']
+            if controller1_node.telnet_conn:
+                controller1_node.telnet_conn.close()
+
+            controller1_node.telnet_conn = install_helper.open_telnet_session(controller1_node)
+            controller1_node.telnet_conn.set_prompt(r'-[\d]+:~\$ ')
+            controller1_node.telnet_conn.login(handle_init_login=True)
+            controller1_node.telnet_conn.close()
+
+            if not controller0_node.ssh_conn:
+                controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+            pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+
+            controller0_node.ssh_conn.rsync(WRSROOT_HOME + '*', 'controller-1', WRSROOT_HOME,
+                                            dest_user=HostLinuxCreds.get_user(),
+                                            dest_password=HostLinuxCreds.get_password(),
+                                            pre_opts=pre_opts)
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
