@@ -148,7 +148,8 @@ def reset_if_modified(request):
                 LOG.info("Check custom conf is removed from {} in nova compute container on {}".format(conf_path, host))
                 for nova_compute_pod in nova_compute_pods:
                     code, output = kube_helper.exec_cmd_in_container(cmd=check_cmd, pod=nova_compute_pod, fail_ok=True,
-                                                                     con_ssh=host_ssh, namespace='openstack')
+                                                                     con_ssh=host_ssh, namespace='openstack',
+                                                                     container_name='nova-compute')
                     assert code == 1, "{} on {} still contains user override info after reset nova helm-override " \
                                       "values and reapply stx-openstack app: {}".format(conf_path, host, output)
     request.addfinalizer(reset)
@@ -234,4 +235,4 @@ def test_stx_openstack_helm_override_update_and_reset(reset_if_modified):
             check_cmd = 'grep foo {}'.format(conf_path)
             for nova_compute_pod in post_nova_compute_pod_names:
                 kube_helper.exec_cmd_in_container(cmd=check_cmd, pod=nova_compute_pod, fail_ok=False, con_ssh=host_ssh,
-                                                  namespace='openstack')
+                                                  namespace='openstack', container_name='nova-compute')

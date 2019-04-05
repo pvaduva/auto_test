@@ -95,15 +95,14 @@ def create_flavor(name=None, flavor_id='auto', vcpus=1, ram=1024, root_disk=None
         if sys_inst_backing:
             configured_backings = [backing for backing in sys_inst_backing if sys_inst_backing[backing]]
         else:
-            hosts_per_backing = host_helper.get_hosts_per_storage_backing(up_only=False, auth_info=auth_info,
+            sys_inst_backing = host_helper.get_hosts_per_storage_backing(up_only=False, auth_info=auth_info,
                                                                           con_ssh=con_ssh)
-            sys_inst_backing = hosts_per_backing
             ProjVar.set_var(INSTANCE_BACKING=sys_inst_backing)
             configured_backings = [backing for backing in sys_inst_backing if sys_inst_backing[backing]]
             if len(configured_backings) > 1:
                 aggregates = get_aggregates(con_ssh=con_ssh, auth_info=auth_info)
                 for inst_backing in configured_backings:
-                    expt_hosts = sorted(hosts_per_backing[inst_backing])
+                    expt_hosts = sorted(sys_inst_backing[inst_backing])
                     aggregate_name = STORAGE_AGGREGATE[inst_backing]
                     if aggregate_name not in aggregates:
                         create_aggregate(name=aggregate_name, check_first=False, con_ssh=con_ssh, auth_info=auth_info)

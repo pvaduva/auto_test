@@ -1,9 +1,8 @@
-
 from pytest import mark, fixture
 
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import host_helper, system_helper, vm_helper
+from keywords import host_helper, vm_helper
 
 
 @fixture(autouse=True)
@@ -34,11 +33,6 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
 
     """
     LOG.tc_step("Determine the hosts to configure")
-    if instance_backing == 'remote' and not system_helper.is_storage_system():
-        # Need to fail instead of skip here because pytest returns 0 exit code when test skipped,
-        # which would be considered as a pass by Jenkins
-        assert False, "Not storage system. Skip configure remote backing"
-
     hosts = host_helper.get_up_hypervisors()
     hosts_len = len(hosts)
     host_num_mapping = {
@@ -65,7 +59,7 @@ def test_set_hosts_storage_backing_min(instance_backing, number_of_hosts):
     for host in hosts_to_config:
         HostsToRecover.add(host)
         host_helper.set_host_storage_backing(host=host, inst_backing=instance_backing, unlock=False,
-                                             wait_for_host_aggregate=False)
+                                             wait_for_configured=False)
 
     host_helper.unlock_hosts(hosts_to_config, check_hypervisor_up=True, fail_ok=False)
 
@@ -124,12 +118,6 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
         'two': 2
     }
     number_of_hosts = host_num_mapping[number_of_hosts]
-
-    if instance_backing == 'remote' and number_of_hosts != 0 and not system_helper.is_storage_system():
-        # Need to fail instead of skip here because pytest returns 0 exit code when test skipped,
-        # which would be considered as a pass by Jenkins
-        assert False, "Not storage system. Skip configure remote backing"
-
     LOG.tc_step("Calculate the hosts to be configured based on test params")
     candidate_hosts = get_candidate_hosts(number_of_hosts=number_of_hosts)
 
@@ -143,8 +131,7 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
         number_to_config = number_of_hosts - len(hosts_with_backing)
         hosts_pool = list(set(candidate_hosts) - set(hosts_with_backing))
     else:
-        # TODO
-        backing_to_config = 'lvm' if instance_backing == 'image' else 'image'
+        backing_to_config = 'remote' if 'image' in instance_backing else 'local_image'
         number_to_config = len(hosts_with_backing) - number_of_hosts
         hosts_pool = hosts_with_backing
 
@@ -156,7 +143,7 @@ def test_set_hosts_storage_backing_equal(instance_backing, number_of_hosts):
 
     for host in hosts_to_config:
         host_helper.set_host_storage_backing(host=host, inst_backing=backing_to_config, unlock=False,
-                                             wait_for_host_aggregate=False)
+                                             wait_for_configured=False)
         HostsToRecover.add(host)
 
     host_helper.unlock_hosts(hosts_to_config, check_hypervisor_up=True, fail_ok=False)

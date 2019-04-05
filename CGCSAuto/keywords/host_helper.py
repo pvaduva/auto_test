@@ -2453,10 +2453,14 @@ def get_host_lvg_show_values(host, fields, lvg='nova-local', con_ssh=None, stric
     return vals
 
 
-def get_host_instance_backing(host, con_ssh=None, auth_info=Tenant.get('admin')):
-    params = get_host_lvg_show_values(host=host, fields='parameters', lvg='nova-local', con_ssh=con_ssh,
-                                      auth_info=auth_info)[0]
-    return params['instance_backing']
+def get_host_instance_backing(host, con_ssh=None):
+    pod_name = 'nova-compute-{}'.format(host)
+    nova_compute_pod = kube_helper.get_openstack_pods_info(pod_names=pod_name, con_ssh=con_ssh)[0][0]['name']
+    cmd = 'grep "images_type" /etc/nova/nova.conf'
+    images_type = kube_helper.exec_cmd_in_container(cmd, pod=nova_compute_pod, container_name='nova-compute',
+                                                    namespace='openstack', con_ssh=con_ssh)[1].split('=')[1].strip()
+    LOG.info("images_type: {}".format(images_type))
+    return 'remote' if images_type == 'rbd' else 'local_image'
 
 
 def is_host_with_instance_backing(host, storage_type='image', con_ssh=None):
@@ -2465,175 +2469,330 @@ def is_host_with_instance_backing(host, storage_type='image', con_ssh=None):
     return storage_type in host_lvg_inst_backing
 
 
-def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None, concurrent_ops=None, lock=True,
-                    unlock=True, fail_ok=False, check_first=True, auth_info=Tenant.get('admin'), con_ssh=None):
+def assign_host_labels(host, labels, default_value='enabled', check_first=True, lock=True, unlock=True, fail_ok=False,
+                       con_ssh=None, auth_info=Tenant.get('admin')):
     """
-    Modify host lvg
-
+    Assign given labels to host
     Args:
-        host (str): host to modify lvg for
-        lvg (str): local volume group name. nova-local by default
-        inst_backing (str): image, lvm, or remote
-        inst_lv_size (int|None): instance lv size in GiB
-        concurrent_ops (int): number of current disk operations
-        lock (bool): whether or not to lock host before modify
-        unlock (bool): whether or not to unlock host and verify config after modify
-        fail_ok (bool): whether or not raise exception if host-lvg-modify cli got rejected
-        auth_info (dict):
-        con_ssh (SSHClient):
-        check_first (bool
+        host:
+        labels (dict|list): when list of label names instead dict, use default_value for each label
+        default_value (str):
+        check_first:
+        lock:
+        unlock:
+        fail_ok:
+        con_ssh:
+        auth_info:
 
     Returns (tuple):
-        (0, "Host is configured")       host configured
-        (1, <stderr>)
-        (2, )
+        (-1, "Host already have expected labels: <labels>. Do nothing.")
+        (0, <labels>(dict))
+        (1, <std_err>)
 
     """
-
-    if inst_backing is not None:
-        if 'image' in inst_backing:
-            inst_backing = 'image'
-        # elif 'lvm' in inst_backing:
-        #     inst_backing = 'lvm'
-        #     if inst_lv_size is None and lvg == 'nova-local':
-        #         lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh,
-        #                                                strict=False)[0]
-        #         inst_lv_size = min(50, int(int(lvm_vg_size)/2))    # half of the nova-local size up to 50g
-        #         if inst_lv_size < 5:        # use default value if lvm_vg_size is less than 10g
-        #             inst_lv_size = None
-        elif 'remote' in inst_backing:
-            inst_backing = 'remote'
-        else:
-            raise ValueError("Invalid instance backing provided. Choose from: image, lvm, remote.")
-
-    def check_host_config(lvg_tab_=None):
-        if lvg_tab_ is None:
-            lvg_tab_ = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvg), ssh_client=con_ssh))
-        params = eval(table_parser.get_value_two_col_table(lvg_tab_, 'parameters'))
-        err_msg = ''
-        if lvg == 'nova-local':
-            if inst_backing is not None:
-                post_inst_backing = params['instance_backing']
-                if inst_backing != post_inst_backing:
-                    err_msg += "Instance backing is {} instead of {}\n".format(post_inst_backing, inst_backing)
-
-            if inst_backing == 'lvm' and inst_lv_size is not None:
-                post_inst_lv_size = params.get('instances_lv_size_gib', 0)
-                if inst_lv_size != int(post_inst_lv_size):
-                    err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size,
-                                                                                         inst_lv_size)
-
-            if concurrent_ops is not None:
-                post_concurrent_ops = params['concurrent_disk_operations']
-                if int(concurrent_ops) != post_concurrent_ops:
-                    err_msg += "Concurrent disk operations is {} instead of {}".format(post_concurrent_ops,
-                                                                                       concurrent_ops)
-        # TODO: Add lvm_type
-        return err_msg
-
-    args_dict = {
-        '-b': inst_backing,
-        '-s': inst_lv_size,
-        '-c': concurrent_ops
-    }
-    args = ''
-
-    for key, val in args_dict.items():
-        if val is not None:
-            args += ' {} {}'.format(key, val)
-
-    if not args:
-        raise ValueError("At least one of the values should be supplied: inst_backing, inst_lv_size, concurrent_ops'")
-
-    args += ' {} {}'.format(host, lvg)
+    if isinstance(labels, (list, tuple)):
+        labels = {label: default_value for label in labels}
 
     if check_first:
-        pre_check_err = check_host_config()
-        if not pre_check_err:
-            msg = "Host already configured with requested lvg values. Do nothing."
+        existing_labels = get_host_labels_info(host, con_ssh=con_ssh, auth_info=auth_info)
+        for label, expt_val in labels.items():
+            if expt_val != existing_labels.get(label, 'disabled'):
+                LOG.debug("{} label needs to assigned to {}".format(label, host))
+                break
+        else:
+            msg = "{} already have expected labels: {}. Do nothing.".format(host, labels)
             LOG.info(msg)
             return -1, msg
 
     if lock:
-        lock_host(host, con_ssh=con_ssh, swact=True)
+        lock_host(host, con_ssh=con_ssh, swact=True, auth_info=auth_info)
 
-    LOG.info("Modifying host-lvg for {} with params: {}".format(host, args))
-    code, output = cli.system('host-lvg-modify', args, fail_ok=fail_ok, rtn_list=True, auth_info=auth_info,
-                              ssh_client=con_ssh)
-
-    err = ''
-    rtn_code = 0
-    if code == 0:
-        err = check_host_config(table_parser.table(output))
-        if err:
-            err = "host-lvg-modify output check failed. " + err
-            rtn_code = 2
-
-    if unlock:
-        unlock_host(host, con_ssh=con_ssh)
-
-        if not err:
-            LOG.info("Checking host lvg configurations are applied correctly after host unlock")
-            err = check_host_config()
-            if err:
-                err = "Host lvg config check failed after host unlock. " + err
-                rtn_code = 3
-
-    if code == 1:
+    args = '{} {}'.format(host, ' '.join(['{}={}'.format(key, val) for key, val in labels.items()]))
+    code, output = cli.system('host-label-assign', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                              rtn_list=True)
+    if code > 0:
         return 1, output
 
-    if err:
-        if fail_ok:
-            LOG.warning(err)
-            return rtn_code, err
-        else:
-            raise exceptions.HostPostCheckFailed(err)
+    LOG.info("{} label(s) assigned: {}".format(host, labels))
+    if unlock:
+        unlock_host(host, con_ssh=con_ssh, auth_info=auth_info)
 
-    return 0, "Host is configured successfully"
+    post_labels = get_host_labels_info(host, con_ssh=con_ssh, auth_info=auth_info)
+    for label_, expt_val in labels.items():
+        if expt_val != post_labels.get(label_, 'disabled'):
+            raise exceptions.SysinvError('Unexpected value for {} label {}'.format(host, label_))
+
+    LOG.info("{} label(s) removed: {}".format(host, labels))
+
+    return 0, labels
 
 
-def set_host_storage_backing(host, inst_backing, lvm='nova-local', lock=True, unlock=True, wait_for_host_aggregate=True,
+def get_host_labels_info(host, con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Get host labels
+    Args:
+        host (str):
+        con_ssh:
+        auth_info:
+
+    Returns (dict): key/value pairs of host labels
+
+    """
+    output = cli.system('host-label-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info)
+    table_ = table_parser.table(output)
+    label_keys = table_parser.get_column(table_, 'label key')
+    label_values = table_parser.get_column(table_, 'label value')
+
+    labels_info = {label_keys[i]: label_values[i] for i in range(len(label_keys))}
+    return labels_info
+
+
+def remove_host_labels(host, labels, check_first=True, lock=True, unlock=True, fail_ok=False, con_ssh=None,
+                       auth_info=Tenant.get('admin')):
+    """
+    Remove given labels from host
+    Args:
+        host:
+        labels (tuple|list): labels to remove
+        check_first:
+        lock:
+        unlock:
+        fail_ok:
+        con_ssh:
+        auth_info:
+
+    Returns (tuple):
+        (-1, "Host already have expected labels: <labels>. Do nothing.")
+        (0, <labels>(list))
+        (1, <std_err>)
+
+    """
+    if isinstance(labels, str):
+        labels = [labels]
+
+    labels_to_remove = labels
+    if check_first:
+        existing_labels = get_host_labels_info(host, con_ssh=con_ssh, auth_info=auth_info)
+        labels_to_remove = list(set(labels) & set(existing_labels))
+        if not labels_to_remove:
+            msg = "{} does not have any of these labels to remove: {}. Do nothing.".format(host, labels)
+            LOG.info(msg)
+            return -1, msg
+
+    if lock:
+        lock_host(host, con_ssh=con_ssh, swact=True, auth_info=auth_info)
+
+    args = '{} {}'.format(host, ' '.join(labels_to_remove))
+    code, output = cli.system('host-label-remove', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
+                              rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    if unlock:
+        unlock_host(host, con_ssh=con_ssh, auth_info=auth_info)
+
+    post_labels = get_host_labels_info(host, con_ssh=con_ssh, auth_info=auth_info)
+    unremoved_labels = list(set(labels) & set(post_labels))
+    if unremoved_labels:
+        raise exceptions.SysinvError("{} labels still exist after removal: {}".format(host, unremoved_labels))
+
+    LOG.info("{} label(s) removed: {}".format(host, labels))
+
+    return 0, labels
+
+#
+# def modify_host_lvg(host, lvg='nova-local', inst_backing=None, inst_lv_size=None, concurrent_ops=None, lock=True,
+#                     unlock=True, fail_ok=False, check_first=True, auth_info=Tenant.get('admin'), con_ssh=None):
+#     """
+#     Modify host lvg
+#
+#     Args:
+#         host (str): host to modify lvg for
+#         lvg (str): local volume group name. nova-local by default
+#         inst_backing (str): image, lvm, or remote
+#         inst_lv_size (int|None): instance lv size in GiB
+#         concurrent_ops (int): number of current disk operations
+#         lock (bool): whether or not to lock host before modify
+#         unlock (bool): whether or not to unlock host and verify config after modify
+#         fail_ok (bool): whether or not raise exception if host-lvg-modify cli got rejected
+#         auth_info (dict):
+#         con_ssh (SSHClient):
+#         check_first (bool
+#
+#     Returns (tuple):
+#         (0, "Host is configured")       host configured
+#         (1, <stderr>)
+#         (2, )
+#
+#     """
+#
+#     if inst_backing is not None:
+#         if 'image' in inst_backing:
+#             inst_backing = 'image'
+#         # elif 'lvm' in inst_backing:
+#         #     inst_backing = 'lvm'
+#         #     if inst_lv_size is None and lvg == 'nova-local':
+#         #         lvm_vg_size = get_host_lvg_show_values(host, fields='lvm_vg_size', lvg=lvg, con_ssh=con_ssh,
+#         #                                                strict=False)[0]
+#         #         inst_lv_size = min(50, int(int(lvm_vg_size)/2))    # half of the nova-local size up to 50g
+#         #         if inst_lv_size < 5:        # use default value if lvm_vg_size is less than 10g
+#         #             inst_lv_size = None
+#         elif 'remote' in inst_backing:
+#             inst_backing = 'remote'
+#         else:
+#             raise ValueError("Invalid instance backing provided. Choose from: image, lvm, remote.")
+#
+#     def check_host_config(lvg_tab_=None):
+#         if lvg_tab_ is None:
+#             lvg_tab_ = table_parser.table(cli.system('host-lvg-show', '{} {}'.format(host, lvg), ssh_client=con_ssh))
+#         params = eval(table_parser.get_value_two_col_table(lvg_tab_, 'parameters'))
+#         err_msg = ''
+#         if lvg == 'nova-local':
+#             if inst_backing is not None:
+#                 post_inst_backing = params['instance_backing']
+#                 if inst_backing != post_inst_backing:
+#                     err_msg += "Instance backing is {} instead of {}\n".format(post_inst_backing, inst_backing)
+#
+#             if inst_backing == 'lvm' and inst_lv_size is not None:
+#                 post_inst_lv_size = params.get('instances_lv_size_gib', 0)
+#                 if inst_lv_size != int(post_inst_lv_size):
+#                     err_msg += "Instance local volume size is {} instead of {}\n".format(post_inst_lv_size,
+#                                                                                          inst_lv_size)
+#
+#             if concurrent_ops is not None:
+#                 post_concurrent_ops = params['concurrent_disk_operations']
+#                 if int(concurrent_ops) != post_concurrent_ops:
+#                     err_msg += "Concurrent disk operations is {} instead of {}".format(post_concurrent_ops,
+#                                                                                        concurrent_ops)
+#         # TODO: Add lvm_type
+#         return err_msg
+#
+#     args_dict = {
+#         '-b': inst_backing,
+#         '-s': inst_lv_size,
+#         '-c': concurrent_ops
+#     }
+#     args = ''
+#
+#     for key, val in args_dict.items():
+#         if val is not None:
+#             args += ' {} {}'.format(key, val)
+#
+#     if not args:
+#         raise ValueError("At least one of the values should be supplied: inst_backing, inst_lv_size, concurrent_ops'")
+#
+#     args += ' {} {}'.format(host, lvg)
+#
+#     if check_first:
+#         pre_check_err = check_host_config()
+#         if not pre_check_err:
+#             msg = "Host already configured with requested lvg values. Do nothing."
+#             LOG.info(msg)
+#             return -1, msg
+#
+#     if lock:
+#         lock_host(host, con_ssh=con_ssh, swact=True)
+#
+#     LOG.info("Modifying host-lvg for {} with params: {}".format(host, args))
+#     code, output = cli.system('host-lvg-modify', args, fail_ok=fail_ok, rtn_list=True, auth_info=auth_info,
+#                               ssh_client=con_ssh)
+#
+#     err = ''
+#     rtn_code = 0
+#     if code == 0:
+#         err = check_host_config(table_parser.table(output))
+#         if err:
+#             err = "host-lvg-modify output check failed. " + err
+#             rtn_code = 2
+#
+#     if unlock:
+#         unlock_host(host, con_ssh=con_ssh)
+#
+#         if not err:
+#             LOG.info("Checking host lvg configurations are applied correctly after host unlock")
+#             err = check_host_config()
+#             if err:
+#                 err = "Host lvg config check failed after host unlock. " + err
+#                 rtn_code = 3
+#
+#     if code == 1:
+#         return 1, output
+#
+#     if err:
+#         if fail_ok:
+#             LOG.warning(err)
+#             return rtn_code, err
+#         else:
+#             raise exceptions.HostPostCheckFailed(err)
+#
+#     return 0, "Host is configured successfully"
+
+
+def set_host_storage_backing(host, inst_backing, lock=True, unlock=True, wait_for_configured=True, check_first=True,
                              fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
 
     Args:
         host (str): host to modify lvg for
-        lvm (str): local volume group name. nova-local by default
-        inst_backing (str): image, lvm, or remote
-        wait_for_host_aggregate (bool): Whether or not wait for host to appear in host-aggregate for specified backing
+        inst_backing (str): image, or remote
+        wait_for_configured (bool): Whether or not wait for host instance backing change via system host-lvg-show
         lock (bool): whether or not to lock host before modify
         unlock (bool): whether or not to unlock host and verify config after modify
-        fail_ok (bool): whether or not raise exception if host-lvg-modify cli got rejected
+        check_first
+        fail_ok (bool): whether or not raise exception if host-label-assign fails
         auth_info (dict):
         con_ssh (SSHClient):
 
     Returns:
 
     """
-    if wait_for_host_aggregate and not unlock:
-        raise ValueError("'wait_for_host_aggregate=True' requires 'unlock=True'")
+    if wait_for_configured and not unlock:
+        raise ValueError("'wait_for_configured=True' requires 'unlock=True'")
 
-    code, output = modify_host_lvg(host, lvg=lvm, inst_backing=inst_backing, lock=lock, unlock=unlock, fail_ok=fail_ok,
-                                   auth_info=auth_info, con_ssh=con_ssh)
+    label = {'remote-storage': 'enabled' if inst_backing == 'remote' else 'disabled'}
+    code, output = assign_host_labels(host, labels=label, lock=lock, unlock=unlock, fail_ok=fail_ok,
+                                      check_first=check_first, auth_info=auth_info, con_ssh=con_ssh)
     if code > 0:
-        return code, output
+        return 1, 'Failed to assign label to {}: {}'.format(host, output)
 
-    if wait_for_host_aggregate:
+    if wait_for_configured:
         res = wait_for_host_in_instance_backing(host=host, storage_backing=inst_backing, fail_ok=fail_ok)
         if not res:
-            err = "Host {} did not appear in {} host-aggregate within timeout".format(host, inst_backing)
-            return 4, err
+            err = "Host {} is not in {} lvg within timeout".format(host, inst_backing)
+            return 2, err
 
     return 0, "{} storage backing is successfully set to {}".format(host, inst_backing)
 
 
-def wait_for_host_in_instance_backing(host, storage_backing, timeout=120, check_interval=3, fail_ok=False, con_ssh=None):
+def wait_for_host_in_instance_backing(host, storage_backing, timeout=120, check_interval=3, fail_ok=False,
+                                      con_ssh=None, auth_info=Tenant.get('admin')):
+    """
+    Wait for host instance backing to be given value via system host-lvg-show
+    Args:
+        host (str):
+        storage_backing: local_image or remote
+        timeout:
+        check_interval:
+        fail_ok:
+        con_ssh:
 
-    endtime = time.time() + timeout
-    while time.time() < endtime:
+    Returns:
+
+    """
+    storage_backing = 'local_image' if 'image' in storage_backing else storage_backing
+    end_time = time.time() + timeout
+    while time.time() < end_time:
         host_backing = get_host_instance_backing(host=host, con_ssh=con_ssh)
         if host_backing in storage_backing:
             LOG.info("{} is configured with {} backing".format(host, storage_backing))
+            inst_backings = ProjVar.get_var('INSTANCE_BACKING')
+            if not inst_backings:
+                inst_backings = get_hosts_per_storage_backing(up_only=False, auth_info=auth_info, con_ssh=con_ssh)
+                ProjVar.set_var(INSTANCE_BACKING=inst_backings)
+            elif host not in inst_backings[storage_backing]:
+                inst_backings[storage_backing].append(host)
+
+            LOG.debug("Hosts instance backing: {}".format(inst_backings))
             time.sleep(30)
             return True
 
@@ -3014,8 +3173,8 @@ def get_hosts_per_storage_backing(up_only=True, con_ssh=None, auth_info=Tenant.g
 
     hosts_per_backing = {'local_image': [], 'remote': []}
     for host in hosts:
-        backing = get_host_instance_backing(host=host, con_ssh=con_ssh, auth_info=auth_info)
-        if backing == 'image':
+        backing = get_host_instance_backing(host=host, con_ssh=con_ssh)
+        if 'image' in backing:
             hosts_per_backing['local_image'].append(host)
         elif backing == 'remote':
             hosts_per_backing['remote'].append(host)

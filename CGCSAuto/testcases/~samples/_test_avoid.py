@@ -28,13 +28,13 @@ def modify_system_backing(request):
 
     LOG.fixture_step("Modify {} storage backing to {}".format(hostname, storage_backing))
     host_helper.lock_host(hostname)
-    host_helper.modify_host_lvg(hostname, inst_backing=storage_backing, lock=False)
+    host_helper.set_host_storage_backing(hostname, inst_backing=storage_backing, lock=False)
     host_helper.unlock_hosts(hostname)
 
     def revert_host():
         LOG.fixture_step("Revert {} storage backing to local_image".format(hostname))
         host_helper.lock_host(hostname)
-        host_helper.modify_host_lvg(hostname, inst_backing='local_image', lock=False)
+        host_helper.set_host_storage_backing(hostname, inst_backing='local_image', lock=False)
         host_helper.unlock_hosts(hostname)
     request.addfinalizer(revert_host)
 
@@ -96,7 +96,8 @@ def host_to_modify(request):
 
     def revert_host():
         LOG.fixture_step("Revert {} storage backing to {} if needed".format(target_host, original_backing))
-        host_helper.modify_host_lvg(target_host, inst_backing=original_backing, check_first=True, lock=True, unlock=True)
+        host_helper.set_host_storage_backing(target_host, inst_backing=original_backing, check_first=True,
+                                             lock=True, unlock=True)
 
     request.addfinalizer(revert_host)
 
@@ -133,8 +134,8 @@ def test_something(host_to_modify, storage_backing):
     # if lock_host() has to be done inside test case, set swact=True, so it will handle CPE case
     LOG.tc_step("Modify {} storage backing to {} if not already has the matching storage backing".format(
             host_to_modify, storage_backing))
-    host_helper.modify_host_lvg(host_to_modify, inst_backing=storage_backing, check_first=True,
-                                lock=True, unlock=True)
+    host_helper.set_host_storage_backing(host_to_modify, inst_backing=storage_backing, check_first=True,
+                                         lock=True, unlock=True)
 
     LOG.tc_step("Create a flavor with specified storage backing")
     flv_id = nova_helper.create_flavor(name='test_avoid_flv', storage_backing=storage_backing)[1]

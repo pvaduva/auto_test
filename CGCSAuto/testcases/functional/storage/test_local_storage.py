@@ -1,55 +1,17 @@
-import time
-import random
 import os
 import re
-import operator
 
-from pytest import mark
 from pytest import skip
 from pytest import fixture
 
 from consts.cgcs import LocalStorage
 from consts.filepaths import WRSROOT_HOME
 
-from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from utils import cli
-from keywords import common
 from testfixtures.recover_hosts import HostsToRecover
 
-from keywords import system_helper, host_helper, local_storage_helper
-
-
-def _get_computes_for_local_backing_type(ls_type='image', con_ssh=None):
-    hosts_of_type = []
-    hosts = host_helper.get_up_hypervisors(con_ssh=con_ssh)
-
-    for host in hosts:
-        if host_helper.is_host_with_instance_backing(host, storage_type=ls_type, con_ssh=con_ssh):
-            hosts_of_type.append(host)
-
-    return hosts_of_type
-
-
-def min_no_disks_hypervisor():
-    hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
-
-    host_disks = [local_storage_helper.get_host_disk_sizes(host=hypervisor) for hypervisor in hypervisors]
-
-    LOG.debug('host_disks={}'.format(host_disks))
-    return min([len(hd.keys()) for hd in host_disks])
-
-
-@fixture(scope='module')
-def ensure_multiple_disks():
-    if min_no_disks_hypervisor() < 2:
-        skip('Every hypervisor must have 2+ hard disks')
-
-
-@fixture(scope='module')
-def ensure_two_hypervisors():
-    if len(host_helper.get_hypervisors(state='up', status='enabled')) < 2:
-        skip("Less than two up hypervisors on system")
+from keywords import system_helper, host_helper, local_storage_helper, common
 
 
 @fixture(scope='module')
@@ -114,7 +76,8 @@ class TestLocalStorage:
         if origin_lvg != local_storage:
             self._add_to_cleanup_list(to_cleanup=(host, origin_lvg, local_storage), cleanup_type='local_storage_type')
             LOG.fixture_step("(class) Set {} local storage backing to {}".format(host, local_storage))
-            self.set_local_storage_backing(host, to_type=local_storage)
+            host_helper.set_host_storage_backing(host, inst_backing=local_storage, check_first=False)
+
         return local_storage, host
 
     def _add_to_cleanup_list(self, to_cleanup=None, cleanup_type=''):
@@ -140,276 +103,6 @@ class TestLocalStorage:
         # reset the list for given type
         TestLocalStorage._cleanup_lists[list_type] = []
         return rtn_list
-
-    def apply_storage_profile(self, compute_dest, ls_type='image', profile=None, force_change=False):
-        if host_helper.is_host_with_instance_backing(compute_dest, ls_type) and not force_change:
-            msg = 'Host already has local-storage backing:{}. No need to apply profile.'.format(ls_type)
-            LOG.info(msg)
-            return -1, msg
-
-        LOG.debug('compute: {} is not in local-storage-type:{} or will force to apply'.format(compute_dest, ls_type))
-        LOG.debug('get the original local-storage-type for compute:{}'.format(compute_dest))
-        old_type = host_helper.get_host_instance_backing(compute_dest)
-
-        LOG.tc_step('Lock the host:{} for applying storage-profile'.format(compute_dest))
-        HostsToRecover.add(compute_dest, scope='function')
-        host_helper.lock_host(compute_dest, fail_ok=False, check_first=True, swact=True)
-
-        LOG.tc_step('Delete the lvg "nova-local" on host:{}'.format(compute_dest))
-        cli.system('host-lvg-delete {} nova-local'.format(compute_dest), fail_ok=False)
-
-        LOG.tc_step('Apply the storage-profile:{} onto host:{}'.format(profile, compute_dest))
-        cli.system('host-apply-storprofile {} {}'.format(compute_dest, profile), fail_ok=False)
-
-        self._add_to_cleanup_list(to_cleanup=(compute_dest, old_type, ls_type), cleanup_type='local_storage_type')
-        return 0, "Storage profile applied successfully"
-
-    def create_storage_profile(self, host, ls_type='image'):
-        prof_name = 'storprof_{}{}_{}_{}'.format(host[0], host[-1],
-                                                 ls_type, time.strftime('%Y%m%d_%H%M%S', time.localtime()))
-        prof_uuid = system_helper.create_storage_profile(host, profile_name=prof_name)
-
-        self._add_to_cleanup_list(to_cleanup=prof_uuid, cleanup_type='profile')
-
-        return prof_uuid
-
-    def set_local_storage_backing(self, compute, to_type='image'):
-        LOG.debug('lock compute:{} in order to change to new local-storage-type:{}'.format(compute, to_type))
-        HostsToRecover.add(compute, scope='function')
-        host_helper.lock_host(compute, check_first=True, swact=True)
-
-        LOG.debug('get the original local-storage-backing-type for compute:{}'.format(compute))
-        old_type = host_helper.get_host_instance_backing(compute)
-
-        LOG.info("Modify {} local storage to {}".format(compute, to_type))
-        cmd = 'host-lvg-modify -b {} {} nova-local'.format(to_type, compute)
-        cli.system(cmd, fail_ok=False)
-        self._add_to_cleanup_list(to_cleanup=(compute, old_type, to_type), cleanup_type='local_storage_type')
-
-        LOG.debug('unlock {} now'.format(compute))
-        host_helper.unlock_host(compute)
-
-    def _choose_compute_unlocked_diff_type(self, ls_type='image'):
-        computes_unlocked_diff_type = [c for c in
-                                       host_helper.get_up_hypervisors()
-                                       if not host_helper.is_host_with_instance_backing(c, storage_type=ls_type)]
-
-        if computes_unlocked_diff_type:
-            return random.choice(computes_unlocked_diff_type)
-
-        return ''
-
-    def _get_computes_unlocked_same_type(self, ls_type='image'):
-        computes_unlocked = [c for c in host_helper.get_up_hypervisors()
-                             if host_helper.is_host_with_instance_backing(c, storage_type=ls_type)]
-
-        return computes_unlocked
-
-    def select_target_compute(self, host_exclude='', ls_type='image'):
-
-        old_active_controller = system_helper.get_active_controller_name()
-
-        # otherwise chose one compute from unlocked and of different local-storage-type to apply storage-profile
-        LOG.debug('Looking for unlocked computes with different local-storage-type')
-        compute_dest = self._choose_compute_unlocked_diff_type(ls_type=ls_type)
-        if compute_dest:
-            LOG.debug('got target compute:{}, unlocked, diff local-storage-type'.format(compute_dest))
-            return compute_dest
-
-        LOG.debug('-no unlocked computes with different local-storage-type')
-
-        LOG.debug('Looking for compute unlocked with same local-storage-type')
-        candidates = self._get_computes_unlocked_same_type(ls_type=ls_type)
-        if host_exclude and host_exclude in candidates:
-            candidates.remove(host_exclude)
-
-        if candidates:
-            LOG.debug('got target compute:{}, unlocked, same local-storage-type'.format(compute_dest))
-            return candidates[0]
-
-        LOG.warn('Cannot find a target compute!?')
-        return ''
-
-    def create_storage_profile_of_type(self, host, ls_type):
-        LOG.info('From {} create a local-storage profile of backing type:{}'.format(host, ls_type))
-        prof_uuid = self.create_storage_profile(host, ls_type=ls_type)
-
-        return prof_uuid
-
-    def _get_local_storage_disk_sizes(self):
-        host_pv_sizes = {}
-        for host in host_helper.get_hypervisors():
-            host_pv_sizes[host] = local_storage_helper.get_host_lvg_disk_size(host=host, lvg_name='nova-local')
-
-        return host_pv_sizes
-
-    # Obsolete following test due to feature already covered in test_storage_profiles.py.
-    def _test_local_storage_operations(self, setup_local_storage, ensure_two_hypervisors, ensure_multiple_disks):
-        """
-        Args:
-            setup_local_storage: test fixture to configure storage backing for selected host
-            ensure_two_hypervisors
-            ensure_multiple_disks
-
-        Setup:
-
-        Test Steps:
-            1 Create a storage-profile with the expected local-storage type
-                1) if there are computes/hyperviors with the local-storage type, randomly choose one
-                2) otherwise, chose a non-active-controller, change its local-storage backing type to the expected type
-            2 Test a negative case: attempt to apply the storage-profile on an unlocked compute/hypervisor
-            3 Select one compute/hypervisor to aplly the storage-profile
-                1) if there is/are locked compute/computes with different storage-type, then randomly chose one
-                2) otherwise randomly select one unlocked with different storage-type
-                    (including the current active controller in case of CPE)
-                3) otherwise, randomly select one from locked computes
-                4) lastly, randomly choose one from the unlocked computes
-                (including the current active controller in case of CPE)
-            4 Apply the storage-profile onto the selected target compute
-                1) if the target compute/hypervisor is also the current active controller, do swact-host
-                2) lock the target compute if it's unlocked
-                3) delete it's PV attached to the LVG named 'nova-local'
-                4) delete it's LVG named 'nova-local'
-                5) apply the storage-profile onto the target compute with CLI 'system host-apply-storpofile'
-            5 Verify the local-storage type of the taget compute was successfully changed
-
-        Teardown:
-            1 delete the storage-profile created
-            2 unlock the computes/hyperviors locked for testing
-            3 restore the local-storage types changed during testing for the impacted computes
-
-        Notes:
-                will cover 3 test cases:
-                    34.  Local Storage Create/Apply/Delete – Local Image
-                    35.  Local Storage Profile Create/Apply/Delete – Remote
-                    36.  Local Storage Profile Apply (Local Image ↔ Remote)
-        """
-        local_storage_type, compute_src = setup_local_storage
-        LOG.tc_step('Create a storage-profile with the expected type of local-storage backing:{}'
-                    .format(local_storage_type))
-        prof_uuid = self.create_storage_profile_of_type(host=compute_src, ls_type=local_storage_type)
-        assert prof_uuid, 'Faild to create storage-profile for local-storage-type:{}'.format(local_storage_type)
-
-        LOG.tc_step('NEG TC: Attempt to apply the storage profile on an unlocked compute, expecting to fail')
-        try:
-            compute_unlocked = random.choice(host_helper.get_up_hypervisors())
-        except IndexError:
-            skip('No unlocked computes to create storage-profile from')
-
-        rtn_code, output = cli.system('host-apply-storprofile {} {}'.format(compute_unlocked, prof_uuid),
-                                      fail_ok=True, rtn_list=True)
-        assert 0 != rtn_code, 'Should fail to apply storage-profile:{} to unlocked host:{}' \
-            .format(prof_uuid, compute_unlocked)
-
-        computes_list = system_helper.get_computes()
-        computes_list.remove(compute_src)
-
-        found_match = False
-        for compute_dest in computes_list:
-            LOG.info("Checking compute {} is compatible with {}".format(compute_dest, compute_src))
-            if not local_storage_helper.is_storprof_applicable_to(host=compute_dest, profile=prof_uuid):
-                msg = 'storage-profile:{} is not applicable to compute:{}'.format(prof_uuid, compute_dest)
-                LOG.info(msg)
-            else:
-                found_match = True
-                msg = 'Found compute with applicable hardware: {}'.format(compute_dest)
-                LOG.info(msg)
-                break
-
-        if not found_match:
-            skip("No compute found with matching hardware")
-
-        con_ssh = ControllerClient.get_active_controller()
-
-        # Change storage backing if needed
-        if compute_dest in host_helper.get_hosts_in_storage_backing(local_storage_type, con_ssh=con_ssh, up_only=False):
-            backends = ['image', 'remote']
-            backends.remove(local_storage_type)
-            host_helper.modify_host_lvg(compute_dest, inst_backing=backends[0])
-
-        host_helper.lock_host(compute_dest)
-
-        LOG.tc_step('Apply the storage-profile:{} onto host:{}'.format(prof_uuid, compute_dest))
-        rtn_code, output = self.apply_storage_profile(compute_dest, ls_type=local_storage_type, profile=prof_uuid)
-        assert 0 == rtn_code, 'Failed to apply the storage-profile {} onto {}'.format(prof_uuid, compute_dest)
-
-        LOG.tc_step('Check if the changes take effect after unlocking')
-        host_helper.unlock_host(compute_dest)
-
-        LOG.tc_step('Verify the local-storage type changed to {} on host:{}' .format(local_storage_type, compute_dest))
-        assert host_helper.is_host_with_instance_backing(compute_dest, storage_type=local_storage_type), \
-            'Local-storage backing failed to change to {} on host:{}'.format(local_storage_type, compute_dest)
-
-    # Obsolete following test due to feature already covered in test_storage_profiles.py.
-    def _test_apply_profile_to_smaller_sized_host(self, setup_local_storage, ensure_two_hypervisors):
-        """
-
-        Args:
-            setup_local_storage: test fixture to configure storage backing for selected host
-            ensure_two_hypervisors: test fixture to skip tests when less than two hypervisors available
-
-        Returns:
-
-        Setup:
-
-        Test Steps:
-            1 check if the lab has computes with different disk sizes, if not skip the rest of the testing
-            2 find the compute having max disk size
-            3 create storage-profile on the compute with max disk size
-            4 randomly choose one of the compute
-            5 lock the selected compute
-            6 apply the storage-profile on compute, expecting to fail
-            7 verify the attempt to apply the storage-profile did not succeed
-
-        Teardown:
-            1 delete the storage-profile created
-            2 unlock the computes/hyperviors locked for testing
-            3 restore the local-storage types changed during testing for the impacted computes
-
-        Notes:
-                will cover 2 test cases:
-                    37.  Local Storage Profile Negative Test (Insufficient Resources/Different Devices)
-                        – Remote profile
-                    38.  Local Storage Profile Negative Test (Different Devices) – Local_Image profile
-        """
-        local_storage_type, compute_src = setup_local_storage
-
-        host_ls_sizes = self._get_local_storage_disk_sizes()
-        sizes = [size for _, size in host_ls_sizes.items()]
-        LOG.tc_step('Check if all the sizes of physical-volumes are the same')
-        if len(set(sizes)) <= 1:
-            msg = 'Skip the test cases, because all sizes of physical-volumes are the same'
-            skip(msg)
-
-        LOG.debug('There are differnt sizes for the pv-disks')
-        compute_with_max, size_max = max(host_ls_sizes.items(), key=operator.itemgetter(1))
-        LOG.tc_step('Create storage-profile on the compute:{} with max disk size:{}'.
-                    format(compute_with_max, size_max))
-        profile_uuid = self.create_storage_profile(compute_with_max, ls_type=local_storage_type)
-        LOG.debug('Profile:{} with max disk size:{} is created for {}'.format(size_max, profile_uuid, compute_with_max))
-        LOG.debug('host_ls_sizes={}'.format(host_ls_sizes))
-
-        LOG.tc_step('Randomly select one other than compute:{}'.format(compute_with_max))
-        other_computes = []
-        for host in host_ls_sizes.keys():
-            size = int(host_ls_sizes[host])
-            if host != compute_with_max and 0 < size < size_max:
-                other_computes.append(host)
-        assert other_computes, 'Cannot find one compute with the disk size:{} other than'.\
-            format(size_max, compute_with_max)
-
-        compute_dest = random.choice(other_computes)
-        LOG.tc_step('Attempt to apply storage-profile from {} to {}'.format(compute_with_max, compute_dest))
-
-        HostsToRecover.add(compute_dest, scope='function')
-        host_helper.lock_host(compute_dest, check_first=True, swact=True)
-
-        rtn_code, output = cli.system('host-apply-storprofile {} {}'.format(compute_dest, profile_uuid),
-                                      fail_ok=True, rtn_list=True)
-
-        LOG.tc_step('Verify the CLI failed as expected')
-        assert rtn_code == 1, 'Fail, expect to fail with return code==1, but got return code:{}, msg:{}'. \
-            format(rtn_code, output)
 
     def get_remote_storprofile_file(self, local_storage_type='image'):
         remote_file = os.path.join(WRSROOT_HOME, '{}_storage_profile_to_import.xml'.format(local_storage_type))
@@ -533,48 +226,6 @@ class TestLocalStorage:
 
         return True
 
-    def get_impt_lsprof_by_name(self, name, impt_lsprf):
-        for uuid in impt_lsprf.keys():
-            if 'name' in impt_lsprf[uuid] and name == impt_lsprf[uuid]['name']:
-                return impt_lsprf[uuid]
-
-        LOG.error('No imported local-storage profile found with name {}'.format(name))
-        assert 0
-        return {}
-
-    def compare_single_local_storprof(self, xmlprof, imptprof):
-        if not self.compare_ls_disks(xmlprof['disk'], imptprof['disk']):
-            LOG.error('disk setting MISMATCH for local-storage profile:{}'.format(xmlprof['name']))
-            return False
-
-        if not self.compare_ls_lvginfo(xmlprof['lvg'], imptprof['lvg']):
-            LOG.error('lvg setting MISMATCH for local-storage profile:{}'.format(xmlprof['name']))
-            return False
-
-        return True
-
-    def compare_local_storage_profile(self, xml_lsprf, pstimt_lsprf):
-        for xmlprof in xml_lsprf:
-            name = xmlprof['name']
-            impt_prof = self.get_impt_lsprof_by_name(name, pstimt_lsprf)
-            if not impt_prof or not self.compare_single_local_storprof(xmlprof, impt_prof):
-                LOG.error('local storage profile mismatch between imported and from XML:{}'.format(name))
-                return 1
-        return 0
-
-    def check_imported_storprofiles(self, xml_profiles=None):
-        post_import_storprofiles = local_storage_helper.get_existing_storprofiles()
-
-        if self.is_storage_node():
-            assert 0 == self.compare_storage_profile(xml_profiles['storageProfile'],
-                                                     post_import_storprofiles['storage']), \
-                'Improted storage-profiles MISMATCH XML profile'
-
-        assert 0 == self.compare_local_storage_profile(xml_profiles['localstorageProfile'],
-                                                       post_import_storprofiles['localstorage']),\
-            'Improted local-storage-profiles MISMATCH XML profile'
-        return 0
-
     def verify_storage_profile_imported(self, profile='', msg_import='', pre_import_storprofiles=None):
 
         from_xml_profile = local_storage_helper.parse_storprofiles_from_xml(xml_file=profile)
@@ -582,8 +233,27 @@ class TestLocalStorage:
         assert 0 == self.check_warn_msg(msg_import=msg_import, existing_profiles=pre_import_storprofiles),\
             'Incorrect CLI messages'
 
-        assert 0 == self.check_imported_storprofiles(xml_profiles=from_xml_profile),\
-            'Imported storage-profiles do not match settings from XML file'
+        post_import_storprofiles = local_storage_helper.get_existing_storprofiles()
+
+        if self.is_storage_node():
+            assert 0 == self.compare_storage_profile(from_xml_profile['storageProfile'],
+                                                     post_import_storprofiles['storage']), \
+                'Improted storage-profiles MISMATCH XML profile'
+
+        impt_prof = None
+        pstimt_lsprf = post_import_storprofiles['localstorage']
+        for xmlprof in from_xml_profile['localstorageProfile']:
+            name = xmlprof['name']
+            for uuid in pstimt_lsprf.keys():
+                if 'name' in pstimt_lsprf[uuid] and name == pstimt_lsprf[uuid]['name']:
+                    impt_prof = pstimt_lsprf[uuid]
+
+            assert impt_prof, 'No imported local-storage profile found with name {}'.format(name)
+            assert self.compare_ls_disks(xmlprof['disk'], impt_prof['disk']), \
+                'disk setting MISMATCH for local-storage profile:{}'.format(xmlprof['name'])
+
+            assert self.compare_ls_lvginfo(xmlprof['lvg'], impt_prof['lvg']), \
+                'lvg setting MISMATCH for local-storage profile:{}'.format(xmlprof['name'])
 
         return 0
 
@@ -609,8 +279,6 @@ class TestLocalStorage:
         Notes:
             will cover 1 test cases:
                 39.  Local Storage Profile Import
-        Returns:
-
         """
 
         local_storage_type, compute_src = setup_local_storage
