@@ -221,7 +221,7 @@ class VolumesPage(basepage.BasePage):
         if description is not None:
             snapshot_form.description.text = description
         snapshot_form.submit()
-        return VolumesnapshotsPage(self.driver)
+        return VolumesnapshotsPage(self.driver, port=self.port)
 
     def extend_volume(self, name, new_size, fail_ok=False):
         row = self._get_row_with_volume_name(name)
