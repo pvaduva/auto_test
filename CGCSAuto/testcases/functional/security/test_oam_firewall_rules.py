@@ -17,7 +17,9 @@ from keywords import host_helper, system_helper, common, dc_helper
 from testfixtures.recover_hosts import HostsToRecover
 
 
-def test_status_firewall_reboot():
+
+# TODO: Disable the test case because filewall is disabled now (CGTS-10759)
+def _test_status_firewall_reboot():
     """
     Test iptables status after reboot of controller
 
@@ -147,7 +149,9 @@ def delete_file(get_custom_firewall_rule, request):
     return invalid_rules_file, invalid_rules_path, firewall_rules_path, cli_client
 
 
-def test_invalid_firewall_rules(delete_file):
+
+# TODO: Disable the test case because filewall is disabled now (CGTS-10759)
+def _test_invalid_firewall_rules(delete_file):
     """
     Verify invalid firewall install files name & invalid file
     Test Setup:
