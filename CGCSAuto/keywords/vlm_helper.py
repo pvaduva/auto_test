@@ -257,7 +257,7 @@ def power_off_hosts(hosts, lab=None, reserve=True, count=1):
 
 
 def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,
-                   hosts_to_check=None, con_ssh=None, region=None, count=1):
+                   hosts_to_check=None, con_ssh=None, region=None, count=1, check_interval=10):
     """
 
     Args:
@@ -267,6 +267,7 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
         reconnect (bool): whether or reconnect to lab via ssh after power on. Useful when power on controllers
         reconnect_timeout (int): max seconds to wait before reconnect succeeds
         hosts_to_check (list|str|None): host(s) to perform post check after power-on. when None, hosts_to_check=hosts
+        check_interval (int)
         con_ssh (SSHClient):
         region:
         count (int): how many times to perform the action
@@ -290,14 +291,15 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
         if reconnect:
             con_ssh.connect(retry=True, retry_timeout=reconnect_timeout)
             host_helper._wait_for_openstack_cli_enable(con_ssh=con_ssh, auth_info=auth_info, timeout=300,
-                                                       reconnect=True)
+                                                       reconnect=True, check_interval=check_interval)
 
         if not hosts_to_check:
             hosts_to_check = hosts
         elif isinstance(hosts_to_check, str):
             hosts_to_check = [hosts_to_check]
 
-        host_helper.wait_for_hosts_ready(hosts_to_check, auth_info=auth_info, con_ssh=con_ssh)
+        host_helper.wait_for_hosts_ready(hosts_to_check, auth_info=auth_info, con_ssh=con_ssh,
+                                         check_interval=check_interval)
 
 
 def reboot_hosts(hosts, lab=None, reserve=True, post_check=True, reconnect=True, reconnect_timeout=HostTimeout.REBOOT,

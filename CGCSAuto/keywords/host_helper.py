@@ -315,7 +315,7 @@ def recover_simplex(con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
 
 
 def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ssh=None, auth_info=Tenant.get('admin'),
-                         timeout=None):
+                         timeout=None, check_interval=None):
     """
     Wait for hosts to be in online state if locked, and available and hypervisor/webservice up if unlocked
     Args:
@@ -325,6 +325,7 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
         con_ssh:
         auth_info
         timeout
+        check_interval
 
     Returns:
 
@@ -339,6 +340,8 @@ def wait_for_hosts_ready(hosts, fail_ok=False, check_task_affinity=False, con_ss
 
     res_lock = res_unlock = True
     timeout_args = {'timeout': timeout} if timeout else {}
+    if check_interval:
+        timeout_args['check_interval'] = check_interval
     from keywords.kube_helper import wait_for_nodes_ready
     if expt_online_hosts:
         LOG.info("Wait for hosts to be online: {}".format(hosts))

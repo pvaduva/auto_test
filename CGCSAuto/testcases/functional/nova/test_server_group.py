@@ -43,7 +43,7 @@ def create_flavor_and_server_group(storage_backing=None, policy=None):
     mark.priorities('nightly', 'domain_sanity', 'sx_nightly')(('affinity', 2)),
     ('soft_anti_affinity', 3),
     mark.priorities('nightly', 'domain_sanity')(('anti_affinity', 2)),   # For system with 2+ hypervisors
-    # ('soft_affinity', 3),     TODO add after cutover
+    ('soft_affinity', 3),
 ])
 def test_server_group_boot_vms(policy, vms_num, check_system):
     """
