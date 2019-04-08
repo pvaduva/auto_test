@@ -1126,7 +1126,7 @@ def _is_live_migration_allowed(vm_id, vm_host, con_ssh=None, block_migrate=None)
 
     if storage_backing == 'local_image':
         if block_migrate and vm_boot_from == 'volume' and not vm_info.has_local_disks():
-            LOG.warning("Live block migration is not supported for boot-from-volume vm with local_lvm storage")
+            LOG.warning("Live block migration is not supported for boot-from-volume vm with local_image storage")
             return False
         return True
 

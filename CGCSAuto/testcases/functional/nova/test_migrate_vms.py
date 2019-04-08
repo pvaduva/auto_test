@@ -146,7 +146,7 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
     LOG.tc_step("Live migrate VM and ensure it's rejected with proper error message")
     # block_mig = True if boot_source == 'image' else False
     code, output = vm_helper.live_migrate_vm(vm_id, block_migrate=block_mig)
-    assert 1 == code, "Expect live migration to have expected fail. Actual: {}".format(output)
+    assert 2 == code, "Expect live migration to have expected fail. Actual: {}".format(output)
 
     # Remove below code due to live-migration is async in newton
     # assert 'Unexpected API Error'.lower() not in output.lower(), "'Unexpected API Error' returned."
