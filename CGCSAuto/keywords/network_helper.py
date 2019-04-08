@@ -558,6 +558,85 @@ def delete_security_group(group_id, fail_ok=False, auth_info=Tenant.get('admin')
     return cli.openstack("security group delete", group_id, fail_ok=fail_ok, auth_info=auth_info)
 
 
+def create_security_group_rule(group=None, remote_ip=None, remote_group=None, description=None, dst_port=None,
+                               icmp_type=None, icmp_code=None, protocol=None, ingress=None, egress=None,
+                               ethertype=None, project=None, project_domain=None, fail_ok=False, auth_info=None,
+                               con_ssh=None):
+    """
+    Create security group rule for given security group
+    Args:
+        group:
+        remote_ip:
+        remote_group:
+        description:
+        dst_port:
+        icmp_type:
+        icmp_code:
+        protocol:
+        ingress:
+        egress:
+        ethertype:
+        project:
+        project_domain:
+        fail_ok:
+        auth_info:
+        con_ssh:
+
+    Returns:
+
+    """
+    if not group:
+        groups = get_security_groups(name='default', project=project, project_domain=project_domain,
+                                     auth_info=auth_info, con_ssh=con_ssh)
+        if len(groups) != 1:
+            return ValueError('group has to be specified when multiple default groups exist')
+        group = groups[0]
+
+    args_dict = {
+        'remote-ip': remote_ip,
+        'remote-group': remote_group,
+        'description': description,
+        'dst-port': dst_port,
+        'icmp-type': icmp_type,
+        'icmp-code': icmp_code,
+        'protocol': protocol,
+        'ingress': ingress,
+        'egress': egress,
+        'ethertype': ethertype,
+        'project': project,
+        'project-domain': project_domain
+    }
+    args = ' '.join((common.parse_args(args_dict), group))
+
+    LOG.info("Creating security group rule for group {}".format(group))
+    code, output = cli.openstack('security group rule create', args, ssh_client=con_ssh, auth_info=auth_info,
+                                 fail_ok=fail_ok, rtn_list=True)
+    if code > 0:
+        return 1, output
+
+    LOG.info("Security group rule created successfully for group {}: {}".format(group, args))
+    return 0, group
+
+
+def get_security_group_rules(protocol=None, ingress=None, egress=None, auth_info=None, con_ssh=None, **filters):
+    """
+    Get security group rules
+    Args:
+        protocol:
+        ingress:
+        egress:
+        auth_info:
+        con_ssh:
+        **filters: header value pairs for security group rules table
+
+    Returns (list):
+
+    """
+    output = cli.openstack('security group rule list --long', ssh_client=con_ssh, auth_info=auth_info)
+    table_ = table_parser.table(output)
+    return table_parser.get_values(table_, 'ID', **filters)
+
+
 def update_net_qos(net_id, qos_id=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Update network qos to given value
@@ -1033,11 +1112,18 @@ def get_providernet_ranges(rtn_val='name', range_name=None, providernet_name=Non
     return table_parser.get_values(table_, rtn_val, strict=strict, **kwargs)
 
 
-def get_security_group(name=None, con_ssh=None, auth_info=None):
+def get_security_groups(name=None, project=None, project_domain=None, tags=None, any_tags=None, not_tags=None,
+                        not_any_tags=None, con_ssh=None, auth_info=None):
     """
         Get the neutron security group list based on name if given for given user.
 
         Args:
+            project
+            project_domain
+            tags (list|tuple|str|None)
+            any_tags (list|tuple|str|None)
+            not_tags (list|tuple|str|None)
+            not_any_tags (list|tuple|str|None)
             con_ssh (SSHClient): If None, active controller ssh will be used.
             auth_info (dict): Tenant dict. If None, primary tenant will be used.
             name (str): Given name for the security group to filter
@@ -1045,7 +1131,17 @@ def get_security_group(name=None, con_ssh=None, auth_info=None):
         Returns (str): Neutron security group id.
 
     """
-    table_ = table_parser.table(cli.neutron('security-group-list', ssh_client=con_ssh, auth_info=auth_info))
+    args_dict = {
+        'project': project,
+        'project_domain': project_domain,
+        'tags': tags,
+        'any-tags': any_tags,
+        'not-tags': not_tags,
+        'not-any-tags': not_any_tags,
+    }
+    args = common.parse_args(args_dict, vals_sep=',')
+
+    table_ = table_parser.table(cli.openstack('security group list', args, ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
         return table_parser.get_values(table_, 'id')
 

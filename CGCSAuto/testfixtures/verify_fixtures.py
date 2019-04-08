@@ -78,6 +78,28 @@ def check_i40e_hosts(request):
 
 @fixture(scope='session', autouse=True)
 def pre_alarms_session():
+    if container_helper.is_stx_openstack_deployed():
+        from keywords import network_helper
+        for auth_info in (Tenant.get_primary(), Tenant.get_secondary()):
+            project = auth_info['tenant']
+            default_group = network_helper.get_security_groups(auth_info=auth_info, name='default')[0]
+            if not default_group:
+                LOG.info("No default security group for {}. Skip security group rule config.".format(project))
+                continue
+
+            security_rules = network_helper.get_security_group_rules(
+                auth_info=auth_info, **{'IP Protocol': ('tcp', 'icmp'), 'Security Group': default_group})
+            if len(security_rules) >= 2:
+                LOG.info("Default security group rules for {} already configured to allow ping and ssh".format(project))
+                continue
+
+            LOG.info("Create icmp and ssh security group rules for {} with best effort".format(project))
+            for rules in (('icmp', None), ('tcp', 22)):
+                protocol, dst_port = rules
+                network_helper.create_security_group_rule(group=default_group, protocol=protocol, dst_port=dst_port,
+                                                          fail_ok=True, auth_info=auth_info)
+
+
     return __get_alarms('session')
 
 

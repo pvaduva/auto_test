@@ -99,7 +99,7 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
                 resource_found = resource_found[0] in router_subnets
 
     elif to_verify is 'security_group':
-        resource_found = network_helper.get_security_group(name='SecurityGroupDeluxe')
+        resource_found = network_helper.get_security_groups(name='SecurityGroupDeluxe')
     elif to_verify is 'key_pair':
         kp_name = getattr(Heat, template_name)['key_pair_name']
         resource_found = nova_helper.get_key_pair(name=kp_name)
