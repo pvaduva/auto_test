@@ -127,7 +127,10 @@ class HostsToRecover():
             if not res2:
                 err_msg.append("Some host(s) from {} are not available.".format(unlocked_hosts))
 
+        host_helpler._wait_for_openstack_cli_enable()
+
         hypervisors = host_helper.get_hypervisors()
+
         hypervisors_recovered = list(set(hypervisors) & set(hostnames))
         if hypervisors_recovered:
             LOG.fixture_step("({}) Wait for unlocked hypervisors up: {}".format(scope, hypervisors_recovered))
