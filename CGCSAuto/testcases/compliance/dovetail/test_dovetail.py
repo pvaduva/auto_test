@@ -87,4 +87,3 @@ def scp_and_parse_logs():
     # parse logs to summary.txt
     localhost.exec_cmd('grep --color=never -E "Pass Rate|pass rate|FAIL|SKIP|TestSuite|Duration: " '
                        '{}/compliance/dovetail.log > {}/compliance/summary.txt'.format(dest_dir, dest_dir))
-

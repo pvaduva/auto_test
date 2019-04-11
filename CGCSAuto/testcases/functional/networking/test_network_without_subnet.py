@@ -30,7 +30,7 @@ def setups(request):
         skip("Feature only supported by AVS")
     
     LOG.fixture_step("Add port_security service parameter")
-    system_helper.enable_port_security_param()
+    system_helper.update_ml2_extension_drivers(drivers='port_security')
 
     network_quota = network_helper.get_quota('network')
     instance_quota = nova_helper.get_quotas('instances')[0]

@@ -14,12 +14,6 @@ GUEST_OS = 'ubuntu_14'
 VMS_COUNT = 4
 
 
-@fixture(scope='module', autouse=True)
-def skip_for_ovs():
-    if not system_helper.is_avs():
-        skip('DNAT unsupported by OVS')
-
-
 @fixture(scope='module')
 def router_info(request):
     LOG.fixture_step("Enable snat on tenant router")

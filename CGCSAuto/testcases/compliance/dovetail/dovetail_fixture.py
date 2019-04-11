@@ -56,7 +56,7 @@ def pre_configs(request):
     port_security = network_helper.get_net_show_values('external-net0', 'port_security_enabled')[0]
     port_security = eval(port_security)
     if not port_security:
-        system_helper.enable_port_security_param()
+        system_helper.update_ml2_extension_drivers(drivers='port_security')
         networks = network_helper.get_networks(auth_info=Tenant.get('admin'))
         for net in networks:
             network_helper.set_network(net_id=net, enable_port_security=True)

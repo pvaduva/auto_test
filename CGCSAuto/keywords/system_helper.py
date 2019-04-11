@@ -1,7 +1,8 @@
-import math
 import re
+import os
 import time
 import copy
+import math
 import configparser
 
 from pytest import skip
@@ -9,6 +10,7 @@ from pytest import skip
 from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import UUID, Prompt, Networks, SysType, EventLogID, PLATFORM_NET_TYPES
 from consts.proj_vars import ProjVar
+from consts.filepaths import WRSROOT_HOME
 from consts.timeout import SysInvTimeout
 from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
@@ -4017,18 +4019,77 @@ def get_networks(rtn_val='type', con_ssh=None, **kwargs):
     return table_parser.get_values(table_, target_header=rtn_val, **kwargs)
 
 
-def enable_port_security_param():
+def update_ml2_extension_drivers(drivers, enable=True, auth_info=Tenant.get('admin'), con_ssh=None):
     """
-    Enable port security param
-    Returns:
+    Enable port security extension driver via helm-override-update if not already enabled
+
+    Args:
+        drivers (str|list|tuple):
+        enable (bool): whether to enable or disable given ml2 extension driver(s)
+        auth_info:
+        con_ssh:
+
+    Returns (tuple):
 
     """
-    code = create_service_parameter(service='network', section='ml2', name='extension_drivers',
-                                    value='port_security', apply=False)[0]
-    if 0 == code:
-        LOG.info("Apply network service parameter and lock/unlock computes")
-        apply_service_parameters(service='network', wait_for_config=False)
-        wait_and_clear_config_out_of_date_alarms(host_type='compute')
+    if isinstance(drivers, str):
+        drivers = (drivers, )
+
+    from keywords import container_helper
+    known_drivers = ['port_security', 'qos', 'dns']
+    all_drivers = known_drivers + [driver for driver in drivers if driver not in known_drivers]
+    chart = 'neutron'
+
+    LOG.info("Check existing ml2 extension_drivers")
+    field = 'combined_overrides'
+    combined_overrides = container_helper.get_helm_override_info(chart, namespace='openstack', fields=field)[0]
+    current_drivers = combined_overrides['conf'].get('plugins', {}).get('ml2_conf', {}).get('ml2', {}).\
+        get('extension_drivers', '').split(sep=',')
+
+    if enable:
+        expt_drivers = set(current_drivers + list(drivers))
+        # convert expt_drivers to ordered list by removing unwanted drivers from ordered all_drivers list
+        drivers_to_remove = set(all_drivers) - expt_drivers
+        expt_drivers = [driver for driver in all_drivers if driver not in drivers_to_remove]
+    else:
+        expt_drivers = [driver for driver in current_drivers if driver not in drivers]
+
+    if expt_drivers == current_drivers:
+        LOG.info("ml2 extension drivers already set to {}. Do nothing.".format(expt_drivers))
+        return -1, current_drivers
+
+    path = 'conf.plugins.ml2_conf.ml2.extension_drivers'
+    new_value = ','.join(expt_drivers)
+    LOG.info("Update neutron helm-override: {}={}".format(path, new_value))
+    if len(expt_drivers) <= 1:
+        kw_args = {'kv_pairs': {path: new_value}}
+    else:
+        content = """
+        conf:
+          plugins:
+            ml2_conf:
+              ml2: 
+                extension_drivers: {}
+        """.format(new_value)
+        yaml_file = os.path.join(WRSROOT_HOME, 'ml2_drivers.yaml')
+        if not con_ssh:
+            con_ssh = ControllerClient.get_active_controller()
+            con_ssh.exec_cmd('rm -f {}'.format(yaml_file), get_exit_code=False)
+            con_ssh.exec_cmd("echo '{}' >> {}".format(content, yaml_file))
+        kw_args = {'yaml_file': yaml_file}
+
+    container_helper.update_helm_override(chart=chart, namespace='openstack', auth_info=auth_info, con_ssh=con_ssh,
+                                          **kw_args)
+    post_overrides = container_helper.get_helm_override_info(chart, namespace='openstack', fields=field)[0]
+    post_drivers = post_overrides['conf'].get('plugins', {}).get('ml2_conf', {}).get('ml2', {}). \
+        get('extension_drivers', '').split(sep=',')
+
+    if not post_drivers == expt_drivers:
+        raise exceptions.SysinvError("ml2 extension_drivers override is not reflected")
+
+    LOG.info("Re-apply stx-openstack application")
+    container_helper.apply_app(app_name='stx-openstack', applied_timeout=1200, auth_info=auth_info, con_ssh=con_ssh)
+    return 0, post_drivers
 
 
 def get_ptp_vals(rtn_val='mode', rtn_dict=False, con_ssh=None):

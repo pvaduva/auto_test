@@ -14,8 +14,8 @@ def setup_port_security():
         source = "{}/port_security/vm{}-userdata.txt".format(TestServerPath.USER_DATA, i)
         common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=TiSPath.USERDATA)
 
-    LOG.fixture_step("Enable port security service parameter on system")
-    system_helper.enable_port_security_param()
+    LOG.fixture_step("Enable port security ml2 extension driver on system")
+    system_helper.update_ml2_extension_drivers(drivers='port_security')
 
     LOG.fixture_step("Select neutron networks to test")
     internal_net_id = network_helper.get_internal_net_id()

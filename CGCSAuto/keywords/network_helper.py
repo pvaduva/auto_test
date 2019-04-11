@@ -488,25 +488,21 @@ def set_network(net_id, name=None, enable=None, share=None, enable_port_security
     return 0, msg
 
 
-def __compose_args(optional_args_dict, *other_args):
-    args = []
-    for key, val in optional_args_dict.items():
-        if val is not None:
-            arg = key + ' ' + val
-            args.append(arg)
-    return ' '.join(args + list(other_args))
-
-
-def create_security_group(name, project=None, description=None, auth_info=None, fail_ok=False, cleanup='function'):
+def create_security_group(name, project=None, description=None, project_domain=None, tag=None, no_tag=None,
+                          auth_info=None, fail_ok=False, con_ssh=None, cleanup='function'):
     """
     Create a security group
     Args:
         name (str):
         project
+        project_domain
+        tag (str|None|list|tuple)
+        no_tag (bool|None)
         description (str):
         auth_info (dict):
             create under this project
         fail_ok (bool):
+        con_ssh
         cleanup (str):
 
     Returns (str|tuple):
@@ -515,31 +511,27 @@ def create_security_group(name, project=None, description=None, auth_info=None, 
         (0, identifier) succeeded
         (1, msg) failed
     """
-    if auth_info is None:
-        auth_info = Tenant.get_primary()
-
     args_dict = {
-        # '--project-domain': auth_info["region"],
-        '--descritpion': description
+        '--project': project,
+        '--project-domain': project_domain,
+        '--description': description,
+        '--tag': tag,
+        '--no-tag': no_tag,
     }
+    args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True), name)
 
-    if project is not None:
-        args_dict['--project'] = project
+    code, output = cli.openstack("security group create", args, fail_ok=fail_ok, auth_info=auth_info,
+                                 ssh_client=con_ssh, rtn_list=True)
+    if code > 0:
+        return 1, output
 
-    table_ = cli.openstack("security group create", __compose_args(args_dict, name),
-                           fail_ok=fail_ok, auth_info=auth_info)
-    if fail_ok:
-        code, table_ = table_
-        if code:
-            return code, table_
-    table_ = table_parser.table(table_)
-    identifier = table_parser.get_value_two_col_table(table_, 'id')
+    table_ = table_parser.table(output)
+    group_id = table_parser.get_value_two_col_table(table_, 'id')
     if cleanup:
-        ResourceCleanup.add('security_group', identifier, scope=cleanup)
-    LOG.info("Security group created: name={} id={}".format(name, identifier))
-    if fail_ok:
-        return 0, identifier
-    return identifier
+        ResourceCleanup.add('security_group', group_id, scope=cleanup)
+
+    LOG.info("Security group created: name={} id={}".format(name, group_id))
+    return 0, group_id
 
 
 def delete_security_group(group_id, fail_ok=False, auth_info=Tenant.get('admin')):
@@ -561,7 +553,7 @@ def delete_security_group(group_id, fail_ok=False, auth_info=Tenant.get('admin')
 def create_security_group_rule(group=None, remote_ip=None, remote_group=None, description=None, dst_port=None,
                                icmp_type=None, icmp_code=None, protocol=None, ingress=None, egress=None,
                                ethertype=None, project=None, project_domain=None, fail_ok=False, auth_info=None,
-                               con_ssh=None):
+                               con_ssh=None, rtn_val='id'):
     """
     Create security group rule for given security group
     Args:
@@ -581,6 +573,7 @@ def create_security_group_rule(group=None, remote_ip=None, remote_group=None, de
         fail_ok:
         auth_info:
         con_ssh:
+        rtn_val (str)
 
     Returns:
 
@@ -608,14 +601,16 @@ def create_security_group_rule(group=None, remote_ip=None, remote_group=None, de
     }
     args = ' '.join((common.parse_args(args_dict), group))
 
-    LOG.info("Creating security group rule for group {}".format(group))
+    LOG.info("Creating security group rule for group {} with args: {}".format(group, args))
     code, output = cli.openstack('security group rule create', args, ssh_client=con_ssh, auth_info=auth_info,
                                  fail_ok=fail_ok, rtn_list=True)
     if code > 0:
         return 1, output
 
-    LOG.info("Security group rule created successfully for group {}: {}".format(group, args))
-    return 0, group
+    table_ = table_parser.table(output)
+    value = table_parser.get_value_two_col_table(table_, rtn_val)
+    LOG.info("Security group rule created successfully for group {} with {}={}".format(group, rtn_val, value))
+    return 0, value
 
 
 def get_security_group_rules(protocol=None, ingress=None, egress=None, auth_info=None, con_ssh=None, **filters):
@@ -632,9 +627,37 @@ def get_security_group_rules(protocol=None, ingress=None, egress=None, auth_info
     Returns (list):
 
     """
-    output = cli.openstack('security group rule list --long', ssh_client=con_ssh, auth_info=auth_info)
+    args_dict = {
+        'protocol': protocol,
+        'ingress': ingress,
+        'egress': egress,
+    }
+    args =  common.parse_args(args_dict)
+    output = cli.openstack('security group rule list --long', args, ssh_client=con_ssh, auth_info=auth_info)
     table_ = table_parser.table(output)
     return table_parser.get_values(table_, 'ID', **filters)
+
+
+def add_icmp_and_tcp_rules(security_group, auth_info=None, con_ssh=None):
+    """
+    Add icmp and tcp security group rules to given security group to allow ping and ssh
+    Args:
+        security_group (str):
+        auth_info:
+        con_ssh:
+
+    """
+    security_rules = get_security_group_rules(con_ssh=con_ssh, auth_info=auth_info,
+                                              **{'IP Protocol': ('tcp', 'icmp'), 'Security Group': security_group})
+    if len(security_rules) >= 2:
+        LOG.info("Security group rules for {} already exist to allow ping and ssh".format(security_group))
+        return
+
+    LOG.info("Create icmp and ssh security group rules for {} with best effort".format(security_group))
+    for rules in (('icmp', None), ('tcp', 22)):
+        protocol, dst_port = rules
+        create_security_group_rule(group=security_group, protocol=protocol, dst_port=dst_port, fail_ok=True,
+                                   auth_info=auth_info)
 
 
 def update_net_qos(net_id, qos_id=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):

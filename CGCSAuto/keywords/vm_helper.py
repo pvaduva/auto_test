@@ -5223,7 +5223,7 @@ def ping_between_routed_vms(to_vm, from_vm, vshell=True, bidirectional=True, tim
 def setup_kernel_routing(vm_id, **kwargs):
     """
     Setup kernel routing function for the specified VM
-    replciates the operation as in wrs_guest_setup.sh (and comes with the same assumptions)
+    replicates the operation as in wrs_guest_setup.sh (and comes with the same assumptions)
     in order to persist kernel routing after reboots, the operation has to be stored in /etc/init.d
     see TisInitServiceScript for script details
     no fail_ok option, since if failed, the vm's state is undefined

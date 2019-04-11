@@ -43,41 +43,22 @@ def skip_if_25g():
 
 
 @fixture(scope='module')
-def security_groups(request):
+def security_groups():
     LOG.fixture_step("(module) Ensure neutron port security is enabled")
-    system_helper.enable_port_security_param()
+    system_helper.update_ml2_extension_drivers(drivers='port_security')
     networks = network_helper.get_networks(auth_info=Tenant.get('admin'))
     for net in networks:
         network_helper.set_network(net_id=net, enable_port_security=True)
 
-    def disable_port_security_for_networks():
-        for net_ in networks:
-            network_helper.set_network(net_id=net_, enable_port_security=False)
-    request.addfinalizer(disable_port_security_for_networks)
+    LOG.fixture_step("(module) Create two security groups for each tenant")
+    group_ids = []
+    group_name = 'test_pkt_typ_sec_rul_enf'
+    for auth_info in (Tenant.get_primary(), Tenant.get_secondary()):
+        group_id = network_helper.create_security_group(group_name, auth_info=auth_info, cleanup='class')[1]
+        network_helper.add_icmp_and_tcp_rules(group_name, auth_info=auth_info)
+        group_ids.append(group_id)
 
-    LOG.fixture_step("(module) Create two security groups")
-    sg_primary = network_helper.create_security_group(
-        "test_pkt_typ_sec_rul_enf", auth_info=Tenant.get_primary(), cleanup='class')
-    sg_secondary = network_helper.create_security_group(
-        "test_pkt_typ_sec_rul_enf", auth_info=Tenant.get_secondary(), cleanup='class')
-
-    # required by ping_vms
-    cli.openstack(
-        "security group rule create",
-        "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.get('admin'))
-    cli.openstack(
-        "security group rule create",
-        "--protocol icmp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.get('admin'))
-
-    # required by routing and ssh (TCP), could be restricted to ranges over internal-network and mgmt-network
-    cli.openstack(
-        "security group rule create",
-        "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary), auth_info=Tenant.get('admin'))
-    cli.openstack(
-        "security group rule create",
-        "--protocol tcp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary), auth_info=Tenant.get('admin'))
-
-    return sg_primary, sg_secondary
+    return group_ids
 
 
 class TestPacketTypeSecurity:
@@ -186,7 +167,7 @@ class TestPacketTypeSecurity:
             assert not succ, "udp traffic successfully passed through"
 
             LOG.tc_step("Allow UDP traffic on the fly and verify traffic comes back to normal")
-            with udp_allow(*security_groups) as modified_groups:
+            with udp_allow(*security_groups):
                 session.get_frames_delta(stable=True)   # raises if the delta is increasing (i.e., udp denied)
 
             LOG.tc_step("Verify UDP traffic is no longer allowed")
@@ -235,7 +216,7 @@ def test_security_group_and_rule_create_reject_when_max_reached():
     sec_group = None
     for i in range(max_secgroups - in_use_secgroups):
         # take the last security group for rules creation
-        sec_group = network_helper.create_security_group('test_max_reached_creation_fail', auth_info=auth_info)
+        sec_group = network_helper.create_security_group('test_max_reached_creation_fail', auth_info=auth_info)[1]
     assert sec_group
 
     LOG.tc_step("Verify security group creation fail as quota is reached")
@@ -269,18 +250,10 @@ def test_security_group_and_rule_create_reject_when_max_reached():
 @contextmanager
 def udp_allow(sg_primary, sg_secondary):
     LOG.info("Creating rules to allow UDP ingress for {} and {}".format(sg_primary, sg_secondary))
-    table = table_parser.table(
-        cli.openstack(
-            "security group rule create", "--protocol udp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_primary),
-            auth_info=Tenant.get('admin')))
-    udp_primary = table_parser.get_value_two_col_table(table, 'id')
-
-    table = table_parser.table(
-        cli.openstack(
-            "security group rule create", "--protocol udp --remote-ip 0.0.0.0/0 --ingress {}".format(sg_secondary),
-            auth_info=Tenant.get('admin')))
-    udp_secondary = table_parser.get_value_two_col_table(table, 'id')
-
+    udp_primary = network_helper.create_security_group_rule(sg_primary, remote_ip='0.0.0.0/0', ingress=True,
+                                                            protocol='udp', auth_info=Tenant.get('admin'))[1]
+    udp_secondary = network_helper.create_security_group_rule(sg_primary, remote_ip='0.0.0.0/0', ingress=True,
+                                                              protocol='udp', auth_info=Tenant.get('admin'))[1]
     yield sg_primary, sg_secondary
 
     LOG.info("Deleting UDP ingress rules for {} and {}".format(sg_primary, sg_secondary))
