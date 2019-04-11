@@ -266,8 +266,8 @@ class TestDnsSettings:
             # TODO: disable for now because IPv6 is not supported yet
             # (('fd00:0:0:21::5', '2001:db8::'), 'apply'),
             (('10.10.10.3', '10.256.0.1', '8.8.8.8'), None),
-            (('8.8.8.8', '8.8.4.4'), 'RANDOM'),
             (('128.224.144.130', '147.11.57.128', '147.11.57.133'), 'apply'),
+            (('8.8.8.8', '8.8.4.4'), 'RANDOM'),
         ],
         ids=id_gen
     )
@@ -318,6 +318,9 @@ class TestDnsSettings:
 
         if with_action_option is not None and with_action_option.upper() == 'RANDOM':
             with_action_option = ''.join(random.choice(string.ascii_lowercase) for _ in range(6))
+            if with_action_option.upper() != 'APPLY':
+                LOG.info('with_action_option.upper: "%s", expecting to fail', with_action_option.upper()) 
+                expect_fail = True
 
         LOG.tc_step('\nAttempt to change the DNS servers to: {}'.format(ip_addr_list))
         code, msg = system_helper.set_dns_servers(fail_ok=expect_fail,
@@ -326,8 +329,14 @@ class TestDnsSettings:
                                                   with_action_option=with_action_option,
                                                   con_ssh=None)
 
-        if expect_fail:
-            assert 1 == code, 'Request to change DNS servers to invalid IP: "{}" should be rejected, msg:"{}"'.format(
+        if code == -1 and ip_addr_list == old_dns_servers:
+            LOG.info('New DNS servers are the same as current DNS servers, PASS the test.\n%s, %s, %s, %s',
+                    'attempting change to:',
+                    ip_addr_list,
+                    'current:',
+                    old_dns_servers) 
+        elif expect_fail:
+            assert code != 0, 'Request to change DNS servers should be rejected but not: new Servers: "{}", msg: "{}"'.format(
                 ip_addr_list, msg)
 
             LOG.info('OK, attempt was rejected as expected to change DNS to: "{}"\n'.format(ip_addr_list))
@@ -337,6 +346,7 @@ class TestDnsSettings:
             assert code == 0, \
                 'In configuration DNS servers should remain unchanged:\nbefore: "{}"\nnow: "{}"'.format(
                     old_dns_servers, output)
+
         else:
             assert 0 == code, 'Failed to change DNS servers to: "{}", msg: "{}"'.format(msg, ip_addr_list)
 
