@@ -379,9 +379,9 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_host, cpu_pol, cpu_thr_pol,
         vm_host_cpus = []
         vcpus_list = list(range(vcpus))
         for instance_name_, instance_map in vcpu_cpu_map.items():
-            for vcpu in vcpus_list:
-                used_host_cpus.append(instance_map[vcpu])
-                if instance_name_ == instance_name:
+            used_host_cpus += list(instance_map.values())
+            if instance_name_ == instance_name:
+                for vcpu in vcpus_list:
                     vm_host_cpus.append(instance_map[vcpu])
         used_host_cpus = list(set(used_host_cpus))
         vm_siblings = None

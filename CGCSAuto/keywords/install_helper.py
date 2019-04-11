@@ -4393,11 +4393,19 @@ def download_stx_helm_charts(lab, server, stx_helm_charts_path=None):
         stx_helm_charts_path = os.path.join(BuildServerPath.STX_HOST_BUILDS_DIR, BuildServerPath.LATEST_BUILD,
                                             BuildServerPath.STX_HELM_CHARTS)
 
-    cmd = "test -e " + stx_helm_charts_path
-    assert server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0, ' STX Helm charts path not found in {}:{}'.format(
-            server.name, stx_helm_charts_path)
+    server_ssh = server.ssh_conn
+    if server_ssh.exec_cmd('test -d {}'.format(stx_helm_charts_path), rm_date=False)[0] == 0:
+        charts = 'helm-charts-manifest.tgz'
+        if server_ssh.exec_cmd('test -f {}/{}'.format(stx_helm_charts_path, charts), rm_date=False)[0] != 0:
+            charts = 'helm-charts-manifest-centos-stable-versioned.tgz'
+            if server_ssh.exec_cmd('test -f {}/{}'.format(stx_helm_charts_path, charts), rm_date=False)[0] != 0:
+                raise ValueError('Helm charts not found on {}:{}'.format(server.name, stx_helm_charts_path))
+        stx_helm_charts_path = '{}/{}'.format(stx_helm_charts_path, charts)
+    elif server_ssh.exec_cmd('test -f {}'.format(stx_helm_charts_path), rm_date=False)[0] != 0:
+        raise ValueError('STX Helm charts path not found in {}:{}'.format(server.name, stx_helm_charts_path))
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-    server.ssh_conn.rsync(stx_helm_charts_path + "/*.tgz",
+    dest_path = '{}/helm-charts-manifest.tgz'.format(WRSROOT_HOME)
+    server.ssh_conn.rsync(stx_helm_charts_path,
                           lab['controller-0 ip'],
-                          WRSROOT_HOME, pre_opts=pre_opts)
+                          dest_path, pre_opts=pre_opts)

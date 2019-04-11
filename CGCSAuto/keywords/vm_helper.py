@@ -3530,6 +3530,19 @@ def get_proc_nums_from_vm(vm_ssh):
     return total_cores, online_cores, offline_cores
 
 
+def get_instance_names_via_virsh(host_ssh):
+    """
+    Get instance names via virsh list on given host
+    Args:
+        host_ssh:
+
+    Returns (list):
+
+    """
+    inst_names = host_ssh.exec_sudo_cmd("virsh list | grep instance- | awk {{'print $2'}}", get_exit_code=False)[1]
+    return [name.strip() for name in inst_names.splitlines()]
+
+
 def get_vcpu_cpu_map(instance_names=None, host_ssh=None, host=None, con_ssh=None):
     """
     Get vm(s) vcpu cpu map on given host
