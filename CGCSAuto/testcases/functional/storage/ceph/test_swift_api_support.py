@@ -139,7 +139,7 @@ def get_large_img_file():
 
 
 @mark.parametrize('pool_size', ['default', 'fixed_size'])
-def test_basic_swift_provisioning(pool_size, pre_swift_check):
+def _test_basic_swift_provisioning(pool_size, pre_swift_check):
     """
     Verifies basic swift provisioning works as expected
     Args:
