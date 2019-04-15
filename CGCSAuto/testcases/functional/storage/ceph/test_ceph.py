@@ -691,7 +691,7 @@ def test_storgroup_semantic_checks():
 
 # Tested on PV0.  Runtime: 58.82 seconds.  Status: Pass  Date: Aug 8, 2017
 @mark.usefixtures('ceph_precheck')
-def test_modify_ceph_pool_size():
+def _test_modify_ceph_pool_size():
     """
     Verify that the user can modify the size of the ceph images pool.
 
