@@ -12,8 +12,8 @@ from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-from consts.cgcs import PLATFORM_NET_TYPES
-from keywords import vm_helper, host_helper, system_helper, network_helper
+from consts.cgcs import PLATFORM_NET_TYPES, PodStatus, AppStatus
+from keywords import vm_helper, host_helper, system_helper, container_helper, kube_helper
 
 HOSTS_IF_MODIFY_ARGS = []
 
@@ -153,26 +153,25 @@ def test_modify_mtu_oam_interface(mtu_range):
         - lock standby controller
         - modify the imtu value of the controller
         - unlock the controller
+        - revert and oam mtu of the controller and check system is still healthy
         - swact the controller
         - lock the controller
         - modify the imtu value of the controller
         - unlock the controller
         - check the controllers have expected mtu
+        - revert the oam mtu of the controller and check system is still healthy
 
     Teardown:
         - Nothing
 
     """
-    first_host = system_helper.get_standby_controller_name()
-    if not first_host:
+    is_sx = system_helper.is_simplex()
+    origin_active, origin_standby = system_helper.get_active_standby_controllers()
+    if not origin_standby and not is_sx:
         skip("Standby controller unavailable. Cannot lock controller.")
 
-    second_host = system_helper.get_active_controller_name()
-
     mtu = __get_mtu_to_mod(providernet_name='-ext', mtu_range=mtu_range)
-
-    HostsToRecover.add([first_host, second_host], scope='function')
-
+    first_host = origin_active if is_sx else origin_standby
     max_mtu, cur_mtu, nic_name = get_max_allowed_mtus(host=first_host, network_type='oam')
     LOG.info('OK, the max MTU for {} is {}'.format(nic_name, max_mtu))
 
@@ -184,45 +183,22 @@ def test_modify_mtu_oam_interface(mtu_range):
 
     # sample attributes: [MTU=9216,AE_MODE=802.3ad]
     pre_oam_mtu = int(oam_attributes[0].split(',')[0].split('=')[1])
+    is_stx_openstack_applied = container_helper.is_stx_openstack_deployed(applied_only=True)
 
-    LOG.tc_step("Modify {} oam interface MTU from {} to {}, and "
-                "ensure it's applied successfully after unlock".format(first_host, pre_oam_mtu, mtu))
-    if mtu == cur_mtu:
-        LOG.info('Setting to same MTU: from:{} to:{}'.format(mtu, cur_mtu))
+    if not is_sx:
+        HostsToRecover.add(origin_standby)
+        prev_bad_pods = kube_helper.get_pods(grep='-v -e {} -e {}'.format(PodStatus.COMPLETED, PodStatus.RUNNING))
 
-    code, res = host_helper.modify_mtu_on_interfaces(first_host, mtu_val=mtu, network_type='oam',
-                                                     lock_unlock=True, fail_ok=True)
+        LOG.tc_step("Modify {} oam interface MTU from {} to {} on standby controller, and "
+                    "ensure it's applied successfully after unlock".format(origin_standby, pre_oam_mtu, mtu))
+        if mtu == cur_mtu:
+            LOG.info('Setting to same MTU: from:{} to:{}'.format(mtu, cur_mtu))
 
-    LOG.tc_step("Revert OAM MTU to original value: {}".format(pre_oam_mtu))
-    code_revert, res_revert = host_helper.modify_mtu_on_interfaces(first_host, mtu_val=pre_oam_mtu, network_type='oam',
-                                                                   lock_unlock=True, fail_ok=True)
-    if 0 == code:
-        assert expecting_pass, "OAM MTU is not modified successfully. Result: {}".format(res)
-    else:
-        assert not expecting_pass, "OAM MTU WAS modified unexpectedly. Result: {}".format(res)
-
-    assert 0 == code_revert, "OAM MTU is not reverted successfully. Result: {}".format(res_revert)
-
-    if second_host == first_host:
-        LOG.tc_step("Active-controller and Standby-controller are the same, likely a SIMPLEX lab," +
-                    "hence, done with the testing")
-    else:
-        LOG.tc_step("Make sure current standby_controller is in available status in order to swact to")
-        host_helper.wait_for_hosts_states(second_host, availability=['available'])
-
-        LOG.tc_step("Swact active controller")
-        host_helper.swact_host(fail_ok=False)
-        host_helper.wait_for_webservice_up(first_host)
-
-        LOG.tc_step("Modify new standby controller {} oam interface MTU to: {}, and "
-                    "ensure it's applied successfully after unlock".format(second_host, mtu))
-
-        code, res = host_helper.modify_mtu_on_interfaces(second_host,
-                                                         mtu_val=mtu, network_type='oam', lock_unlock=True,
-                                                         fail_ok=True)
+        code, res = host_helper.modify_mtu_on_interfaces(origin_standby, mtu_val=mtu, network_type='oam',
+                                                         lock_unlock=True, fail_ok=True)
 
         LOG.tc_step("Revert OAM MTU to original value: {}".format(pre_oam_mtu))
-        code_revert, res_revert = host_helper.modify_mtu_on_interfaces(second_host, mtu_val=pre_oam_mtu,
+        code_revert, res_revert = host_helper.modify_mtu_on_interfaces(origin_standby, mtu_val=pre_oam_mtu,
                                                                        network_type='oam',
                                                                        lock_unlock=True, fail_ok=True)
         if 0 == code:
@@ -231,6 +207,46 @@ def test_modify_mtu_oam_interface(mtu_range):
             assert not expecting_pass, "OAM MTU WAS modified unexpectedly. Result: {}".format(res)
 
         assert 0 == code_revert, "OAM MTU is not reverted successfully. Result: {}".format(res_revert)
+
+        LOG.tc_step("Check openstack cli, application and pods status after modify and revert {} oam mtu".
+                    format(origin_standby))
+        check_containers(prev_bad_pods, check_app=is_stx_openstack_applied)
+
+        LOG.tc_step("Ensure standby controller is in available state and attempt to swact active controller to {}".
+                    format(origin_standby))
+        host_helper.wait_for_hosts_states(origin_active, availability=['available'])
+        host_helper.swact_host(fail_ok=False)
+        host_helper.wait_for_webservice_up(origin_standby)
+
+    prev_bad_pods = kube_helper.get_pods(grep='-v -e {} -e {}'.format(PodStatus.COMPLETED, PodStatus.RUNNING))
+    HostsToRecover.add(origin_active)
+    LOG.tc_step("Modify {} oam interface MTU to: {}, and "
+                "ensure it's applied successfully after unlock".format(origin_active, mtu))
+    code, res = host_helper.modify_mtu_on_interfaces(origin_active,
+                                                     mtu_val=mtu, network_type='oam', lock_unlock=True,
+                                                     fail_ok=True)
+    LOG.tc_step("Revert OAM MTU to original value: {}".format(pre_oam_mtu))
+    code_revert, res_revert = host_helper.modify_mtu_on_interfaces(origin_active, mtu_val=pre_oam_mtu,
+                                                                   network_type='oam',
+                                                                   lock_unlock=True, fail_ok=True)
+    if 0 == code:
+        assert expecting_pass, "OAM MTU is not modified successfully. Result: {}".format(res)
+    else:
+        assert not expecting_pass, "OAM MTU WAS modified unexpectedly. Result: {}".format(res)
+
+    assert 0 == code_revert, "OAM MTU is not reverted successfully. Result: {}".format(res_revert)
+
+    LOG.tc_step("Check openstack cli, application and pods after modify and revert {} oam mtu".format(origin_active))
+    check_containers(prev_bad_pods, check_app=is_stx_openstack_applied)
+
+
+def check_containers(prev_bad_pods, check_app):
+    host_helper._wait_for_openstack_cli_enable()
+    res_app = True
+    if check_app:
+        res_app = container_helper.wait_for_apps_status(apps='stx-openstack', status=AppStatus.APPLIED)[0]
+    res_pods = kube_helper.wait_for_pods_ready(check_interval=10, pods_to_exclude=prev_bad_pods)[0]
+    assert (res_app and res_pods), "Application status or pods status check failed after modify and unlock host"
 
 
 @fixture()

@@ -904,7 +904,7 @@ def wait_for_tasks_affined(host, timeout=180, fail_ok=False, con_ssh=None, auth_
 
 def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con_ssh=None,
                  auth_info=Tenant.get('admin'), check_hypervisor_up=False, check_webservice_up=False,
-                 check_nodes_ready=True, use_telnet=False, con_telnet=None):
+                 check_nodes_ready=True, check_containers=False, use_telnet=False, con_telnet=None):
 
     """
     Unlock given hosts. Please use unlock_host() keyword if only one host needs to be unlocked.
@@ -917,6 +917,7 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         check_hypervisor_up (bool): Whether to check if host is up in nova hypervisor-list
         check_webservice_up (bool): Whether to check if host's web-service is active in system servicegroup-list
         check_nodes_ready (bool)
+        check_containers (bool)
         use_telnet
         con_telnet
 
@@ -962,6 +963,15 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
 
     is_simplex = system_helper.is_simplex(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                           auth_info=auth_info)
+
+    check_stx = prev_bad_pods = None
+    if check_containers and not use_telnet:
+        from keywords import kube_helper, container_helper
+        check_stx = container_helper.is_stx_openstack_deployed(applied_only=True, con_ssh=con_ssh, auth_info=auth_info,
+                                                               use_telnet=use_telnet, con_telnet=con_telnet)
+        prev_bad_pods = kube_helper.get_pods(con_ssh=con_ssh,
+                                             grep='-v -e {} -e {}'.format(PodStatus.COMPLETED, PodStatus.RUNNING))
+
     hosts_to_check = []
     for host in hosts_to_unlock:
         exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
@@ -1043,16 +1053,30 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True, con
         # hosts_avail = list(set(hosts_avail) - set(hosts_affine_incomplete))
 
     if check_nodes_ready and (hosts_avail or hosts_degrd) and not use_telnet:
-        from keywords.kube_helper import wait_for_nodes_ready
+        from keywords import kube_helper, container_helper
 
         hosts_to_wait = list(hosts_avail)
         hosts_to_wait += hosts_degrd
-        hosts_not_ready = wait_for_nodes_ready(hosts=hosts_to_wait, timeout=180, con_ssh=con_ssh, fail_ok=fail_ok)[1]
-
+        res_nodes, hosts_not_ready = kube_helper.wait_for_nodes_ready(hosts=hosts_to_wait, timeout=180, con_ssh=con_ssh,
+                                                                      fail_ok=fail_ok)
         if hosts_not_ready:
             hosts_avail = list(set(hosts_avail) - set(hosts_not_ready))
             for host in hosts_not_ready:
                 res[host] = 8, "Host status not ready in kubectl get nodes"
+
+        if check_containers:
+            res_app = True
+            if check_stx:
+                res_app = container_helper.wait_for_apps_status(apps='stx-openstack', status=AppStatus.APPLIED,
+                                                                con_ssh=con_ssh, check_interval=10, fail_ok=fail_ok)[0]
+            res_pods = kube_helper.wait_for_pods_ready(check_interval=10, con_ssh=con_ssh, fail_ok=fail_ok,
+                                                       pods_to_exclude=prev_bad_pods)[0]
+            if not (res_app and res_pods):
+                err_msg = "Application status or pods status check failed after unlock {}".format(hosts)
+                hosts_to_update = list((set(hosts_to_wait) - set(hosts_not_ready)))
+                hosts_avail = []
+                for host_ in hosts_to_update:
+                    res[host_] = 9, err_msg
 
     for host in hosts_avail:
         res[host] = 0, "Host is unlocked and in available state."
