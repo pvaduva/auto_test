@@ -173,7 +173,7 @@ def delete_lab_setup_files(con_ssh, host, files):
     mark.p1(('storage', None, None)),
 ])
 @mark.usefixtures('delete_profiles_teardown')
-def test_storage_profile(personality, from_backing, to_backing):
+def _test_storage_profile(personality, from_backing, to_backing):
     """
     This test creates a storage profile and then applies it to a node with
     identical hardware, assuming one exists.
