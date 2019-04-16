@@ -146,31 +146,15 @@ def test_modify_timezone_log_timestamps():
     assert not failed_logs, "Timestamp for following new logs are different than system time: {}".format(failed_logs)
 
 
-def get_cli_timestamps(ceil_id, vol_id, img_id, net_id, vm_id):
+def get_cli_timestamps(vol_id):
 
     table_ = table_parser.table(cli.system('show'))
     sysinv_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
 
-    table_ = table_parser.table(cli.cinder('show', vol_id, auth_info=Tenant.get('admin')))
-    cinder_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
-
-    table_ = table_parser.table(cli.glance('image-show', img_id))
-    glance_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
-
-    table_ = table_parser.table(cli.neutron('net-show', net_id))
-    neutron_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
-
-    table_ = table_parser.table(cli.nova('show', vm_id))
-    nova_timestamp = table_parser.get_value_two_col_table(table_, 'created')
-
-    table_ = table_parser.table(cli.ceilometer('event-show', ceil_id, auth_info=None))
-    ceil_timestamp = table_parser.get_value_two_col_table(table_, 'generated')
-
     table_ = table_parser.table(cli.openstack('volume show', vol_id, auth_info=Tenant.get('admin')))
     openstack_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
 
-    return ceil_timestamp, cinder_timestamp, glance_timestamp, nova_timestamp, neutron_timestamp, sysinv_timestamp, \
-        openstack_timestamp
+    return  sysinv_timestamp, openstack_timestamp
 
 
 def test_modify_timezone_cli_timestamps():
@@ -200,27 +184,23 @@ def test_modify_timezone_cli_timestamps():
         - Delete the vm
 
     """
-    services = ('ceilometer', 'glance', 'cinder', 'nova', 'neutron', 'sysinv', 'openstack')
+    services = ('sysinv', 'openstack')
 
     prev_timezone = system_helper.get_timezone()
     post_timezone = __select_diff_timezone(current_zone=prev_timezone)
 
     # CHECK PRE TIMEZONE CHANGE CLI TIMESTAMPS
     LOG.tc_step("Getting CLI timestamps before timezone change for: {}".format(services))
-    ceil_id = ceilometer_helper.get_events(event_type=None, limit=1)[0]
-    img_id = glance_helper.get_images()[0]
     vol_id = cinder_helper.create_volume('timezone_test', cleanup='function')[1]
-    vm_id = vm_helper.boot_vm(name='timezone_test', source='volume', source_id=vol_id, cleanup='function')[1]
-    net_id = network_helper.get_mgmt_net_id()
 
-    prev_timestamps = get_cli_timestamps(ceil_id, vol_id=vol_id, img_id=img_id, vm_id=vm_id, net_id=net_id)
+    prev_timestamps = get_cli_timestamps(vol_id=vol_id)
     LOG.tc_step("Modify timezone from {} to {}".format(prev_timezone, post_timezone))
     system_helper.modify_timezone(post_timezone)
 
     # CHECK POST TIMEZONE CHANGE CLI TIMESTAMPS
     time.sleep(10)
     LOG.tc_step("Getting CLI timestamps after timezone change for: {}".format(services))
-    post_timestamps = get_cli_timestamps(ceil_id, vol_id=vol_id, img_id=img_id, vm_id=vm_id, net_id=net_id)
+    post_timestamps = get_cli_timestamps(vol_id=vol_id)
 
     LOG.tc_step("Comparing timestamps from before and after timezone change for: {}".format(services))
     failed_services = []
