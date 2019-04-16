@@ -319,7 +319,7 @@ class PortsTable(tables.TableRegion):
     HEADERS_MAP = {
         # Accelerate not in the cli table
         'name': 'Name',
-        'mac address': 'MAC Address',
+        'macaddress': 'MAC Address',
         'pci address': 'PCI Address',
         'processor': 'Processor',
         'auto neg': 'Auto Negotiation',
