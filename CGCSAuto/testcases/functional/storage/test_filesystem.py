@@ -12,8 +12,8 @@ from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
-DRBDFS = ['backup', 'glance', 'database', 'img-conversions', 'scratch', 'extension', 'gnocchi']
-DRBDFS_CEPH = ['backup', 'database', 'img-conversions', 'scratch', 'extension']
+DRBDFS = ['backup', 'glance', 'database', 'scratch', 'extension', 'gnocchi']
+DRBDFS_CEPH = ['backup', 'database', 'scratch', 'extension']
 
 
 @fixture()
@@ -364,7 +364,7 @@ def test_modify_drdb_swact_then_reboot():
 
     LOG.info("Current fs values are: {}".format(drbdfs_val))
 
-    LOG.tc_step("Increase the size of the backup and img-conversions filesystem")
+    LOG.tc_step("Increase the size of the backup and glance filesystem")
     partition_name = "backup"
     partition_value = drbdfs_val[partition_name]
     backup_freespace = math.trunc(float(free_space) / 10)
@@ -372,7 +372,7 @@ def test_modify_drdb_swact_then_reboot():
     cmd = "controllerfs-modify {}={}".format(partition_name, new_partition_value)
     cli.system(cmd)
 
-    partition_name = "img-conversions"
+    partition_name = "glance"
     partition_value = drbdfs_val[partition_name]
     cgcs_freespace = math.trunc(backup_freespace / 2)
     new_partition_value = cgcs_freespace + int(partition_value)
