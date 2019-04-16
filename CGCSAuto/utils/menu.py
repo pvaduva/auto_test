@@ -200,8 +200,8 @@ class KickstartMenu(Menu):
         return super().get_current_option()
 
     def find_options(self, telnet_conn,
-                     end_of_menu=r"[A|a]utomatic(ally)?( boot)? in|Press (\[Tab\]|\'e\') to edit".encode(),
-                     option_identifier=r"(\dm?\)\s[\w]+)|Boot from hard drive\s+|([\w]+\s)+\s+> ".encode(),
+                     end_of_menu=r"([A|a]utomatic(ally)?( boot)? in)|Press (\[Tab\]|\'e\') to edit".encode(),
+                     option_identifier=r"(\dm?\)\s+[\w]+)|Boot from hard drive\s+|([\w]+\s)+\s+> ".encode(),
                      newline=r'(\x1b\[\d+;\d+H)+'.encode()):
 
         super().find_options(telnet_conn, end_of_menu=end_of_menu, option_identifier=option_identifier,
