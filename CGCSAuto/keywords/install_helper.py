@@ -3693,7 +3693,8 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
                     # sub_menu.find_options(node_obj.telnet_conn, option_identifier=b'\x1b.*([\w]+\s)+\s+',
                     #                       end_of_menu=b"Standard Security Profile Enabled (default setting)",
                     #                       newline=b'(\x1b\[\d+;\d+H)+')
-                    sub_menu.find_options(node_obj.telnet_conn, option_identifier=sub_menu.option_identifier.encode())
+                    sub_menu.find_options(node_obj.telnet_conn, end_of_menu=r"Press (\[Tab\]|\'e\')".encode(),
+                                          option_identifier=sub_menu.option_identifier.encode())
                     LOG.info("Selecting for  {}".format(sub_menu.name))
                     # Since we are already in security menu we are setting the tag security option to standard to
                     # match the submenu option tag
