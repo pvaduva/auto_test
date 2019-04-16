@@ -16,7 +16,7 @@ IP_ADDR = html_helper.get_ip_addr()
 def get_headers():
     headers = {"Content-Type": "application/json",
                "Accept": "application/json",
-               "X-Auth-Token": html_helper.get_user_token()}
+               "X-Auth-Token": html_helper.get_user_token(platform=True)}
 
     return headers
 

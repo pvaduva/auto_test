@@ -46,18 +46,20 @@ def create_url(ip=None, port=None, version=None, extension=None):
     return url
 
 
-def get_user_token(rtn_value='id', con_ssh=None):
+def get_user_token(rtn_value='id', con_ssh=None, platform=False):
     """
     Return an authentication token for the admin.
 
     Args:
         rtn_value (str):
         con_ssh (SSHClient):
+        platform (True/False)
 
     Returns (list): a list containing at most one authentication token
 
     """
-    table_ = table_parser.table(cli.openstack('token issue', ssh_client=con_ssh, auth_info=Tenant.get('admin')))
+    table_ = table_parser.table(cli.openstack('token issue', ssh_client=con_ssh, auth_info=Tenant.get('admin'),
+                                              platform=platform))
     token = table_parser.get_value_two_col_table(table_, rtn_value)
     return token
 
