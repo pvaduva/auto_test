@@ -145,7 +145,7 @@ class SSHClient:
                 self.logpath = self._get_logpath()
 
                 if self.logpath:
-                    self._session.logfile = open(self.logpath, 'w+')
+                    self._session.logfile = open(self.logpath, 'a+')
 
                 # Login
                 self._session.login(self.host, self.user, self.password, login_timeout=timeout,

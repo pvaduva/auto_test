@@ -3700,6 +3700,9 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
                     tag['security'] = 'standard'
                     sub_menu.select(node_obj.telnet_conn, index=index[sub_menus_navigated + 1] if index else None,
                                     tag=tag)
+                    output = node_obj.telnet_conn.read_until("vmlinuz".encode(), 10)
+                    if b'vmlinux' not in output:
+                        node_obj.telnet_conn.write(TerminalKeys.Keys['Enter'].encode())
 
                 else:
                     LOG.info("Selecting for  unknown")

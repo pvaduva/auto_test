@@ -620,6 +620,16 @@ class Labs:
         'ixia_ports': [{'port': (8, 13), 'range': (900, 999)}, {'port': (8, 14), 'range': (1000, 1049)}],
     }
 
+    WCP_111 = {
+        'short_name': 'wcp_111',
+        'name': 'yow-cgcs-wildcat-111',
+        'floating ip': '128.224.151.57',
+        'controller-0 ip': '128.224.151.57',
+        'controller_nodes': [23600],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
     WCP_112 = {
         'short_name': 'wcp_112',
         'name': 'yow-cgcs-wildcat-112',
