@@ -1935,7 +1935,8 @@ def ping_vms_from_vm(to_vms=None, from_vm=None, user=None, password=None, prompt
     f_path = '{}/{}'.format(ProjVar.get_var('PING_FAILURE_DIR'), ProjVar.get_var('TEST_NAME'))
     try:
         with ssh_to_vm_from_natbox(vm_id=from_vm, username=user, password=password, natbox_client=natbox_client,
-                                   prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip) as from_vm_ssh:
+                                   prompt=prompt, con_ssh=con_ssh, vm_ip=from_vm_ip, use_fip=from_fip,
+                                   retry_timeout=300) as from_vm_ssh:
                 res = _ping_vms(ssh_client=from_vm_ssh, vm_ids=to_vms, con_ssh=con_ssh, num_pings=num_pings,
                                 timeout=timeout, fail_ok=fail_ok, use_fip=to_fip, net_types=net_types, retry=retry,
                                 retry_interval=retry_interval, vlan_zero_only=vlan_zero_only, exclude_nets=exclude_nets,
@@ -5109,7 +5110,7 @@ def get_vms_ports_info(vms, rtn_subnet_id=False):
 
                 LOG.info("VM {} port {}: mac={} ip={} subnet={} net_id={}".format(vm, port, mac, ip_addr, subnet,
                                                                                   net_id))
-                info[vm].append((ip_addr, subnet, mac, net_id))
+                info[vm].append((port, ip_addr, subnet, mac, net_id))
 
     return info
 
@@ -5179,21 +5180,22 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True):
     if vm1 == vm2:
         raise ValueError("cannot route to a VM itself")
 
+    auth_info = Tenant.get('admin')
     LOG.info("Collecting VMs' networks")
     interfaces = {
-        vm1: {"data": network_helper.get_data_ips_for_vms(vm1, auth_info=Tenant.get('admin')),
+        vm1: {"data": network_helper.get_data_ips_for_vms(vm1, auth_info=auth_info),
               "internal": network_helper.get_internal_ips_for_vms(vm1)},
-        vm2: {"data": network_helper.get_data_ips_for_vms(vm2, auth_info=Tenant.get('admin')),
+        vm2: {"data": network_helper.get_data_ips_for_vms(vm2, auth_info=auth_info),
               "internal": network_helper.get_internal_ips_for_vms(vm2)},
     }
 
     for vm, info in get_vms_ports_info([vm1, vm2]).items():
-        for ip, cidr, mac, net_id in info:
+        for port, ip, cidr, mac, net_id in info:
             # expect one data and one internal
             if ip in interfaces[vm]['data']:
-                interfaces[vm]['data'] = {'ip': ip, 'cidr': cidr, 'mac': mac}
+                interfaces[vm]['data'] = {'ip': ip, 'cidr': cidr, 'mac': mac, 'port': port}
             elif ip in interfaces[vm]['internal']:
-                interfaces[vm]['internal'] = {'ip': ip, 'cidr': cidr, 'mac': mac}
+                interfaces[vm]['internal'] = {'ip': ip, 'cidr': cidr, 'mac': mac, 'port': port}
 
     if interfaces[vm1]['internal']['cidr'] != interfaces[vm2]['internal']['cidr']:
         raise ValueError("the internal interfaces for the VM pair is not on the same gateway")
@@ -5205,6 +5207,11 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True):
     if bidirectional:
         _set_vm_route(vm2, interfaces[vm1]['data']['cidr'], interfaces[vm1]['internal']['ip'],
                       interfaces[vm2]['internal']['mac'])
+
+    for vm in (vm1, vm2):
+        LOG.info("Add vms' data network ip as allowed address for internal network port")
+        network_helper.set_port(port_id=interfaces[vm]['internal']['port'], auth_info=auth_info,
+                                allowed_addr_pairs={'ip-address': interfaces[vm]['data']['ip']})
 
     if validate:
         LOG.info("Validating route(s) across data")
@@ -5292,7 +5299,7 @@ def setup_avr_routing(vm_id, mtu=1500, vm_type='vswitch', **kwargs):
         internals = list()
     internal_dict = dict()
     for vm, info in get_vms_ports_info([vm_id]).items():
-        for ip, cidr, mac, net_id in info:
+        for port, ip, cidr, mac, net_id in info:
             if ip in datas:
                 data_dict[ip] = ipaddress.ip_network(cidr).netmask
             elif ip in internals:
@@ -5402,7 +5409,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
 
     LOG.info("Getting VLANs associated")
     for vm, ports in get_vms_ports_info(list(src.values())+list(dest.values()), rtn_subnet_id=False).items():
-        for ip, cidr, mac, net_id in ports:
+        for port, ip, cidr, mac, net_id in ports:
             if ip in src or ip in dest:
                 table = table_parser.table(cli.openstack('network show', net_id, auth_info=Tenant.get('admin')))
                 net_type = table_parser.get_value_two_col_table(table, "provider:network_type")
