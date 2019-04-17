@@ -4133,7 +4133,7 @@ def update_pxeboot_ks_files(lab, tuxlab_conn, feed_path):
     lab_name = controller0_node.host_name
 
     LOG.info("Controller-0 node name is {}".format(lab_name))
-    feed_url = "v{}_feed".format(lab_name)
+    feed_url = "http://128.224.151.254/umalab/{}_feed".format(lab_name)
     try:
         url_code = urlopen(feed_url).getcode()
     except:
