@@ -4098,7 +4098,7 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None,  tuxlab_conn=None, i
 
     test_server_conn.rsync(media_iso_path + "/", tuxlab_server, feed_path,
                           dest_user=SvcCgcsAuto.USER, dest_password=SvcCgcsAuto.PASSWORD,
-                          extra_opts=["--delete", "--force", "--chmod=Du=rwx"], pre_opts=pre_opts,
+                          extra_opts=["--delete", "--force", "--chmod=Du=rwx,Dgo=rx,Fu=rwx,Fog=r"], pre_opts=pre_opts,
                           timeout=InstallTimeout.INSTALL_LOAD)
 
     LOG.info("Updating pxeboot kickstart files")
@@ -4133,7 +4133,7 @@ def update_pxeboot_ks_files(lab, tuxlab_conn, feed_path):
     lab_name = controller0_node.host_name
 
     LOG.info("Controller-0 node name is {}".format(lab_name))
-    feed_url = "http://128.224.151.254/umalab/{}_feed".format(lab_name)
+    feed_url = "v{}_feed".format(lab_name)
     try:
         url_code = urlopen(feed_url).getcode()
     except:
