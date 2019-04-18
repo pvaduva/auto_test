@@ -170,7 +170,8 @@ class TestRetentionPeriod:
         name = 'event_time_to_live'
 
         LOG.tc_step('Check if the modification attempt will fail based on the input value')
-        if new_retention_period < self.MIN_RETENTION_PERIOD or new_retention_period > self.MAX_RETENTION_PERIOD:
+        # if new_retention_period < self.MIN_RETENTION_PERIOD or new_retention_period > self.MAX_RETENTION_PERIOD:
+        if False:   # all values are expected to be accepted
             expect_fail = True
         else:
             expect_fail = False
