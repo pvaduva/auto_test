@@ -548,7 +548,7 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None):
     LOG.tc_step(test_step)
     if do_step(test_step):
         LOG.info("running lab_setup.sh")
-        install_helper.run_setup_script(conf_file=conf_file, con_ssh=con_ssh, fail_ok=False, config=True, timeout=5400)
+        install_helper.run_setup_script(conf_file=conf_file, con_ssh=con_ssh, fail_ok=False, config=True, timeout=7200)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
