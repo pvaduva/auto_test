@@ -17,24 +17,6 @@ DRBDFS_CEPH = ['backup', 'database', 'scratch', 'extension']
 
 
 @fixture()
-def aio_precheck():
-    if not system_helper.is_two_node_cpe() and not system_helper.is_simplex():
-        skip("Test only applies to AIO-SX or AIO-DX systems")
-
-
-@fixture()
-def lvm_precheck():
-    if system_helper.is_simplex() or system_helper.is_storage_system():
-        skip("Test does not apply to AIO-SX systems or storage systems")
-
-
-@fixture()
-def storage_precheck():
-    if not system_helper.is_storage_system():
-        skip("This test only applies to storage nodes")
-
-
-@fixture()
 def freespace_check():
     """
     See if there is enough free space to run tests.
@@ -398,88 +380,8 @@ def test_modify_drdb_swact_then_reboot():
                                           timeout=600)
 
 
-def test_increase_cinder():
-    """
-    Increase the size of the cinder filesystem.
-
-    Test steps:
-    1.  Query the size of cinder
-    2.  Determine the available space on the disk hosting cinder
-    3.  Increase the size of the cinder filesystem
-    5.  Check cinder to see if the filesystem is increased
-
-    Enhancement:
-    1.  Check on the physical filesystem rather than depending on TiS reporting
-    """
-
-    active, standby = system_helper.get_active_standby_controllers()
-    hosts = system_helper.get_controllers()
-    if len(hosts) > 1:
-        hosts = [standby, active]
-    else:
-        hosts = [active]
-
-    LOG.tc_step("Determine location of cinder")
-    table_ = table_parser.table(cli.system("host-pv-list {} --nowrap".format(hosts[0])))
-    pv_type = table_parser.get_values(table_, "pv_type", **{"lvm_vg_name": "cinder-volumes"})
-    if not pv_type:
-        skip("Cinder disk or partition is not present in lab")
-    elif pv_type == "disk":
-        skip("Code not present for this scenario")
-    else:
-        for host in hosts:
-            print("This is hosts: {}".format(hosts))
-            if host == active and len(hosts) > 1:
-                host_helper.swact_host()
-            LOG.tc_step("Check if disk hosting the partition has space available for resize")
-            table_ = table_parser.table(cli.system("host-pv-list {} --nowrap".format(host)))
-            device_node = table_parser.get_values(table_, "disk_or_part_device_node", **{"lvm_vg_name": "cinder-volumes"})[0]
-            device_path = table_parser.get_values(table_, 'disk_or_part_device_path', **{"lvm_vg_name": "cinder-volumes"})[0]
-            if "nvme" in device_node:
-                device_node = re.sub(r"p\d+$", "", device_node)
-            else:
-                device_node = re.sub(r"\d+$", "", device_node)
-            table_ = table_parser.table(cli.system("host-disk-show {} {}".format(host, device_node)))
-            available_gib = table_parser.get_value_two_col_table(table_, 'available_gib')
-            disk_uuid = table_parser.get_value_two_col_table(table_, 'uuid')
-            LOG.info("Disk {} has {} available".format(device_node, available_gib))
-            if float(available_gib) < 10:
-                skip("Insufficient disk space available for test")
-
-            LOG.tc_step("Modify the cinder partition to a larger size for host {}".format(host))
-            table_ = table_parser.table(cli.system("host-disk-partition-show {} {}".format(host, device_path)))
-            partition_uuid = table_parser.get_value_two_col_table(table_, "uuid")
-            partition_size_mib = table_parser.get_value_two_col_table(table_, "size_mib")
-            partition_size_gib = float(partition_size_mib) / 1024
-            LOG.info("Current partition size is {}".format(partition_size_gib))
-            final_status = [PartitionStatus.READY, PartitionStatus.IN_USE]
-            partition_helper.modify_partition(host, partition_uuid, str(int(partition_size_gib) + 10), final_status=final_status)
-            system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                              entity_id="host={}".format(host))
-            system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC,
-                                              timeout=300)
-
-    # Need to swact again for cinder-volumes to be updated on both controllers
-    if len(hosts) > 1:
-        host_helper.swact_host()
-
-    LOG.tc_step("Confirm partition size of cinder is increased")
-    host_helper.wait_for_hosts_ready(hosts)
-    table_ = table_parser.table(cli.system("host-disk-partition-show {} {}".format(hosts[0], device_path)))
-    partition_uuid = table_parser.get_value_two_col_table(table_, "uuid")
-    partition_size_mib = table_parser.get_value_two_col_table(table_, "size_mib")
-    new_partition_size_gib = float(partition_size_mib) / 1024
-    LOG.info("Partition size was {} and is now {}".format(partition_size_gib, new_partition_size_gib))
-    assert new_partition_size_gib > partition_size_gib, "Partition size did not increase"
-
-    LOG.tc_step("Reboot active controller")
-    active, standby = system_helper.get_active_standby_controllers()
-    host_helper.reboot_hosts(active)
-
-
 # TODO for Maria. Current issue: config out-of-date status is not cleared after lock/unlock standby controller
 @mark.usefixtures("freespace_check")
-@mark.usefixtures("storage_precheck")
 def _test_increase_ceph_mon():
     """
     Increase the size of ceph-mon.  Only applicable to a storage system.
