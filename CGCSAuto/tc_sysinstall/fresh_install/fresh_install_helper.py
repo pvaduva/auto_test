@@ -198,7 +198,7 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
 
     if not InstallVars.get_install_var("DEPLOY_OPENSTACK"):
         controller0_node = lab['controller-0']
-        controller0_node.telnet_conn.exec_cmd("touch .no_opentack_install")
+        controller0_node.telnet_conn.exec_cmd("touch .no_openstack_install")
 
     LOG.info("WK: Downloading the helm charts to active controller ...")
     helm_chart_path = InstallVars.get_install_var("HELM_CHART_PATH")
