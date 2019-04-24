@@ -743,9 +743,9 @@ def add_ceph_mon(host, ceph_mon_gib='20', ceph_mon_dev=None, con_ssh=None, fail_
                 raise exceptions.HostError(msg)
 
     if not host_helper.is_host_locked(host, con_ssh=con_ssh):
-        rc, output =  host_helper.lock_host(host, con_ssh=con_ssh)
+        rc, output = host_helper.lock_host(host, con_ssh=con_ssh)
         if rc != 0:
-            msg = "Cannot add ceph-mon to host {} because the host fail to lock: {}".format(output)
+            msg = "Cannot add ceph-mon to host {} because the host fail to lock: {}".format(host, output)
             if fail_ok:
                 return rc, msg
             else:

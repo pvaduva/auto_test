@@ -126,16 +126,10 @@ def test_standard_install(install_setup):
 
     # WK1 - adding ceph mon to compute-0
     fresh_install_helper.add_ceph_ceph_mon_to_host(controller0_node, 'compute-0')
-    hosts_to_unlock = system_helper.get_hostnames(administrative='locked', availability='online',
-                                                  con_ssh=controller0_node.ssh_conn)
-    if hosts_to_unlock:
-        fresh_install_helper.unlock_hosts(hosts_to_unlock, con_ssh=controller0_node.ssh_conn)
 
-    # WK2-  add ceph osds to controllers:
-    fresh_install_helper.add_ceph_osds_to_controller(lab=lab)
-    controller0_node.ssh_conn.close()
-    controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
-
+    # Unlock computes
+    fresh_install_helper.unlock_hosts([host_ for host_ in hosts if 'compute' in host_],
+                                      con_ssh=controller0_node.ssh_conn)
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     if lab.get("floating ip"):
