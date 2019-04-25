@@ -323,7 +323,7 @@ def sw_manager(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False
 
     return exec_cli('sw-manager', sub_cmd=cmd, positional_args=positional_args, flags=flags,
                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    source_openrc=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+                    source_openrc=source_creden_, err_only=err_only, timeout=timeout, rtn_list=rtn_list, platform=True)
 
 
 def murano(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
