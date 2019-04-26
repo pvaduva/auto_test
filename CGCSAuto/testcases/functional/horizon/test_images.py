@@ -2,7 +2,7 @@ from pytest import fixture
 
 from consts import horizon
 from consts.auth import Tenant
-from keywords import nova_helper
+from keywords import nova_helper, glance_helper
 from utils.tis_log import LOG
 from utils.horizon import helper
 from utils.horizon.regions import messages
@@ -17,16 +17,21 @@ def admin_images_pg(admin_home_pg_container, request):
     image_name = helper.gen_resource_name('image')
     images_pg = imagespage.ImagesPage(admin_home_pg_container.driver, port=admin_home_pg_container.port)
     images_pg.go_to_target_page()
+    image_id = glance_helper.create_image(image_name)[1]
 
     def teardown():
         LOG.fixture_step('Back to Images page')
         images_pg.go_to_target_page()
+        LOG.fixture_step('Delete image {}'.format(image_name))
+        images_pg.delete_image(glance_helper.get_image_value(image_id, 'Name'))
 
     request.addfinalizer(teardown)
-    return images_pg, image_name
+    return images_pg, image_name, image_id
 
 
-def test_horizon_image_create_delete(admin_images_pg):
+# test case is temporarily taken out due to Angular form not handling upload image to form well
+# will wait for upstream fix
+def _test_horizon_image_create_delete(admin_images_pg):
     """
     Test the image creation and deletion functionality:
 
@@ -82,27 +87,22 @@ def test_horizon_update_image_metadata(admin_images_pg):
         - Verify metadata updated successfully
         - Delete the newly created image
     """
-    images_pg, image_name = admin_images_pg
-    with helper.gen_temporary_file() as file_name:
-        LOG.tc_step('Create new image {}.'.format(image_name))
-        images_pg.create_image(image_name, image_file=file_name,
-                               description='description')
-        assert images_pg.find_message_and_dismiss(messages.INFO)
-        assert not images_pg.find_message_and_dismiss(messages.ERROR)
-        assert images_pg.is_image_active(image_name)
+    images_pg, image_name, image_id = admin_images_pg
+    images_pg.refresh_page()
+    assert images_pg.is_image_active(glance_helper.get_image_value(image_id, 'Name'))
 
-        LOG.tc_step('Update image metadata and Verify metadata updated successfully')
-        new_metadata = {'metadata1': "value1", 'metadata2': "value2"}
-        images_pg.add_custom_metadata(image_name, new_metadata)
-        assert not images_pg.find_message_and_dismiss(messages.ERROR)
-        assert images_pg.is_image_active(image_name)
+    LOG.tc_step('Update image metadata and Verify metadata updated successfully')
+    new_metadata = {'metadata1': "value1", 'metadata2': "value2"}
+    images_pg.add_custom_metadata(glance_helper.get_image_value(image_id, 'Name'), new_metadata)
+    assert not images_pg.find_message_and_dismiss(messages.ERROR)
+    assert images_pg.is_image_active(glance_helper.get_image_value(image_id, 'Name'))
 
-        LOG.tc_step('Delete the image {}.'.format(image_name))
-        images_pg.delete_image(image_name)
-        horizon.test_result = True
+    horizon.test_result = True
 
 
-def test_horizon_remove_protected_image(admin_images_pg):
+# test has been temporarily taken out due to Angular unidentifiable Visibility and Protected form fields
+# will wait for upstream fix
+def _test_horizon_remove_protected_image(admin_images_pg):
     """
     Test that protected image is not deletable:
 
@@ -158,7 +158,9 @@ def test_horizon_remove_protected_image(admin_images_pg):
         horizon.test_result = True
 
 
-def test_edit_image_description_and_name(admin_images_pg):
+# test has been temporarily taken out due to Angular unidentifiable Visibility and Protected form fields
+# will wait for upstream fix
+def _test_edit_image_description_and_name(admin_images_pg):
     """
     Test that image description is editable:
 
@@ -227,36 +229,27 @@ def test_horizon_create_volume_from_image(admin_images_pg):
         - Delete the volume
         - Delete the image
     """
-    images_pg, image_name = admin_images_pg
-    with helper.gen_temporary_file(suffix='.iso') as file_name:
+    images_pg, image_name, image_id = admin_images_pg
+    images_pg.refresh_page()
+    assert images_pg.is_image_active(glance_helper.get_image_value(image_id, 'Name'))
 
-        LOG.tc_step('Create new image {}.'.format(image_name))
-        images_pg.create_image(image_name, image_file=file_name,
-                               description='description')
-        assert images_pg.find_message_and_dismiss(messages.INFO)
-        assert not images_pg.find_message_and_dismiss(messages.ERROR)
-        assert images_pg.is_image_active(image_name)
+    volume_name = helper.gen_resource_name('volume_from_image')
+    LOG.tc_step('Create new volume {} from image'.format(volume_name))
+    volumes_pg = images_pg.create_volume_from_image(glance_helper.get_image_value(image_id, 'Name'),
+                                                    volume_name=volume_name)
+    assert volumes_pg.find_message_and_dismiss(messages.SUCCESS)
+    assert not volumes_pg.find_message_and_dismiss(messages.ERROR)
 
-        volume_name = helper.gen_resource_name('volume_from_image')
-        LOG.tc_step('Create new volume {} from image'.format(volume_name))
-        volumes_pg = images_pg.create_volume_from_image(image_name,
-                                                        volume_name=volume_name)
-        assert volumes_pg.find_message_and_dismiss(messages.INFO)
-        assert not volumes_pg.find_message_and_dismiss(messages.ERROR)
+    LOG.tc_step('Check that volume status is Available')
+    volumes_pg.go_to_target_page()
+    assert volumes_pg.is_volume_status(volume_name, 'Available')
+    assert volumes_pg.is_volume_present(volume_name)
 
-        LOG.tc_step('Check that volume status is Available')
-        assert volumes_pg.is_volume_status(volume_name, 'Available')
-        assert volumes_pg.is_volume_present(volume_name)
+    LOG.tc_step('Delete volume {}.'.format(volume_name))
+    volumes_pg.delete_volume(volume_name)
+    assert volumes_pg.is_volume_deleted(volume_name)
 
-        LOG.tc_step('Delete volume {}.'.format(volume_name))
-        volumes_pg.delete_volume(volume_name)
-        assert volumes_pg.is_volume_deleted(volume_name)
-
-        LOG.tc_step('Delete image {}.'.format(image_name))
-        images_pg.go_to_target_page()
-        images_pg.delete_image(image_name)
-        assert images_pg.find_message_and_dismiss(messages.SUCCESS)
-        horizon.test_result = True
+    horizon.test_result = True
 
 
 def test_filter_images(admin_images_pg):
@@ -279,33 +272,25 @@ def test_filter_images(admin_images_pg):
         - Clear filter and set nonexistent image name. Check that 0 rows are displayed
         - Delete the newly created image
     """
-    images_pg, image_name = admin_images_pg
-    with helper.gen_temporary_file(suffix='.iso') as file_name:
-        LOG.tc_step('Create new image {}.'.format(image_name))
-        images_pg.create_image(image_name, image_file=file_name,
-                               description='description')
-        assert images_pg.find_message_and_dismiss(messages.INFO)
-        assert not images_pg.find_message_and_dismiss(messages.ERROR)
-        assert images_pg.is_image_active(image_name)
+    images_pg, image_name, image_id = admin_images_pg
+    images_pg.refresh_page()
+    assert images_pg.is_image_active(glance_helper.get_image_value(image_id, 'Name'))
 
-        LOG.tc_step('Go to Admin > Compute > Image')
-        admin_images_pg = admin_imagespage.ImagesPage(images_pg.driver, port=images_pg.port)
-        admin_images_pg.go_to_target_page()
+    LOG.tc_step('Go to Admin > Compute > Image')
+    admin_images_pg = admin_imagespage.ImagesPage(images_pg.driver, port=images_pg.port)
+    admin_images_pg.go_to_target_page()
 
-        LOG.tc_step('Use filter by image name and Check that filtered table has the wanted image')
-        admin_images_pg.images_table.filter(image_name)
-        assert admin_images_pg.is_image_present(image_name)
+    LOG.tc_step('Use filter by image name and Check that filtered table has the wanted image')
+    admin_images_pg.images_table.filter(image_name)
+    assert admin_images_pg.is_image_present(glance_helper.get_image_value(image_id, 'Name'))
 
-        LOG.tc_step('Clear filter and set nonexistent image name and Check that 0 rows are displayed')
-        nonexistent_image_name = "nonexistent_image_test"
-        admin_images_pg.images_table.filter(nonexistent_image_name)
-        assert admin_images_pg.images_table.rows == []
+    LOG.tc_step('Clear filter and set nonexistent image name and Check that 0 rows are displayed')
+    nonexistent_image_name = "nonexistent_image_test"
+    admin_images_pg.images_table.filter(nonexistent_image_name)
+    assert admin_images_pg.images_table.rows == []
 
-        admin_images_pg.images_table.filter('')
-        LOG.tc_step('Delete image {}.'.format(image_name))
-        admin_images_pg.delete_image(image_name)
-        assert admin_images_pg.find_message_and_dismiss(messages.SUCCESS)
-        horizon.test_result = True
+    admin_images_pg.images_table.clear()
+    horizon.test_result = True
 
 
 @fixture(scope='function')
@@ -314,13 +299,17 @@ def tenant_images_pg(tenant_home_pg_container, request):
     image_name = helper.gen_resource_name('image')
     images_pg = imagespage.ImagesPage(tenant_home_pg_container.driver, port=tenant_home_pg_container.port)
     images_pg.go_to_target_page()
+    LOG.fixture_step('Create new image {}'.format(image_name))
+    image_id = glance_helper.create_image(image_name, auth_info=Tenant.get_primary(), public=False)[1]
 
     def teardown():
-        LOG.fixture_step('Back to Groups page')
+        LOG.fixture_step('Back to Images page')
         images_pg.go_to_target_page()
+        LOG.fixture_step('Delete image {}'.format(image_name))
+        images_pg.delete_image(glance_helper.get_image_value(image_id, 'Name'))
 
     request.addfinalizer(teardown)
-    return images_pg, image_name
+    return images_pg, image_name, image_id
 
 
 def test_horizon_launch_instance_from_image(tenant_images_pg):
@@ -342,38 +331,31 @@ def test_horizon_launch_instance_from_image(tenant_images_pg):
         - Delete the newly lunched instance
         - Delete the newly created image
     """
-    images_pg, image_name = tenant_images_pg
+    images_pg, image_name, image_id = tenant_images_pg
 
     mgmt_net_name = '-'.join([Tenant.get_primary()['tenant'], 'mgmt', 'net'])
     flv_name = nova_helper.get_basic_flavor(rtn_id=False)
 
-    with helper.gen_temporary_file(suffix='.iso') as file_name:
-        LOG.tc_step('Create new image {}.'.format(image_name))
-        images_pg.create_image(image_name, image_file=file_name,
-                               description='description')
-        assert images_pg.find_message_and_dismiss(messages.INFO)
-        assert not images_pg.find_message_and_dismiss(messages.ERROR)
-        assert images_pg.is_image_active(image_name)
+    images_pg.refresh_page()
+    assert images_pg.is_image_active(glance_helper.get_image_value(image_id, 'Name'))
 
-        instance_name = helper.gen_resource_name('image_instance')
-        LOG.tc_step('Launch new instance {} from image.'.format(instance_name))
-        images_pg.launch_instance_from_image(image_name, instance_name,
-                                             flavor_name=flv_name, network_names=[mgmt_net_name],
-                                             create_new_volume=False)
-        instance_pg = instancespage.InstancesPage(images_pg.driver, port=images_pg.port)
-        instance_pg.go_to_target_page()
-        assert not instance_pg.find_message_and_dismiss(messages.ERROR)
+    instance_name = helper.gen_resource_name('image_instance')
+    LOG.tc_step('Launch new instance {} from image.'.format(instance_name))
+    images_pg.launch_instance_from_image(glance_helper.get_image_value(image_id, 'Name'), instance_name,
+                                         flavor_name=flv_name, network_names=[mgmt_net_name],
+                                         create_new_volume=False)
+    assert not images_pg.find_message_and_dismiss(messages.ERROR)
+    instance_pg = instancespage.InstancesPage(images_pg.driver, port=images_pg.port)
+    instance_pg.go_to_target_page()
+    assert not instance_pg.find_message_and_dismiss(messages.ERROR)
 
-        LOG.tc_step('Check that status of newly created instance is Active.')
-        assert instance_pg.is_instance_active(instance_name)
+    LOG.tc_step('Check that status of newly created instance is Active.')
+    instance_pg.refresh_page()
+    assert instance_pg.is_instance_active(instance_name)
 
-        LOG.tc_step('Delete instance {}.'.format(instance_name))
-        instance_pg.delete_instance_by_row(instance_name)
-        assert not instance_pg.find_message_and_dismiss(messages.ERROR)
-        assert instance_pg.is_instance_deleted(instance_name)
+    LOG.tc_step('Delete instance {}.'.format(instance_name))
+    instance_pg.delete_instance_by_row(instance_name)
+    assert not instance_pg.find_message_and_dismiss(messages.ERROR)
+    assert instance_pg.is_instance_deleted(instance_name)
 
-        LOG.tc_step('Delete image {}.'.format(image_name))
-        images_pg.go_to_target_page()
-        images_pg.delete_image(image_name)
-        assert images_pg.find_message_and_dismiss(messages.SUCCESS)
-        horizon.test_result = True
+    horizon.test_result = True

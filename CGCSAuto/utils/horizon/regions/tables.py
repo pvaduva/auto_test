@@ -275,7 +275,7 @@ def bind_table_action(action_name, attribute_search='id'):
     return decorator
 
 
-def bind_row_action(action_name, attribute_search='id'):
+def bind_row_action(action_name, attribute_search='id', secondary_locator_index=None):
     """A decorator to bind table region method to an actual row action button.
 
     Many table actions when started (by clicking a corresponding button
@@ -294,6 +294,16 @@ def bind_row_action(action_name, attribute_search='id'):
         Part of the action button id which is specific to action itself. It
         is safe to use action `name` attribute from the dashboard tables.py
         code.
+
+    .. param:: attribute_search
+
+        Attribute that is searched for to find action element. By default it
+        looks for id but another identifying attribute can be specified.
+
+    .. param:: secondary_locator_index
+
+        Used to look for nth child of 'ul' when all children have the
+        identical attributes.
     """
     # NOTE(tsufiev): button tag could be either <a> or <button> - target
     # both with *. Also primary action could be single as well, do not use
@@ -302,10 +312,13 @@ def bind_row_action(action_name, attribute_search='id'):
         by.By.CSS_SELECTOR, 'td.actions_column *.btn:nth-child(1)')
     secondary_actions_opener_locator = (
         by.By.CSS_SELECTOR,
-        'td.actions_column > .btn-group > *.btn:nth-child(2)')
+        'td.actions_column *.btn-group > *.btn:nth-child(2)')
     secondary_actions_locator = (
         by.By.CSS_SELECTOR,
-        'td.actions_column > .btn-group > ul.row_actions > li > a, button')
+        'td.actions_column *.btn-group > ul > li > a, button')
+    secondary_locator_by_index = (
+        by.By.CSS_SELECTOR,
+        'td.actions_column *.btn-group > ul > li:nth-child({}) > a'.format(secondary_locator_index))
 
     def decorator(method):
         @functools.wraps(method)
@@ -318,10 +331,13 @@ def bind_row_action(action_name, attribute_search='id'):
             if not find_action(action_element):
                 action_element = None
                 row._get_element(*secondary_actions_opener_locator).click()
-                for element in row._get_elements(*secondary_actions_locator):
-                    if find_action(element):
-                        action_element = element
-                        break
+                if secondary_locator_index:
+                    action_element = row._get_element(*secondary_locator_by_index)
+                else:
+                    for element in row._get_elements(*secondary_actions_locator):
+                        if find_action(element):
+                            action_element = element
+                            break
 
             if action_element is None:
                 msg = "Could not bind method '%s' to action control '%s'" % (

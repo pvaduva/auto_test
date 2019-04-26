@@ -9,26 +9,40 @@ from utils.horizon.pages.project.volumes.volumespage import VolumesPage
 
 class ImagesForm(forms.FormRegion):
     _fields_locator = (by.By.CSS_SELECTOR, 'ng-include')
+    _submit_locator = (by.By.CSS_SELECTOR, '*.btn.btn-primary.finish')
+
+
+class ImagesClickVisibility(forms.YesOrNoFormFieldRegion):
+    _buttons_locator = (by.By.CSS_SELECTOR, 'label')
 
 
 class ImagesTable(tables.TableRegion):
     name = "OS::Glance::Image"
     _rows_locator = (by.By.CSS_SELECTOR, 'tbody > tr[class="ng-scope"]')
+    _search_field_locator = (by.By.CSS_SELECTOR, 'div.search-bar input.search-input')
+    _clear_btn_locator = (by.By.CSS_SELECTOR, 'div.search-bar a.magic-search-clear')
 
     CREATE_IMAGE_FORM_FIELDS = (
-        "name", "description", "image_file",
-        "disk_format", "architecture", "minimum_disk", "minimum_ram",
+        "name", "description", "image_file", "kernel", "ramdisk",
+        "format", "architecture", "min_disk", "min_ram",
         "is_public", "protected"
     )
 
     CREATE_VOLUME_FROM_IMAGE_FORM_FIELDS = (
         "name", "description", "image_source",
-        "type", "size", "availability_zone")
+        "type", "volume-size", "availability-zone")
 
     EDIT_IMAGE_FORM_FIELDS = (
-        "name", "description", "disk_format", "minimum_disk",
-        "minimum_ram", "public", "protected"
+        "name", "description", "format", "min_disk",
+        "min_ram", "public", "protected"
     )
+
+    def filter(self, value):
+        self._set_search_field(value)
+
+    def clear(self):
+        btn = self._get_element(*self._clear_btn_locator)
+        btn.click()
 
     @tables.bind_table_action('btn-default', attribute_search='class')
     def create_image(self, create_button):
@@ -42,35 +56,54 @@ class ImagesTable(tables.TableRegion):
         delete_button.click()
         return forms.BaseFormRegion(self.driver)
 
-    @tables.bind_row_action('delete')
+    @tables.bind_row_action('text-danger', attribute_search='class')
     def delete_image_by_row(self, delete_button, row):
         delete_button.click()
         return forms.BaseFormRegion(self.driver)
 
-    @tables.bind_row_action('create_volume_from_image')
+    @tables.bind_row_action('create_volume_from_image', secondary_locator_index=1)
     def create_volume(self, create_volume, row):
+        """
+        Create volume must be referenced by index using the secondary_locator_index
+        since the a tag does not have defining attributes. The create volume button
+        is under the first li tag under ul.dropdown-menu for the specified row.
+        The parameter is explained in the tables.bind_row_action docstring.
+        """
         create_volume.click()
         self.wait_till_spinner_disappears()
         return forms.FormRegion(
             self.driver,
             field_mappings=self.CREATE_VOLUME_FROM_IMAGE_FORM_FIELDS)
 
-    @tables.bind_row_action('launch_image_ng')
+    @tables.bind_row_action('btn-default', attribute_search='class')
     def launch_instance(self, launch_button, row):
         launch_button.click()
         return instancespage.LaunchInstanceForm(self.driver)
 
-    @tables.bind_row_action('update_metadata')
+    @tables.bind_row_action('update_metadata', secondary_locator_index=3)
     def update_metadata(self, metadata_button, row):
+        """
+        Metadata must be referenced by index using the secondary_locator_index
+        since the a tag does not have defining attributes. The update metadata
+        button is under the third li under ul.dropdown-menu for the specified row.
+        The parameter is explained in the tables.bind_row_action docstring.
+        """
         metadata_button.click()
+        self.wait_till_spinner_disappears()
         return forms.MetadataFormRegion(self.driver)
 
-    @tables.bind_row_action('edit')
+    @tables.bind_row_action('edit', secondary_locator_index=2)
     def edit_image(self, edit_button, row):
+        """
+        Edit Image must be referenced by index using the secondary_locator_index
+        since the a tag does not have defining attributes. The edit image button
+        is under the second li under ul.dropdown-menu for the specified row.
+        The parameter is explained in the tables.bind_row_action docstring.
+        """
         edit_button.click()
         self.wait_till_spinner_disappears()
-        return forms.FormRegion(self.driver,
-                                field_mappings=self.EDIT_IMAGE_FORM_FIELDS)
+        return ImagesForm(self.driver,
+                          field_mappings=self.EDIT_IMAGE_FORM_FIELDS)
 
     @tables.bind_row_anchor_column('Image Name')
     def go_to_image_description_page(self, row_link, row):
@@ -209,7 +242,7 @@ class ImagesPage(basepage.BasePage):
         if availability_zone is not None:
             create_volume_form.availability_zone.text = availability_zone
         create_volume_form.submit()
-        return VolumesPage(self.driver)
+        return VolumesPage(self.driver, self.port)
 
     def launch_instance_from_image(self, name, instance_name, availability_zone=None, count=None,
                                    boot_source_type=None, create_new_volume=None,
