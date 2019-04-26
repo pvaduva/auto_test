@@ -52,14 +52,14 @@ def test_kube_system_services(controller):
             assert PodStatus.RUNNING == pod_status, "Pod {} status is {} instead of {}".\
                 format(pod_name, pod_status, PodStatus.RUNNING)
 
-        services = ('calico-typha', 'kube-dns', 'tiller-deploy')
+        services = ('kube-dns', 'tiller-deploy')
         LOG.tc_step("Check kube-system services on {}: {}".format(controller, services))
         existing_services = kube_system_info['service']
         existing_services = [service['name'] for service in existing_services]
         for service in services:
             assert service in existing_services, "{} not in kube-system service table".format(service)
 
-        deployments = ('calico-typha', 'coredns', 'tiller-deploy')
+        deployments = ('calico-kube-controllers', 'coredns', 'tiller-deploy')
         LOG.tc_step("Check kube-system deployments on {}: {}".format(controller, deployments))
         existing_deployments = kube_system_info['deployment.apps']
         existing_deployments = [deployment['name'] for deployment in existing_deployments]

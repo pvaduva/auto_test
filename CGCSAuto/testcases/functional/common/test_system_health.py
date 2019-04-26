@@ -30,12 +30,12 @@ class TestCoreDumpsAndCrashes:
         existing_files = {}
         for host in post_coredumps_and_crash_reports:
             core_dumps, crash_reports = post_coredumps_and_crash_reports[host]
+            failures = {'core_dumps': core_dumps, 'crash_reports': crash_reports}
 
-            if eval(report_type):
-                existing_files[host] = core_dumps
+            if failures[report_type]:
+                existing_files[host] = failures[report_type]
 
-        assert not existing_files, "{} exist on {}. Details: \n{}".format(report_type, existing_files.keys(),
-                                                                          existing_files)
+        assert not existing_files, "{} exist on {}".format(report_type, list(existing_files.keys()))
 
 
 @mark.abslast

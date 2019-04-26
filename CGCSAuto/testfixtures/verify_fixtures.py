@@ -1,5 +1,3 @@
-import re
-
 from pytest import fixture, skip
 
 from consts.auth import Tenant
@@ -98,7 +96,6 @@ def pre_alarms_session():
                 protocol, dst_port = rules
                 network_helper.create_security_group_rule(group=default_group, protocol=protocol, dst_port=dst_port,
                                                           fail_ok=True, auth_info=auth_info)
-
 
     return __get_alarms('session')
 

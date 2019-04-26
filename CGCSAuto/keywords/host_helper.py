@@ -3241,44 +3241,33 @@ def get_coredumps_and_crashreports(move=True):
     con_dir = '{}/coredumps_and_crashreports/'.format(WRSROOT_HOME)
     con_ssh.exec_cmd('mkdir -p {}'.format(con_dir))
     scp_to_local = False
-    ls_cmd = 'ls -l --time-style=+%Y-%m-%d_%H-%M-%S {} | cat'
+    ls_cmd = 'ls -l --time-style=+%Y-%m-%d_%H-%M-%S {} | grep --color=never -v total'
     core_dump_dir = '/var/lib/systemd/coredump/'
     crash_report_dir = '/var/crash/'
     for host in hosts_to_check:
         with ssh_to_host(hostname=host) as host_ssh:
-            core_dump_output = host_ssh.exec_cmd(ls_cmd.format(core_dump_dir), fail_ok=False)[1]
-            core_dumps = core_dump_output.splitlines()[1:]
-            crash_report_output = host_ssh.exec_cmd(ls_cmd.format(crash_report_dir), fail_ok=False)[1]
-            crash_reports = crash_report_output.splitlines()[1:]
-            core_dumps_and_reports[host] = core_dumps, crash_reports
+            core_dumps_and_reports[host] = []
 
-            if move:
-                if core_dumps:
-                    for line in core_dumps:
-                        timestamp, name = line.split(sep=' ')[-2:]
-                        new_name = '_'.join((host, timestamp, name))
-                        host_ssh.exec_sudo_cmd('mv {}/{} {}/{}'.format(core_dump_dir, name, core_dump_dir, new_name))
+            for failure_dir in (core_dump_dir, crash_report_dir):
+                failures = host_ssh.exec_cmd(ls_cmd.format(failure_dir), fail_ok=True)[1].splitlines()
+                core_dumps_and_reports[host].append(failures)
 
-                    scp_to_local = True
-                    host_ssh.scp_on_source(source_path='{}/*'.format(core_dump_dir),
+            if move and failures:
+                for line in failures:
+                    timestamp, name = line.split(sep=' ')[-2:]
+                    new_name = '_'.join((host, timestamp, name))
+                    host_ssh.exec_sudo_cmd('mv {}/{} {}/{}'.format(failure_dir, name, failure_dir, new_name),
+                                           fail_ok=False)
+
+                scp_to_local = True
+                if host_ssh.get_hostname() != active_con:
+                    host_ssh.scp_on_source(source_path='{}/*'.format(failure_dir),
                                            dest_user=HostLinuxCreds.get_user(),
                                            dest_ip=active_con, dest_path=con_dir,
                                            dest_password=HostLinuxCreds.get_password())
-                    host_ssh.exec_sudo_cmd('rm -f {}*'.format(core_dump_dir))
-
-                if crash_reports:
-                    for line in crash_reports:
-                        timestamp, name = line.split(sep=' ')[-2:]
-                        new_name = '_'.join((host, timestamp, name))
-                        host_ssh.exec_sudo_cmd('mv {}/{} {}/{}'.format(crash_report_dir, name, crash_report_dir,
-                                                                       new_name))
-
-                    scp_to_local = True
-                    host_ssh.scp_on_source(source_path='{}/*'.format(crash_report_dir),
-                                           dest_user=HostLinuxCreds.get_user(),
-                                           dest_ip=active_con, dest_path=con_dir,
-                                           dest_password=HostLinuxCreds.get_password())
-                    host_ssh.exec_sudo_cmd('rm -f {}*'.format(crash_report_dir))
+                else:
+                    host_ssh.exec_sudo_cmd('cp -r {}/* {}'.format(failure_dir, con_dir), fail_ok=False)
+                host_ssh.exec_sudo_cmd('rm -rf {}/*'.format(failure_dir))
 
     if scp_to_local:
         con_ssh.exec_sudo_cmd('chmod -R 755 {}'.format(con_dir))
@@ -3288,7 +3277,7 @@ def get_coredumps_and_crashreports(move=True):
         os.makedirs(coredump_and_crashreport_dir, exist_ok=True)
         source_path = '{}/*'.format(con_dir)
         common.scp_from_active_controller_to_localhost(source_path=source_path, dest_path=coredump_and_crashreport_dir)
-        con_ssh.exec_cmd('rm -f {}/*'.format(con_dir))
+        con_ssh.exec_cmd('rm -rf {}/*'.format(con_dir))
 
     LOG.info("core dumps and crash reports per host: {}".format(core_dumps_and_reports))
     return core_dumps_and_reports

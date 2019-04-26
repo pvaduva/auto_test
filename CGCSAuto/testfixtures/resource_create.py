@@ -2,7 +2,7 @@ from pytest import fixture
 
 from consts.cgcs import GuestImages
 from consts.proj_vars import ProjVar
-from keywords import nova_helper, glance_helper, keystone_helper
+from keywords import nova_helper, glance_helper, keystone_helper, container_helper
 from utils.tis_log import LOG
 
 
@@ -117,6 +117,8 @@ def rhel7_image():
 
 @fixture(scope='session', autouse=True)
 def tis_centos_image():
+    if not container_helper.is_stx_openstack_deployed():
+        return None
     return __create_image('tis-centos-guest', 'session')
 
 
