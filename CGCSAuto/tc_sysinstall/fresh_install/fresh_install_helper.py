@@ -1029,7 +1029,9 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     helm_chart_server = InstallVars.get_install_var("HELM_CHART_SERVER")
     patch_server = InstallVars.get_install_var("PATCH_SERVER")
     guest_server = InstallVars.get_install_var("GUEST_SERVER")
-    servers = list({file_server, iso_host, patch_server, guest_server, helm_chart_server})
+
+    servers = list({file_server, iso_host, patch_server, guest_server, helm_chart_server}) if not subcloud else \
+        list({iso_host, patch_server, guest_server, helm_chart_server})
     LOG.fixture_step("Establishing connection to {}".format(servers))
 
     servers_map = {server_: setups.initialize_server(server_) for server_ in servers}
