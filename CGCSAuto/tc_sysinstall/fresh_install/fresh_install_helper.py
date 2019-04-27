@@ -1045,6 +1045,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         file_server_obj = Node(host_ip=dc_float_ip, host_name='controller-0')
         file_server_obj.ssh_conn = install_helper.establish_ssh_connection(file_server_obj.host_ip)
         ipv6_config = InstallVars.get_install_var("IPV6_CONFIG")
+        set_preinstall_projvars(build_dir=build_dir, build_server=bs_obj)
         v6 = is_dcloud_system_controller_ipv6(file_server_obj)
         if not v6:
             if ipv6_config:
