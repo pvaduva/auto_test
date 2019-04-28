@@ -488,7 +488,6 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
     computes = []
     storages = []
     available_only = False
-    check_if_ready = True
     for hostname in hostnames:
         if 'controller' in hostname:
             controllers.append(hostname)
@@ -509,9 +508,6 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
             test_step += ' compute nodes'
         else:
             test_step += " {}".format(computes[0])
-
-        if not any(h for h in lab_hosts if 'storage' in h):
-            check_if_ready = False
     elif storages and not controllers and not computes:
         if len(storages) > 1:
             test_step += ' storage nodes'
@@ -527,9 +523,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
                                     check_hypervisor_up=False, check_webservice_up=False)
         else:
             host_helper.unlock_hosts(hostnames, con_ssh=con_ssh, fail_ok=False, check_nodes_ready=False)
-
-        if check_if_ready:
-            kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=HostTimeout.NODES_STATUS_READY)
+        kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=HostTimeout.NODES_STATUS_READY)
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
