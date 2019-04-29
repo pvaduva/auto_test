@@ -764,9 +764,7 @@ def sm_dump_table(output_lines):
             continue
 
         row = [category]
-        row_contents = list(__sm_item_line.findall(line))
-        if not 3 == len(row_contents):
-            raise ValueError("Expecting 3 columns per item line. Actual line: {}".format(line))
+        row_contents = list(__sm_item_line.findall(line))[:3]   # Take the first 3 columns only. Could have up to 5.
 
         row += row_contents
         table_['values'].append(row)
