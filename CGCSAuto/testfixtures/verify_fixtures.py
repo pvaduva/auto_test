@@ -191,19 +191,11 @@ def ping_vms_from_nat(request):
 @fixture()
 def ceph_precheck():
     """
-    Run test pre-checks before running CEPH storage tests.
+    Run test pre-checks before running CEPH tests.
 
     """
-    LOG.info('Ensure the system has storage nodes')
-    sys_type = system_helper.get_sys_type()
-    if not sys_type == SysType.STORAGE:
-        skip('SUT does not have storage nodes')
 
     LOG.info('Verify the health of the CEPH cluster')
     rtn, msg = storage_helper.is_ceph_healthy()
     LOG.info('{}'.format(msg))
 
-    LOG.info('Verify if there are OSDs provisioned')
-    osds = storage_helper.get_num_osds()
-    LOG.info('System has {} OSDS'.format(osds))
-    assert osds != 0, 'There are no OSDs assigned'
