@@ -46,6 +46,7 @@ def __wait_for_records(limit, meter, query, entry_num, timeout):
 
     end_time = time.time() + timeout
     while time.time() < end_time:
+        # ceilometer sample cmds are obsolete. Update required.
         samples = ceilometer_helper.get_samples(limit=limit, meter=meter, query=query)
         if len(samples) >= entry_num:
             return samples

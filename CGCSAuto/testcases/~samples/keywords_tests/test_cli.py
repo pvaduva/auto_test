@@ -9,7 +9,7 @@ def test_clis():
     cli.system('host-show controller-0')
     cli.nova('list')
     cli.heat('stack-list')
-    ceilometer_helper.get_samples()
+    ceilometer_helper.get_alarms()
     keystone_helper.get_endpoints()
     cli.neutron('router-list')
     cli.neutron('router-list', convert_openstack=True)

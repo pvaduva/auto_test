@@ -277,12 +277,12 @@ def neutron(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, 
                     err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 
 
-def ceilometer(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
-               auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
-
-    return exec_cli('ceilometer', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+# def ceilometer(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
+#                auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
+#
+#     return exec_cli('ceilometer', sub_cmd=cmd, positional_args=positional_args, flags=flags,
+#                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
+#                     err_only=err_only, timeout=timeout, rtn_list=rtn_list)
 
 
 def cinder(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
