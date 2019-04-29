@@ -354,7 +354,7 @@ def test_modify_drdb_swact_then_reboot():
     cmd = "controllerfs-modify {}={}".format(partition_name, new_partition_value)
     cli.system(cmd)
 
-    partition_name = "glance"
+    partition_name = "extension"
     partition_value = drbdfs_val[partition_name]
     cgcs_freespace = math.trunc(backup_freespace / 2)
     new_partition_value = cgcs_freespace + int(partition_value)
