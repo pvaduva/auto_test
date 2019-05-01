@@ -1478,7 +1478,7 @@ def get_retention_period(name='metering_time_to_live', con_ssh=None):
     return int(ret_per)
 
 
-def get_dns_servers(auth_info=Tenant.get('admin'), con_ssh=None, use_telnet=False, con_telnet=None, ):
+def get_dns_servers(auth_info=None, con_ssh=None, use_telnet=False, con_telnet=None, ):
     """
     Get the DNS servers currently in-use in the System
 
@@ -1491,6 +1491,9 @@ def get_dns_servers(auth_info=Tenant.get('admin'), con_ssh=None, use_telnet=Fals
     Returns (list): a list of DNS servers will be returned
 
     """
+    if auth_info is None:
+        auth_info=Tenant.get('admin')
+
     table_ = table_parser.table(cli.system('dns-show', ssh_client=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                            auth_info=auth_info))
     dns_servers = table_parser.get_value_two_col_table(table_, 'nameservers').strip().split(sep=',')
@@ -1532,7 +1535,7 @@ def set_dns_servers(nameservers, with_action_option=None, check_first=True, fail
     if check_first:
         dns_servers = get_dns_servers(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                       auth_info=auth_info)
-        if dns_servers == nameservers:
+        if dns_servers == nameservers and with_action_option is None:
             msg = 'DNS servers already set to {}. Do nothing.'.format(dns_servers)
             LOG.info(msg)
             return -1, dns_servers

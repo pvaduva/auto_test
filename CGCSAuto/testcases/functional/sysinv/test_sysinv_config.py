@@ -268,7 +268,8 @@ class TestDnsSettings:
             # (('fd00:0:0:21::5', '2001:db8::'), 'apply'),
             (('10.10.10.3', '10.256.0.1', '8.8.8.8'), None),
             (('128.224.144.130', '147.11.57.128', '147.11.57.133'), 'apply'),
-            (('8.8.8.8', '8.8.4.4'), 'RANDOM'),
+            # TODO: no more sematic checking for action=xxx any more
+            # (('8.8.8.8', '8.8.4.4'), 'RANDOM'),
         ],
         ids=id_gen
     )
