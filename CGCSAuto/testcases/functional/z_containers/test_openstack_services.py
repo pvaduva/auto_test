@@ -40,7 +40,7 @@ def test_openstack_services_healthy():
     LOG.tc_step("Check openstack pods are in running or completed status via kubectl get on all controllers")
     controllers = get_valid_controllers()
     for host in controllers:
-        check_openstack_pods_healthy(host=host, timeout=5)
+        check_openstack_pods_healthy(host=host, timeout=60)
 
 
 @mark.trylast
