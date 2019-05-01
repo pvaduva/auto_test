@@ -90,12 +90,13 @@ def upload_helm_charts(tar_file, delete_first=False, con_ssh=None, timeout=120, 
     return 0, file_path
 
 
-def upload_app(app_name, tar_file, check_first=True, fail_ok=False, uploaded_timeout=300, con_ssh=None,
-               auth_info=Tenant.get('admin')):
+def upload_app(tar_file, app_name=None, app_version=None, check_first=True, fail_ok=False, uploaded_timeout=300,
+               con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Upload an application via 'system application-upload'
     Args:
         app_name:
+        app_version:
         tar_file:
         check_first
         fail_ok:
@@ -111,7 +112,12 @@ def upload_app(app_name, tar_file, check_first=True, fail_ok=False, uploaded_tim
         LOG.info(msg)
         return -1, msg
 
-    args = '{} {}'.format(app_name, tar_file)
+    args = ''
+    if app_name:
+        args += '-n {} '.format(app_name)
+    if app_version:
+        args += '-v {} '.format(app_version)
+    args = '{}{}'.format(args, tar_file)
     code, output = cli.system('application-upload', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
                               rtn_list=True)
 

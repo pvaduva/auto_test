@@ -114,7 +114,7 @@ def test_launch_app_via_sysinv(copy_test_apps, cleanup_app):
 
     # Test fails at upload, possible workaround: sudo install -d -o www -g root -m 755 /www/pages/helm_charts
     LOG.tc_step("Upload {} helm charts".format(app_name))
-    container_helper.upload_app(app_name=app_name, tar_file=os.path.join(app_dir, HELM_TAR))
+    container_helper.upload_app(app_name=app_name, app_version='1.0', tar_file=os.path.join(app_dir, HELM_TAR))
 
     LOG.tc_step("Apply {}".format(app_name))
     container_helper.apply_app(app_name=app_name)
