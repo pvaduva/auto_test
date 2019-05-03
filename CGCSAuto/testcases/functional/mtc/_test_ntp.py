@@ -9,7 +9,7 @@ def test_ntp_alarm_in_sync_with_ntpq_stats():
         LOG.tc_step("Check ntp alarm and 'ntpq -pn'")
         host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
 
-
+# This test was removed temporily due to https://bugs.launchpad.net/starlingx/+bug/1824814
 def test_system_ntp_modify():
     """
     Test that ntp servers were initially configured and can be reconfigured
