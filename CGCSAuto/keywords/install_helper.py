@@ -3369,7 +3369,7 @@ def get_git_name(lab_name):
 
 
 def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None, close_telnet=False,
-                             banner=True, branding=True, kubernetes=False, subcloud=False):
+                             banner=True, branding=True, kubernetes=False, subcloud=False, ansible=False):
     """
     Runs the config_controller command on the active_controller host
     Args:
@@ -3401,6 +3401,9 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             con_telnet.exec_cmd("source {}".format(bashrc_path))
         con_telnet.exec_cmd("export USER=wrsroot")
         config_file_found = False
+        if ansible:
+            config_file = 'localhost.yml'
+
         if con_telnet.exec_cmd("test -f {}".format(config_file))[0] == 0:
             config_file_found = True
         else:
@@ -3412,15 +3415,21 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         if not config_file_found:
             msg = "The controller configuration file {}  not found in {}".format(config_file, WRSROOT_HOME)
             raise exceptions.InstallError(msg)
+        if not ansible:
+            config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") \
+                else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '') if not subcloud \
+                else "config_subcloud"
+            cmd = 'echo "{}" | sudo -S {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
+        else:
+            config_cmd = 'ansible-playbook /usr/share/ansible/stx-ansible/playbooks/bootstrap/bootstrap.yml -e ' \
+                         '"override_files_dir={} ansible_become_pass={}"'\
+                .format(WRSROOT_HOME, HostLinuxCreds.get_password())
+            cmd = 'echo "{}" | sudo -S {}'.format(HostLinuxCreds.get_password(), config_cmd)
 
-        config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") \
-            else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '') if not subcloud \
-            else "config_subcloud"
-        cmd = 'echo "{}" | sudo -S {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT, fail_ok=True)
 
-        if rc != 0 or "failed" in output:
+        if rc != 0 or (ansible and analyze_ansible_output(output)[0] != 0) or (not ansible and "failed" in output):
             err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
             LOG.error(err_msg)
             scp_logs_to_log_dir([LogPath.CONFIG_CONTROLLER_LOG], con_ssh=con_telnet)
@@ -4413,3 +4422,21 @@ def download_stx_helm_charts(lab, server, stx_helm_charts_path=None):
     server.ssh_conn.rsync(stx_helm_charts_path,
                           lab['controller-0 ip'],
                           dest_path, pre_opts=pre_opts)
+
+
+def analyze_ansible_output(output):
+    if output and len(output) > 0:
+        lastlines = output.splitlines()[-2:]
+        result_line = [line for line in lastlines if "PLAY RECAP" not in line]
+        result_line = result_line[0] if len(result_line) > 0 else None
+        LOG.info("Ansible result line = {}".format(result_line))
+        if result_line and ":" in result_line:
+            result = result_line.split(':')[1].split()
+            failed = [i for i in result if "failed" in i]
+            if failed:
+                return int(failed[0].split('=')[1]), result
+            return 1, result
+
+    return 1, None
+
+

@@ -96,7 +96,12 @@ def test_simplex_install(install_setup):
         fresh_install_helper.configure_subcloud(controller0_node, lab_files_server, subcloud=install_subcloud,
                                                 final_step=final_step)
     else:
-        fresh_install_helper.configure_controller(controller0_node)
+        fresh_install_helper.configure_controller_(controller0_node, ansible=True)
+
+    fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTITIAL)
+
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+    fresh_install_helper.unlock_active_controller(controller0_node)
 
     controller0_node.telnet_conn.hostname = r"controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
@@ -110,7 +115,9 @@ def test_simplex_install(install_setup):
 
     fresh_install_helper.wait_for_hosts_ready(controller0_node.name, lab=lab)
 
-    fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
+    #fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
+
+    fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_LAST)
 
     fresh_install_helper.attempt_to_run_post_install_scripts()
 

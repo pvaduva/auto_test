@@ -111,6 +111,7 @@ def test_storage_install(install_setup):
 
     fresh_install_helper.bulk_add_hosts(lab=lab, con_ssh=controller0_node.ssh_conn)
     fresh_install_helper.boot_hosts(boot_device)
+    fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTERIM)
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.unlock_hosts(["controller-1"], con_ssh=controller0_node.ssh_conn)
@@ -128,8 +129,8 @@ def test_storage_install(install_setup):
         collect_sys_net_info(lab)
         setup_tis_ssh(lab)
 
-    fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
-
+    #fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
+    fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_LAST)
     fresh_install_helper.attempt_to_run_post_install_scripts()
 
     fresh_install_helper.reset_global_vars()

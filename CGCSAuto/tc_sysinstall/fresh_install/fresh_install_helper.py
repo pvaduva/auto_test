@@ -6,17 +6,25 @@ from pytest import skip
 
 import setups
 from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \
-    keystone_helper
+    keystone_helper, common
 from utils import cli
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
-from consts.auth import Tenant, HostLinuxCreds
+from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto
 from consts.timeout import InstallTimeout, HostTimeout
 from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState
 from consts.filepaths import BuildServerPath, WRSROOT_HOME, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
 
+
+DEPLOY_TOOL = 'deploy'
+DEPLOY_SOUCE_PATH = '/folk/cgts/lab/bin/'
+DEPLOY_DEST_PATH = '/home/wrsroot/'
+DEPLOY_RESULTS_DEST_PATH = '/folk/cgts/lab/deployment/'
+DEPLOY_INTITIAL = 'initial'
+DEPLOY_INTERIM = 'interim'
+DEPLOY_LAST = 'last'
 
 lab_setup_count = 0
 completed_resume_step = False
@@ -254,6 +262,55 @@ def set_guest_image_var(sys_version=None):
     InstallVars.set_install_var(guest_image=guest_path)
 
     return guest_path
+
+
+def configure_controller_(controller0_node, config_file='TiS_config.ini_centos', lab=None, banner=True, branding=True,
+                          ansible=False, final_step=None):
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    kubernetes = InstallVars.get_install_var("KUBERNETES")
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
+    test_step = "Configure controller"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+        install_helper.controller_system_config(lab=lab, config_file=config_file,
+                                                con_telnet=controller0_node.telnet_conn, kubernetes=kubernetes,
+                                                banner=banner, branding=branding, ansible=ansible)
+
+    if controller0_node.ssh_conn is None:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+    install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
+
+    # WK Touch .this_didnt_work to avoid using heat for kubernetes
+    controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
+
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        reset_global_vars()
+        skip("stopping at install step: {}".format(LOG.test_step))
+
+
+def unlock_active_controller(controller0_node,  lab=None, final_step=None):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    test_step = "unlock_active_controller"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+        if controller0_node.ssh_conn is None:
+            controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+        sys_mode = system_helper.get_system_value(field="system_mode",  con_ssh=controller0_node.ssh_conn)
+        LOG.info("unlocking {}".format(controller0_node.name))
+        host_helper.unlock_host(host=controller0_node.name,
+                                available_only=False if sys_mode == "duplex-direct" else True,
+                                con_ssh=controller0_node.ssh_conn, timeout=2400,
+                                check_hypervisor_up=False, check_webservice_up=False, check_subfunc=False,
+                                check_first=False, con0_install=True)
+
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        reset_global_vars()
+        skip("stopping at install step: {}".format(LOG.test_step))
+
 
 
 def configure_controller(controller0_node, config_file='TiS_config.ini_centos', lab_setup_conf_file=None,
@@ -1373,3 +1430,97 @@ def apply_node_labels(hosts, active_controller_node):
             cli.system(cmd.format(host), "sriov=enabled", ssh_client=active_controller_node.ssh_conn)
         else:
             cli.system(cmd.format(host), "openstack-control-plane=enabled", ssh_client=active_controller_node.ssh_conn)
+
+
+def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
+    """
+
+    Args:
+        lab:
+        stage:
+
+    Returns:
+
+    """
+
+    if not InstallVars.get_install_var("EXTRACT_DEPLOY_CONFIG"):
+        return 0
+
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    controller0_node = lab['controller-0']
+    lab_name = lab['name']
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+    ControllerClient.set_active_controller(controller0_node.ssh_conn)
+
+    deploy_tool_full_path = DEPLOY_DEST_PATH + DEPLOY_TOOL
+
+    test_step = "collect lab configuration {}".format(stage)
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+
+        cmd = "test -f {}".format(deploy_tool_full_path)
+        run_deploy = False
+        err_msg = ''
+        if controller0_node.ssh_conn.exec_cmd(cmd)[0] != 0:
+            # download deploy tool
+
+            pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+
+            rc,  output = server.ssh_conn.rsync(DEPLOY_SOUCE_PATH + DEPLOY_TOOL, controller0_node.host_ip,
+                                                DEPLOY_DEST_PATH, dest_user=HostLinuxCreds.get_user(),
+                                                dest_password=HostLinuxCreds.get_password(), pre_opts=pre_opts,
+                                                fail_ok=True)
+            if rc != 0:
+                err_msg = err_msg + output
+            run_deploy = True if rc == 0 else False
+        else:
+            run_deploy = True
+
+        if run_deploy and controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
+             controller0_node.ssh_conn.exec_cmd("chmod 777 {}".format(deploy_tool_full_path))
+        else:
+            LOG.warning("The deploy script  is missing in  controller-0: {}".format(err_msg))
+
+        cmd2 = None
+        if run_deploy:
+            if stage == DEPLOY_INTITIAL:
+                cmd1 = "{} build -n {} -o {}_initial.yaml".format(deploy_tool_full_path, lab_name, lab_name)
+            elif stage == DEPLOY_INTERIM:
+                cmd1 = "{} build -n {} -o {}_before.yaml".format(deploy_tool_full_path, lab_name, lab_name)
+            else:
+                cmd1 = "{} build -n {} -o {}.yaml --minimal-config".format(deploy_tool_full_path, lab_name, lab_name)
+                cmd2 = "{} build -n {} -o {}_full.yaml".format(deploy_tool_full_path, lab_name, lab_name)
+
+            if cmd1:
+                rc, output = controller0_node.ssh_conn.exec_cmd("source /etc/platform/openrc; " + cmd1)
+                if rc != 0:
+                    LOG.warning("The deploy command {} failed: {}".format(cmd1, output))
+            if cmd2:
+                rc, output = controller0_node.ssh_conn.exec_cmd("source /etc/platform/openrc; " + cmd2)
+                if rc != 0:
+                    LOG.warning("The deploy command {} failed: {}".format(cmd2, output))
+
+            # check if yaml files are generated:
+            yaml_files = "{}{}*.yaml".format(WRSROOT_HOME, lab_name)
+            cmd = "ls {}".format(yaml_files)
+            if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
+                if not server.server_ip:
+                   rc, server_ip = server.ssh_conn.exec_cmd("hostname -i")
+                   if rc == 0:
+                       server.server_ip = server_ip.strip()
+                pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
+                rc, output = controller0_node.ssh_conn.rsync(yaml_files, server.server_ip, DEPLOY_RESULTS_DEST_PATH,
+                                                             dest_user=SvcCgcsAuto.USER,
+                                                             dest_password=SvcCgcsAuto.PASSWORD,
+                                                             pre_opts=pre_opts, fail_ok=True)
+                if rc != 0:
+                    LOG.warning("Fail to copy {} to  destination {}:{}".format(yaml_files, server.name,
+                                                                               DEPLOY_RESULTS_DEST_PATH))
+
+    if LOG.test_step == final_step or test_step == final_step:
+        skip("stopping at install step: {}".format(LOG.test_step))
