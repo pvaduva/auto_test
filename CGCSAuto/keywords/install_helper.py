@@ -641,15 +641,15 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
                                lab['controller-0 ip'],
                                WRSROOT_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
 
-    # # WK around for copying the stein lab_setup.sh file
-    # if "k8s_lab_config" in lab_file_dir:
-    #
-    #         k8s_lab_setup_script_path = os.path.split(lab_file_dir)[0] + "/lab_setup_stein.sh"
-    #         cmd = "test -e {}".format(k8s_lab_setup_script_path)
-    #         conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
-    #         conf_server.ssh_conn.rsync(k8s_lab_setup_script_path,
-    #                                lab['controller-0 ip'],
-    #                                WRSROOT_HOME + "lab_setup.sh", pre_opts='sshpass -p "Li69nux*"')
+    openstack_lab_files_dir = os.path.split(lab_file_dir)[0] + "/openstack"
+
+    cmd = "test -e " + openstack_lab_files_dir
+    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
+        conf_server.ssh_conn.rsync(openstack_lab_files_dir + "/*",
+                               lab['controller-0 ip'],
+                               WRSROOT_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
+    else:
+        LOG.warning("Openstack lab config file path: {} does not exist".format(openstack_lab_files_dir))
 
 
 
