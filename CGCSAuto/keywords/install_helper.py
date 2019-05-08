@@ -641,7 +641,7 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
                                lab['controller-0 ip'],
                                WRSROOT_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
 
-    openstack_lab_files_dir = os.path.split(lab_file_dir)[0] + "/openstack"
+    openstack_lab_files_dir = os.path.split(script_path)[0] + "/yow/openstack"
 
     cmd = "test -e " + openstack_lab_files_dir
     if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
