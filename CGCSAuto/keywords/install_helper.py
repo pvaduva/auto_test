@@ -788,7 +788,8 @@ def run_infra_post_install_setup():
     return run_setup_script(script="lab_infra_post_install_setup", config=True)
 
 
-def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=None, timeout=3600, fail_ok=True):
+def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=None, timeout=3600, repeat=1,
+                     fail_ok=True):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
@@ -809,9 +810,9 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
             else:
                 raise exceptions.InstallError(msg)
 
+    attempts = repeat
     cmd = "test -e {}/{}.sh".format(WRSROOT_HOME, script)
     rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
-
     if rc != 0:
         msg = "The {}.sh file missing from active controller".format(script)
         if fail_ok:
@@ -825,7 +826,14 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
         cmd = "cd; source /etc/platform/openrc; ./{}.sh".format(script)
 
     con_ssh.set_prompt(Prompt.ADMIN_PROMPT)
-    rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout, fail_ok=fail_ok)
+    #rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout, fail_ok=fail_ok)
+    #if rc != 0:
+    rc = 1
+    while rc != 0 and attempts > 0:
+        rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout)
+        attempts -= 1
+        time.sleep(1)
+
     if rc != 0:
         msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)
@@ -3416,10 +3424,16 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             msg = "The controller configuration file {}  not found in {}".format(config_file, WRSROOT_HOME)
             raise exceptions.InstallError(msg)
         if not ansible:
+            extra_option = '--force'
+            # extra_option = '--force' \
+            #     if con_telnet.exec_sudo_cmd("config_controller --help | grep \'\\-\\-force\'", fail_ok=True)[0] == 0 \
+            #     else ''
+
             config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") \
-                else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '') if not subcloud \
-                else "config_subcloud"
-            cmd = 'echo "{}" | sudo -S {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file)
+                else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '')\
+                if not subcloud else "config_subcloud"
+            cmd = 'echo "{}" | sudo -S {} {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file,
+                                                        extra_option)
         else:
             config_cmd = 'ansible-playbook /usr/share/ansible/stx-ansible/playbooks/bootstrap/bootstrap.yml -e ' \
                          '"override_files_dir={} ansible_become_pass={}"'\
@@ -4110,9 +4124,6 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None,  tuxlab_conn=None, i
                           extra_opts=["--delete", "--force", "--chmod=Du=rwx,Dgo=rx,Fu=rwx,Fog=r"], pre_opts=pre_opts,
                           timeout=InstallTimeout.INSTALL_LOAD)
 
-    LOG.info("Updating pxeboot kickstart files")
-    update_pxeboot_ks_files(lab_dict, tuxlab_conn, feed_path)
-
     LOG.info("Create new symlink to {}".format(feed_path))
     if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
         msg = "Failed to remove feed"
@@ -4123,6 +4134,9 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None,  tuxlab_conn=None, i
         msg = "Failed to set VLM target {} feed symlink to: " + tuxlab_sub_dir
         LOG.error(msg)
         return False
+
+    LOG.info("Updating pxeboot kickstart files")
+    update_pxeboot_ks_files(lab_dict, tuxlab_conn, feed_path)
 
     tuxlab_conn.close()
 

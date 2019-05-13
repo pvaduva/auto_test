@@ -271,6 +271,12 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
         lab = InstallVars.get_install_var("LAB")
     kubernetes = InstallVars.get_install_var("KUBERNETES")
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
+
+    if controller0_node.telnet_conn is None:
+        controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
+
+    ansible = True if controller0_node.telnet_conn.exec_cmd("test -f {}localhost.yml".format(WRSROOT_HOME),
+                                                            fail_ok=True)[0] == 0  else False
     test_step = "Configure controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
@@ -586,7 +592,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None):
+def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None, repeat=1):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     ovs = InstallVars.get_install_var("OVS") if ovs is None else ovs
     if conf_file is None:
@@ -599,7 +605,8 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None):
     LOG.tc_step(test_step)
     if do_step(test_step):
         LOG.info("running lab_setup.sh")
-        install_helper.run_setup_script(conf_file=conf_file, con_ssh=con_ssh, fail_ok=False, config=True, timeout=7200)
+        install_helper.run_setup_script(conf_file=conf_file, con_ssh=con_ssh, fail_ok=False, config=True, timeout=7200,
+                                        repeat=repeat)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))

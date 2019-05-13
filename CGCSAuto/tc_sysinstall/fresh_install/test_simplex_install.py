@@ -108,7 +108,7 @@ def test_simplex_install(install_setup):
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    fresh_install_helper.run_lab_setup(controller0_node.ssh_conn)
+    fresh_install_helper.run_lab_setup(controller0_node.ssh_conn, repeat=2)
 
     if lab.get("floating ip"):
         setup_tis_ssh(lab)
