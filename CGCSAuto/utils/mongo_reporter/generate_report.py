@@ -299,12 +299,13 @@ def mark_status_on_build_server(status, build_server, build_id=None, builds_dir=
 
     with host_helper.ssh_to_build_server(bld_srv=build_server) as bld_srv_ssh:
         for build_path in build_paths:
+            build_path = os.path.normpath(build_path)
             if not bld_srv_ssh.file_exists(file_path=build_path):
                 print("Build path {} does not exist".format(build_path))
                 continue
 
             if status == 'GREEN':
-                green_path = '{}/latest_green_build'.format(os.path.dirname(os.path.abspath(build_path)))
+                green_path = '{}/latest_green_build'.format(os.path.dirname(build_path))
                 bld_srv_ssh.exec_cmd('rm -f {}'.format(green_path))
                 bld_srv_ssh.exec_cmd('ln -s {} {}'.format(build_path, green_path), fail_ok=False)
                 print("latest_green_build symlink is successfully updated to {}:{}".format(build_server, build_path))

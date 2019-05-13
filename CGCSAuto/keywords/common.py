@@ -638,7 +638,7 @@ def parse_args(args_dict, repeat_arg=False, vals_sep=' '):
         else:
             raise ValueError("Unrecognized value type. Key: {}; value: {}".format(key, val))
 
-    return args
+    return args.strip()
 
 
 def get_symlink(ssh_client, file_path):

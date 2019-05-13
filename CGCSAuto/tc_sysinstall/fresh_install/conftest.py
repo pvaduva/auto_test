@@ -83,7 +83,7 @@ def pytest_configure(config):
             tis_build_dir = tis_build_dir if tis_build_dir else BuildServerPath.LATEST_BUILD
             host_build_dir_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, tis_builds_dir, tis_build_dir)
 
-        host_build_dir_path = os.path.abspath(host_build_dir_path)
+        host_build_dir_path = os.path.normpath(host_build_dir_path)
         if host_build_dir_path.endswith('/latest_build'):
             build_id = build_info.get_latest_host_build_dir(build_server=build_server,
                                                             latest_build_simlink=host_build_dir_path)

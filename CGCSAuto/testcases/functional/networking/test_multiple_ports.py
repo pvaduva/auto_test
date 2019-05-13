@@ -75,7 +75,7 @@ class TestMutiPortsBasic:
         ResourceCleanup.add('flavor', flavor_id, scope='class')
 
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+        nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
         mgmt_net_id = network_helper.get_mgmt_net_id()
         tenant_net_id = network_helper.get_tenant_net_id()
@@ -227,8 +227,8 @@ class TestMutiPortsPCI:
         pcipt_seg_ids = {}
         if avail_nets:
             avail_net_name = avail_nets[-1]
-            avail_net, segment_id = network_helper.get_net_show_values(network=avail_net_name,
-                                                                       fields=('id', 'provider:segmentation_id'))
+            avail_net, segment_id = network_helper.get_network_values(network=avail_net_name,
+                                                                      fields=('id', 'provider:segmentation_id'))
             internal_nets = [avail_net]
             pcipt_seg_ids[avail_net_name] = segment_id
             avail_pcipt_net = avail_sriov_net = avail_net
@@ -238,7 +238,7 @@ class TestMutiPortsPCI:
             internal_nets = []
             if avail_pcipt_nets:
                 avail_pcipt_net_name = avail_pcipt_nets[-1]
-                avail_pcipt_net, segment_id = network_helper.get_net_show_values(
+                avail_pcipt_net, segment_id = network_helper.get_network_values(
                     network=avail_pcipt_net_name, fields=('id', 'provider:segmentation_id'))
                 internal_nets.append(avail_pcipt_net)
                 pcipt_seg_ids[avail_pcipt_net_name] = segment_id
@@ -256,8 +256,8 @@ class TestMutiPortsPCI:
 
         if avail_pcipt_nets and is_cx4:
             extra_pcipt_net_name = avail_nets[0] if avail_nets else avail_pcipt_nets[0]
-            extra_pcipt_net, seg_id = network_helper.get_net_show_values(network=extra_pcipt_net_name,
-                                                                         fields=('id', 'provider:segmentation_id'))
+            extra_pcipt_net, seg_id = network_helper.get_network_values(network=extra_pcipt_net_name,
+                                                                        fields=('id', 'provider:segmentation_id'))
             if extra_pcipt_net not in internal_nets:
                 nics.append({'net-id': extra_pcipt_net})
                 pcipt_seg_ids[extra_pcipt_net_name] = seg_id
@@ -265,7 +265,7 @@ class TestMutiPortsPCI:
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
         flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048, cleanup='class')[1]
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'preferred'}
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+        nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
         LOG.fixture_step("(class) Boot a base pci vm with following nics: {}".format(nics))
         base_vm_pci = vm_helper.boot_vm(name='multiports_pci_base', flavor=flavor_id, nics=nics, cleanup='class')[1]

@@ -2,53 +2,14 @@ import time
 
 from pytest import fixture, mark
 
-from consts.auth import Tenant
 from consts.cgcs import EventLogID
 from keywords import nova_helper, host_helper, system_helper, network_helper, vm_helper
-from utils import table_parser, cli
 from utils.tis_log import LOG
 
 DEFAULT_DNS_SERVERS = ['147.11.57.133', '128.224.144.130', '147.11.57.128']
 UNRESTORED_DNS_SERVERS = []
 NET_NAME = None
 HOSTS_AFFECTED = []
-
-
-def apply_service_parameters(service, hosts):
-    """
-    This applies service parameters.
-
-    Args:
-        - service: service parameter to apply
-
-    Setup:
-        - Assume that there are parameters that need to be applied
-
-    Test Steps:
-        - Apply service parameters
-        - Wait for nodes to report 'Config out-of-date' alarm(s)
-        - Lock/unlock each affected node
-        - Ensure 'Config out-of-date' alarm(s) clear
-
-    Returns:
-        - Nothing
-    """
-    LOG.tc_step("Applying service parameters")
-    system_helper.apply_service_parameters(service, wait_for_config=False)
-
-    LOG.tc_step("Check config out-of-date alarms are raised against the nodes")
-    for node in hosts:
-        system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id="host={}".format(node))
-
-    LOG.info("Wait 60 seconds to ensure the service parameter is applied")
-    time.sleep(60)
-
-    LOG.tc_step("Lock and unlock all affected nodes: {}".format(hosts))
-    host_helper.lock_unlock_hosts(hosts=hosts)
-
-    LOG.tc_step("Wait for the config out-of-date alarms to clear")
-    for node in hosts:
-        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id="host={}".format(node))
 
 
 def provision_internal_dns(hosts):
@@ -73,24 +34,19 @@ def provision_internal_dns(hosts):
         - Nothing
 
     """
+    LOG.tc_step("Ensure ml2 extension driver for dns is enabled.")
+    code = system_helper.add_ml2_extension_drivers(drivers='dns')[0]
+    if code == -1:
+        return
 
-    # service, section, name, value
-    service = 'network'
-    ml2driver = ('network', 'ml2', 'extension_drivers', 'dns')
-    neutron_domain = ('network', 'default', 'dns_domain', 'example.ca')
-
-    LOG.tc_step("Setting internal dns resolution service parameters")
-    system_helper.create_service_parameter(*ml2driver)
-    system_helper.create_service_parameter(*neutron_domain)
-
-    apply_service_parameters(service, hosts=hosts)
+    __clear_config_out_of_date_alarms(hosts=hosts)
 
 
 def deprovision_internal_dns(hosts):
     """
     Verify that internal dns provisioning can be disabled using system
     service parameters.
-    
+
     Args:
         - Nothing
 
@@ -109,54 +65,25 @@ def deprovision_internal_dns(hosts):
 
     """
 
-    service = "network"
-    ml2driver = ("network", "ml2", "extension_drivers")
-    neutron_domain = ("network", "default", "dns_domain")
+    LOG.tc_step("Ensure ml2 extension driver for dns is enabled.")
+    code = system_helper.remove_ml2_extension_drivers(drivers='dns')[0]
+    if code == -1:
+        return
 
-    LOG.tc_step("Deleting internal dns resolution service parameters")
-    ml2_uuid = system_helper.get_service_parameter_values(*ml2driver, rtn_value='uuid')
-    neutron_uuid = system_helper.get_service_parameter_values(*neutron_domain, rtn_value='uuid')
-    system_helper.delete_service_parameter(ml2_uuid)
-    system_helper.delete_service_parameter(neutron_uuid)
-
-    apply_service_parameters(service, hosts)
+    __clear_config_out_of_date_alarms(hosts=hosts)
 
 
-def get_subnets(net_name):
-    """
-    Helper function to return list of subnets.
+def __clear_config_out_of_date_alarms(hosts):
+    LOG.info("Check config out-of-date alarms are raised against the nodes and lock unlock them to clear alarms")
+    for node in hosts:
+        system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id="host={}".format(node))
 
-    Arguments:
-    - net-name: tenant to be used
-    """
-    LOG.info("Query subnets")
-    cmd = "net-show {}".format(net_name)
-    net_show_table_ = table_parser.table(cli.neutron(cmd))
-    subnet_list = table_parser.get_value_two_col_table(net_show_table_, "subnets")
-    LOG.info("Subnets are: {}".format(subnet_list))
+    LOG.info("Wait 60 seconds to ensure the service parameter is applied")
+    time.sleep(60)
 
-    if isinstance(subnet_list, str):
-        subnet_list = [subnet_list]
-
-    return subnet_list
-
-
-def get_dns_servers(net_name):
-    """
-    Helper function to return list of dns servers.
-
-    Arguments:
-    - net-name: tenant to be used
-    """
-
-    LOG.info("Query DNS Servers")
-    subnet_list = get_subnets(net_name)
-    cmd = "subnet-show {}".format(subnet_list[0])
-    subnet_show_table_ = table_parser.table(cli.neutron(cmd))
-    dns_servers = table_parser.get_value_two_col_table(subnet_show_table_, "dns_nameservers")
-    LOG.info("DNS servers are: {}".format(dns_servers))
-
-    return dns_servers
+    host_helper.lock_unlock_hosts(hosts=hosts)
+    for node in hosts:
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id="host={}".format(node))
 
 
 def set_dns_servers(subnet_list, dns_servers=None):
@@ -174,29 +101,28 @@ def set_dns_servers(subnet_list, dns_servers=None):
     if not dns_servers:
         LOG.info("Clearing DNS entries")
         for subnet in subnet_list:
-            args = " {} --dns_nameservers action=clear".format(subnet)
-            cli.neutron('subnet-update', args, auth_info=Tenant.get('admin'))
+            network_helper.set_subnet(subnet, no_dns_servers=True)
     else:
         LOG.info("Setting DNS entries to: {}".format(dns_servers))
         for subnet in subnet_list:
-            dns_string = " ".join(dns_servers)
-            args = " {} --dns_nameservers list=true {}".format(subnet, dns_string)
-            cli.neutron("subnet-update", args, auth_info=Tenant.get('admin'))
+            network_helper.set_subnet(subnet, dns_servers=dns_servers)
 
 
-@fixture(scope='function', autouse=True)
+@fixture(scope='function')
 def func_recover(request):
+    vm_helper.delete_vms()
+    mgmt_net_id = network_helper.get_mgmt_net_id()
+
     def teardown():
         """
         If DNS servers are not set, set them.  Deprovision internal DNS.
         """
         global UNRESTORED_DNS_SERVERS
-        global NET_NAME
         global HOSTS_AFFECTED
 
         if UNRESTORED_DNS_SERVERS:
             LOG.fixture_step("Restoring DNS entries to: {}".format(UNRESTORED_DNS_SERVERS))
-            subnet_list = get_subnets(NET_NAME)
+            subnet_list = network_helper.get_subnets(network=mgmt_net_id)
             set_dns_servers(subnet_list, UNRESTORED_DNS_SERVERS)
             UNRESTORED_DNS_SERVERS = []
 
@@ -207,14 +133,16 @@ def func_recover(request):
                 if host_helper.get_hostshow_value(host, 'config_status') == 'Config out-of-date':
                     LOG.info("Lock/unlock {} to clear config out-of-date status".format(host))
                     host_helper.lock_unlock_hosts(hosts=host)
-            HOSTS_AFFECTED = []
+                HOSTS_AFFECTED.remove(host)
 
     request.addfinalizer(teardown)
+
+    return mgmt_net_id
 
 
 @mark.p1
 # Exclude for now until we improve robustness for test teardown. The impact is big if teardown is interrupted.
-def test_ping_between_vms_using_hostnames():
+def test_ping_between_vms_using_hostnames(func_recover):
     """
     This test includes a positive test and a negative test.
 
@@ -255,18 +183,11 @@ def test_ping_between_vms_using_hostnames():
 
     """
 
-    vm_helper.delete_vms()
-
-    mgmt_net_id = network_helper.get_mgmt_net_id()
-    net_name = network_helper.get_net_name_from_id(net_id=mgmt_net_id)
-
-    global NET_NAME
-    NET_NAME = net_name
-    subnet_list = get_subnets(NET_NAME)
+    mgmt_net_id = func_recover
+    subnet_list = network_helper.get_subnets(network=mgmt_net_id)
 
     LOG.tc_step("Store existing DNS entries so they can be restored later")
-    dns_servers = get_dns_servers(NET_NAME)
-
+    dns_servers = network_helper.get_subnet_values(subnet_list[0], fields='dns_nameservers')[0]
     if not dns_servers:
         LOG.tc_step("No DNS servers found.  Setting DNS servers to defaults")
         dns_servers = DEFAULT_DNS_SERVERS
@@ -283,7 +204,7 @@ def test_ping_between_vms_using_hostnames():
     HOSTS_AFFECTED = []
 
     LOG.tc_step("Modify DNS entries for each subnet in the network")
-    subnet_list = get_subnets(net_name)
+    subnet_list = network_helper.get_subnets(network=mgmt_net_id)
     set_dns_servers(subnet_list)
 
     LOG.tc_step("Launch two VMs using the same network")

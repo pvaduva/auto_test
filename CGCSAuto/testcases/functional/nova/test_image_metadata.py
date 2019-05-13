@@ -39,7 +39,7 @@ def test_create_image_with_metadata(property_key, values, disk_format, container
                                               cleanup='function', **{property_key: value})[1]
 
         LOG.tc_step("Verify image property is set correctly via glance image-show.")
-        actual_property_val = glance_helper.get_image_properties(image_id, property_key)[property_key]
+        actual_property_val = glance_helper.get_image_properties(image_id, property_key)[0]
         assert value.lower() == actual_property_val.lower(), \
             "Actual image property {} value - {} is different than set value - {}".format(
                     property_key, actual_property_val, value)

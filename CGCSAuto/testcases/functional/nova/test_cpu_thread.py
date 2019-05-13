@@ -79,7 +79,7 @@ def _test_cpu_thread_flavor_set_negative(cpu_policy, cpu_thread_policy, shared_v
             specs_to_set[key] = value
 
     LOG.tc_step("Attempt to set following flavor extra specs: {}".format(specs_to_set))
-    code, output = nova_helper.set_flavor_extra_specs(flavor_id, fail_ok=True, **specs_to_set)
+    code, output = nova_helper.set_flavor(flavor_id, fail_ok=True, **specs_to_set)
 
     LOG.tc_step("Verify cli rejected invalid extra specs setting with proper error message.")
     expt_err_eval = eval(expt_err)
@@ -119,10 +119,10 @@ def _test_cpu_thread_flavor_add_negative(specs_preset, specs_to_set, expt_err):
     ResourceCleanup.add('flavor', flavor_id)
 
     LOG.tc_step("Set following extra specs: {}".format(specs_preset))
-    nova_helper.set_flavor_extra_specs(flavor_id, **specs_preset)
+    nova_helper.set_flavor(flavor_id, **specs_preset)
 
     LOG.tc_step("Attempt to set following flavor extra specs: {}".format(specs_to_set))
-    code, output = nova_helper.set_flavor_extra_specs(flavor_id, fail_ok=True, **specs_to_set)
+    code, output = nova_helper.set_flavor(flavor_id, fail_ok=True, **specs_to_set)
 
     LOG.tc_step("Verify cli rejected invalid extra specs setting with proper error message.")
     expt_err_eval = eval(expt_err)
@@ -166,11 +166,11 @@ def _test_cpu_thread_flavor_delete_negative(cpu_thread_policy):
 
     specs = {FlavorSpec.CPU_THREAD_POLICY: cpu_thread_policy, FlavorSpec.CPU_POLICY: 'dedicated'}
     LOG.tc_step("Set following extra specs: {}".format(specs))
-    nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+    nova_helper.set_flavor(flavor_id, **specs)
 
     LOG.tc_step("Attempt to unset cpu policy while cpu thread policy is set to {}".format(cpu_thread_policy))
-    code, output = nova_helper.unset_flavor_extra_specs(flavor_id, FlavorSpec.CPU_POLICY, check_first=False,
-                                                        fail_ok=True)
+    code, output = nova_helper.unset_flavor(flavor_id, FlavorSpec.CPU_POLICY, check_first=False,
+                                            fail_ok=True)
     assert 1 == code, 'Unset cpu policy is not rejected when cpu thread policy is set.'
     assert CPUThreadErr.DEDICATED_CPU_REQUIRED_FLAVOR in output
 
@@ -223,11 +223,11 @@ class TestHTEnabled:
         flavor_id = nova_helper.create_flavor(name='cpu_thread_{}'.format(cpu_thread_policy), vcpus=vcpu_count,
                                               cleanup='function')[1]
         specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.CPU_THREAD_POLICY: cpu_thread_policy}
-        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+        nova_helper.set_flavor(flavor_id, **specs)
 
         LOG.tc_step("Get used vcpus for vm host before booting vm, and ensure sufficient instance and core quotas")
         host = ht_hosts[0]
-        vms = nova_helper.get_vms_on_hypervisor(hostname=host)
+        vms = nova_helper.get_vms_on_host(hostname=host)
         vm_helper.delete_vms(vms=vms)
         log_core_counts = host_helper.get_logcores_counts(host, thread='0', functions='Applications')
         max_vm_count = int(log_core_counts[0]/vcpu_count) + int(log_core_counts[1]/vcpu_count)
@@ -301,7 +301,7 @@ class TestHTEnabled:
             specs[FlavorSpec.MIN_VCPUS] = min_vcpus
 
         LOG.tc_step("Set following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+        nova_helper.set_flavor(flavor_id, **specs)
 
         LOG.tc_step("Get used cpus for all hosts before booting vm")
         hosts_to_check = ht_hosts if cpu_thread_policy == 'require' else ht_hosts + non_ht_hosts
@@ -395,7 +395,7 @@ class TestHTEnabled:
                 specs[FlavorSpec.CPU_THREAD_POLICY] = flv_cpu_thr_pol
 
             LOG.tc_step("Set following extra specs: {}".format(specs))
-            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+            nova_helper.set_flavor(flavor_id, **specs)
 
         LOG.tc_step("Get used cpus for all hosts before booting vm")
         hosts_to_check = ht_hosts if img_cpu_thr_pol == 'require' else ht_hosts + non_ht_hosts
@@ -410,7 +410,7 @@ class TestHTEnabled:
                                               **image_meta)[1]
         if create_vol:
             LOG.tc_step("Create a volume from above image")
-            source_id = cinder_helper.create_volume(name='cpu_thr_img', image_id=image_id)[1]
+            source_id = cinder_helper.create_volume(name='cpu_thr_img', source_id=image_id)[1]
             ResourceCleanup.add('volume', source_id)
             source = 'volume'
         else:
@@ -463,7 +463,7 @@ class TestHTEnabled:
 
         specs = {FlavorSpec.CPU_THREAD_POLICY: 'isolate', FlavorSpec.CPU_POLICY: 'dedicated'}
         LOG.fixture_step("Set following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+        nova_helper.set_flavor(flavor_id, **specs)
 
         LOG.fixture_step("Calculate max number of 4-core-isolate VMs with can be booted on {}".format(ht_host))
         # pre_host_used_cpus = host_helper.get_vcpus_for_computes(hosts=ht_hosts, rtn_val='used_now')[ht_host]
@@ -485,20 +485,7 @@ class TestHTEnabled:
 
         # max_cores = math.floor(pre_host_total_cpus - pre_host_used_cpus)
         max_cores = max_vm_num * 8
-
-        cores_quota, instances_quota = nova_helper.get_quotas(['cores', 'instances'])
-        if instances_quota <= max_vm_num:
-            LOG.fixture_step("Update quota for instances and volumes to ensure VMs number is not limited by quota.")
-            nova_helper.update_quotas(instances=max_vm_num + 10)
-            cinder_helper.update_quotas(volumes=max_vm_num + 10)
-
-        if cores_quota < max_cores + 3:
-            LOG.fixture_step("Update quota for cores to ensure VMs number is not limited by quota.")
-            nova_helper.update_quotas(cores=max_cores + 8)
-
-            def revert_quota():
-                nova_helper.update_quotas(cores=cores_quota)
-            request.addfinalizer(revert_quota)
+        vm_helper.ensure_vms_quotas(vms_num=max_vm_num+10, cores_num=max_cores+8)
 
         # # 8 cores because for isolate the sibling cores are always reserved. So it's 4*2.
         # max_vm_num = int(max_cores / 8)
@@ -609,120 +596,120 @@ class TestHTEnabled:
         assert 1 == code, "Boot vm cli is not rejected. Details: {}".format(msg)
 
         LOG.tc_step("Check expected fault message displayed in nova show")
-        fault_msg = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
+        fault_msg = nova_helper.get_vm_fault_message(vm_id)
         assert "No valid host was found" in fault_msg
         assert CPUThreadErr.INSUFFICIENT_CORES_FOR_ISOLATE.format(ht_host, 4) in fault_msg
 
-    # Deprecated. cpu scaling removed.
-    @mark.parametrize(('vcpus', 'cpu_thread_pol', 'min_vcpus', 'numa_0'), [
-        mark.p2((6, 'require', None, 1)),   # Not allowed to set min_vcpus with require
-        mark.p2((6, 'isolate', 3, 0)),
-        mark.p2((6, 'prefer', 1, 0)),
-        mark.p2((6, None, 4, 1)),     # should default to prefer behaviour
-        mark.p2((5, 'isolate', 2, None)),
-        mark.p2((5, 'prefer', 1, None)),
-    ])
-    def _test_cpu_scale_cpu_thread_pol(self, vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_hosts_, check_numa_num):
-        if numa_0 == 1 and check_numa_num < 2:
-            skip('Require at least 2 processors on compute host for numa_0=1')
-
-        ht_hosts, non_ht_hosts = ht_hosts_
-        LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
-        flavor_id = nova_helper.create_flavor(name='cpu_thread_scale', vcpus=vcpus)[1]
-        ResourceCleanup.add('flavor', flavor_id)
-
-        specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
-        if cpu_thread_pol is not None:
-            specs[FlavorSpec.CPU_THREAD_POLICY] = cpu_thread_pol
-        if min_vcpus is not None:
-            specs[FlavorSpec.MIN_VCPUS] = min_vcpus
-        if numa_0 is not None:
-            specs[FlavorSpec.NUMA_0] = numa_0
-
-        LOG.tc_step("Set following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
-
-        LOG.tc_step("Boot a vm with above flavor and check it booted successfully on a hyperthreaded host.")
-        vm_id = vm_helper.boot_vm(name='vcpu{}_min{}_{}'.format(vcpus, min_vcpus, cpu_thread_pol), flavor=flavor_id,
-                                  cleanup='function')[1]
-
-        LOG.tc_step("Wait for vm pingable from NatBox and guest_agent process running on VM")
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        if min_vcpus:
-            GuestLogs.add(vm_id)
-            vm_helper.wait_for_process(process='guest_agent', vm_id=vm_id, disappear=False, timeout=120, fail_ok=False)
-
-        vm_host = nova_helper.get_vm_host(vm_id)
-        if cpu_thread_pol == 'require':
-            assert vm_host in ht_hosts, "require VM is not on hyperthreaded host"
-
-        LOG.tc_step("Check vm vcpus in nova show is as specified in flavor")
-        expt_min_cpu = vcpus if min_vcpus is None else min_vcpus
-        expt_max_cpu = expt_current_cpu = vcpus
-        check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
-
-        LOG.tc_step("Get used cpus for all hosts before scaling vm")
-        host_allocated_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')[vm_host]
-
-        expt_vcpu_num_change = 2 if (cpu_thread_pol == 'isolate' and vm_host in ht_hosts) else 1
-
-        # Scale down test
-        if expt_current_cpu > expt_min_cpu:
-            LOG.tc_step("Scale down vm vcpus until it hits the lower limit and ensure scale is successful.")
-            for i in range(expt_current_cpu - expt_min_cpu):
-
-                LOG.tc_step("Scale down once and check vm vcpus change in nova show")
-                vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
-                expt_current_cpu -= 1
-                # check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
-
-                LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is reduced by 1')
-                check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
-                                                  vm_host=vm_host, cpu_pol='dedicated', cpu_thr_pol=cpu_thread_pol,
-                                                  expt_increase=-expt_vcpu_num_change,
-                                                  min_vcpus=expt_min_cpu, current_vcpus=expt_current_cpu)
-
-                # assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
-                # assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
-                host_allocated_cpus -= expt_vcpu_num_change
-
-        LOG.tc_step("VM is now at it's minimal vcpus, attempt to scale down and ensure it's rejected")
-        code, output = vm_helper.scale_vm(vm_id, direction='down', resource='cpu', fail_ok=True)
-        assert 1 == code, 'scale down cli is not rejected. Actual: {}'.format(output)
-        assert ScaleErr.SCALE_LIMIT_HIT in output, "Expected error message is not found in cli output"
-
-        LOG.tc_step("Check vm vcpus in nova show did not change")
-        check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
-
-        # Scale up test
-        if expt_max_cpu > expt_current_cpu:
-            LOG.tc_step("Scale up vm vcpus until it hits the upper limit and ensure scale is successful.")
-            for i in range(expt_max_cpu - expt_current_cpu):
-                LOG.tc_step("Scale up once and check vm vcpus change in nova show")
-
-                vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
-                expt_current_cpu += 1
-                # check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
-
-                LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is increased by 1')
-                check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
-                                                  vm_host=vm_host, cpu_pol='dedicated', cpu_thr_pol=cpu_thread_pol,
-                                                  expt_increase=expt_vcpu_num_change,
-                                                  min_vcpus=expt_min_cpu, current_vcpus=expt_current_cpu)
-
-                # assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
-                # assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
-                host_allocated_cpus += expt_vcpu_num_change
-
-        LOG.tc_step("VM is now at it's maximum vcpus, attemp to scale up and ensure it's rejected")
-        code, output = vm_helper.scale_vm(vm_id, direction='up', resource='cpu', fail_ok=True)
-        assert 1 == code, 'scale up cli is not rejected. Actual: {}'.format(output)
-        assert ScaleErr.SCALE_LIMIT_HIT in output, "Expected error message is not found in cli output"
-
-        LOG.tc_step("Check vm vcpus in nova show did not change")
-        check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
-        if min_vcpus:
-            GuestLogs.remove(vm_id)
+    # # Deprecated. cpu scaling removed.
+    # @mark.parametrize(('vcpus', 'cpu_thread_pol', 'min_vcpus', 'numa_0'), [
+    #     mark.p2((6, 'require', None, 1)),   # Not allowed to set min_vcpus with require
+    #     mark.p2((6, 'isolate', 3, 0)),
+    #     mark.p2((6, 'prefer', 1, 0)),
+    #     mark.p2((6, None, 4, 1)),     # should default to prefer behaviour
+    #     mark.p2((5, 'isolate', 2, None)),
+    #     mark.p2((5, 'prefer', 1, None)),
+    # ])
+    # def _test_cpu_scale_cpu_thread_pol(self, vcpus, cpu_thread_pol, min_vcpus, numa_0, ht_hosts_, check_numa_num):
+    #     if numa_0 == 1 and check_numa_num < 2:
+    #         skip('Require at least 2 processors on compute host for numa_0=1')
+    #
+    #     ht_hosts, non_ht_hosts = ht_hosts_
+    #     LOG.tc_step("Create flavor with {} vcpus".format(vcpus))
+    #     flavor_id = nova_helper.create_flavor(name='cpu_thread_scale', vcpus=vcpus)[1]
+    #     ResourceCleanup.add('flavor', flavor_id)
+    #
+    #     specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
+    #     if cpu_thread_pol is not None:
+    #         specs[FlavorSpec.CPU_THREAD_POLICY] = cpu_thread_pol
+    #     if min_vcpus is not None:
+    #         specs[FlavorSpec.MIN_VCPUS] = min_vcpus
+    #     if numa_0 is not None:
+    #         specs[FlavorSpec.NUMA_0] = numa_0
+    #
+    #     LOG.tc_step("Set following extra specs: {}".format(specs))
+    #     nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+    #
+    #     LOG.tc_step("Boot a vm with above flavor and check it booted successfully on a hyperthreaded host.")
+    #     vm_id = vm_helper.boot_vm(name='vcpu{}_min{}_{}'.format(vcpus, min_vcpus, cpu_thread_pol), flavor=flavor_id,
+    #                               cleanup='function')[1]
+    #
+    #     LOG.tc_step("Wait for vm pingable from NatBox and guest_agent process running on VM")
+    #     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
+    #     if min_vcpus:
+    #         GuestLogs.add(vm_id)
+    #         vm_helper.wait_for_process(process='guest_agent', vm_id=vm_id, disappear=False, timeout=120, fail_ok=False)
+    #
+    #     vm_host = nova_helper.get_vm_host(vm_id)
+    #     if cpu_thread_pol == 'require':
+    #         assert vm_host in ht_hosts, "require VM is not on hyperthreaded host"
+    #
+    #     LOG.tc_step("Check vm vcpus in nova show is as specified in flavor")
+    #     expt_min_cpu = vcpus if min_vcpus is None else min_vcpus
+    #     expt_max_cpu = expt_current_cpu = vcpus
+    #     check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+    #
+    #     LOG.tc_step("Get used cpus for all hosts before scaling vm")
+    #     host_allocated_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')[vm_host]
+    #
+    #     expt_vcpu_num_change = 2 if (cpu_thread_pol == 'isolate' and vm_host in ht_hosts) else 1
+    #
+    #     # Scale down test
+    #     if expt_current_cpu > expt_min_cpu:
+    #         LOG.tc_step("Scale down vm vcpus until it hits the lower limit and ensure scale is successful.")
+    #         for i in range(expt_current_cpu - expt_min_cpu):
+    #
+    #             LOG.tc_step("Scale down once and check vm vcpus change in nova show")
+    #             vm_helper.scale_vm(vm_id, direction='down', resource='cpu')
+    #             expt_current_cpu -= 1
+    #             # check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+    #
+    #             LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is reduced by 1')
+    #             check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
+    #                                               vm_host=vm_host, cpu_pol='dedicated', cpu_thr_pol=cpu_thread_pol,
+    #                                               expt_increase=-expt_vcpu_num_change,
+    #                                               min_vcpus=expt_min_cpu, current_vcpus=expt_current_cpu)
+    #
+    #             # assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
+    #             # assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
+    #             host_allocated_cpus -= expt_vcpu_num_change
+    #
+    #     LOG.tc_step("VM is now at it's minimal vcpus, attempt to scale down and ensure it's rejected")
+    #     code, output = vm_helper.scale_vm(vm_id, direction='down', resource='cpu', fail_ok=True)
+    #     assert 1 == code, 'scale down cli is not rejected. Actual: {}'.format(output)
+    #     assert ScaleErr.SCALE_LIMIT_HIT in output, "Expected error message is not found in cli output"
+    #
+    #     LOG.tc_step("Check vm vcpus in nova show did not change")
+    #     check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+    #
+    #     # Scale up test
+    #     if expt_max_cpu > expt_current_cpu:
+    #         LOG.tc_step("Scale up vm vcpus until it hits the upper limit and ensure scale is successful.")
+    #         for i in range(expt_max_cpu - expt_current_cpu):
+    #             LOG.tc_step("Scale up once and check vm vcpus change in nova show")
+    #
+    #             vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
+    #             expt_current_cpu += 1
+    #             # check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+    #
+    #             LOG.tc_step('Check total allocated vcpus for host and pcpus for vm is increased by 1')
+    #             check_helper.check_topology_of_vm(vm_id, vcpus=vcpus, prev_total_cpus=host_allocated_cpus,
+    #                                               vm_host=vm_host, cpu_pol='dedicated', cpu_thr_pol=cpu_thread_pol,
+    #                                               expt_increase=expt_vcpu_num_change,
+    #                                               min_vcpus=expt_min_cpu, current_vcpus=expt_current_cpu)
+    #
+    #             # assert expt_max_cpu == len(pcpus_total), 'max pcpus number is not as expected'
+    #             # assert expt_current_cpu == len(set(pcpus_total)), "current pcpus is not as expected in vm topology"
+    #             host_allocated_cpus += expt_vcpu_num_change
+    #
+    #     LOG.tc_step("VM is now at it's maximum vcpus, attemp to scale up and ensure it's rejected")
+    #     code, output = vm_helper.scale_vm(vm_id, direction='up', resource='cpu', fail_ok=True)
+    #     assert 1 == code, 'scale up cli is not rejected. Actual: {}'.format(output)
+    #     assert ScaleErr.SCALE_LIMIT_HIT in output, "Expected error message is not found in cli output"
+    #
+    #     LOG.tc_step("Check vm vcpus in nova show did not change")
+    #     check_helper.check_vm_vcpus_via_nova_show(vm_id, expt_min_cpu, expt_current_cpu, expt_max_cpu)
+    #     if min_vcpus:
+    #         GuestLogs.remove(vm_id)
 
     # Deprecated - numa pinning. Rest is covered by test_cpu_thread_vm_topology_nova_actions
     @mark.parametrize(('vcpus', 'cpu_pol', 'cpu_thr_pol',  'min_vcpus', 'numa_0', 'vs_numa_affinity', 'boot_source', 'nova_actions', 'host_action'), [
@@ -771,7 +758,7 @@ class TestHTEnabled:
 
         if specs:
             LOG.tc_step("Set following extra specs: {}".format(specs))
-            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+            nova_helper.set_flavor(flavor_id, **specs)
 
         LOG.tc_step("Get used cpus for all hosts before booting vm")
         hosts_to_check = ht_hosts if cpu_thr_pol == 'require' else ht_hosts + non_ht_hosts
@@ -887,7 +874,7 @@ class TestHTEnabled:
 
         if specs:
             LOG.tc_step("Set following extra specs: {}".format(specs))
-            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+            nova_helper.set_flavor(flavor_id, **specs)
 
         image_id = None
         if flv_or_img == 'image':
@@ -1039,7 +1026,7 @@ class TestHTEnabled:
 
             if boot_source == 'volume':
                 LOG.tc_step("Create a volume from above image")
-                source_id = cinder_helper.create_volume(name=name_str, image_id=image_id)[1]
+                source_id = cinder_helper.create_volume(name=name_str, source_id=image_id)[1]
                 ResourceCleanup.add('volume', source_id)
             else:
                 source_id = image_id
@@ -1050,7 +1037,7 @@ class TestHTEnabled:
 
         if specs:
             LOG.tc_step("Set following extra specs: {}".format(specs))
-            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+            nova_helper.set_flavor(flavor_id, **specs)
 
         LOG.tc_step("Get used cpus for all hosts before booting vm")
         hosts_to_check = ht_hosts if cpu_thr_pol == 'require' else ht_hosts + non_ht_hosts
@@ -1155,7 +1142,7 @@ class TestHTDisabled:
             specs[FlavorSpec.MIN_VCPUS] = min_vcpus
 
         LOG.tc_step("Set following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+        nova_helper.set_flavor(flavor_id, **specs)
 
         LOG.tc_step("Attempt to boot a vm with the above flavor.")
         code, vm_id, msg, vol_id = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy),
@@ -1265,7 +1252,7 @@ class TestVariousHT:
             specs[FlavorSpec.MIN_VCPUS] = min_vcpus
 
         LOG.tc_step("Set following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+        nova_helper.set_flavor(flavor_id, **specs)
 
         LOG.tc_step("Boot a vm with above flavor and ensure it's booted on a HT enabled host.")
         vm_id = vm_helper.boot_vm(name='cpu_thread_{}'.format(cpu_thread_policy), flavor=flavor_id,

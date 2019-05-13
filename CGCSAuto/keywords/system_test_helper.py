@@ -22,7 +22,7 @@ def get_all_vms():
     :return:  list of all VMs in the system
     """
     # Getting the vms on each compute node
-    vms_by_compute_dic = nova_helper.get_vms_by_hypervisors()
+    vms_by_compute_dic = nova_helper.get_vms_per_host()
     vms_to_check = vms_by_compute_dic.values()
     # compute_to_lock = []
     # vms_to_check = []
@@ -35,19 +35,6 @@ def get_all_vms():
     # Making a merged list from list of lists
     vms = [y for x in vms_to_check for y in x]
     return vms
-
-
-def get_all_vms_status():
-    """
-
-    Gets the status of all vms
-
-    Returns: (dict): {vm_id1:vm_status, vm_id2:vm_status, ...}
-
-    """
-    vm_status_dict = nova_helper.get_vms_info(get_all_vms())
-
-    return vm_status_dict
 
 
 def check_for_diffs_in_vm_status(first_dict, second_dict):
@@ -175,7 +162,7 @@ def sys_lock_unlock_hosts(number_of_hosts_to_lock):
     :return:
     """
     # identify a host with atleast 5 vms
-    vms_by_compute_dic = nova_helper.get_vms_by_hypervisors()
+    vms_by_compute_dic = nova_helper.get_vms_per_host()
     compute_to_lock = []
     vms_to_check = []
     hosts_threads = []
@@ -229,7 +216,7 @@ def sys_evacuate_from_hosts(number_of_hosts_to_evac):
     :return:
     """
     # identify a host with atleast 5 vms
-    vms_by_compute_dic = nova_helper.get_vms_by_hypervisors()
+    vms_by_compute_dic = nova_helper.get_vms_per_host()
     computes_to_reboot = []
     vms_to_check = []
     hosts_threads = []

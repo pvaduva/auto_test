@@ -59,7 +59,7 @@ def upgrade_host(host, timeout=InstallTimeout.UPGRADE, fail_ok=False, con_ssh=No
         return exitcode, output
 
     exitcode, output = cli.system('host-upgrade', host, ssh_client=con_ssh, auth_info=auth_info,
-                                  rtn_list=True, fail_ok=True, timeout=timeout)
+                                  rtn_code=True, fail_ok=True, timeout=timeout)
     if exitcode == 1:
         err_msg = "Host {} cli upgrade host failed: {}".format(host, output)
         if fail_ok:
@@ -494,7 +494,7 @@ def activate_upgrade(con_ssh=None, fail_ok=False):
         (1, <stderr>)   # cli returns stderr, applicable if fail_ok is true
 
     """
-    rc, output = cli.system('upgrade-activate', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
+    rc, output = cli.system('upgrade-activate', ssh_client=con_ssh, fail_ok=True, rtn_code=True)
     if rc != 0:
         err_msg = "CLI system upgrade-activate failed: {}".format(output)
         LOG.warning(err_msg)
@@ -572,7 +572,7 @@ def complete_upgrade(con_ssh=None, fail_ok=False):
         (1, <stderr>)   # cli returns stderr, applicable if fail_ok is true
 
     """
-    rc, output = cli.system('upgrade-complete', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
+    rc, output = cli.system('upgrade-complete', ssh_client=con_ssh, fail_ok=True, rtn_code=True)
     if rc != 0:
         err_msg = "CLI system upgrade-complete rejected: {}".format(output)
         LOG.warning(err_msg)

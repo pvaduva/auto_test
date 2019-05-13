@@ -64,7 +64,7 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
         flavor = nova_helper.create_flavor(vcpus=2, storage_backing=storage_backing)[1]
 
     ResourceCleanup.add('flavor', flavor)
-    nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
+    nova_helper.set_flavor(flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     host_str = ' on {}'.format(target_host) if target_host else ''
     LOG.tc_step("Boot a vm from {}{} and collect vm startup time".format(boot_from, host_str))

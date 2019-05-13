@@ -23,8 +23,8 @@ def origin_total_vcpus(target_hosts):
 
 
 def get_failed_live_migrate_action_id(vm_id):
-    action_table = table_parser.table(cli.nova('instance-action-list {}'.format(vm_id)))
-    req_id = table_parser.get_values(action_table, 'Request_ID', **{'Action': 'live-migration', 'Message': 'Error'})
+    action_table = table_parser.table(cli.openstack('event list', vm_id))
+    req_id = table_parser.get_values(action_table, 'Request ID', **{'Action': 'live-migration', 'Message': 'Error'})
     assert req_id, "request id for failed live migration not found"
     return req_id[0]
 
@@ -71,7 +71,7 @@ def create_shared_flavor(vcpus=2, storage_backing='local_image', cpu_policy='ded
     if shared_vcpu is not None:
         extra_specs[FlavorSpec.SHARED_VCPU] = shared_vcpu
 
-    nova_helper.set_flavor_extra_specs(flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor_id, **extra_specs)
     return flavor_id
 
 
@@ -84,7 +84,7 @@ def create_shared_flavor(vcpus=2, storage_backing='local_image', cpu_policy='ded
 def test_set_shared_vcpu_spec(vcpu_id):
     flavor = nova_helper.create_flavor(name='shared_vcpus', vcpus=64)[1]
     ResourceCleanup.add('flavor', resource_id=flavor)
-    nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.SHARED_VCPU: vcpu_id})
+    nova_helper.set_flavor(flavor, **{FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.SHARED_VCPU: vcpu_id})
 
 
 @mark.parametrize(('vcpus', 'cpu_policy', 'shared_vcpu'), [
@@ -116,10 +116,10 @@ def test_set_shared_vcpu_spec_reject(cpu_policy, vcpus, shared_vcpu):
 
     flavor = nova_helper.create_flavor(vcpus=vcpus)[1]
     ResourceCleanup.add('flavor', flavor, scope='function')
-    nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: cpu_policy})
+    nova_helper.set_flavor(flavor, **{FlavorSpec.CPU_POLICY: cpu_policy})
 
     LOG.tc_step("Attempt to set shared_vcpu spec to invalid value - {} and verify it's rejected.".format(shared_vcpu))
-    code, output = nova_helper.set_flavor_extra_specs(flavor, fail_ok=True, **{FlavorSpec.SHARED_VCPU: shared_vcpu})
+    code, output = nova_helper.set_flavor(flavor, fail_ok=True, **{FlavorSpec.SHARED_VCPU: shared_vcpu})
 
     error_msg = 'undefined'
     if cpu_policy == 'shared':
@@ -181,7 +181,7 @@ class TestSharedCpuDisabled:
             code = keystone_helper.add_or_remove_role(add_=True, role='admin')[0]
 
             def remove_admin():
-                nova_helper.delete_aggregate(avail_zone, remove_hosts=True)
+                nova_helper.delete_aggregates(avail_zone, remove_hosts=True)
                 if code != -1:
                     LOG.fixture_step("({}) Remove admin role and cgcsauto aggregate".format('class'))
                     keystone_helper.add_or_remove_role(add_=False, role='admin')
@@ -239,7 +239,7 @@ class TestSharedCpuDisabled:
         assert 1 == code, 'Expect boot vm cli return error, although vm is booted anyway. Actual: {}'.format(output)
         LOG.tc_step("Ensure vm is in error state with expected fault message in nova show")
         vm_helper.wait_for_vm_values(vm_id, 10, status='ERROR', fail_ok=False)
-        actual_fault = nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='fault')
+        actual_fault = nova_helper.get_vm_fault_message(vm_id)
         expt_fault = 'Shared vCPU not enabled on host cell'
 
         assert expt_fault in actual_fault, "Expected fault message mismatch"
@@ -282,8 +282,8 @@ class TestSharedCpuDisabled:
                 vcpus, cpu_policy, shared_vcpu))
         flavor = nova_helper.create_flavor(name='shared_cpu', vcpus=vcpus, storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor, scope='module')
-        nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.CPU_POLICY: cpu_policy})
-        nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.SHARED_VCPU: shared_vcpu})
+        nova_helper.set_flavor(flavor, **{FlavorSpec.CPU_POLICY: cpu_policy})
+        nova_helper.set_flavor(flavor, **{FlavorSpec.SHARED_VCPU: shared_vcpu})
 
         LOG.tc_step("Attempt to resize vm with invalid flavor, and verify resize request is rejected.")
         code, msg = vm_helper.resize_vm(vm_id, flavor, fail_ok=True)
@@ -461,7 +461,7 @@ class TestSharedCpuEnabled:
             assert 1 == code, "Expect error vm. Actual result: {}".format(output)
             LOG.tc_step("Ensure vm is in error state with expected fault message in nova show")
             vm_helper.wait_for_vm_values(vm_id, 10, status='ERROR', fail_ok=False)
-            actual_fault = nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='fault')
+            actual_fault = nova_helper.get_vm_fault_message(vm_id)
             expt_fault = 'shared vcpu with 0 requested dedicated vcpus is not allowed'
             assert expt_fault in actual_fault, "Expected fault message mismatch"
             return
@@ -617,87 +617,87 @@ class TestSharedCpuEnabled:
             check_shared_vcpu(vm=vm_, expt_increase=post_evac_expt_increase,
                               prev_total_vcpus=prev_total_vcpus, shared_vcpu=shared_vcpu, vcpus=vcpus)
 
-    # Deprecated. vcpu scaling.
-    @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu', 'min_vcpus'), [
-            (3, 1, 1, 0, 1)
-    ])
-    def _test_shared_vcpu_scaling(self, vcpus, numa_nodes, numa_node0, shared_vcpu, min_vcpus, add_shared_cpu):
-        """
-            Tests the following:
-            - That the scaling of instance with shared vCPU behaves appropiately (TC5097)
-
-            Test Setup:
-                - Configure at least two computes to have shared cpus via
-                    'system host-cpu-modify -f shared p0=1,p1=1 <hostname>' (module)
-
-            Test Steps:
-                - enable shared CPU on a compute node,
-                - Create a scalable flavor with 4 cpus and shared CPU
-                - Add min_vcpus related extra specs
-                - Boot a vm with flavor
-                - validate shared CPU
-                - scale down instance once
-                    -confirm offline vcpus pin to shared cpu
-                - scale down to minimum vcpus and back to maximum
-                    - confirm appropriate vcpu pinning.
-            Teardown:
-                - Delete created vms and flavors
-        """
-
-        storage_backing, shared_cpu_hosts, max_vcpus_per_proc = add_shared_cpu
-        prev_total_vcpus = host_helper.get_vcpus_for_computes()
-        if max_vcpus_per_proc[numa_node0][0] < vcpus/numa_nodes \
-                or max_vcpus_per_proc[0 if numa_node0 == 1 else 1][0] < vcpus - (vcpus/numa_nodes):
-            skip("Less than {} VMs cores on numa node0 of any hypervisor".format(vcpus/numa_nodes))
-        # make vm (4 vcpus)
-        LOG.tc_step("Make a flavor with {} vcpus and scaling enabled".format(vcpus))
-        flavor_1 = create_shared_flavor(vcpus=vcpus, numa_nodes=numa_nodes, node0=numa_node0, shared_vcpu=shared_vcpu,
-                                        storage_backing=storage_backing)
-        ResourceCleanup.add('flavor', flavor_1)
-        first_specs = {FlavorSpec.MIN_VCPUS: min_vcpus}
-        nova_helper.set_flavor_extra_specs(flavor_1, **first_specs)
-        LOG.tc_step("Boot a vm with above flavor")
-        vm_1 = vm_helper.boot_vm(flavor=flavor_1, cleanup='function', fail_ok=False)[1]
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
-        GuestLogs.add(vm_1)
-        LOG.tc_step("Validate Shared CPU")
-        check_shared_vcpu(vm_1, numa_node0=numa_node0, numa_nodes=numa_nodes, vcpus=vcpus,
-                          prev_total_vcpus=prev_total_vcpus, min_vcpus=min_vcpus, shared_vcpu=shared_vcpu)
-
-        # scale down once
-        LOG.tc_step("Scale down the vm once")
-        vm_helper.scale_vm(vm_1, direction='down', resource='cpu', fail_ok=False)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
-        check_helper.check_vm_vcpus_via_nova_show(vm_1, min_vcpus, (vcpus-1), vcpus)
-
-        LOG.tc_step("Confirm offline vCPUs pin to shared CPU")
-        host = nova_helper.get_vm_host(vm_1)
-        check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=prev_total_vcpus[host],
-                                          shared_vcpu=shared_vcpu, min_vcpus=min_vcpus, current_vcpus=vcpus-1,
-                                          expt_increase=vcpus-2, cpu_pol='dedicated')
-
-        # scale down to 1 (minimum)
-        LOG.tc_step("Scale down to minimum vCPUs")
-        for i in range(vcpus - 2):
-            vm_helper.scale_vm(vm_1, direction='down', resource='cpu', fail_ok=False)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
-
-        LOG.tc_step("Confirm offline vCPUs pin to shared CPU")
-        host = nova_helper.get_vm_host(vm_1)
-        check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=prev_total_vcpus[host],
-                                          shared_vcpu=shared_vcpu, min_vcpus=min_vcpus, current_vcpus=min_vcpus,
-                                          expt_increase=min_vcpus-1, cpu_pol='dedicated')
-
-        # scale up from 1 to vcpus (maximum)
-        LOG.tc_step("Scale up to maximum vCPUs")
-        for i in range(vcpus - 1):
-            vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=False)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
-        host = nova_helper.get_vm_host(vm_1)
-        check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=prev_total_vcpus[host],
-                                          shared_vcpu=shared_vcpu, min_vcpus=min_vcpus, current_vcpus=vcpus,
-                                          expt_increase=vcpus-1, cpu_pol='dedicated')
-        GuestLogs.remove(vm_1)
+    # # Deprecated. vcpu scaling.
+    # @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu', 'min_vcpus'), [
+    #         (3, 1, 1, 0, 1)
+    # ])
+    # def _test_shared_vcpu_scaling(self, vcpus, numa_nodes, numa_node0, shared_vcpu, min_vcpus, add_shared_cpu):
+    #     """
+    #         Tests the following:
+    #         - That the scaling of instance with shared vCPU behaves appropiately (TC5097)
+    #
+    #         Test Setup:
+    #             - Configure at least two computes to have shared cpus via
+    #                 'system host-cpu-modify -f shared p0=1,p1=1 <hostname>' (module)
+    #
+    #         Test Steps:
+    #             - enable shared CPU on a compute node,
+    #             - Create a scalable flavor with 4 cpus and shared CPU
+    #             - Add min_vcpus related extra specs
+    #             - Boot a vm with flavor
+    #             - validate shared CPU
+    #             - scale down instance once
+    #                 -confirm offline vcpus pin to shared cpu
+    #             - scale down to minimum vcpus and back to maximum
+    #                 - confirm appropriate vcpu pinning.
+    #         Teardown:
+    #             - Delete created vms and flavors
+    #     """
+    #
+    #     storage_backing, shared_cpu_hosts, max_vcpus_per_proc = add_shared_cpu
+    #     prev_total_vcpus = host_helper.get_vcpus_for_computes()
+    #     if max_vcpus_per_proc[numa_node0][0] < vcpus/numa_nodes \
+    #             or max_vcpus_per_proc[0 if numa_node0 == 1 else 1][0] < vcpus - (vcpus/numa_nodes):
+    #         skip("Less than {} VMs cores on numa node0 of any hypervisor".format(vcpus/numa_nodes))
+    #     # make vm (4 vcpus)
+    #     LOG.tc_step("Make a flavor with {} vcpus and scaling enabled".format(vcpus))
+    #     flavor_1 = create_shared_flavor(vcpus=vcpus, numa_nodes=numa_nodes, node0=numa_node0, shared_vcpu=shared_vcpu,
+    #                                     storage_backing=storage_backing)
+    #     ResourceCleanup.add('flavor', flavor_1)
+    #     first_specs = {FlavorSpec.MIN_VCPUS: min_vcpus}
+    #     nova_helper.set_flavor_extra_specs(flavor_1, **first_specs)
+    #     LOG.tc_step("Boot a vm with above flavor")
+    #     vm_1 = vm_helper.boot_vm(flavor=flavor_1, cleanup='function', fail_ok=False)[1]
+    #     vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
+    #     GuestLogs.add(vm_1)
+    #     LOG.tc_step("Validate Shared CPU")
+    #     check_shared_vcpu(vm_1, numa_node0=numa_node0, numa_nodes=numa_nodes, vcpus=vcpus,
+    #                       prev_total_vcpus=prev_total_vcpus, min_vcpus=min_vcpus, shared_vcpu=shared_vcpu)
+    #
+    #     # scale down once
+    #     LOG.tc_step("Scale down the vm once")
+    #     vm_helper.scale_vm(vm_1, direction='down', resource='cpu', fail_ok=False)
+    #     vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
+    #     check_helper.check_vm_vcpus_via_nova_show(vm_1, min_vcpus, (vcpus-1), vcpus)
+    #
+    #     LOG.tc_step("Confirm offline vCPUs pin to shared CPU")
+    #     host = nova_helper.get_vm_host(vm_1)
+    #     check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=prev_total_vcpus[host],
+    #                                       shared_vcpu=shared_vcpu, min_vcpus=min_vcpus, current_vcpus=vcpus-1,
+    #                                       expt_increase=vcpus-2, cpu_pol='dedicated')
+    #
+    #     # scale down to 1 (minimum)
+    #     LOG.tc_step("Scale down to minimum vCPUs")
+    #     for i in range(vcpus - 2):
+    #         vm_helper.scale_vm(vm_1, direction='down', resource='cpu', fail_ok=False)
+    #     vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
+    #
+    #     LOG.tc_step("Confirm offline vCPUs pin to shared CPU")
+    #     host = nova_helper.get_vm_host(vm_1)
+    #     check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=prev_total_vcpus[host],
+    #                                       shared_vcpu=shared_vcpu, min_vcpus=min_vcpus, current_vcpus=min_vcpus,
+    #                                       expt_increase=min_vcpus-1, cpu_pol='dedicated')
+    #
+    #     # scale up from 1 to vcpus (maximum)
+    #     LOG.tc_step("Scale up to maximum vCPUs")
+    #     for i in range(vcpus - 1):
+    #         vm_helper.scale_vm(vm_1, direction='up', resource='cpu', fail_ok=False)
+    #     vm_helper.wait_for_vm_pingable_from_natbox(vm_1)
+    #     host = nova_helper.get_vm_host(vm_1)
+    #     check_helper.check_topology_of_vm(vm_1, vcpus=vcpus, prev_total_cpus=prev_total_vcpus[host],
+    #                                       shared_vcpu=shared_vcpu, min_vcpus=min_vcpus, current_vcpus=vcpus,
+    #                                       expt_increase=vcpus-1, cpu_pol='dedicated')
+    #     GuestLogs.remove(vm_1)
 
     # Already covered by other test cases such as test_launch_vm_with_shared_vcpu
     @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [
@@ -754,7 +754,7 @@ class TestSharedCpuEnabled:
         ResourceCleanup.add('flavor', no_share_flavor)
         second_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_NODES: numa_nodes,
                         FlavorSpec.NUMA_0: numa_node0}
-        nova_helper.set_flavor_extra_specs(no_share_flavor, **second_specs)
+        nova_helper.set_flavor(no_share_flavor, **second_specs)
 
         LOG.tc_step("boot vm with above flavor")
         vm_1 = vm_helper.boot_vm(flavor=no_share_flavor, cleanup='function', fail_ok=False, vm_host=vm_host)[1]
@@ -867,7 +867,7 @@ class TestMixSharedCpu:
 
         LOG.tc_step("Create a flavor with given number of vcpus")
         flavor = create_shared_flavor(vcpus=2, storage_backing=storage_backing, shared_vcpu=1)
-        nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.MEM_PAGE_SIZE: 2048})
+        nova_helper.set_flavor(flavor, **{FlavorSpec.MEM_PAGE_SIZE: 2048})
 
         LOG.tc_step("Boot a vm with above flavor, and ensure vm is booted successfully")
         vm_id = vm_helper.boot_vm(name='shared_cpu', flavor=flavor, fail_ok=False, cleanup='function')[1]

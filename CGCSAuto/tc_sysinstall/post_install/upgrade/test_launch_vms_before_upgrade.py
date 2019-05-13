@@ -43,18 +43,14 @@ def test_launch_vms_pre_upgrade():
 
     if count > exiting_count:
 
-        nova_helper.get_flavor()
         LOG.tc_step("Create or get a flavor without ephemeral or swap disks")
-        flavor_1 = nova_helper.get_flavor(name='flv_rootdisk')
-        if flavor_1 is None or flavor_1 == '':
-            flavor_1 = nova_helper.create_flavor('flv_rootdisk')[1]
-            ResourceCleanup.add('flavor', flavor_1)
+        flavor_1 = nova_helper.get_flavors(name='flv_rootdisk')
+        flavor_1 = flavor_1[0] if flavor_1 else nova_helper.create_flavor('flv_rootdisk', cleanup='function')[1]
 
         LOG.tc_step("Create or get another flavor with ephemeral and swap disks")
-        flavor_2 = nova_helper.get_flavor(name='flv_ephemswap', ephemeral=1)
-        if flavor_2 is None or flavor_2 == '':
-            flavor_2 = nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512)[1]
-            ResourceCleanup.add('flavor', flavor_2)
+        flavor_2 = nova_helper.get_flavors(name='flv_ephemswap', ephemeral=1)
+        flavor_2 = flavor_2[0] if flavor_2 else nova_helper.create_flavor('flv_ephemswap', ephemeral=1, swap=512,
+                                                                          cleanup='function')[1]
 
         for i in range(int(count - exiting_count)):
             LOG.tc_step("Boot vm1 from volume with flavor flv_rootdisk and wait for it to be pingable from NatBox")

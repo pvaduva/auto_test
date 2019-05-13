@@ -53,7 +53,7 @@ def delete_partition(host, uuid, fail_ok=False, timeout=DP_TIMEOUT):
     * rc, out - return code and output of the host-disk-partition-delete
     """
 
-    rc, out = cli.system('host-disk-partition-delete {} {}'.format(host, uuid), rtn_list=True, fail_ok=fail_ok)
+    rc, out = cli.system('host-disk-partition-delete {} {}'.format(host, uuid), rtn_code=True, fail_ok=fail_ok)
     if rc > 0:
         return 1, out
 
@@ -78,7 +78,7 @@ def create_partition(host, device_node, size_gib, fail_ok=False, wait=True, time
     * rc, out - return code and output of the host-disk-partition-command
     """
     args = '{} {} {}'.format(host, device_node, size_gib)
-    rc, out = cli.system('host-disk-partition-add', args, rtn_list=True, fail_ok=fail_ok)
+    rc, out = cli.system('host-disk-partition-add', args, rtn_code=True, fail_ok=fail_ok)
     if rc > 0 or not wait:
         return rc, out
 
@@ -102,7 +102,7 @@ def modify_partition(host, uuid, size_gib, fail_ok=False, timeout=MP_TIMEOUT, fi
     """
 
     args = '-s {} {} {}'.format(size_gib, host, uuid)
-    rc, out = cli.system('host-disk-partition-modify', args, rtn_list=True, fail_ok=fail_ok)
+    rc, out = cli.system('host-disk-partition-modify', args, rtn_code=True, fail_ok=fail_ok)
     if rc > 0:
         return 1, out
 
@@ -126,7 +126,7 @@ def get_partition_info(host, uuid, param=None):
 
     param_value = None
     args = "{} {}".format(host, uuid)
-    rc, out = cli.system('host-disk-partition-show', args, fail_ok=True, rtn_list=True)
+    rc, out = cli.system('host-disk-partition-show', args, fail_ok=True, rtn_code=True)
 
     if rc == 0:
         convert_to_gib = False
@@ -192,7 +192,7 @@ def get_disk_info(host, device_node, param=None):
     """
     param_value = None
     args = "{} {}".format(host, device_node)
-    rc, out = cli.system('host-disk-show', args, fail_ok=True, rtn_list=True)
+    rc, out = cli.system('host-disk-show', args, fail_ok=True, rtn_code=True)
 
     if rc == 0:
         table_ = table_parser.table(out)

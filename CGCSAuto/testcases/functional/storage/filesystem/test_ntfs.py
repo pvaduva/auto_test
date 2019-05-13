@@ -237,7 +237,7 @@ def test_ntfs(host_type="controller"):
     LOG.tc_step("Create flavor for windows guest image")
     flv_id = nova_helper.create_flavor(name=guest_os, vcpus=4, ram=8192, storage_backing="local_image",
                                        guest_os=guest_os)[1]
-    nova_helper.set_flavor_extra_specs(flv_id, **{FlavorSpec.CPU_POLICY: "dedicated"})
+    nova_helper.set_flavor(flv_id, **{FlavorSpec.CPU_POLICY: "dedicated"})
     ResourceCleanup.add("flavor", flv_id)
 
     LOG.tc_step("Import image into glance")

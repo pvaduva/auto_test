@@ -71,7 +71,7 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
     LOG.info("Attempt to {}: {}".format(operation, subclouds_to_update))
     failed_subclouds = []
     for subcloud_ in subclouds_to_update:
-        code, out = cli.dcmanager('subcloud ' + operation, subcloud_, fail_ok=True, rtn_list=True,
+        code, out = cli.dcmanager('subcloud ' + operation, subcloud_, fail_ok=True, rtn_code=True,
                                   auth_info=auth_info, ssh_client=con_ssh, source_openrc=source_openrc)
 
         if code > 0:
@@ -481,7 +481,7 @@ def wait_for_subcloud_keypair(subcloud=None, subcloud_ssh=None, expected_keypair
         (2, <subcloud_dns_servers>)     # updated to unexpected value
 
     """
-    func = nova_helper.get_keypair
+    func = nova_helper.get_keypairs
     func_kwargs = {'con_ssh': subcloud_ssh} if subcloud_ssh else {}
     return wait_for_subcloud_config(subcloud=subcloud, func=func, config_name='Name',
                                     expected_value=expected_keypair, fail_ok=fail_ok, timeout=timeout,

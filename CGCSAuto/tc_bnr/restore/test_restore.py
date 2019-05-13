@@ -405,7 +405,7 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
             LOG.info('try:{} locking:{}'.format(tried, host))
             admin_state = host_helper.get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
             if admin_state != 'locked':
-                code, output = cli.system(cmd + ' ' + host, ssh_client=con_ssh, fail_ok=True, rtn_list=True)
+                code, output = cli.system(cmd + ' ' + host, ssh_client=con_ssh, fail_ok=True, rtn_code=True)
                 if 0 != code:
                     LOG.warn('Failed to lock host:{} using CLI:{}'.format(host, cmd))
                 else:
@@ -430,7 +430,7 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
 
     cli.system('host-list', ssh_client=con_ssh)
 
-    code, output = cli.system('host-list', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
+    code, output = cli.system('host-list', ssh_client=con_ssh, fail_ok=True, rtn_code=True)
     LOG.debug('code:{}, output:{}'.format(code, output))
 
 
@@ -622,9 +622,8 @@ def create_dummy_rbd_images(volumes, con_ssh):
     in_use_volumes = []
 
     for volume_id in volumes:
-        volume_size = cinder_helper.get_volume_states(volume_id, fields='size', con_ssh=con_ssh)['size']
-        volume_status = cinder_helper.get_volume_states(volume_id, fields='status', con_ssh=con_ssh)['status']
-
+        volume_size, volume_status = cinder_helper.get_volume_show_values(volume_id, fields=('size', 'status'),
+                                                                          con_ssh=con_ssh)
         if volume_status == 'in-use':
             in_use_volumes.append(volume_id)
             con_ssh.exec_cmd('cinder reset-state --state available ' + volume_id, fail_ok=False)

@@ -6,10 +6,8 @@ from pytest import mark, skip, fixture
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 
-from consts.auth import Tenant
-from consts.cgcs import ServerGroupMetadata
 from consts.cli_errs import SrvGrpErr
-from keywords import nova_helper, vm_helper, keystone_helper
+from keywords import nova_helper, vm_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -104,7 +102,7 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
         code, vm_id, err, vol = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
                                                   fail_ok=True, cleanup='function')
 
-        nova_helper.get_vm_nova_show_value(vm_id, 'fault')
+        nova_helper.get_vm_fault_message(vm_id)
         assert 1 == code, "Boot vm is not rejected"
 
     unique_vm_hosts = list(set(vm_hosts))
@@ -311,73 +309,3 @@ def _test_server_group_launch_vms_in_parallel(policy, min_count, max_count, chec
     LOG.tc_step("Check vms are in server group {}: {}".format(srv_grp_id, vms))
     members = nova_helper.get_server_group_info(srv_grp_id, headers='Members')[0]
     assert set(vms) <= set(members), "Some vms are not in srv group"
-
-
-# Deprecated - align with upstream
-def _test_server_group_update():
-    """
-    - test server group metadata key removal (TC2910)
-    - check server group project ID (TC2914)
-    - test resize reject when group size < member size (TC2917)
-    - test server group deletion reject when member exists
-
-    Test Steps
-        - Create a server group with given server group policy, group size and best effort flag
-        - Add metadata to the group
-        - Verify:
-            - running "nova server-group-set-metadata <key>=" removes metadata
-            - that server group id is the same as primary tenant id
-        - Launch 2 vms as server group members
-        - Verify:
-            - resize succeed when group size >= member size
-            - resize reject when group size < member size (TC2917)
-            - server group deletion reject when member exists
-
-    Teardown:
-        - Delete created server group and vms
-
-    """
-    policy = 'affinity'
-    best_effort = False
-
-    group_size = 3
-    LOG.tc_step("Create server group with size=3 as tenant")
-    srv_grp_id = nova_helper.create_server_group(policy=policy, max_group_size=group_size)[1]
-    ResourceCleanup.add(resource_type='server_group', resource_id=srv_grp_id)
-
-    LOG.tc_step("Check server group Project ID")
-    project_id = nova_helper.get_server_groups_info(srv_grp_id, auth_info=Tenant.get('admin'),
-                                                    headers='Project Id')[srv_grp_id][0]
-    tenant_id = keystone_helper.get_tenant_ids()[0]
-    assert project_id == tenant_id
-
-    metadata = {ServerGroupMetadata.BEST_EFFORT: best_effort}
-    LOG.tc_step("Add server group metadata: {}".format(metadata))
-    nova_helper.set_server_group_metadata(srv_grp_id, **metadata)
-
-    LOG.tc_step("Remove best effort metadata")
-    metadata[ServerGroupMetadata.BEST_EFFORT] = ""
-    nova_helper.set_server_group_metadata(srv_grp_id, **metadata)
-
-    LOG.tc_step("Create 2 vms in server group")
-    for i in range(2):
-        vm_helper.boot_vm(name='srv_grp', hint={'group': srv_grp_id}, cleanup='function')
-
-    LOG.tc_step("Attempt to delete server group and ensure it's rejected")
-    code, output = nova_helper.delete_server_groups(srv_grp_id, fail_ok=True)
-    assert code == 1, "Deletion not rejected as expected"
-    expt_err = "Instance group {} is not empty. Must delete all group members before deleting group.".format(srv_grp_id)
-    assert expt_err in output, "Expect {} in error, actual error is {}".format(expt_err, output)
-
-    # TC2917
-    LOG.tc_step("Attempt to resize server group size to 2 and sure it passes")
-    metadata = {ServerGroupMetadata.GROUP_SIZE: 2}
-    nova_helper.set_server_group_metadata(srv_grp_id, fail_ok=False, **metadata)
-
-    LOG.tc_step("Attempt to resize server group size to 1 and ensure it's rejected due to 2 members exist")
-    metadata = {ServerGroupMetadata.GROUP_SIZE: 1}
-    code, output = nova_helper.set_server_group_metadata(srv_grp_id, fail_ok=True, **metadata)
-    assert code == 1, "Expect server group metadata set to fail. Actual: {}".format(output)
-    err_pattern = "Action would result in server group .* number of members {} exceeding .*group size {}".\
-        format(2, 1)
-    assert re.search(err_pattern, output), "Improper error message returned"

@@ -27,7 +27,7 @@ def skip_4k_for_ovs(mempage_size):
     '1048576',
 ])
 def _test_set_mem_page_size_extra_specs(flavor_id_module, mem_page_size):
-    nova_helper.set_flavor_extra_specs(flavor_id_module, **{FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
+    nova_helper.set_flavor(flavor_id_module, **{FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
 
 
 @fixture(scope='module')
@@ -135,8 +135,8 @@ def test_vm_mem_pool_default_config(prepare_resource, mem_page_size):
     hypervisor, flavor_1g, volume_ = prepare_resource
 
     LOG.tc_step("Set memory page size extra spec in flavor")
-    nova_helper.set_flavor_extra_specs(flavor_1g, **{FlavorSpec.CPU_POLICY: 'dedicated', 
-                                                     FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
+    nova_helper.set_flavor(flavor_1g, **{FlavorSpec.CPU_POLICY: 'dedicated',
+                                         FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
 
     LOG.tc_step("Check system host-memory-list before launch vm")
     is_sufficient, prev_host_mems = is_host_mem_sufficient(host=hypervisor, mempage_size=mem_page_size)
@@ -267,9 +267,9 @@ class TestConfigMempage:
         skip_4k_for_ovs(mem_page_size)
 
         if mem_page_size is None:
-            nova_helper.unset_flavor_extra_specs(flavor_id, FlavorSpec.MEM_PAGE_SIZE)
+            nova_helper.unset_flavor(flavor_id, FlavorSpec.MEM_PAGE_SIZE)
         else:
-            nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
+            nova_helper.set_flavor(flavor_id, **{FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
 
         return mem_page_size
 
@@ -384,8 +384,8 @@ class TestConfigMempage:
 
         flavor_id, hosts_configured, storage_backing = flavor_2g
         LOG.tc_step("Set memory page size extra spec in flavor")
-        nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated',
-                                                         FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
+        nova_helper.set_flavor(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated',
+                                             FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
 
         host_helper.wait_for_hypervisors_up(hosts_configured)
         prev_computes_mems = {}
@@ -399,8 +399,8 @@ class TestConfigMempage:
                                                  cleanup='function')
         assert 0 == code, "VM is not successfully booted."
 
-        instance_name, vm_host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"],
-                                                                     strict=False)
+        instance_name, vm_host = nova_helper.get_vm_values(vm_id, fields=[":instance_name", ":host"],
+                                                           strict=False)
         vm_node = vm_helper.get_vm_numa_nodes_via_ps(vm_id=vm_id, instance_name=instance_name, host=vm_host)
         if mem_page_size == '1048576':
             assert host_1g == vm_host, "VM is not created on the configured host {}".format(hosts_configured[0])

@@ -81,7 +81,7 @@ def _flavors(hosts_pci_device_info):
                           # FlavorSpec.NUMA_NODES: '2',     # feature deprecated. May need to update test case as well.
                           FlavorSpec.CPU_POLICY: 'dedicated'}
 
-            nova_helper.set_flavor_extra_specs(flavor_id, **extra_spec)
+            nova_helper.set_flavor(flavor_id, **extra_spec)
         flavors[k] = flavor_id
 
     return flavors

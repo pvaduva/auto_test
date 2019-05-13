@@ -612,7 +612,7 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     default_lab_config_path = os.path.join(load_path, BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[sys_version])
 
     if lab_file_dir:
-        lab_file_dir = os.path.abspath(lab_file_dir)
+        lab_file_dir = os.path.normpath(lab_file_dir)
         if os.path.basename(lab_file_dir) == 'yow':
             lab_file_dir += '/{}'.format(lab_name)
 
@@ -1455,7 +1455,7 @@ def restore_controller_system_config(system_backup, tel_net_session=None, con_ss
 
     """
 
-    if system_backup is None or not os.path.abspath(system_backup):
+    if system_backup is None or not os.path.normpath(system_backup):
         msg = "Full path of the system backup file must be provided: {}".format(system_backup)
         LOG.info(msg)
         raise ValueError(msg)
@@ -1586,7 +1586,7 @@ def upgrade_controller_simplex(system_backup, tel_net_session=None, fail_ok=Fals
         3 - Unexpected result after system restore
     """
 
-    if system_backup is None or not os.path.abspath(system_backup):
+    if system_backup is None or not os.path.normpath(system_backup):
         msg = "Full path of the system backup file must be provided: {}".format(system_backup)
         LOG.info(msg)
         raise ValueError(msg)
@@ -1706,7 +1706,7 @@ def restore_controller_system_images(images_backup, tel_net_session=None, fail_o
 
     """
 
-    if images_backup is None or not os.path.abspath(images_backup):
+    if images_backup is None or not os.path.normpath(images_backup):
         msg = "Full path of the system backup file must be provided: {}".format(images_backup)
         LOG.info(msg)
         raise ValueError(msg)
@@ -1901,13 +1901,7 @@ def import_image_from_backup(image_backup_files, con_ssh=None, fail_ok=False):
     images_failed = []
     cmd = 'image-backup import '
     for file in image_backup_files:
-        if not os.path.abspath(file):
-            # msg = "Full path of the image backup file must be provided: {}".format(file)
-            # LOG.info(msg)
-            # if fail_ok:
-            #     return 1, msg
-            # else:
-            #     raise ValueError(msg)
+        if not os.path.normpath(file):
             file = TiSPath.BACKUPS + '/' + file
         rc, output = con_ssh.exec_sudo_cmd(cmd + file, expect_timeout=300)
         if rc != 0:

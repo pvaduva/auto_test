@@ -255,9 +255,8 @@ def test_ceph_post_install(ceph_post_install_info):
     image_names = glance_helper.get_images(rtn_val='name')
     for name in image_names:
         id_ = glance_helper.get_image_id_from_name(name=name)
-        store = glance_helper.get_image_properties(id_, ['store'])
-        assert 'store' in store and store['store'] == 'file', "Unexpected store value {} for image {}"\
-            .format(store, name)
+        store = glance_helper.get_image_properties(id_, 'store')[0]
+        assert store == 'file', "Unexpected store value {} for image {}".format(store, name)
 
     LOG.tc_step("Creating  image, volume and VM using ceph backend ....")
     # for image_file in current_images:
@@ -266,18 +265,18 @@ def test_ceph_post_install(ceph_post_install_info):
     rc, image_id_rbd, msg = glance_helper.create_image(name=new_img_name, source_image_file=source_image,
                                                        cleanup='function')
     assert rc == 0, "Fail to create image {} ceph as backend storage: {}".format(new_img_name, msg)
-    store = glance_helper.get_image_properties(image_id_rbd, 'store')['store']
+    store = glance_helper.get_image_properties(image_id_rbd, 'store')[0]
     assert store == 'rbd', "Invalid backend; store value used = {}; expected rbd".format(store)
 
     vol_name = 'vol_{}'.format(new_img_name)
     LOG.info('Creating Volume {} from  image {}  ......'.format(vol_name, new_img_name))
     ProjVar.set_var(**{"SOURCE_CREDENTIAL": Tenant.TENANT2})
-    rc, vol_id = cinder_helper.create_volume(name=vol_name, image_id=image_id_rbd, vol_type='ceph',
-                                             auth_info=Tenant.TENANT2, fail_ok=True)
+    rc, vol_id = cinder_helper.create_volume(name=vol_name, source_id=image_id_rbd, vol_type='ceph', fail_ok=True,
+                                             auth_info=Tenant.TENANT2)
     if rc != 1:
         ResourceCleanup.add("volume", vol_id)
     assert rc == 0, "Fail to create volume {}: {} ".format(vol_name, vol_id)
-    vol_type = cinder_helper.get_volume_show_values(vol_id, "volume_type")
+    vol_type = cinder_helper.get_volume_show_values(vol_id, "type")[0]
     assert vol_type.strip() == 'ceph', "Unexpected volume type {} for volume {}; expected type is ceph"\
         .format(vol_type, vol_name)
 

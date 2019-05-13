@@ -22,10 +22,7 @@ def skip_test_if_less_than_two_hosts(no_simplex):
         skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
     LOG.fixture_step("Update instance and volume quota to at least 10 and 20 respectively")
-    if nova_helper.get_quotas(quotas='instances')[0] < 10:
-        nova_helper.update_quotas(instances=10, cores=20)
-    if cinder_helper.get_quotas(quotas='volumes')[0] < 20:
-        cinder_helper.update_quotas(volumes=20)
+    vm_helper.ensure_vms_quotas(vms_num=10)
 
     return len(hypervisors)
 
@@ -217,14 +214,14 @@ class TestEvacKPI:
         vm2_host = nova_helper.get_vm_host(vm2)
         vm1_router = network_helper.get_tenant_router(auth_info=Tenant.get_primary())
         vm2_router = network_helper.get_tenant_router(auth_info=Tenant.get_secondary())
-        vm1_router_host = network_helper.get_router_info(router_id=vm1_router, field='wrs-net:host')
-        vm2_router_host = network_helper.get_router_info(router_id=vm2_router, field='wrs-net:host')
+        vm1_router_host = network_helper.get_router_host(router=vm1_router)
+        vm2_router_host = network_helper.get_router_host(router=vm2_router)
         targets = list(get_hosts)
 
         if vm1_router_host == vm2_router_host:
             def _chk_same_router_host():
-                vm1_router_host = network_helper.get_router_info(router_id=vm1_router, field='wrs-net:host')
-                vm2_router_host = network_helper.get_router_info(router_id=vm2_router, field='wrs-net:host')
+                vm1_router_host = network_helper.get_router_host(router=vm1_router)
+                vm2_router_host = network_helper.get_router_host(router=vm2_router)
                 return vm1_router_host == vm2_router_host
             succ, val = common.wait_for_val_from_func(False, 360, 10, _chk_same_router_host)
             assert succ, \
@@ -268,8 +265,8 @@ class TestEvacKPI:
             # verify setup
             vm1_host = nova_helper.get_vm_host(vm1)
             vm2_host = nova_helper.get_vm_host(vm2)
-            vm1_router_host = network_helper.get_router_info(router_id=vm1_router, field='wrs-net:host')
-            vm2_router_host = network_helper.get_router_info(router_id=vm2_router, field='wrs-net:host')
+            vm1_router_host = network_helper.get_router_host(router=vm1_router)
+            vm2_router_host = network_helper.get_router_host(router=vm2_router)
             assert vm1_router_host != vm1_host and vm2_host != vm1_host and vm2_router_host != vm1_host, \
                 "setup is incorrect"
         else:
@@ -304,8 +301,8 @@ class TestEvacKPI:
             # verify setup
             vm1_host = nova_helper.get_vm_host(vm1)
             vm2_host = nova_helper.get_vm_host(vm2)
-            vm1_router_host = network_helper.get_router_info(router_id=vm1_router, field='wrs-net:host')
-            vm2_router_host = network_helper.get_router_info(router_id=vm2_router, field='wrs-net:host')
+            vm1_router_host = network_helper.get_router_host(router=vm1_router)
+            vm2_router_host = network_helper.get_router_host(router=vm2_router)
             assert vm1_host == vm1_router_host and vm2_host != vm1_host and vm2_router_host != vm1_host, \
                 "setup is incorrect"
 

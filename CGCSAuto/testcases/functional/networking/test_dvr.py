@@ -27,16 +27,17 @@ def router_info(request):
     LOG.fixture_step("Disable SNAT and update router to DVR if not already done.")
 
     router_id = network_helper.get_tenant_router()
-    network_helper.update_router_ext_gateway_snat(router_id, enable_snat=False)
-    is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.get('admin')))
+    network_helper.set_router_gateway(router_id, enable_snat=False)
+    is_dvr = network_helper.get_router_values(router_id, fields='distributed', auth_info=Tenant.get('admin'))[0]
 
     def teardown():
-        if eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.get('admin'))) != is_dvr:
-                network_helper.update_router_distributed(router_id, distributed=is_dvr)
+        post_dvr = network_helper.get_router_values(router_id, fields='distributed', auth_info=Tenant.get('admin'))[0]
+        if post_dvr != is_dvr:
+            network_helper.set_router_mode(router_id, distributed=is_dvr)
     request.addfinalizer(teardown)
 
     if not is_dvr:
-        network_helper.update_router_distributed(router_id, distributed=True, post_admin_up_on_failure=False)
+        network_helper.set_router_mode(router_id, distributed=True, enable_on_failure=False)
 
     result_ = True
     return router_id
@@ -48,7 +49,7 @@ def _bring_up_router(request):
     def _router_up():
         if result_ is False:
             router_id = network_helper.get_tenant_router()
-            network_helper._update_router(admin_state_up=True, router_id=router_id, fail_ok=False)
+            network_helper.set_router(router=router_id, fail_ok=False, enable=True)
     request.addfinalizer(_router_up)
 
 
@@ -85,12 +86,12 @@ def test_dvr_update_router(router_info, _bring_up_router):
 
     for update_to_val in [False, True]:
         LOG.tc_step("Update router distributed to {}".format(update_to_val))
-        network_helper.update_router_distributed(router_id, distributed=update_to_val, post_admin_up_on_failure=False)
+        network_helper.set_router_mode(router_id, distributed=update_to_val, enable_on_failure=False)
 
         # Wait for 30 seconds to allow the router update completes
         time.sleep(30)
         LOG.tc_step("Verify router is in active state and vm can be ping'd from NatBox")
-        assert RouterStatus.ACTIVE == network_helper.get_router_info(router_id, field='status'), \
+        assert RouterStatus.ACTIVE == network_helper.get_router_values(router_id, fields='status')[0], \
             "Router is not in active state after updating distributed to {}.".format(update_to_val)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
@@ -130,22 +131,18 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
 
     """
     # Increase instance quota count if needed
-    instance_quota = nova_helper.get_quotas('instances')[0]
     current_vms = len(nova_helper.get_vms(strict=False))
     quota_needed = current_vms + vms_num
-    if instance_quota < quota_needed:
-        LOG.tc_step("Increase the instance quota from {} to {}".format(instance_quota, quota_needed))
-        quota_diff = quota_needed - instance_quota
-        nova_helper.update_quotas(instances=instance_quota + quota_diff)
+    vm_helper.ensure_vms_quotas(quota_needed)
 
     if srv_grp_policy == 'anti-affinity' and len(host_helper.get_up_hypervisors()) == 1:
         skip("Only one nova host on the system.")
 
     LOG.tc_step("Update router to distributed if not already done")
     router_id = router_info
-    is_dvr = eval(network_helper.get_router_info(router_id, field='distributed', auth_info=Tenant.get('admin')))
+    is_dvr = network_helper.get_router_values(router_id, fields='distributed', auth_info=Tenant.get('admin'))[0]
     if not is_dvr:
-        network_helper.update_router_distributed(router_id, distributed=True)
+        network_helper.set_router_mode(router_id, distributed=True)
 
     LOG.tc_step("Boot {} vms with server group policy {}".format(vms_num, srv_grp_policy))
     affinity_grp, anti_affinity_grp = server_groups(soft=True)
@@ -162,7 +159,7 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
 
     nics = [{'net-id': mgmt_net_id}, {'net-id': tenant_net_id}, internal_vif]
     for i in range(vms_num):
-        vol = cinder_helper.create_volume(rtn_exist=False)[1]
+        vol = cinder_helper.create_volume()[1]
         ResourceCleanup.add(resource_type='volume', resource_id=vol)
         vm_id = vm_helper.boot_vm('dvr_ew_traffic', source='volume', source_id=vol, nics=nics, cleanup='function',
                                   hint={'group': srv_grp_id})[1]

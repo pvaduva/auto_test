@@ -883,7 +883,7 @@ def remove_columns(table_, headers):
     return new_table_
 
 
-def convert_value_to_dict_cinder(value):
+def convert_value_to_dict(value):
     """
     In a client (e.g. cinderclient) CLI output, a dict type value can be either
     a plain raw string (e.g. cinderclient Newton) or a "pretty formatted"
@@ -897,27 +897,25 @@ def convert_value_to_dict_cinder(value):
 
     Example:
         input:
-        ['checksum : c1b6664df43550fd5684fe85cdd3ddc3',
-        'container_format : bare',
-        'disk_format : qcow2',
-        'image_id : 8d8ea28f-e633-4e29-8f28-9d8171dbf5b6',
-        'image_name : ubuntu_14',
-        'min_disk : 0', 'min_ram : 0',
-        'size : 260440576', 'store : file']
+        checksum='c1b6664df43550fd5684fe85cdd3ddc3', container_format='bare'
+
         output:
         {'checksum': 'c1b6664df43550fd5684fe85cdd3ddc3',
-        'min_ram': '0', 'disk_format': 'qcow2',
-        'image_name': 'ubuntu_14', 'image_id': '8d8ea28f-e633-4e29-8f28-9d8171dbf5b6',
         'container_format': 'bare', 'min_disk': '0', 'store': 'file', 'size': '260440576'}
 
     """
-    if not isinstance(value, list):
+    if isinstance(value, str):
         if '{' in value:
-            # newton
             return eval(value)
-        value = [value]
-    d = {k.strip(): v.strip() for k, v in (x.split(':') for x in value)}
-    return d
+        value = value.split(sep=', ')
+
+    parsed_dict = {}
+    for item in value:
+        k, v = item.split('=')
+        v = v.strip()
+        v = v[1:-1] if v == "'{}'".format(v[1:-1]) else v
+        parsed_dict[k.strip()] = v
+    return parsed_dict
 
 
 def get_columns(table_, headers):

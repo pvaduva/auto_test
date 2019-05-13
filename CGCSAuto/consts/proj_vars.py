@@ -1,5 +1,9 @@
 from consts.filepaths import WRSROOT_HOME
 
+#
+# Please DO NOT import any CGCSAUTO modules other than consts.filepaths #
+#
+
 
 class ProjVar:
     __var_dict = {'BUILD_ID': None,
@@ -37,6 +41,7 @@ class ProjVar:
                   'TEMP_DIR': '',
                   'INSTANCE_BACKING': {},
                   'OPENSTACK_DEPLOYED': None,
+                  'STX_KEYFILE_PATH': '{}/.ssh/id_rsa'.format(WRSROOT_HOME)
                   }
 
     @classmethod
@@ -46,8 +51,8 @@ class ProjVar:
         labname = lab['short_name']
 
         cls.__var_dict.update(**{
-            'KEYFILE_PATH': '/folk/svc-cgcsauto/priv_keys/keyfile_{}.pem'.format(labname),
-            'KEYFILE_NAME': '/home/wrsroot/.ssh/' + 'keyfile_{}.pem'.format(labname),
+            'NATBOX_KEYFILE_PATH': '~/priv_keys/keyfile_{}.pem'.format(labname),
+            'STX_KEYFILE_WRS_HOME': '/home/wrsroot/keyfile_{}.pem'.format(labname),
             'LOG_DIR': logdir,
             'TCLIST_PATH': logdir + '/test_results.log',
             'PYTESTLOG_PATH': logdir + '/pytestlog.log',
@@ -130,7 +135,6 @@ class InstallVars:
                          ipv6_config=False,
                          helm_chart_path=None,
                          helm_chart_server=None,
-                         set_install_vars=None,
                          no_manage=False,
                          extract_deploy_config=False):
 

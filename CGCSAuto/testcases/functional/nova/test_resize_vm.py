@@ -376,7 +376,7 @@ class TestResizeDiffHost:
         flavor_1 = nova_helper.create_flavor(ephemeral=0, swap=0, root_disk=root_disk_size, vcpus=1,
                                              storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor_1)
-        nova_helper.set_flavor_extra_specs(flavor_1, **numa0_specs)
+        nova_helper.set_flavor(flavor_1, **numa0_specs)
 
         LOG.tc_step("Boot a vm with above flavor")
         vm_to_resize = vm_helper.boot_vm(flavor=flavor_1, source='image', cleanup='function', vm_host=origin_host)[1]
@@ -388,7 +388,7 @@ class TestResizeDiffHost:
         second_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: 0}
         flavor_2 = nova_helper.create_flavor(vcpus=occupy_amount, storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor_2)
-        nova_helper.set_flavor_extra_specs(flavor_2, **second_specs)
+        nova_helper.set_flavor(flavor_2, **second_specs)
 
         LOG.tc_step("Boot a vm with above flavor to occupy remaining vcpus")
         vm_2 = vm_helper.boot_vm(flavor=flavor_2, source='image', cleanup='function', vm_host=origin_host)[1]
@@ -403,7 +403,7 @@ class TestResizeDiffHost:
         resize_flavor = nova_helper.create_flavor(ephemeral=0, swap=0, root_disk=root_disk_size, vcpus=2,
                                                   storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', resize_flavor)
-        nova_helper.set_flavor_extra_specs(resize_flavor, **numa0_specs)
+        nova_helper.set_flavor(resize_flavor, **numa0_specs)
 
         LOG.tc_step("Resize the vm and verify if it is on a different host")
         vm_helper.resize_vm(vm_to_resize, resize_flavor)

@@ -1,6 +1,5 @@
 from pytest import mark, skip
 
-from utils import table_parser
 from utils.tis_log import LOG
 from keywords import system_helper, nova_helper, kube_helper
 
@@ -22,11 +21,9 @@ def test_cpe_services_and_functions():
                     # "nova-cert",
                     "nova-conductor",
                     "nova-consoleauth",
-                    "nova-scheduler",
                     "nova-compute"]
 
-    services_tab = nova_helper.get_nova_services_table()
-    binaries = table_parser.get_column(services_tab, 'Binary')
+    binaries = nova_helper.get_compute_services(rtn_val='Binary')
     assert set(check_params) <= set(binaries), "Not all binaries from {} exist in 'nova service-list'".\
         format(check_params)
 

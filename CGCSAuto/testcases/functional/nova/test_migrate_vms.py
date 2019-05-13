@@ -315,7 +315,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
         specs = {FlavorSpec.CPU_POLICY: cpu_pol}
 
         LOG.tc_step("Add following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
+        nova_helper.set_flavor(flavor=flavor_id, **specs)
 
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))
@@ -357,12 +357,12 @@ def test_migrate_vm(check_system, guest_os, mig_type, cpu_pol):
     if cpu_pol is not None:
         specs = {FlavorSpec.CPU_POLICY: cpu_pol}
         LOG.tc_step("Add following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
+        nova_helper.set_flavor(flavor=flavor_id, **specs)
 
     LOG.tc_step("Create a volume from {} image".format(guest_os))
     image_id = glance_helper.get_guest_image(guest_os=guest_os)
 
-    vol_id = cinder_helper.create_volume(image_id=image_id, size=9, guest_image=guest_os)[1]
+    vol_id = cinder_helper.create_volume(source_id=image_id, size=9, guest_image=guest_os)[1]
     ResourceCleanup.add('volume', vol_id)
 
     LOG.tc_step("Boot a vm from above flavor and volume")
@@ -421,12 +421,12 @@ def test_migrate_vm_various_guest(check_system, guest_os, vcpus, ram, cpu_pol, b
     if cpu_pol is not None:
         specs = {FlavorSpec.CPU_POLICY: cpu_pol}
         LOG.tc_step("Add following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
+        nova_helper.set_flavor(flavor=flavor_id, **specs)
 
     source_id = img_id
     if boot_source == 'volume':
         LOG.tc_step("Create a volume from {} image".format(guest_os))
-        code, vol_id = cinder_helper.create_volume(name=guest_os, guest_image=guest_os, fail_ok=True)
+        code, vol_id = cinder_helper.create_volume(name=guest_os, fail_ok=True, guest_image=guest_os)
         ResourceCleanup.add('volume', vol_id)
 
         assert 0 == code, "Issue occurred when creating volume"

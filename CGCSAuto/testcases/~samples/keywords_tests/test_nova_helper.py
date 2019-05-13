@@ -6,7 +6,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 @fixture(scope='module')
 def add_host_to_zone(request, add_cgcsauto_zone, add_admin_role_module):
-    nova_zone_hosts = host_helper.get_nova_hosts(zone='nova')
+    nova_zone_hosts = host_helper.get_up_hypervisors()
     host_to_add = nova_zone_hosts[0]
     nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=host_to_add)
 

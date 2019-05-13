@@ -47,12 +47,12 @@ def test_autorecovery_image_metadata_in_volume(auto_recovery, disk_format, conta
                                           cleanup='function', **{property_key: auto_recovery})[1]
 
     LOG.tc_step("Create a volume from the image")
-    vol_id = cinder_helper.create_volume(name='auto_recov', image_id=image_id, rtn_exist=False)[1]
+    vol_id = cinder_helper.create_volume(name='auto_recov', source_id=image_id)[1]
     ResourceCleanup.add('volume', vol_id)
 
     LOG.tc_step("Verify image properties are shown in cinder list")
     field = 'volume_image_metadata'
-    vol_image_metadata_dict = cinder_helper.get_volume_states(vol_id=vol_id, fields=field)[field]
+    vol_image_metadata_dict = cinder_helper.get_volume_show_values(vol_id, fields=field)[0]
     LOG.info("vol_image_metadata dict: {}".format(vol_image_metadata_dict))
 
     assert auto_recovery.lower() == vol_image_metadata_dict[property_key].lower(), \
@@ -111,7 +111,7 @@ def test_vm_autorecovery_without_heartbeat(cpu_policy, flavor_auto_recovery, ima
         extra_specs[FlavorSpec.AUTO_RECOVERY] = flavor_auto_recovery
 
     if extra_specs:
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+        nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     property_key = ImageMetadata.AUTO_RECOVERY
     LOG.tc_step("Create an image with property auto_recovery={}, disk_format={}, container_format={}".
@@ -187,7 +187,7 @@ def _test_vm_autorecovery_with_heartbeat(cpu_policy, auto_recovery, expt_autorec
     if auto_recovery is not None:
         extra_specs[FlavorSpec.AUTO_RECOVERY] = auto_recovery
 
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Boot a vm using the flavor with guest heartbeat - true and auto recovery - {}".format(auto_recovery))
     vm_id = vm_helper.boot_vm(name='test_ar_with_hb', flavor=flavor_id, cleanup='function')[1]
@@ -271,7 +271,7 @@ def _test_vm_heartbeat_without_autorecovery(guest_heartbeat, heartbeat_enabled):
     if guest_heartbeat is not None:
         extra_specs[FlavorSpec.GUEST_HEARTBEAT] = guest_heartbeat
 
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Boot a vm using flavor with auto recovery - False and guest heartbeat - {}".format(guest_heartbeat))
     vm_id = vm_helper.boot_vm(name='test_hb_no_ar', flavor=flavor_id, cleanup='function')[1]
@@ -348,7 +348,7 @@ def _test_vm_autorecovery_kill_host_kvm(heartbeat, collect_kpi):
     ResourceCleanup.add('flavor', flavor_id)
 
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: str(heartbeat)}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Boot a vm with above flavor")
     mgmt_net_id = network_helper.get_mgmt_net_id()

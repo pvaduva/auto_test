@@ -510,7 +510,7 @@ def create_rt_vm(hypervisor):
         FlavorSpec.CPU_REALTIME_MASK: '^{}'.format(non_rt_core),
         FlavorSpec.MEM_PAGE_SIZE: 2048,
     }
-    nova_helper.set_flavor_extra_specs(flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor_id, **extra_specs)
 
     LOG.tc_step('Boot a VM with rt flavor and image on the targeted hypervisor: {}'.format(hypervisor))
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source='image', source_id=image_id, vm_host=hypervisor,
@@ -547,7 +547,7 @@ def test_kpi_cyclictest_hypervisor(collect_kpi, prepare_test_session, get_hyperv
 
     LOG.info('Hypervisor chosen to run cyclictest: {}'.format(chosen_hypervisor))
     active_controller_name = system_helper.get_active_controller_name()
-    program = os.path.join(os.path.abspath(CYCLICTEST_DIR), os.path.basename(CYCLICTEST_EXE))
+    program = os.path.join(os.path.normpath(CYCLICTEST_DIR), os.path.basename(CYCLICTEST_EXE))
     LOG.debug('program={}'.format(program))
 
     with host_helper.ssh_to_host(chosen_hypervisor) as target_ssh:
@@ -583,8 +583,8 @@ def test_kpi_cyclictest_vm(collect_kpi, prepare_test_session, get_rt_guest_image
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     cyclictest_dir = '/root/cyclictest/'
-    program = os.path.join(os.path.abspath(cyclictest_dir), os.path.basename(CYCLICTEST_EXE))
-    program_active_con = os.path.join(os.path.abspath(CYCLICTEST_DIR), os.path.basename(CYCLICTEST_EXE))
+    program = os.path.join(os.path.normpath(cyclictest_dir), os.path.basename(CYCLICTEST_EXE))
+    program_active_con = os.path.join(os.path.normpath(CYCLICTEST_DIR), os.path.basename(CYCLICTEST_EXE))
 
     cpu_info = {'vm_cores': [id for id in range(vcpu_count) if id != non_rt_core]}
 

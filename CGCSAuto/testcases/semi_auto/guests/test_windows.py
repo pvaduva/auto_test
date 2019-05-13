@@ -18,7 +18,7 @@ def test_boot_windows_guest():
     LOG.tc_step("Create flavor with {} storage backing".format(storage))
     flv_id = nova_helper.create_flavor(name='{}-{}'.format(storage, guest), vcpus=4, ram=8192,
                                        storage_backing=storage, guest_os=guest)[1]
-    nova_helper.set_flavor_extra_specs(flv_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
+    nova_helper.set_flavor(flv_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     LOG.tc_step("Boot {} vm".format(guest))
     vm_id = vm_helper.boot_vm(name='{}-{}'.format(guest, storage), flavor=flv_id, guest_os=guest, source=boot_source)[1]

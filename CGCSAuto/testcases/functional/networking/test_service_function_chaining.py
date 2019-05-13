@@ -3,7 +3,6 @@ from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 from keywords import vm_helper, host_helper, network_helper, nova_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -135,18 +134,17 @@ def test_robustness_service_function_chaining(protocol, nsh_aware, same_host, ad
     flow_classifier_name = 'new_sfc_flow_classifier'
     new_flow_classifier, dest_vm_internal_net_ip = _setup_flow_classifier(flow_classifier_name, source_vm_id,
                                                                           dest_vm_id, add_protocol)
-    ResourceCleanup.add('flow_classifier', new_flow_classifier)
 
     LOG.tc_step("Update port chain with new flow classifier:".format(new_flow_classifier))
-    network_helper.update_port_chain(port_chain_id, port_pair_groups=port_pair_group_id,
-                                     flow_classifiers=new_flow_classifier)
+    network_helper.set_sfc_port_chain(port_chain_id, port_pair_groups=port_pair_group_id,
+                                      flow_classifiers=new_flow_classifier)
 
     LOG.tc_step("Execute vxlan.py tool and verify {} packet received VM1 to VM2".format(add_protocol))
     _check_packets_forwarded_in_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip, add_protocol,
                                        nsh_aware, symmetric, load_balancing=False)
 
     LOG.info("Get the host to reboot where the VMs launched")
-    hosts_to_reboot = nova_helper.get_vms_host(vm_ids=vm_ids)
+    hosts_to_reboot = nova_helper.get_vms_hosts(vm_ids=vm_ids)
 
     LOG.tc_step("Reboot VMs host {} and ensure vms are evacuated to other host".format(hosts_to_reboot))
     vm_helper.evacuate_vms(host=hosts_to_reboot, vms_to_check=vm_ids, ping_vms=True)
@@ -253,8 +251,8 @@ def test_multiple_chained_service_function(protocol, nsh_aware, same_host, symme
     port_pair_group_ids.append(port_pair_group_id2)
 
     LOG.tc_step("Update port chain")
-    network_helper.update_port_chain(port_chain_id, port_pair_groups=port_pair_group_ids,
-                                     flow_classifiers=flow_classifier)
+    network_helper.set_sfc_port_chain(port_chain_id, port_pair_groups=port_pair_group_ids,
+                                      flow_classifiers=flow_classifier)
 
     LOG.tc_step("Execute vxlan.py tool and verify {} packet received VM1 to VM2".format(protocol))
     _check_packets_forwarded_in_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, dest_vm_internal_net_ip, protocol,
@@ -446,11 +444,11 @@ def _setup_port_pair(nsh_aware, ingress_port_id, egress_port_id):
     """
     service_func_param = 'correlation=nsh' if nsh_aware else ''
     LOG.info("Create port pair with nsh aware: {}".format(nsh_aware))
-    port_pair_id = network_helper.create_port_pair(name='sfc_port_pair',
-                                                   ingress_port=ingress_port_id,
-                                                   egress_port=egress_port_id,
-                                                   service_func_param=service_func_param)[1]
-    ResourceCleanup.add('port_pair', port_pair_id)
+    port_pair_id = network_helper.create_sfc_port_pair(name='sfc_port_pair',
+                                                       ingress_port=ingress_port_id,
+                                                       egress_port=egress_port_id,
+                                                       service_func_param=service_func_param,
+                                                       cleanup='function')[1]
     LOG.info("Created port pair: {}".format(port_pair_id))
     return port_pair_id
 
@@ -467,8 +465,8 @@ def _setup_port_pair_groups(port_pair_id):
     """
 
     LOG.info("Create port pair group")
-    port_pair_group_id = network_helper.create_port_pair_group(port_pairs=port_pair_id, name='port_pair_group')[1]
-    ResourceCleanup.add('port_pair_group', port_pair_group_id)
+    port_pair_group_id = network_helper.create_sfc_port_pair_group(port_pairs=port_pair_id, name='port_pair_group',
+                                                                   cleanup='function')[1]
     LOG.info("Created port pair group {} with port pair:{}".format(port_pair_group_id, port_pair_id))
     return port_pair_group_id
 
@@ -483,21 +481,21 @@ def _setup_flow_classifier(name, source_vm_id, dest_vm_id, protocol):
     Returns:
         flow_classifier_id
     """
-    internal_net_ip = network_helper.get_internal_ips_for_vms(source_vm_id, rtn_dict=False)
-    internal_net_ip = ''.join(internal_net_ip)
+    internal_net_ip = network_helper.get_internal_ips_for_vms(source_vm_id, rtn_dict=False)[0]
     source_ip_prefix = "{}/32".format(internal_net_ip)
 
     dest_vm_internal_net_ip = network_helper.get_internal_ips_for_vms(dest_vm_id, rtn_dict=False)
     dest_vm_internal_net_ip = ''.join(dest_vm_internal_net_ip)
 
-    logical_source_port = network_helper.get_vm_port(vm=internal_net_ip, vm_val='ip')
+    logical_source_port = network_helper.get_ports(server=source_vm_id, fixed_ips={'ip-address': internal_net_ip})[0]
     LOG.info("internal port id is {}".format(logical_source_port))
     LOG.info("internal net ip is {}".format(source_ip_prefix))
 
     flow_classifier = network_helper.create_flow_classifier(name=name,
                                                             logical_source_port=logical_source_port,
-                                                            source_ip_prefix=source_ip_prefix, protocol=protocol)[1]
-    ResourceCleanup.add('flow_classifier', flow_classifier)
+                                                            source_ip_prefix=source_ip_prefix,
+                                                            protocol=protocol,
+                                                            cleanup='function')[1]
     LOG.info("Created flow classifier: {}".format(flow_classifier))
     return flow_classifier, dest_vm_internal_net_ip
 
@@ -514,9 +512,9 @@ def _setup_port_chain(port_pair_group_id, flow_classifier, symmetric):
     """
     chain_param = 'symmetric=true' if symmetric else ''
     LOG.info("Create port chain with symmetric: {}".format(symmetric))
-    port_chain_id = network_helper.create_port_chain(name='sfc_port_chain', port_pair_groups=port_pair_group_id,
-                                                     flow_classifiers=flow_classifier, chain_param=chain_param)[1]
-    ResourceCleanup.add('port_chain', port_chain_id)
+    port_chain_id = network_helper.create_sfc_port_chain(name='sfc_port_chain', port_pair_groups=port_pair_group_id,
+                                                         flow_classifiers=flow_classifier, chain_param=chain_param,
+                                                         cleanup='function')[1]
     LOG.info("Created port chain: {}".format(port_chain_id))
     return port_chain_id
 
@@ -534,16 +532,17 @@ def _check_packets_forwarded_in_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, des
 
     greeting = "hello"
     port = 20010
+    vm_thread = None
     if protocol != 'icmp':
-        vm_thread = MThread(_ssh_to_dest_vm_and_wait_for_greetings, start_event, end_event,
-                            received_event, dest_vm_id, dest_vm_internal_net_ip, greeting, port, protocol,
-                            load_balancing)
+        func_args = (start_event, end_event, received_event, dest_vm_id, dest_vm_internal_net_ip, greeting, port,
+                     protocol, load_balancing)
+        vm_thread = MThread(_ssh_to_dest_vm_and_wait_for_greetings, *func_args)
 
     sfc_vm_threads = []
     for sfc_vm in sfc_vm_ids:
         start_event_sfc, received_event_sfc = vms_events[sfc_vm]
-        sfc_vm_thread = MThread(_ssh_to_sfc_vm_and_wait_for_packets, start_event_sfc, end_event, received_event_sfc,
-                                sfc_vm, protocol, nsh_aware, symmetric)
+        func_args = (start_event_sfc, end_event, received_event_sfc, sfc_vm, protocol, nsh_aware, symmetric)
+        sfc_vm_thread = MThread(_ssh_to_sfc_vm_and_wait_for_packets, *func_args)
         sfc_vm_threads.append(sfc_vm_thread)
 
     LOG.tc_step("Starting VM ssh session threads to ping (icmp) or send hello (tcp, udp)")
@@ -578,8 +577,6 @@ def _check_packets_forwarded_in_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, des
             start_event_sfc, received_event_sfc = vms_events[sfc_vm]
             assert received_event_sfc.wait_for_event(timeout=10), "Received Event is not set in SFC function"
 
-    except:
-        raise
     finally:
         end_event.set()
         if protocol != 'icmp':

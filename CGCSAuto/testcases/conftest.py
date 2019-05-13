@@ -10,7 +10,6 @@ from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 
 natbox_ssh = None
-con_ssh = None
 initialized = False
 
 
@@ -33,6 +32,7 @@ def setup_test_session(global_setup, request):
         raise
     # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
 
+    con_ssh = ControllerClient.get_active_controller()
     # set build id to be used to upload/write test results
     setups.set_build_info(con_ssh)
 
@@ -48,7 +48,7 @@ def setup_test_session(global_setup, request):
     natbox_ssh.flush()
     natbox_ssh.connect(retry=True)
     # copy private key to natbox and public key to localhost (if remote cli)
-    setups.copy_keyfiles(nat_ssh=natbox_ssh, con_ssh=con_ssh)
+    setups.setup_keypair(nat_ssh=natbox_ssh, con_ssh=con_ssh)
 
     # collect telnet logs for all hosts
     if ProjVar.get_var('COLLECT_TELNET'):

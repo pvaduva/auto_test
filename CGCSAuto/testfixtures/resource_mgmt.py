@@ -128,36 +128,37 @@ def _delete_resources(resources, scope):
 
     def __del_aggregate(aggregate_, **kwargs):
         nova_helper.remove_hosts_from_aggregate(aggregate=aggregate_, check_first=False, **kwargs)
-        return nova_helper.delete_aggregate(name=aggregate_, **kwargs)
+        return nova_helper.delete_aggregates(names=aggregate_, **kwargs)
 
     # List resources in proper order if there are dependencies!
     del_list = [
         # resource, del_fun, fun_params, whether to delete all resources together.
         ('heat_stack', __del_heat_stacks, {}, False),
-        ('port_chain', network_helper.delete_port_chain, {'check_first': True}, False),
+        ('port_chain', network_helper.delete_sfc_port_chain, {'check_first': True}, False),
         ('flow_classifier', network_helper.delete_flow_classifier, {'check_first': True}, False),
         ('vm', vm_helper.delete_vms, {'delete_volumes': False}, True),
         ('vm_with_vol', vm_helper.delete_vms, {'delete_volumes': True}, True),
         ('vol_snapshot', cinder_helper.delete_volume_snapshots, {}, True),
         ('volume', cinder_helper.delete_volumes, {}, True),
         ('volume_type', cinder_helper.delete_volume_types, {}, True),
-        ('volume_qos', cinder_helper.delete_qos_list, {}, True),
+        ('volume_qos', cinder_helper.delete_volume_qos, {}, True),
         ('flavor', nova_helper.delete_flavors, {}, True),
         ('image', glance_helper.delete_images, {}, True),
         ('server_group', nova_helper.delete_server_groups, {}, True),
-        ('floating_ip', network_helper.delete_floating_ip, {'fip_val': 'ip'}, False),
-        ('trunk', network_helper.delete_trunk, {}, False),
-        ('port_pair_group', network_helper.delete_port_pair_group, {'check_first': True}, False),
-        ('port_pair', network_helper.delete_port_pairs, {'check_first': True}, True),
+        ('floating_ip', network_helper.delete_floating_ips, {}, True),
+        ('trunk', network_helper.delete_trunks, {}, True),
+        ('port_pair_group', network_helper.delete_sfc_port_pair_group, {'check_first': True}, False),
+        ('port_pair', network_helper.delete_sfc_port_pairs, {'check_first': True}, True),
         ('port', network_helper.delete_port, {}, False),
         ('router', network_helper.delete_router, {}, False),
-        ('subnet', network_helper.delete_subnet, {}, False),
+        ('subnet', network_helper.delete_subnets, {}, True),
         ('network_qos', network_helper.delete_qos, {}, False),
         ('network', network_helper.delete_network, {}, False),
+        ('security_group_rule', network_helper.delete_security_group_rules, {}, True),
         ('security_group', network_helper.delete_security_group, {}, False),
         ('aggregate', __del_aggregate, {}, False),
         ('datanetwork', system_helper.delete_data_network, {}, False),
-        ('providernet', network_helper.delete_providernet, {}, False),
+        # ('providernet', network_helper.delete_providernet, {}, False),
     ]
 
     err_msgs = []

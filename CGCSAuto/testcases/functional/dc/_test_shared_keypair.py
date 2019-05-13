@@ -25,14 +25,14 @@ def keypair_precheck(request):
     assert managed_subclouds, "This test needs at least two online subclouds for testing."
 
     central_auth = Tenant.get('admin', dc_region='SystemController')
-    central_keypair = nova_helper.get_keypair(auth_info=central_auth)
+    central_keypair = nova_helper.get_keypairs(auth_info=central_auth)
 
     ssh_map = ControllerClient.get_active_controllers_map()
     managed_subclouds = [subcloud for subcloud in managed_subclouds if subcloud in ssh_map]
 
     LOG.fixture_step("Ensure keypair are synced on {}".format(primary_subcloud))
     subcloud_auth = Tenant.get('admin', dc_region=primary_subcloud)
-    subcloud_keypair = nova_helper.get_keypair(auth_info=subcloud_auth)
+    subcloud_keypair = nova_helper.get_keypairs(auth_info=subcloud_auth)
 
     if sorted(subcloud_keypair) != sorted(central_keypair):
         dc_helper.wait_for_subcloud_keypair(primary_subcloud, expected_keypair=central_keypair)
@@ -42,7 +42,7 @@ def keypair_precheck(request):
         dc_helper.manage_subcloud(primary_subcloud)
 
         LOG.fixture_step("Delete new keypair on central region")
-        nova_helper.delete_keypair(kp_names=NEW_KEYPAIR, auth_info=central_auth)
+        nova_helper.delete_keypairs(keypairs=NEW_KEYPAIR, auth_info=central_auth)
 
         LOG.fixture_step("Wait for sync audit on {} and keypair to sync over".
                          format(primary_subcloud))

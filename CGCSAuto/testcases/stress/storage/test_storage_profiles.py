@@ -105,7 +105,7 @@ def get_hw_compatible_hosts(hosts):
     hardware = {}
     hardware_hash = {}
     for host in hosts:
-        rc, out = cli.system("host-disk-list {} --nowrap".format(host), rtn_list=True)
+        rc, out = cli.system("host-disk-list {} --nowrap".format(host), rtn_code=True)
         table_ = table_parser.table(out)
         device_nodes = table_parser.get_column(table_, "device_node")
         device_type = table_parser.get_column(table_, "device_type")
@@ -316,7 +316,7 @@ def _test_storage_profile(personality, from_backing, to_backing):
     # Negative test #1 - attempt to apply profile on unlocked host (should be rejected)
     LOG.tc_step('Apply the storage-profile {} onto unlocked host:{}'.format(prof_name, to_host))
     cmd = 'host-apply-storprofile {} {}'.format(to_host, prof_name)
-    rc, msg = cli.system(cmd, rtn_list=True, fail_ok=True)
+    rc, msg = cli.system(cmd, rtn_code=True, fail_ok=True)
     assert rc != 0, msg
     host_helper.lock_host(to_host, swact=True)
 
@@ -330,7 +330,7 @@ def _test_storage_profile(personality, from_backing, to_backing):
         # nova-local (should be rejected)
         LOG.tc_step('Apply the storage-profile {} onto host with existing nova-local:{}'.format(prof_name, to_host))
         cmd = 'host-apply-storprofile {} {}'.format(to_host, prof_name)
-        rc, msg = cli.system(cmd, rtn_list=True, fail_ok=True)
+        rc, msg = cli.system(cmd, rtn_code=True, fail_ok=True)
         assert rc != 0, msg
 
         # If we were simply switching backing (without applying a storage
@@ -347,7 +347,7 @@ def _test_storage_profile(personality, from_backing, to_backing):
             LOG.tc_step('Apply the storage-profile {} onto host with existing \
                          in-use partitions:{}'.format(prof_name, to_host))
             cmd = 'host-apply-storprofile {} {}'.format(to_host, prof_name)
-            rc, msg = cli.system(cmd, rtn_list=True, fail_ok=True)
+            rc, msg = cli.system(cmd, rtn_code=True, fail_ok=True)
             assert rc != 0, msg
 
             LOG.tc_step("In-use partitions found.  Must delete the host and freshly install before proceeding.")
@@ -359,7 +359,7 @@ def _test_storage_profile(personality, from_backing, to_backing):
 
             LOG.tc_step("Delete the host {}".format(to_host))
             cli.system("host-bulk-export")
-            cli.system("host-delete {}".format(to_host), rtn_list=True)
+            cli.system("host-delete {}".format(to_host), rtn_code=True)
             assert len(system_helper.get_controllers()) > 1, "Host deletion failed"
 
             cli.system("host-bulk-add hosts.xml")
@@ -392,7 +392,7 @@ def _test_storage_profile(personality, from_backing, to_backing):
 
         LOG.tc_step("Delete the host {}".format(to_host))
         cli.system("host-bulk-export")
-        cli.system("host-delete {}".format(to_host), rtn_list=True)
+        cli.system("host-delete {}".format(to_host), rtn_code=True)
         cli.system("host-bulk-add hosts.xml")
         host_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
 
@@ -424,7 +424,7 @@ def _test_storage_profile(personality, from_backing, to_backing):
 
         LOG.tc_step("Delete the host {}".format(to_host))
         cli.system("host-bulk-export")
-        cli.system("host-delete {}".format(to_host), rtn_list=True)
+        cli.system("host-delete {}".format(to_host), rtn_code=True)
         assert len(system_helper.get_controllers()) > 1, "Host deletion failed"
 
         cli.system("host-bulk-add hosts.xml")

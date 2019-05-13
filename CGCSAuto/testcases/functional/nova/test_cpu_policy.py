@@ -29,7 +29,7 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
         specs = {FlavorSpec.CPU_POLICY: flv_pol}
 
         LOG.tc_step("Set following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+        nova_helper.set_flavor(flavor_id, **specs)
 
     if img_pol is not None:
         image_meta = {ImageMetadata.CPU_POLICY: img_pol}
@@ -40,7 +40,7 @@ def test_boot_vm_cpu_policy_image(flv_vcpus, flv_pol, img_pol, boot_source, expt
 
     if boot_source == 'volume':
         LOG.tc_step("Create a volume from image")
-        source_id = cinder_helper.create_volume(name='cpu_pol_img', image_id=image_id)[1]
+        source_id = cinder_helper.create_volume(name='cpu_pol_img', source_id=image_id)[1]
         ResourceCleanup.add('volume', source_id)
     else:
         source_id = image_id
@@ -91,7 +91,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
             specs = {FlavorSpec.CPU_POLICY: cpu_pol}
 
             LOG.tc_step("Set following extra specs: {}".format(specs))
-            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+            nova_helper.set_flavor(flavor_id, **specs)
         else:
             image_meta = {ImageMetadata.CPU_POLICY: cpu_pol}
             LOG.tc_step("Create image with following metadata: {}".format(image_meta))
@@ -99,7 +99,7 @@ def test_cpu_pol_vm_actions(flv_vcpus, cpu_pol, pol_source, boot_source):
                                                   **image_meta)[1]
     if boot_source == 'volume':
         LOG.tc_step("Create a volume from image")
-        source_id = cinder_helper.create_volume(name='cpu_pol'.format(cpu_pol), image_id=image_id)[1]
+        source_id = cinder_helper.create_volume(name='cpu_pol'.format(cpu_pol), source_id=image_id)[1]
         ResourceCleanup.add('volume', source_id)
     else:
         source_id = image_id
@@ -191,7 +191,7 @@ def _test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_s
         - Delete created volumes and flavors
     """
     LOG.tc_step("Getting host list")
-    target_hosts = host_helper.get_hypervisors(state='up', status='enabled')
+    target_hosts = host_helper.get_hypervisors(state='up')
     target_host = target_hosts[0]
     storage_backing = host_helper.get_host_instance_backing(host=target_host)
     if 'image' in storage_backing:
@@ -218,7 +218,7 @@ def _test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_s
         if pol_source == 'flavor':
             LOG.tc_step("Set CPU_POLICY for {} flavor".format(x))
             specs = {FlavorSpec.CPU_POLICY: x}
-            nova_helper.set_flavor_extra_specs(flavor_id, **specs)
+            nova_helper.set_flavor(flavor_id, **specs)
         else:
             LOG.tc_step("Create image with CPU_POLICY: {}".format(x))
             image_meta = {ImageMetadata.CPU_POLICY: x}
@@ -226,7 +226,7 @@ def _test_cpu_pol_dedicated_shared_coexists(vcpus_dedicated, vcpus_shared, pol_s
 
         if boot_source == 'volume':
             LOG.tc_step("Create volume from image")
-            source_id = cinder_helper.create_volume(name='cpu_pol_{}'.format(x), image_id=image_id)[1]
+            source_id = cinder_helper.create_volume(name='cpu_pol_{}'.format(x), source_id=image_id)[1]
             ResourceCleanup.add('volume', source_id)
         else:
             source_id = image_id

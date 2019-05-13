@@ -1455,7 +1455,7 @@ def deploy_ssh_key(self):
     cmd = 'grep -q "{}" {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH)
     if self.exec_cmd(cmd)[0] != 0:
         LOG.info("Adding public key to {}".format(AUTHORIZED_KEYS_FPATH))
-        self.write_line('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
+        self.write_line(r'echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
         self.write_line("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 """
 def connect(ip_addr, port=23, timeout=TELNET_EXPECT_TIMEOUT, port_login=False,

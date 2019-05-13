@@ -1,21 +1,20 @@
 import time
 
-from consts.auth import Tenant
 from utils.tis_log import LOG
-from keywords import system_helper, host_helper, network_helper, common
 from utils import cli, table_parser, exceptions
-from consts.proj_vars import ProjVar
-from consts.filepaths import MuranoPath, WRSROOT_HOME
 from utils.clients.ssh import ControllerClient
+from consts.filepaths import WRSROOT_HOME
+from consts.auth import Tenant
+from keywords import system_helper, host_helper
 
 
-def enable_disable_murano(enable=True, enable_disable_murano_agent=False, fail_ok=False,
+def enable_disable_murano(enable=True, enable_disable_agent=False, fail_ok=False,
                           con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Enable/Disable Murano service and murano agent on the system
     Args:
         enable: True/False, True for enable, false for disable
-        enable_disable_murano_agent: Ture/False, true for the same action as enable above
+        enable_disable_agent: Ture/False, true for the same action as enable above
         fail_ok: whether return False or raise exception when some services fail to reach enabled-active state
         con_ssh (SSHClient):
         auth_info (dict)
@@ -29,32 +28,32 @@ def enable_disable_murano(enable=True, enable_disable_murano_agent=False, fail_o
 
     if enable:
         msg = "Enabled Murano Service Successfully"
-        ret, out = system_helper.enable_murano(con_ssh=con_ssh, auth_info=auth_info)
+        ret, out = system_helper.enable_murano(con_ssh=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
 
         if ret == 1:
             return 1, out
 
-        if enable_disable_murano_agent:
-            ret, out = system_helper.create_service_parameter(service="murano",section="engine",
+        if enable_disable_agent:
+            ret, out = system_helper.create_service_parameter(service="murano", section="engine",
                                                               name="disable_murano_agent",
-                                                              value="false",modify_existing=True)
+                                                              value="false", modify_existing=True)
             if ret != 0:
                 return 1, out
     else:
         msg = "Disabled Murano Service Successfully"
-        ret, out = system_helper.disable_murano(con_ssh=con_ssh, auth_info=auth_info)
+        ret, out = system_helper.disable_murano(con_ssh=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
 
         if ret == 1:
             return 1, out
 
-        if enable_disable_murano_agent:
-            ret, out = system_helper.create_service_parameter(service="murano",section="engine",
+        if enable_disable_agent:
+            ret, out = system_helper.create_service_parameter(service="murano", section="engine",
                                                               name="disable_murano_agent",
-                                                              value="true",modify_existing=True)
+                                                              value="true", modify_existing=True)
             if ret != 0:
                 return 1, out
 
-    if ret == 0 and host_helper.get_hostshow_value('controller-0','config_status') == 'Config out-of-date':
+    if ret == 0 and host_helper.get_hostshow_value('controller-0', 'config_status') == 'Config out-of-date':
             # need to lock/unlock standby and swact lock/unlock
         ret, out = host_helper.lock_unlock_controllers(alarm_ok=True)
         if ret == 1:
@@ -66,15 +65,13 @@ def enable_disable_murano(enable=True, enable_disable_murano_agent=False, fail_o
     return 0, msg
 
 
-def enable_disable_murano_agent(enable=True, con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
+def enable_disable_murano_agent(enable=True, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Enable/Disable Murano service and murano agent on the system
     Args:
         enable: True/False, True for enable, false for disable
-        enable_disable_murano_agent: Ture/False, true for the same action as enable above
         con_ssh (SSHClient):
         auth_info (dict)
-        fail_ok (bool): whether return False or raise exception when some services fail to reach enabled-active state
 
     Returns:
         code, msg: return code and msg
@@ -86,17 +83,20 @@ def enable_disable_murano_agent(enable=True, con_ssh=None, auth_info=Tenant.get(
     if enable:
         ret, out = system_helper.create_service_parameter(service="murano", section="engine",
                                                           name="disable_murano_agent",
-                                                          value="false", modify_existing=True)
+                                                          value="false", modify_existing=True,
+                                                          con_ssh=con_ssh)
 
     else:
         ret, out = system_helper.create_service_parameter(service="murano", section="engine",
                                                           name="disable_murano_agent",
-                                                          value="true", modify_existing=True)
+                                                          value="true", modify_existing=True,
+                                                          con_ssh=con_ssh)
 
     if ret != 0:
         return 1, out
 
-    if host_helper.get_hostshow_value('controller-0', 'config_status') == 'Config out-of-date':
+    if host_helper.get_hostshow_value('controller-0', 'config_status', con_ssh=con_ssh, auth_info=auth_info) \
+            == 'Config out-of-date':
             # need to lock/unlock standby and swact lock/unlock
         ret, out = host_helper.lock_unlock_controllers()
         if ret != 0:
@@ -125,16 +125,11 @@ def import_package(pkg, con_ssh=None, auth_info=None, fail_ok=False):
         raise ValueError("Package name has to be specified.")
 
     LOG.info("Importing Murano package {}".format(pkg))
-    code, output = cli.murano('package-import --exists-action u', pkg, ssh_client=con_ssh, auth_info=auth_info,
-                              fail_ok=fail_ok, rtn_list=True)
+    code, output = cli.openstack('package import --exists-action u', pkg, ssh_client=con_ssh, auth_info=auth_info,
+                                 fail_ok=fail_ok, rtn_code=True)
 
-    if code != 0:
-        msg = "Fail to import package {}:{}".format(pkg, output)
-        if fail_ok:
-            LOG.warn(msg)
-            return 1, output
-        else:
-            raise exceptions.MuranoError(msg)
+    if code > 0:
+        return 1, output
 
     table_ = table_parser.table(output)
     pkg_id = table_parser.get_values(table_, 'ID')
@@ -160,10 +155,11 @@ def import_bundle(bundle, is_public=False, con_ssh=None, auth_info=None, fail_ok
         raise ValueError("Murano bundle name has to be specified.")
 
     LOG.info("Importing Murano bundle {}".format(bundle))
-    code, output = cli.murano('bundle-import', bundle, ssh_client=con_ssh, auth_info=auth_info,
-                              fail_ok=fail_ok, rtn_list=True)
+    args = bundle if not is_public else '--is-public {}'.format(bundle)
+    code, output = cli.openstack('bundle import', args, ssh_client=con_ssh, auth_info=auth_info,
+                                 fail_ok=fail_ok, rtn_code=True)
 
-    if code == 1:
+    if code > 0:
         return 1, output
 
     table_ = table_parser.table(output)
@@ -172,18 +168,19 @@ def import_bundle(bundle, is_public=False, con_ssh=None, auth_info=None, fail_ok
 
 
 def get_package_list(header='ID', pkgid=None, name=None, fqn=None, author=None, active=None, is_public=None,
-                           type=None, version=None, auth_info=Tenant.get('admin'), con_ssh=None, strict=True,
-                           regex=None, **kwargs):
+                     pkg_type=None, version=None, auth_info=Tenant.get('admin'), con_ssh=None, strict=True,
+                     regex=None, **kwargs):
     """
 
     Args:
         header:
+        pkgid
         name:
         fqn:
         author:
         active:
         is_public:
-        type:
+        pkg_type:
         version:
         auth_info:
         con_ssh:
@@ -195,9 +192,7 @@ def get_package_list(header='ID', pkgid=None, name=None, fqn=None, author=None, 
 
     """
 
-    table_ = table_parser.table(cli.murano('package-list',
-                                           ssh_client=con_ssh,
-                                           auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('package list', ssh_client=con_ssh, auth_info=auth_info))
     args_temp = {
         'ID': pkgid,
         'Name': name,
@@ -205,7 +200,7 @@ def get_package_list(header='ID', pkgid=None, name=None, fqn=None, author=None, 
         'Author': author,
         'Active': active,
         'Is Public': is_public,
-        'Type': type,
+        'Type': pkg_type,
         'Version': version
     }
     for key, value in args_temp.items():
@@ -232,10 +227,10 @@ def delete_bundle(bundle_id, con_ssh=None, auth_info=None, fail_ok=False):
         raise ValueError("Murano bundle id has to be specified.")
 
     LOG.info("Deleting Murano bundle {}".format(bundle_id))
-    code, output = cli.murano('bundle-delete', bundle_id, ssh_client=con_ssh, auth_info=auth_info,
-                              fail_ok=fail_ok, rtn_list=True)
+    code, output = cli.openstack('bundle delete', bundle_id, ssh_client=con_ssh, auth_info=auth_info,
+                                 fail_ok=fail_ok, rtn_code=True)
 
-    if code == 1:
+    if code > 0:
         return 1, output
 
     table_ = table_parser.table(output)
@@ -261,16 +256,10 @@ def delete_package(package_id, con_ssh=None, auth_info=None, fail_ok=False):
         raise ValueError("Murano package name has to be specified.")
 
     LOG.info("Deleting Murano bundle {}".format(package_id))
-    code, output = cli.murano('package-delete', package_id, ssh_client=con_ssh, auth_info=auth_info,
-                              fail_ok=fail_ok, rtn_list=True)
-
-    if code != 0:
-        msg = "Fail to delete murano package {}:{}".format(package_id, output)
-        if fail_ok:
-            LOG.warn(msg)
-            return 1, output
-        else:
-            raise exceptions.MuranoError(msg)
+    code, output = cli.openstack('package delete', package_id, ssh_client=con_ssh, auth_info=auth_info,
+                                 fail_ok=fail_ok, rtn_code=True)
+    if code > 0:
+        return 1, output
 
     return 0, "package {} deleted successfully".format(package_id)
 
@@ -295,16 +284,17 @@ def create_env(name, mgmt_net_id=None, mgmt_subnet_id=None, con_ssh=None, auth_i
         raise ValueError("Murano environment name has to be specified.")
 
     LOG.info("Creating Murano Environment {}".format(name))
-    cmd = "environment-create"
 
+    args = ''
     if mgmt_subnet_id:
-        cmd = cmd + " --join-subnet-id {}".format(mgmt_subnet_id)
+        args = " --join-subnet-id {}".format(mgmt_subnet_id)
     elif mgmt_net_id:
-        cmd = cmd + " --join-net-id {}".format(mgmt_net_id)
+        args = " --join-net-id {}".format(mgmt_net_id)
 
-    code, output = cli.murano(cmd, name, ssh_client=con_ssh, auth_info=auth_info,
-                              fail_ok=fail_ok, rtn_list=True)
-    if code == 1:
+    args = '{} {}'.format(args, name)
+    code, output = cli.openstack("environment create", args, ssh_client=con_ssh, auth_info=auth_info,
+                                 fail_ok=fail_ok, rtn_code=True)
+    if code > 0:
         return 1, output
 
     table_ = table_parser.table(output)
@@ -320,7 +310,7 @@ def create_env(name, mgmt_net_id=None, mgmt_subnet_id=None, con_ssh=None, auth_i
             raise exceptions.MuranoError(msg)
 
 
-def create_session (env_id, con_ssh=None, auth_info=None, fail_ok=False):
+def create_session(env_id, con_ssh=None, auth_info=None, fail_ok=False):
     """
     Create a Murano Session
     Args:
@@ -337,16 +327,16 @@ def create_session (env_id, con_ssh=None, auth_info=None, fail_ok=False):
         raise ValueError("Murano env id has to be specified.")
 
     LOG.info("Creating a Murano Session in Environment {}".format(env_id))
-    code, output = cli.murano('environment-session-create', env_id, ssh_client=con_ssh, auth_info=auth_info,
-                              fail_ok=fail_ok, rtn_list=True)
+    code, output = cli.openstack('environment session create', env_id, ssh_client=con_ssh, auth_info=auth_info,
+                                 fail_ok=fail_ok, rtn_code=True)
 
-    if code == 1:
+    if code > 1:
         return 1, output
 
     table_ = table_parser.table(output)
     session_id = table_parser.get_value_two_col_table(table_, 'id')
     if session_id != '':
-        msg = "Session succesfully created session {}".format(session_id)
+        msg = "Session successfully created session {}".format(session_id)
         LOG.info(msg)
         return 0, session_id
     else:
@@ -360,7 +350,8 @@ def create_session (env_id, con_ssh=None, auth_info=None, fail_ok=False):
 
 def deploy_env(env_id, session_id, con_ssh=None, auth_info=None, fail_ok=False):
 
-    code, output = cli.murano('environment-deploy {} --session-id {}'.format(env_id, session_id), rtn_list=True)
+    code, output = cli.openstack('environment deploy --session-id {} {}'.format(session_id, env_id), rtn_code=True,
+                                 ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
 
     if code == 1:
         return 1, output
@@ -391,20 +382,14 @@ def delete_env(env_id, con_ssh=None, auth_info=None, fail_ok=False):
 
         """
 
-    if env_id is None:
+    if not env_id:
         raise ValueError("Murano env id has to be specified.")
 
     LOG.info("Deleting Murano Environment {}".format(env_id))
-    code, output = cli.murano('environment-delete', env_id, ssh_client=con_ssh, auth_info=auth_info,
-                              fail_ok=fail_ok, rtn_list=True)
-
-    if code != 0:
-        msg = "Failure to delete environment id {}: {}".format(env_id, output)
-        if fail_ok:
-            LOG.warn(msg)
-            return 1, output
-        else:
-            raise exceptions.MuranoError(msg)
+    code, output = cli.openstack('environment delete', env_id, ssh_client=con_ssh, auth_info=auth_info,
+                                 fail_ok=fail_ok, rtn_code=True)
+    if code > 0:
+        return 1, output
 
     return 0, "Env {} Deleted Successfully".format(env_id)
 
@@ -429,13 +414,11 @@ def import_package_from_repo(pkg, repo, con_ssh=None, auth_info=None, fail_ok=Fa
     elif pkg is None:
         raise ValueError("Package name has to be specified.")
 
-    args = ""
-    args += "--murano-repo=" + repo
-    args += " package-import " + pkg
+    args = "--murano-repo-url {} {}".format(repo, pkg)
 
     LOG.info("Importing Murano package {}".format(pkg))
-    code, output = cli.murano(args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
-
+    code, output = cli.openstack('package import', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                                 rtn_code=True)
     if code == 1:
         return 1, output
 
@@ -444,7 +427,7 @@ def import_package_from_repo(pkg, repo, con_ssh=None, auth_info=None, fail_ok=Fa
     return 0, pkg_id
 
 
-def get_environment_status(env_id,  con_ssh=None ):
+def get_environment_status(env_id,  con_ssh=None):
     """
 
     Args:
@@ -454,7 +437,7 @@ def get_environment_status(env_id,  con_ssh=None ):
     Returns:
 
     """
-    return (get_environment_list_table(header="Status", env_id=env_id)).pop()
+    return get_environment_list_table(header="Status", env_id=env_id, con_ssh=con_ssh).pop()
 
 
 def wait_for_environment_status(env_id, status, timeout=180, check_interval=6, fail_ok=False):
@@ -489,7 +472,7 @@ def wait_for_environment_status(env_id, status, timeout=180, check_interval=6, f
             status_match = True
             break
         time.sleep(check_interval)
-    msg = "Environment id {} did not reach {} status  within specified time ".format(env_id,status)
+    msg = "Environment id {} did not reach {} status  within specified time ".format(env_id, status)
     if status_match:
         return True, act_status
     else:
@@ -518,7 +501,6 @@ def wait_for_environment_delete(env_id, timeout=300, check_interval=6, fail_ok=F
         raise ValueError("Environment id  has to be specified ")
 
     status_match = False
-    act_status, prev_status = None, None
     while time.time() < end_time:
         ids = get_environment_list_table()
         if env_id not in ids:
@@ -536,18 +518,17 @@ def wait_for_environment_delete(env_id, timeout=300, check_interval=6, fail_ok=F
             raise exceptions.MuranoError(msg)
 
 
-
-def get_environment_list_table(header='ID', env_id=None, Name=None, Status=None, Created=None, Updated=None,
-                           auth_info=Tenant.get('admin'), con_ssh=None, strict=True, regex=None, **kwargs):
+def get_environment_list_table(header='ID', env_id=None, name=None, status=None, created=None, updated=None,
+                               auth_info=Tenant.get('admin'), con_ssh=None, strict=True, regex=None, **kwargs):
     """
     Get enviroment_list through murano command
     Args:
         header: 'ID' (default value)
-        enviroment_id:
-        Name:
-        Status:
-        Created:
-        Updated:
+        env_id:
+        name:
+        status:
+        created:
+        updated:
         auth_info:
         con_ssh:
         strict:
@@ -557,15 +538,15 @@ def get_environment_list_table(header='ID', env_id=None, Name=None, Status=None,
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.murano('environment-list --all-tenants',
-                                           ssh_client=con_ssh,
-                                           auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('environment list --all-tenants',
+                                              ssh_client=con_ssh,
+                                              auth_info=auth_info))
     args_temp = {
         'ID': env_id,
-        'Name': Name,
-        'Status': Status,
-        'Created': Created,
-        'Updated': Updated
+        'Name': name,
+        'Status': status,
+        'Created': created,
+        'Updated': updated
     }
     for key, value in args_temp.items():
         if value is not None:
@@ -614,17 +595,19 @@ def edit_environment_object_mode(env_id, session_id=None, object_model_file=None
         else:
             raise exceptions.MuranoError(msg)
 
-    cli.murano('environment-apps-edit --session-id {} {} {}'.format(session_id, env_id, filename))
+    code, output = cli.openstack('environment apps edit', '--session-id {} {} {}'.format(session_id, env_id, filename),
+                                 ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_code=True)
+    if code > 0:
+        return 1, output
 
-    code, output = cli.murano('environment-show {} --session-id {} --only-apps'.format(env_id, session_id),
-                              rtn_list=True)
-    if code != 0:
+    code, output = cli.openstack('environment show', '--session-id {} --only-apps {}'.format(session_id, env_id),
+                                 rtn_code=True, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok)
+    if code > 0:
         msg = "Fail to display environment's object model; ID = {}; session id = {}: {}"\
-            .format(env_id, session_id,output)
-        if fail_ok:
-            return 2, msg
-        else:
-            raise exceptions.MuranoError(msg)
+            .format(env_id, session_id, output)
+        LOG.warning(msg)
+        return 2, msg
+
     if delete_file_after:
         con_ssh.exec_cmd("rm -f " + WRSROOT_HOME + filename)
 

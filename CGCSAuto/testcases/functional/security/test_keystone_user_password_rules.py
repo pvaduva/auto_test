@@ -369,7 +369,7 @@ def verify_login(user_name, password, is_admin=True, expecting_pass=True):
     if is_admin:
         command = 'endpoint list'
         LOG.debug('auth_info={}'.format(auth_info))
-        code, output = openstack(command, auth_info=auth_info, fail_ok=True, rtn_list=True)
+        code, output = openstack(command, auth_info=auth_info, fail_ok=True, rtn_code=True)
     else:
         command = 'user show {}'.format(user_name)
         LOG.info('TODO: command:openstack {}\n'.format(command))
@@ -495,7 +495,7 @@ def change_user_password(user_name, original_password, password, by_admin=True, 
 
     auth_info = get_user_auth_info(user_name, original_password, in_admin_project=by_admin)
 
-    code, output = openstack(command, auth_info=auth_info, fail_ok=True, rtn_list=True)
+    code, output = openstack(command, auth_info=auth_info, fail_ok=True, rtn_code=True)
 
     message = '\nuser:{}, password:{}, expecting:{}\ncode={}\noutput=\n{}\nUSED:{}\n'.format(
         user_name, password, expecting_pass, code, output, USERS_INFO)

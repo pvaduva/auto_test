@@ -64,8 +64,8 @@ def upload_helm_charts(tar_file, delete_first=False, con_ssh=None, timeout=120, 
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    abs_dir = os.path.abspath(TiSPath.HELM_CHARTS_DIR)
-    file_path = os.path.join(abs_dir, os.path.basename(tar_file))
+    helm_dir = os.path.normpath(TiSPath.HELM_CHARTS_DIR)
+    file_path = os.path.join(helm_dir, os.path.basename(tar_file))
     current_host = con_ssh.get_hostname()
     controllers = [current_host]
     if not system_helper.is_simplex(con_ssh=con_ssh):
@@ -119,7 +119,7 @@ def upload_app(tar_file, app_name=None, app_version=None, check_first=True, fail
         args += '-v {} '.format(app_version)
     args = '{}{}'.format(args, tar_file)
     code, output = cli.system('application-upload', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True)
+                              rtn_code=True)
 
     if code > 0:
         return 1, output
@@ -290,7 +290,7 @@ def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=300, c
 
     LOG.info("Apply application: {}".format(app_name))
     code, output = cli.system('application-apply', app_name, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True)
+                              rtn_code=True)
     if code > 0:
         return 1, output
 
@@ -339,7 +339,7 @@ def delete_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, c
             return -1, msg
 
     code, output = cli.system('application-delete', app_name, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True)
+                              rtn_code=True)
     if code > 0:
         return 1, output
 
@@ -381,7 +381,7 @@ def remove_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, c
             return -1, msg
 
     code, output = cli.system('application-remove', app_name, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True)
+                              rtn_code=True)
     if code > 0:
         return 1, output
 
@@ -703,7 +703,7 @@ def update_helm_override(chart, namespace, yaml_file=None, kv_pairs=None, reset_
         cmd_overrides = ','.join(['{}={}'.format(k, v) for k, v in kv_pairs.items()])
         args = '--set {} {}'.format(cmd_overrides, args)
 
-    code, output = cli.system('helm-override-update', args, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+    code, output = cli.system('helm-override-update', args, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True,
                               fail_ok=fail_ok)
     if code != 0:
         return 1, output

@@ -17,7 +17,7 @@ def flavors():
         # ResourceCleanup.add('flavor', numa_flv, scope='module')
         flvs['numa{}'.format(numa)] = numa_flv
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.NUMA_0: numa}
-        nova_helper.set_flavor_extra_specs(numa_flv, **extra_specs)
+        nova_helper.set_flavor(numa_flv, **extra_specs)
 
     return flvs
 
@@ -42,7 +42,7 @@ def launch_delete_vms(flavors, end_time, end_event):
 
 def live_migrate_vm(end_time, end_event):
     ded_flv = nova_helper.create_flavor(name='dedicated', vcpus=2)[1]
-    nova_helper.set_flavor_extra_specs(ded_flv, **{FlavorSpec.CPU_POLICY: 'dedicated'})
+    nova_helper.set_flavor(ded_flv, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     vm_id = vm_helper.boot_vm(name='live-mig', flavor=ded_flv)[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

@@ -10,7 +10,7 @@ from consts.compliance import VM_ROUTE_VIA, Dovetail, USER_PASSWORD
 from consts.auth import Tenant, ComplianceCreds, CumulusCreds
 from consts.cgcs import Prompt
 from consts.proj_vars import ProjVar
-from keywords import network_helper, nova_helper, keystone_helper, cinder_helper
+from keywords import network_helper, nova_helper, keystone_helper, vm_helper
 
 
 def add_route_for_vm_access(compliance_client):
@@ -136,10 +136,9 @@ def update_dovetail_mgmt_interface():
 
     with ssh_to_cumulus_server() as cumulus_con:
         cumulus_auth = CumulusCreds.TENANT_TIS_LAB
-        vm_id = nova_helper.get_vm_id_from_name(vm_name='dovetail', fail_ok=False, con_ssh=cumulus_con,
-                                                auth_info=cumulus_auth)
+        vm_id = nova_helper.get_vm_id_from_name(vm_name='dovetail', con_ssh=cumulus_con, auth_info=cumulus_auth)
 
-        dovetail_networks = nova_helper.get_vms(vms=vm_id, return_val='Networks', con_ssh=cumulus_con,
+        dovetail_networks = nova_helper.get_vms(vms=vm_id, rtn_val='Networks', con_ssh=cumulus_con,
                                                 auth_info=cumulus_auth)[0]
 
         actual_nets = dovetail_networks.split(sep=';')
@@ -215,6 +214,5 @@ def create_tenants_and_update_quotas(new_tenants_index=(3, 6), add_swift_role=Fa
             projects.append(name)
 
     for project in projects:
-        nova_helper.update_quotas(tenant=project, instances=20, cores=50)
-        cinder_helper.update_quotas(tenant=project, volumes=30, snapshots=20)
-        network_helper.update_quotas(tenant_name=project, port=500, floatingip=50, subnet=100, network=100)
+        vm_helper.set_quotas(tenant=project, instances=20, cores=50, volumes=30, snapshots=20,
+                             ports=500, subnets=100, networks=100, **{'floating-ips': 50})

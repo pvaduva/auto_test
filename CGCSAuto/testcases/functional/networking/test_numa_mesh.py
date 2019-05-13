@@ -35,7 +35,7 @@ def test_vswitch_ports_cores_mapping():
     if not system_helper.is_avs():
         skip("vshell commands unsupported by OVS")
 
-    up_hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
+    up_hypervisors = host_helper.get_hypervisors(state='up')
     assert up_hypervisors, "No hypervisor is up."
 
     for host in up_hypervisors:

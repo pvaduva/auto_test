@@ -36,12 +36,12 @@ def test_flavor_set_storage(flavor_):
 
     LOG.tc_step("Set flavor storage spec to local_lvm and check it is set successfully")
     local_lvm_spec = {storage_spec: "local_lvm"}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_, **local_lvm_spec)
-    extra_spec_storage_1 = nova_helper.get_flavor_extra_specs(flavor=flavor_)[storage_spec]
+    nova_helper.set_flavor(flavor=flavor_, **local_lvm_spec)
+    extra_spec_storage_1 = nova_helper.get_flavor_properties(flavor=flavor_)[storage_spec]
     assert extra_spec_storage_1 == 'local_lvm', "Actual storage spec: {}".format(extra_spec_storage_1)
 
     LOG.tc_step("Set flavor storage spec to local_image and check it is set successfully")
     local_lvm_spec = {storage_spec: "local_image"}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_, **local_lvm_spec)
-    extra_spec_storage_2 = nova_helper.get_flavor_extra_specs(flavor=flavor_)[storage_spec]
+    nova_helper.set_flavor(flavor=flavor_, **local_lvm_spec)
+    extra_spec_storage_2 = nova_helper.get_flavor_properties(flavor=flavor_)[storage_spec]
     assert extra_spec_storage_2 == 'local_image', "Actual storage spec: {}".format(extra_spec_storage_2)

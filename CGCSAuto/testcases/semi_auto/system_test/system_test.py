@@ -1,13 +1,12 @@
 from pytest import fixture, mark, skip
+
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, heat_helper, host_helper, cinder_helper, network_helper, system_test_helper
-from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
+from keywords import nova_helper, vm_helper, heat_helper, host_helper, system_test_helper
+from consts.filepaths import TiSPath, HeatTemplate
 from utils.clients.ssh import ControllerClient
-from consts.auth import HostLinuxCreds, Tenant
-from consts.cgcs import GuestImages, HeatStackStatus
+from consts.auth import Tenant
+from consts.cgcs import HeatStackStatus
 from consts.proj_vars import ProjVar
-from utils.multi_thread import MThread, Events
-from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unreserve_hosts_module
 
 
 @fixture(scope='function')
@@ -33,11 +32,10 @@ def pre_check(request):
         def revert():
             ProjVar.set_var(REMOTE_CLI=remote_cli)
         request.addfinalizer(revert)
-    network_helper.update_quotas(network=600)
-    nova_helper.update_quotas(cores=1000, instances=1000, ram=7168000, server_groups=100, server_group_members=1000)
-    cinder_helper.update_quotas(volumes=1000)
-    network_helper.update_quotas(port=1000)
-    #system_test_helper.launch_heat_stack()
+
+    vm_helper.set_quotas(networks=600, ports=1000, volumes=1000, cores=1000, instances=1000, ram=7168000,
+                         server_groups=100, server_group_members=1000)
+    # system_test_helper.launch_heat_stack()
 
     def list_status():
         LOG.fixture_step("Listing heat resources and nova migrations")

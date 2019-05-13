@@ -36,7 +36,7 @@ def add_cgcsauto_zone(request):
 
     def remove_aggregate():
         LOG.fixture_step("(session) Delete cgcsauto aggregate")
-        nova_helper.delete_aggregate('cgcsauto')
+        nova_helper.delete_aggregates('cgcsauto')
     request.addfinalizer(remove_aggregate)
 
     # return name of aggregate/availability zone

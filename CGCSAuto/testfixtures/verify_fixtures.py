@@ -80,11 +80,12 @@ def pre_alarms_session():
         from keywords import network_helper
         for auth_info in (Tenant.get_primary(), Tenant.get_secondary()):
             project = auth_info['tenant']
-            default_group = network_helper.get_security_groups(auth_info=auth_info, name='default')[0]
+            default_group = network_helper.get_security_groups(auth_info=auth_info, name='default', strict=True)
             if not default_group:
                 LOG.info("No default security group for {}. Skip security group rule config.".format(project))
                 continue
 
+            default_group = default_group[0]
             security_rules = network_helper.get_security_group_rules(
                 auth_info=auth_info, **{'IP Protocol': ('tcp', 'icmp'), 'Security Group': default_group})
             if len(security_rules) >= 2:
@@ -133,28 +134,29 @@ def check_vms(request):
         request: caller of this fixture. i.e., test func.
     """
     LOG.fixture_step("Gathering system VMs info before test begins.")
-    before_vms_status = nova_helper.get_field_by_vms(field="Status", auth_info=Tenant.get('admin'))
+    before_vms_status = nova_helper.get_vms_info(fields=['status'], long=False, all_vms=True,
+                                                 auth_info=Tenant.get('admin'))
 
     def verify_vms():
         LOG.fixture_step("Verifying system VMs after test ended...")
-        after_vms_status = nova_helper.get_field_by_vms(field="Status", auth_info=Tenant.get('admin'))
+        after_vms_status = nova_helper.get_vms_info(fields=['status'], long=False, all_vms=True,
+                                                    auth_info=Tenant.get('admin'))
 
         # compare status between the status of each VMs before/after the test
         common_vms = set(before_vms_status) & set(after_vms_status)
         LOG.debug("VMs to verify: {}".format(common_vms))
-        before_dict = {vm_id: before_vms_status[vm_id] for vm_id in common_vms}
-        after_dict = {vm_id: after_vms_status[vm_id] for vm_id in common_vms}
-
         failure_msgs = []
-        if not before_dict == after_dict:
-            for vm, post_status in after_dict:
-                if post_status.lower() != 'active' and post_status != before_vms_status[vm]:
-                    msg = "VM {} is not in good state after lock. Pre status: {}. Post status: {}". \
-                        format(vm, after_vms_status[vm], post_status)
-                    failure_msgs.append(msg)
+        for vm in common_vms:
+            before_status = before_vms_status[vm][0]
+            post_status = after_vms_status[vm][0]
+
+            if post_status.lower() != 'active' and post_status != before_status:
+                msg = "VM {} is not in good state. Previous status: {}. Current status: {}". \
+                    format(vm, before_status, post_status)
+                failure_msgs.append(msg)
 
         assert not failure_msgs, '\n'.join(failure_msgs)
-        LOG.info("System VMs verified.")
+        LOG.info("VMs status verified.")
     request.addfinalizer(verify_vms)
     return
 

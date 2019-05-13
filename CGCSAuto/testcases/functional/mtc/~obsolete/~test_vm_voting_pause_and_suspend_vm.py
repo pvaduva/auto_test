@@ -35,7 +35,7 @@ def heartbeat_flavor_vm(request):
     flavor_id = nova_helper.create_flavor()[1]
     ResourceCleanup.add(resource_type='flavor', resource_id=flavor_id, scope='module')
     heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
+    nova_helper.set_flavor(flavor=flavor_id, **heartbeat_spec)
 
     boot_source = 'image'
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]
@@ -57,7 +57,7 @@ def heartbeat_flavor_vm(request):
     def delete_flavor_vm():
         # must delete VM before flavors
         vm_helper.delete_vms(vm_id, delete_volumes=True)
-        nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
+        nova_helper.delete_flavors(flavors=flavor_id, fail_ok=True)
     request.addfinalizer(delete_flavor_vm)
 
     return vm

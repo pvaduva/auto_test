@@ -415,13 +415,13 @@ class MonitoredProcess:
         if cmd:
             main_cmd = cmd.split()[0]
 
-            if main_cmd == self.cmd and not os.path.abspath(self.cmd):
+            if main_cmd == self.cmd and not os.path.normpath(self.cmd):
                 self.cmd = DEF_PROCESS_RESTART_CMD.format(cmd)
 
         if self.pid_file is None:
             self.pid_file = DEF_PROCESS_PID_FILE_PATH.format(self.name)
 
-        elif not os.path.abspath(self.pid_file):
+        elif not os.path.normpath(self.pid_file):
             self.pid_file = DEF_PROCESS_PID_FILE_PATH.format(os.path.splitext(os.path.basename(self.pid_file))[0])
 
         self.update_process_info()

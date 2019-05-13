@@ -109,35 +109,38 @@ class HostsToRecover():
         table_ = table_parser.table(cli.system('host-list'))
         table_ = table_parser.filter_table(table_, hostname=hostnames)
 
-        unlocked_hosts = table_parser.get_values(table_, 'hostname', administrative='unlocked')
+        # unlocked_hosts = table_parser.get_values(table_, 'hostname', administrative='unlocked')
         locked_hosts = table_parser.get_values(table_, 'hostname', administrative='locked')
 
         err_msg = []
         if locked_hosts:
             LOG.fixture_step("({}) Unlock hosts: {}".format(scope, locked_hosts))
-            res1 = host_helper.unlock_hosts(hosts=locked_hosts, fail_ok=True)
+            # Hypervisor state will be checked later in wait_for_hosts_ready which handles platform only deployment
+            res1 = host_helper.unlock_hosts(hosts=locked_hosts, fail_ok=True, check_hypervisor_up=False)
             for host in res1:
                 if res1[host][0] not in [0, 4]:
                     err_msg.append("Not all host(s) unlocked successfully. Detail: {}".format(res1))
+        #
+        # if unlocked_hosts:
+        #     LOG.fixture_step("({}) Wait for hosts to becomes available or degraded: {}".format(scope, unlocked_hosts))
+        #     res2 = host_helper.wait_for_hosts_states(unlocked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
+        #                                              fail_ok=True, availability=['available'])
+        #     if not res2:
+        #         err_msg.append("Somtable_ = table_parser.table(e host(s) from {} are not available.".format(unlocked_hosts))
 
-        if unlocked_hosts:
-            LOG.fixture_step("({}) Wait for hosts to becomes available or degraded: {}".format(scope, unlocked_hosts))
-            res2 = host_helper.wait_for_hosts_states(unlocked_hosts, timeout=HostTimeout.REBOOT, check_interval=10,
-                                                     fail_ok=True, availability=['available'])
-            if not res2:
-                err_msg.append("Some host(s) from {} are not available.".format(unlocked_hosts))
-
-        host_helper._wait_for_openstack_cli_enable()
-
-        hypervisors = host_helper.get_hypervisors()
-
-        hypervisors_recovered = list(set(hypervisors) & set(hostnames))
-        if hypervisors_recovered:
-            LOG.fixture_step("({}) Wait for unlocked hypervisors up: {}".format(scope, hypervisors_recovered))
-            # simplex lab requires long time to recover
-            res, down_hosts = host_helper.wait_for_hypervisors_up(hypervisors_recovered, fail_ok=True,
-                                                                  timeout=HostTimeout.REBOOT)
-            if not res:
-                err_msg.append("Host(s) {} are not up in hypervisor-list".format(down_hosts))
-
-        assert not err_msg, '\n'.join(err_msg)
+        host_helper.wait_for_hosts_ready(hostnames)
+        #
+        # host_helper._wait_for_openstack_cli_enable()
+        #
+        # hypervisors = host_helper.get_hypervisors()
+        #
+        # hypervisors_recovered = list(set(hypervisors) & set(hostnames))
+        # if hypervisors_recovered:
+        #     LOG.fixture_step("({}) Wait for unlocked hypervisors up: {}".format(scope, hypervisors_recovered))
+        #     # simplex lab requires long time to recover
+        #     res, down_hosts = host_helper.wait_for_hypervisors_up(hypervisors_recovered, fail_ok=True,
+        #                                                           timeout=HostTimeout.REBOOT)
+        #     if not res:
+        #         err_msg.append("Host(s) {} are not up in hypervisor-list".format(down_hosts))
+        #
+        # assert not err_msg, '\n'.join(err_msg)

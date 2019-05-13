@@ -40,7 +40,7 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
     if hosts_num < 1:
         skip("No host with local_image storage backing")
 
-    volume_id = cinder_helper.create_volume(name='vol_inst1', guest_image=guest_os, image_id=img_id)[1]
+    volume_id = cinder_helper.create_volume(name='vol_inst1', source_id=img_id, guest_image=guest_os)[1]
     ResourceCleanup.add('volume', volume_id, scope='function')
 
     block_device = {'source': 'volume', 'dest': 'volume', 'id': volume_id, 'device': 'vda'}
@@ -48,7 +48,7 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
                               cleanup='function', guest_os=guest_os, meta={'foo': 'bar'})[1]
 
     LOG.tc_step("Confirming the config drive is set to True in vm ...")
-    assert nova_helper.get_vm_nova_show_value(vm_id, "config_drive") == 'True', "vm config-drive not true"
+    assert str(nova_helper.get_vm_values(vm_id, "config_drive")[0]) == 'True', "vm config-drive not true"
 
     LOG.tc_step("Add date to config drive ...")
     check_vm_config_drive_data(vm_id)

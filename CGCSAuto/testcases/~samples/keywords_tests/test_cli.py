@@ -7,14 +7,13 @@ def test_clis():
     print(CliAuth.get_var('HTTPS'))
     cli.system('host-list')
     cli.system('host-show controller-0')
-    cli.nova('list')
-    cli.heat('stack-list')
+    cli.openstack('server list')
+    cli.openstack('stack list')
     ceilometer_helper.get_alarms()
     keystone_helper.get_endpoints()
-    cli.neutron('router-list')
-    cli.neutron('router-list', convert_openstack=True)
-    cli.cinder('list')
-    cli.glance('image-list')
+    cli.openstack('router list')
+    cli.openstack('volume list')
+    cli.openstack('image list')
 
 
 def test_alarms():

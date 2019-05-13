@@ -18,11 +18,11 @@ VMS_COUNT = 4
 def router_info(request):
     LOG.fixture_step("Enable snat on tenant router")
     router_id = network_helper.get_tenant_router()
-    network_helper.update_router_ext_gateway_snat(router_id, enable_snat=True)
+    network_helper.set_router_gateway(router_id, enable_snat=True)
 
     def teardown():
         LOG.fixture_step("Disable snat on tenant router")
-        network_helper.update_router_ext_gateway_snat(router_id, enable_snat=False)
+        network_helper.set_router_gateway(router_id, enable_snat=False)
     request.addfinalizer(teardown)
 
     return router_id
@@ -63,7 +63,7 @@ def _vms():
     LOG.fixture_step("Create a favor with dedicated cpu policy")
     flavor_id = nova_helper.create_flavor(name='dedicated-ubuntu', guest_os=GUEST_OS)[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
-    nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
+    nova_helper.set_flavor(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     internal_net_id = network_helper.get_internal_net_id()
@@ -127,7 +127,7 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
     LOG.tc_step("Creating tcp port forwarding rules for VMs: {}.".format(_vms))
     vm_tcp_pfs = create_portforwarding_rules_for_vms(vm_mgmt_ips, router_id, "tcp", for_ssh=False)
 
-    ext_gateway_ip = network_helper.get_router_ext_gateway_subnet_ip_address(router_id)
+    ext_gateway_ip = network_helper.get_router_external_gateway_ips(router_id)[0]
     nat_ssh = NATBoxClient.get_natbox_client()
     LOG.tc_step("Testing external access to vms and TCP packets ...")
     check_port_forwarding_protocol(ext_gateway_ip, nat_ssh, vm_pfs=vm_tcp_pfs, vm_ssh_pfs=vm_ssh_pfs, protocol='tcp')
@@ -187,7 +187,7 @@ def test_dnat_ubuntu_vm_udp(_vms, router_info):
     LOG.tc_step("Creating udp port forwarding rules for VMs: {}.".format(_vms))
     vm_udp_pfs = create_portforwarding_rules_for_vms(vm_mgmt_ips, router_id, "udp", for_ssh=False)
 
-    ext_gateway_ip = network_helper.get_router_ext_gateway_subnet_ip_address(router_id)
+    ext_gateway_ip = network_helper.get_router_external_gateway_ips(router_id)[0]
     LOG.info("External Router IP address = {}".format(ext_gateway_ip))
 
     LOG.info("Setting NATBox SSH session ...")

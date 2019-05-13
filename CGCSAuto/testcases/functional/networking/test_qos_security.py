@@ -26,13 +26,12 @@ def ixia_required(ixia_supported):
 def update_network_quotas(request):
     for tenant in (Tenant.get_primary()['tenant'], Tenant.get_secondary()['tenant']):
         LOG.fixture_step("Increasing network and subnet quotas by 10 for {}".format(tenant))
-        nw_quota = network_helper.get_quota('network', tenant_name=tenant)
-        sn_quota = network_helper.get_quota('subnet', tenant_name=tenant)
-        network_helper.update_quotas(tenant_name=tenant, subnet=sn_quota+10, network=nw_quota+10)
+        nw_quota, sn_quota = vm_helper.get_quotas(('networks', 'subnets'), tenant=tenant)
+        vm_helper.set_quotas(tenant=tenant, subnet=sn_quota+10, network=nw_quota+10)
 
         def teardown():
             LOG.fixture_step("Reverting network and subnet quotas for {}".format(tenant))
-            network_helper.update_quotas(tenant_name=tenant, subnet=sn_quota, network=nw_quota)
+            vm_helper.set_quotas(tenant=tenant, subnet=sn_quota, network=nw_quota)
         request.addfinalizer(teardown)
 
 
@@ -45,7 +44,7 @@ def skip_if_25g():
 @fixture(scope='module')
 def security_groups():
     LOG.fixture_step("(module) Ensure neutron port security is enabled")
-    system_helper.update_ml2_extension_drivers(drivers='port_security')
+    system_helper.add_ml2_extension_drivers(drivers='port_security')
     networks = network_helper.get_networks(auth_info=Tenant.get('admin'))
     for net in networks:
         network_helper.set_network(net_id=net, enable_port_security=True)
@@ -54,8 +53,8 @@ def security_groups():
     group_ids = []
     group_name = 'test_pkt_typ_sec_rul_enf'
     for auth_info in (Tenant.get_primary(), Tenant.get_secondary()):
-        group_id = network_helper.create_security_group(group_name, auth_info=auth_info, cleanup='class')[1]
-        network_helper.add_icmp_and_tcp_rules(group_name, auth_info=auth_info)
+        group_id = network_helper.create_security_group(group_name, auth_info=auth_info, cleanup='module')[1]
+        network_helper.add_icmp_and_tcp_rules(group_name, auth_info=auth_info, cleanup='module')
         group_ids.append(group_id)
 
     return group_ids
@@ -118,8 +117,8 @@ class TestPacketTypeSecurity:
         vm_test, vm_observer = vm_helper.launch_vm_pair(vm_type)
 
         LOG.tc_step("Add security groups to launched VMs")
-        cli.nova('add-secgroup', "{} {}".format(vm_test, sg_primary), auth_info=Tenant.get('admin'))
-        cli.nova('add-secgroup', "{} {}".format(vm_observer, sg_secondary), auth_info=Tenant.get('admin'))
+        vm_helper.add_security_group(vm_test, sg_primary, auth_info=Tenant.get('admin'))
+        vm_helper.add_security_group(vm_observer, sg_secondary, auth_info=Tenant.get('admin'))
 
         with vm_helper.traffic_between_vms([(vm_test, vm_observer)], ixncfg=IxiaPath.CFG_UDP) as session:
             LOG.tc_step("Verify UDP traffic is not allowed")
@@ -202,67 +201,67 @@ def test_security_group_and_rule_create_reject_when_max_reached():
 
     # nova_helper.get_quotas uses nova quota-show, which does not include secgroup* fields
     LOG.tc_step("Retrive quota and usage information")
-    quota_table = table_parser.table(cli.openstack('quota show', auth_info=auth_info))
-    max_secgroups = int(table_parser.get_value_two_col_table(quota_table, 'secgroups'))
-    max_rules = int(table_parser.get_value_two_col_table(quota_table, 'secgroup-rules'))
+    max_secgroups, max_rules = vm_helper.get_quotas(quotas=('secgroups', 'secgroup-rules'), auth_info=auth_info)
     LOG.info("Tenant Quota Retrieved: secgroups={} secgroup-rules={}".format(max_secgroups, max_rules))
 
     LOG.tc_step("Retrieve usage for security groups")
-    groups_list = table_parser.table(cli.openstack('security group list', auth_info=auth_info))
-    in_use_secgroups = len(table_parser.get_all_rows(groups_list))
+    groups_list = network_helper.get_security_groups(auth_info=auth_info)
+    in_use_secgroups = len(groups_list)
     LOG.info("Tenant InUse Retrieved: secgroups={}".format(in_use_secgroups))
 
     LOG.tc_step("Create enough groups to reach the quota")
     sec_group = None
     for i in range(max_secgroups - in_use_secgroups):
         # take the last security group for rules creation
-        sec_group = network_helper.create_security_group('test_max_reached_creation_fail', auth_info=auth_info)[1]
+        sec_group = network_helper.create_security_group('test_max_reached_creation_fail', auth_info=auth_info,
+                                                         cleanup='function')[1]
     assert sec_group
 
     LOG.tc_step("Verify security group creation fail as quota is reached")
     code, msg = network_helper.create_security_group(
-        'test_max_reached_creation_fail', auth_info=auth_info, fail_ok=True)
+        'test_max_reached_creation_fail', auth_info=auth_info, fail_ok=True, cleanup='function')
     assert code, "creation after max quota reached succeeded"
 
     LOG.tc_step("Retrieve usage for security group rules")
     # note: each new security group creates 2 default rules for egress
     # therefore this usage must be retrieved after security group operations are completed
-    rules_list = table_parser.table(cli.openstack('security group rule list', auth_info=auth_info))
-    in_use_rules = len(table_parser.get_all_rows(rules_list))
+    rules_list = network_helper.get_security_group_rules(auth_info=auth_info)
+    in_use_rules = len(rules_list)
     LOG.info("Tenant InUse Retrieved: secgroups-rules={}".format(in_use_rules))
 
     LOG.tc_step("Create enough rules to reach the quota")
     dummy_ip = ipaddress.ip_address("0.0.0.0")
     for i in range(max_rules - in_use_rules):
         dummy_ip += 1   # duplicate security group rule creation will fail
-        cli.openstack(
-            "security group rule create", "--protocol udp --remote-ip {}/32 --ingress {}".format(
-                dummy_ip, sec_group),
-            auth_info=auth_info)
+        network_helper.create_security_group_rule(sec_group, remote_ip='{}/32'.format(dummy_ip),
+                                                  protocol='udp', ingress=True, auth_info=auth_info,
+                                                  cleanup='function')
+
     LOG.tc_step("Verify security rule creation fail as quota is reached")
-    code, msg = cli.openstack(
-        "security group rule create", "--protocol udp --remote-ip 255.255.255.254/32 --ingress {}".format(
-            sec_group),
-        auth_info=auth_info, fail_ok=True)
-    assert code, "creation after max quota reached succeeded"
+    code, msg = network_helper.create_security_group_rule(sec_group, remote_ip='255.255.255.254/32',
+                                                          protocol='udp', ingress=True, auth_info=auth_info,
+                                                          fail_ok=True, cleanup='function')
+
+    assert code == 1, "creation after max quota reached succeeded"
 
 
 @contextmanager
 def udp_allow(sg_primary, sg_secondary):
     LOG.info("Creating rules to allow UDP ingress for {} and {}".format(sg_primary, sg_secondary))
+    auth_info = Tenant.get('admin')
     udp_primary = network_helper.create_security_group_rule(sg_primary, remote_ip='0.0.0.0/0', ingress=True,
-                                                            protocol='udp', auth_info=Tenant.get('admin'))[1]
+                                                            protocol='udp', auth_info=auth_info)[1]
     udp_secondary = network_helper.create_security_group_rule(sg_primary, remote_ip='0.0.0.0/0', ingress=True,
-                                                              protocol='udp', auth_info=Tenant.get('admin'))[1]
+                                                              protocol='udp', auth_info=auth_info)[1]
     yield sg_primary, sg_secondary
 
     LOG.info("Deleting UDP ingress rules for {} and {}".format(sg_primary, sg_secondary))
-    cli.openstack("security group rule delete", udp_primary, auth_info=Tenant.get('admin'))
-    cli.openstack("security group rule delete", udp_secondary, auth_info=Tenant.get('admin'))
+    network_helper.delete_security_group_rules(udp_primary, auth_info=auth_info)
+    network_helper.delete_security_group_rules(udp_secondary, auth_info=auth_info)
 
 
 def qos_apply(net_id, qos_id, request):
-    old_qos = network_helper.get_net_info(net_id=net_id, field='wrs-tm:qos')
+    old_qos = network_helper.get_network_values(network=net_id, fields='wrs-tm:qos')[0]
     network_helper.update_net_qos(net_id, qos_id)
 
     def teardown():
@@ -350,9 +349,11 @@ def test_qos_weight_enforced(request, no_ovs, skip_if_25g):
     LOG.tc_step("Create QoS policies with different weights")
     weight_high, weight_low = 100, 10
     qos_high = network_helper.create_qos(scheduler={'weight': weight_high},
-                                         tenant_name=tenant_name)[1]
+                                         tenant_name=tenant_name,
+                                         cleanup='function')[1]
     qos_low = network_helper.create_qos(scheduler={'weight': weight_low},
-                                        tenant_name=tenant_name)[1]
+                                        tenant_name=tenant_name,
+                                        cleanup='function')[1]
 
     LOG.tc_step("Assign network QoS policies")
     qos_apply(tenant_high, qos_high, request)
@@ -364,7 +365,7 @@ def test_qos_weight_enforced(request, no_ovs, skip_if_25g):
     ResourceCleanup.add('flavor', flavor, scope='function')
     extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
     extra_specs.update({FlavorSpec.VCPU_MODEL: 'SandyBridge', FlavorSpec.MEM_PAGE_SIZE: '2048'})
-    nova_helper.set_flavor_extra_specs(flavor=flavor, **extra_specs)
+    nova_helper.set_flavor(flavor=flavor, **extra_specs)
 
     nics = [{'net-id': mgmt_net},
             {'net-id': tenant_high, 'vif-model': vif_model}]
@@ -622,7 +623,7 @@ def test_jumbo_frames(vm_type, skip_for_ovs, update_network_quotas):
     """
     for tenant in [Tenant.get_primary(), Tenant.get_secondary()]:
         tenant_net = network_helper.get_tenant_net_id(auth_info=tenant)
-        if network_helper.get_net_info(tenant_net, field='provider:network_type') != 'vlan':
+        if network_helper.get_network_values(tenant_net, fields='provider:network_type')[0] != 'vlan':
             skip("Tenant {}'s providernet is not on vlan".format(tenant['tenant']))
 
     LOG.tc_step("Launch a pair of test VMs")
@@ -630,14 +631,14 @@ def test_jumbo_frames(vm_type, skip_for_ovs, update_network_quotas):
         vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_primary())
     vm_test = vms[0]
     tenant_net = nics[1]['net-id']
-    providernet = network_helper.get_net_info(tenant_net, field='provider:physical_network')
+    providernet = network_helper.get_network_values(tenant_net, fields='provider:physical_network')[0]
     vm_test_mtu = int(system_helper.get_data_networks(name=providernet, rtn_val='mtu')[0])
 
     vms, nics = vm_helper.launch_vms(
         vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_secondary())
     vm_observer = vms[0]
     tenant_net = nics[1]['net-id']
-    providernet = network_helper.get_net_info(tenant_net, field='provider:physical_network')
+    providernet = network_helper.get_network_values(tenant_net, fields='provider:physical_network')[0]
     vm_observer_mtu = int(system_helper.get_data_networks(name=providernet, rtn_val='mtu')[0])
 
     if vm_test_mtu != vm_observer_mtu:

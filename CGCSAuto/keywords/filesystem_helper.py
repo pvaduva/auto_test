@@ -69,7 +69,7 @@ def modify_controllerfs(fail_ok=False, **kwargs):
     attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
     args_ = ' '.join(attr_values_)
 
-    rc, out = cli.system("controllerfs-modify", args_, rtn_list=True, fail_ok=fail_ok)
+    rc, out = cli.system("controllerfs-modify", args_, rtn_code=True, fail_ok=fail_ok)
 
     if not fail_ok:
         assert rc == 0, "Failed to update filesystem"

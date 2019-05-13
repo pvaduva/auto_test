@@ -403,7 +403,7 @@ def pytest_configure(config):
     # put keyfile to home directory of localhost
     if natbox['ip'] == 'localhost':
         labname = ProjVar.get_var('LAB_NAME')
-        ProjVar.set_var(KEYFILE_PATH='~/priv_keys/keyfile_{}.pem'.format(labname))
+        ProjVar.set_var(NATBOX_KEYFILE_PATH='~/priv_keys/keyfile_{}.pem'.format(labname))
 
     if setups.is_vbox():
         ProjVar.set_var(IS_VBOX=True)

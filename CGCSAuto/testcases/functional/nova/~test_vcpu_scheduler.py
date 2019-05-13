@@ -42,9 +42,9 @@ def test_flavor_vcpu_scheduler_valid(vcpu_num, vcpu_schedulers):
         extra_spec = {FlavorSpec.VCPU_SCHEDULER: vcpu_scheduler, FlavorSpec.CPU_POLICY: "dedicated"}
 
         LOG.tc_step("Set flavor extra spec to: {} and verify extra spec is set successfully.".format(extra_spec))
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_spec)
+        nova_helper.set_flavor(flavor=flavor_id, **extra_spec)
 
-        post_extra_spec = nova_helper.get_flavor_extra_specs(flavor=flavor_id)
+        post_extra_spec = nova_helper.get_flavor_properties(flavor=flavor_id)
         assert post_extra_spec[FlavorSpec.VCPU_SCHEDULER] == eval(vcpu_scheduler), "Actual flavor extra specs: {}".\
             format(post_extra_spec)
 
@@ -97,7 +97,7 @@ def test_flavor_vcpu_scheduler_invalid(vcpu_num, vcpu_schedulers, expected_err):
 
         LOG.tc_step("Attempt to set vcpu_scheduler to invalid value - {} in extra specs, and verify it is rejected "
                     "with proper error message".format(vcpu_scheduler))
-        code, output = nova_helper.set_flavor_extra_specs(flavor=flavor_id, fail_ok=True, **extra_spec)
+        code, output = nova_helper.set_flavor(flavor=flavor_id, fail_ok=True, **extra_spec)
 
         assert 1 == code, "Set flavor extra spec request is not rejected."
         assert eval("VCPUSchedulerErr." + expected_err) in output, "Expected error string is not found in CLI output."
@@ -133,12 +133,12 @@ def test_boot_vm_vcpu_scheduler(vcpu_num, vcpu_scheduler):
     LOG.tc_step("Set flavor vcpu_scheduler spec to: {}".format(vcpu_scheduler))
     vcpu_scheduler_flavor = '''"{}"'''.format(vcpu_scheduler)
     extra_spec = {FlavorSpec.VCPU_SCHEDULER: vcpu_scheduler_flavor, FlavorSpec.CPU_POLICY: "dedicated"}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_spec)
+    nova_helper.set_flavor(flavor=flavor_id, **extra_spec)
 
     LOG.tc_step("Boot a vm with above flavor.")
     vm_id = vm_helper.boot_vm(flavor=flavor_id, cleanup='function')[1]
 
-    instance_name, host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"], strict=False)
+    instance_name, host = nova_helper.get_vm_values(vm_id, fields=[":instance_name", ":host"], strict=False)
 
     with host_helper.ssh_to_host(host) as host_ssh:
         actual_vcpus = host_helper.get_values_virsh_xmldump(instance_name, host_ssh, 'cputune/vcpupin',

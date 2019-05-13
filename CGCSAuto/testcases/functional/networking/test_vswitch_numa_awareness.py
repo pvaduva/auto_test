@@ -354,7 +354,7 @@ def _create_flavor(vcpus, storage_backing, vswitch_numa_affinity=None, numa_0=No
         specs[FlavorSpec.NUMA_NODES] = numa_nodes
     if vswitch_numa_affinity is not None:
         specs[FlavorSpec.VSWITCH_NUMA_AFFINITY] = vswitch_numa_affinity
-    nova_helper.set_flavor_extra_specs(flavor=flv_id, **specs)
+    nova_helper.set_flavor(flavor=flv_id, **specs)
 
     return flv_id
 
@@ -374,7 +374,7 @@ def get_hosts(host_to_config):
     vm_helper.delete_vms(stop_first=False)
 
     LOG.fixture_step("(module) Update cores and instances quota for tenant to ensure vms can boot")
-    nova_helper.update_quotas(cores=200, instances=20)
+    vm_helper.set_quotas(cores=200, instances=20)
 
     hosts_to_conf = [host0, host1]
     LOG.fixture_step("(module) Add hosts to cgcsauto aggregate: {}".format(hosts_to_conf))
@@ -492,7 +492,7 @@ class TestNovaSchedulerAVS:
         if expt_err:
             LOG.tc_step("Check boot vm failed due to conflict in vswitch node affinity and numa nodes requirements")
             assert 1 == code, "Boot vm is not rejected with conflicting requirements"
-            actual_err = nova_helper.get_vm_nova_show_value(vm_id, 'fault')
+            actual_err = nova_helper.get_vm_fault_message(vm_id)
             expt_err = eval(expt_err).format(0)
 
             assert re.search(expt_err, actual_err), "Expected fault message is not found from nova show"
@@ -642,7 +642,7 @@ class TestNovaSchedulerAVS:
         if vswitch_numa_affinity is not None:
             # Test vm actions for prefer and strict. None should be the same as prefer, so skip it for None.
             LOG.tc_step("Delete all vms on {}".format(other_host))
-            vms_to_del = nova_helper.get_vms_on_hypervisor(other_host)
+            vms_to_del = nova_helper.get_vms_on_host(other_host)
             vm_helper.delete_vms(vms_to_del)
             LOG.tc_step("Check total allocated vcpus is 0 from nova-compute.log on {}".format(other_host))
             host_helper.wait_for_total_allocated_vcpus_update_in_log(other_host, expt_cpus=0, fail_ok=False)
@@ -799,13 +799,13 @@ class TestNovaSchedulerAVS:
         LOG.fixture_step("(class) Create a origin flavor with 2 vcpus and boot a vm with this flavor.")
         pre_flavor = nova_helper.create_flavor(name='2_vcpus', vcpus=2)[1]
         ResourceCleanup.add('flavor', resource_id=pre_flavor, scope='class')
-        nova_helper.set_flavor_extra_specs(pre_flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
+        nova_helper.set_flavor(pre_flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
         LOG.fixture_step("(class) Create dest flavor with vcpu number larger than the available cores on "
                          "current numa node")
         huge_flavor = nova_helper.create_flavor(name='many_vcpus', vcpus=vswitch_vm_cores_num + 1)[1]
         ResourceCleanup.add('flavor', huge_flavor, scope='class')
-        nova_helper.set_flavor_extra_specs(huge_flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
+        nova_helper.set_flavor(huge_flavor, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
         return target_host, vswitch_proc, vswitch_vm_cores_num, nonvswitch_vm_cores_num, pre_flavor, huge_flavor
 
@@ -858,7 +858,7 @@ class TestNovaSchedulerAVS:
         assert vswitch_proc == pre_numa_nodes[0], "VM {} is not booted on vswitch numa node {}".\
             format(vm_id, vswitch_proc)
 
-        nova_helper.set_flavor_extra_specs(huge_flavor, **{FlavorSpec.VSWITCH_NUMA_AFFINITY: vswitch_numa_affinity})
+        nova_helper.set_flavor(huge_flavor, **{FlavorSpec.VSWITCH_NUMA_AFFINITY: vswitch_numa_affinity})
         LOG.tc_step("Resize {}vm to above huge flavor with vswitch numa affinity {}".
                     format('and revert ' if resize_revert else '', vswitch_numa_affinity))
 
@@ -944,7 +944,7 @@ class TestSpanNumaNodes:
                 specs[key] = val
 
         LOG.tc_step("Add following extra spec to flavor {}: {}".format(flv_id, specs))
-        nova_helper.set_flavor_extra_specs(flv_id, **specs)
+        nova_helper.set_flavor(flv_id, **specs)
 
         return flv_id
 
@@ -963,7 +963,7 @@ class TestSpanNumaNodes:
                  }
 
         LOG.fixture_step("(class) Add following extra spec to flavor {}: {}".format(flv_id, specs))
-        nova_helper.set_flavor_extra_specs(flv_id, **specs)
+        nova_helper.set_flavor(flv_id, **specs)
 
         return flv_id
 

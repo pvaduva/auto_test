@@ -17,7 +17,7 @@ def hb_flavor():
     ResourceCleanup.add('flavor', flavor_id, scope='module')
 
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     return flavor_id
 
@@ -285,7 +285,7 @@ def event_timeout_vm():
     flavor_id = nova_helper.create_flavor()[1]
     ResourceCleanup.add(resource_type='flavor', resource_id=flavor_id, scope='module')
     heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
+    nova_helper.set_flavor(flavor=flavor_id, **heartbeat_spec)
 
     vm_id = vm_helper.boot_vm(flavor=flavor_id, cleanup='module')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

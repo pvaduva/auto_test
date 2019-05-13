@@ -69,14 +69,14 @@ def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False
             extra_specs[key] = val
 
     LOG.tc_step("Set flavor extra specs: {}".format(extra_specs))
-    code, output = nova_helper.set_flavor_extra_specs(flv_id, fail_ok=fail_ok, **extra_specs)
+    code, output = nova_helper.set_flavor(flv_id, fail_ok=fail_ok, **extra_specs)
     return flv_id, code, output
 
 
 def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=None,
                                            offline_cpus=None, check_virsh_vcpusched=True):
     LOG.tc_step("Check realtime and ordinary cpu info via virsh and ps")
-    inst_name, vm_host = nova_helper.get_vm_nova_show_values(vm_id, fields=[":instance_name", ":host"], strict=False)
+    inst_name, vm_host = nova_helper.get_vm_values(vm_id, fields=[":instance_name", ":host"], strict=False)
 
     with host_helper.ssh_to_host(hostname=vm_host) as host_ssh:
 
@@ -229,20 +229,19 @@ def check_hosts():
     return storage_backing, hosts_with_shared_cpu, ht_hosts
 
 
-@mark.parametrize(('vcpus', 'cpu_rt', 'rt_mask', 'rt_source', 'shared_vcpu', 'numa_nodes', 'cpu_thread', 'min_vcpus'), [
-    (3, None, '^0', 'flavor', None, None, 'prefer', None),   # min_vcpu deprecated
-    (4, 'yes', '^0', 'favor', None, None, 'require', None),     # numa_nodes deprecated
-    #   (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate', 4),
-    (6, 'yes', '^2-3', 'flavor', None, None, 'isolate', None),     # tmp. numa nodes deprecated
-    (2, 'yes', '^1', 'flavor', 1, None, None, None),
-    (3, 'yes', '^0-1', 'image', None, None, None, None),    # Deprecated - vcpu
-    # (4, 'no', '^0-2', 'image', 0, 2, None, None),     # numa_nodes deprecated
-    (3, 'yes', '^1-2', 'image', None, None, 'isolate', None),
-    (4, 'no', '^0-2', 'flavor', 2, None, None, None),
-    (4, 'no', '^0-2', 'image', None, None, None, None),
+@mark.parametrize(('vcpus', 'cpu_rt', 'rt_mask', 'rt_source', 'shared_vcpu', 'numa_nodes', 'cpu_thread'), [
+    (3, None, '^0', 'flavor', None, None, 'prefer'),   # min_vcpu deprecated
+    (4, 'yes', '^0', 'favor', None, None, 'require'),     # numa_nodes deprecated
+    #   (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate'),
+    (6, 'yes', '^2-3', 'flavor', None, None, 'isolate'),     # tmp. numa nodes deprecated
+    (2, 'yes', '^1', 'flavor', 1, None, None),
+    (3, 'yes', '^0-1', 'image', None, None, None),    # Deprecated - vcpu
+    # (4, 'no', '^0-2', 'image', 0, 2, None),     # numa_nodes deprecated
+    (3, 'yes', '^1-2', 'image', None, None, 'isolate'),
+    (4, 'no', '^0-2', 'flavor', 2, None, None),
+    (4, 'no', '^0-2', 'image', None, None, None),
 ])
-def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu, numa_nodes, cpu_thread, min_vcpus,
-                                 check_hosts):
+def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu, numa_nodes, cpu_thread, check_hosts):
     """
     Test vm with realtime cpu policy specified in flavor
     Args:
@@ -253,7 +252,6 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
         shared_vcpu (int|None):min_vcpus
         numa_nodes (int|None): number of numa_nodes to boot vm on
         cpu_thread
-        min_vcpus
         check_hosts (tuple): test fixture
 
     Setups:
@@ -289,16 +287,16 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
 
     image_id = None
     if rt_mask_img is not None:
-        image_medata = {ImageMetadata.CPU_RT_MASK: rt_mask_img}
-        image_id = glance_helper.create_image(name='rt_mask', cleanup='function', **image_medata)[1]
+        image_metadata = {ImageMetadata.CPU_RT_MASK: rt_mask_img}
+        image_id = glance_helper.create_image(name='rt_mask', cleanup='function', **image_metadata)[1]
 
-    vol_id = cinder_helper.create_volume(image_id=image_id)[1]
+    vol_id = cinder_helper.create_volume(source_id=image_id)[1]
     ResourceCleanup.add('volume', vol_id)
 
     name = 'rt-{}_mask-{}_{}vcpu'.format(cpu_rt, rt_mask_flv, vcpus)
     flv_id = create_rt_flavor(vcpus, cpu_pol='dedicated', cpu_rt=cpu_rt_flv, rt_mask=rt_mask_flv,
                               shared_vcpu=shared_vcpu, numa_nodes=numa_nodes, cpu_thread=cpu_thread,
-                              min_vcpus=min_vcpus, storage_backing=storage_backing)[0]
+                              storage_backing=storage_backing)[0]
 
     LOG.tc_step("Boot a vm with above flavor")
     vm_id = vm_helper.boot_vm(name=name, flavor=flv_id, cleanup='function', source='volume', source_id=vol_id)[1]
@@ -344,24 +342,6 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
 
         check_virsh = True
         offline_cpu = None
-        if min_vcpus is not None:
-            offline_cpu = vcpus - 1
-            if offline_cpu in expt_rt_cpus:
-                check_virsh = False
-
-            LOG.tc_step("Check vm vcpus are not changed after {}".format(actions))
-            check_helper.check_vm_vcpus_via_nova_show(vm_id, min_vcpus, expt_current_cpu, vcpus)
 
         check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=shared_vcpu,
                                                offline_cpus=offline_cpu, check_virsh_vcpusched=check_virsh)
-
-    if min_vcpus is not None:
-        LOG.tc_step('Scale up vm and stop/start, and ensure realtime cpu config persists')
-        vm_helper.scale_vm(vm_id, direction='up', resource='cpu')
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        vm_helper.stop_vms(vm_id)
-        vm_helper.start_vms(vm_id)
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        check_helper.check_vm_vcpus_via_nova_show(vm_id, min_vcpus, vcpus, vcpus)
-        check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=shared_vcpu)
-        GuestLogs.remove(vm_id)

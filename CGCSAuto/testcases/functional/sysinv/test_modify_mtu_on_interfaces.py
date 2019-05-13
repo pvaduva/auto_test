@@ -298,7 +298,7 @@ def test_modify_mtu_data_interface(mtu_range, revert_data_mtu):
 
     """
 
-    hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
+    hypervisors = host_helper.get_hypervisors(state='up')
     if len(hypervisors) < 2:
         skip("Less than two hypervisors available.")
 

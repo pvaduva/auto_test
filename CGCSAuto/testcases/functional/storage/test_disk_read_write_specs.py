@@ -81,14 +81,14 @@ class TestQoS:
 
         LOG.tc_step("Create QoS spec: {}".format(qos_specs))
         # consumer must be set to both or xmldump will not display correct tag and data
-        qos_id = cinder_helper.create_qos_specs(consumer='both', qos_name=name_str, **qos_specs)[1]
+        qos_id = cinder_helper.create_volume_qos(consumer='both', qos_name=name_str, **qos_specs)[1]
         ResourceCleanup.add('volume_qos', qos_id)
 
         LOG.tc_step("Create volume type and associate above QoS spec to it")
         volume_type_id = cinder_helper.create_volume_type("test_volume_type")[1]
         ResourceCleanup.add('volume_type', volume_type_id)
 
-        cinder_helper.associate_qos_to_volume_type(qos_id, volume_type_id)
+        cinder_helper.associate_volume_qos(qos_id, volume_type_id)
 
         LOG.tc_step("Create volume with above volume type")
         volume_id = cinder_helper.create_volume(name_str, vol_type=volume_type_id)[1]
@@ -166,7 +166,7 @@ class TestFlavor:
                        }
 
         LOG.tc_step("Set following extra specs: {}".format(extra_specs))
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+        nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
         LOG.tc_step("Boot vm from image with above flavor that has the disk speed info")
         # boot vm must be from image

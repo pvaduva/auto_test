@@ -78,14 +78,14 @@ def verify_cli(sub_auth=None, central_auth=None):
 
     for auth in auths:
         cli.system('host-list', auth_info=auth, fail_ok=False)
-        cli.nova('list --a', auth_info=auth, fail_ok=False)
-        cli.glance('image-list', auth_info=auth, fail_ok=False)
-        cli.cinder('list --a', auth_info=auth, fail_ok=False)
         cli.fm('alarm-list', auth_info=auth, fail_ok=False)
+        cli.openstack('server list --a', auth_info=auth, fail_ok=False)
+        cli.openstack('image list', auth_info=auth, fail_ok=False)
+        cli.openstack('volume list --a', auth_info=auth, fail_ok=False)
         cli.openstack('user list', auth_info=auth, fail_ok=False)
-        cli.neutron('router-list', auth_info=auth, fail_ok=False)
+        cli.openstack('router list', auth_info=auth, fail_ok=False)
 
     if sub_auth:
-        cli.heat('stack-list', auth_info=sub_auth, fail_ok=False)
+        cli.openstack('stack list', auth_info=sub_auth, fail_ok=False)
         cli.openstack('alarm list', auth_info=sub_auth, fail_ok=False)
         cli.openstack('metric status', auth_info=sub_auth, fail_ok=False)

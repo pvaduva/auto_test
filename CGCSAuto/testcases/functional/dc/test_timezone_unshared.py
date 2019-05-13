@@ -29,7 +29,7 @@ def prev_check(request, check_central_alarms_module):
         time.sleep(30)
 
     img_id = glance_helper.get_images()[0]
-    prev_time = glance_helper.get_image_value(image=img_id, field='created_at')
+    prev_time = glance_helper.get_image_show_values(image=img_id, fields='created_at')[0]
     central_zone, sub_zone = __select_two_timezones(current_zone=DEFAULT_ZONE)
 
     def _revert():
@@ -59,7 +59,8 @@ def __select_two_timezones(current_zone=None):
 def wait_for_timestamp_update(auth_info, image_id, prev_timestamp=None, expt_time=None):
     timeout = time.time() + 60
     while time.time() < timeout:
-        post_timestamp = glance_helper.get_image_value(image=image_id, field='created_at', auth_info=auth_info)
+        post_timestamp = glance_helper.get_image_show_values(image=image_id, fields='created_at',
+                                                             auth_info=auth_info)[0]
         if prev_timestamp and prev_timestamp != post_timestamp:
             if prev_timestamp != post_timestamp:
                 return post_timestamp
@@ -116,7 +117,8 @@ def test_dc_modify_timezone(prev_check):
 
     LOG.tc_step("Ensure glance image timestamp does not change after subcloud sync audit")
     dc_helper.wait_for_sync_audit(subclouds=subcloud)
-    post_sync_sub_time = glance_helper.get_image_value(image=img_id, field='created_at', auth_info=subcloud_auth)
+    post_sync_sub_time = glance_helper.get_image_show_values(image=img_id, fields='created_at',
+                                                             auth_info=subcloud_auth)[0]
     assert post_sub_time == post_sync_sub_time, "glance image timestamp changed after sync audit on {}".format(subcloud)
 
     if not system_helper.is_simplex():
@@ -125,7 +127,8 @@ def test_dc_modify_timezone(prev_check):
         post_swact_sub_zone = system_helper.get_timezone(auth_info=subcloud_auth)
         assert post_swact_sub_zone == sub_zone
 
-        post_swact_sub_time = glance_helper.get_image_value(image=img_id, field='created_at', auth_info=subcloud_auth)
+        post_swact_sub_time = glance_helper.get_image_show_values(image=img_id, fields='created_at',
+                                                                  auth_info=subcloud_auth)[0]
         assert post_swact_sub_time == post_sub_time
 
     if system_helper.get_standby_controller_name(auth_info=central_auth):
@@ -135,13 +138,13 @@ def test_dc_modify_timezone(prev_check):
         # Verify central timezone persists
         post_swact_central_zone = system_helper.get_timezone(auth_info=central_auth)
         assert post_swact_central_zone == central_zone
-        post_swact_central_time = glance_helper.get_image_value(image=img_id, field='created_at',
-                                                                auth_info=central_auth)
+        post_swact_central_time = glance_helper.get_image_show_values(image=img_id, fields='created_at',
+                                                                      auth_info=central_auth)[0]
         assert post_swact_central_time == post_central_time
 
         # Verify subcloud timezone persists
         post_central_swact_sub_zone = system_helper.get_timezone(auth_info=subcloud_auth)
         assert post_central_swact_sub_zone == sub_zone
-        post_central_swact_sub_time = glance_helper.get_image_value(image=img_id, field='created_at',
-                                                                    auth_info=subcloud_auth)
+        post_central_swact_sub_time = glance_helper.get_image_show_values(image=img_id, fields='created_at',
+                                                                          auth_info=subcloud_auth)[0]
         assert post_central_swact_sub_time == post_sub_time

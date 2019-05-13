@@ -48,7 +48,7 @@ def test_attach_cinder_volume_to_instance(vol_vif, skip_for_ovs):
                                         **{ImageMetadata.VIF_MODEL: vol_vif})[1]
 
     LOG.tc_step("Boot a volume from above image")
-    volume_id = cinder_helper.create_volume('vif_{}'.format(vol_vif), image_id=img_id, cleanup='function')[1]
+    volume_id = cinder_helper.create_volume('vif_{}'.format(vol_vif), source_id=img_id, cleanup='function')[1]
 
     # boot a cinder volume and attached it to vm
     LOG.tc_step("Attach cinder Volume to VM")
@@ -88,7 +88,7 @@ def test_vif_model_from_image(img_vif, skip_for_ovs):
                                         **{ImageMetadata.VIF_MODEL: img_vif})[1]
 
     LOG.tc_step("Boot a volume from above image")
-    volume_id = cinder_helper.create_volume('vif_{}'.format(img_vif), image_id=img_id, cleanup='function')[1]
+    volume_id = cinder_helper.create_volume('vif_{}'.format(img_vif), source_id=img_id, cleanup='function')[1]
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()

@@ -41,9 +41,7 @@ def check_cinder_type(cinder_type="ceph-external-ceph-external"):
     Returns:
     - (bool) True if type is found, False if not
     """
-
-    table_ = table_parser.table(cli.cinder('type-list'))
-    cinder_types = table_parser.get_values(table_, 'Name')
+    cinder_types = cinder_helper.get_volume_types(rtn_val='Name')
 
     return bool(cinder_type in cinder_types)
 
@@ -122,8 +120,7 @@ def add_external_ceph(dest_filepath, ceph_services):
 
     LOG.tc_step('Launch a volume and ensure it is created in the external ceph backend')
     vol_id = cinder_helper.create_volume(cleanup="function")[1]
-    table_ = table_parser.table(cli.cinder('show', vol_id, auth_info=Tenant.get('admin')))
-    volume_type = table_parser.get_value_two_col_table(table_, 'os-vol-host-attr:host', strict=False)
+    volume_type = cinder_helper.get_volume_show_values(vol_id, fields='os-vol-host-attr:host')
     assert volume_type == 'controller@ceph-external#ceph-external', "Volume created in wrong backend"
 
 

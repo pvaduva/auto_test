@@ -157,7 +157,7 @@ def test_ceilometer_meters_exist(meters):
     LOG.tc_step('Check meters for vswitch')
     resource_ids = gnocchi_helper.get_metrics(metric_name='vswitch.engine.util', fail_ok=True, rtn_val='resource_id')
     if system_helper.is_avs():
-        hypervisors = host_helper.get_hypervisors(rtn_val='ID')
+        hypervisors = host_helper.get_hypervisors()
         assert len(hypervisors) <= len(resource_ids), \
             "Each nova hypervisor should have at least one vSwitch core"
     else:

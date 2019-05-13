@@ -520,10 +520,10 @@ def get_procs_and_siblings_on_windows(vm_ssh):
              format(total_log_procs, log_procs_per_phy))
     return total_log_procs, log_procs_per_phy
 
-
-def check_vm_vcpus_via_nova_show(vm_id, min_cpu, current_cpu, max_cpu, con_ssh=None):
-    actual_vcpus = eval(nova_helper.get_vm_nova_show_value(vm_id=vm_id, field='wrs-res:vcpus', con_ssh=con_ssh))
-    assert [min_cpu, current_cpu, max_cpu] == actual_vcpus, "vcpus in nova show {} is not as expected".format(vm_id)
+#
+# def check_vm_vcpus_via_nova_show(vm_id, min_cpu, current_cpu, max_cpu, con_ssh=None):
+#     actual_vcpus = eval(nova_helper.get_server_show_values(vm_id=vm_id, fields='wrs-res:vcpus', con_ssh=con_ssh))
+#     assert [min_cpu, current_cpu, max_cpu] == actual_vcpus, "vcpus in nova show {} is not as expected".format(vm_id)
 
 
 def check_vm_vswitch_affinity(vm_id, on_vswitch_nodes=True):
@@ -796,14 +796,10 @@ def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_
     after_alarms = system_helper.get_alarms(auth_info=auth_info, con_ssh=con_ssh)
     new_alarms = []
     check_interval = 5
-    schedule_conn_test = False
     for item in after_alarms:
         if item not in before_alarms:
             alarm_id, entity_id = item.split('::::')
-            if alarm_id == EventLogID.PROVIDER_NETWORK_FAILURE:
-                # Providernet connectivity alarm handling
-                schedule_conn_test = True
-            elif alarm_id == EventLogID.CPU_USAGE_HIGH:
+            if alarm_id == EventLogID.CPU_USAGE_HIGH:
                 check_interval = 45
             elif alarm_id == EventLogID.NTP_ALARM:
                 # NTP alarm handling
@@ -813,10 +809,6 @@ def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_
                 continue
 
             new_alarms.append((alarm_id, entity_id))
-
-    if schedule_conn_test:
-        LOG.info("Providernet connectivity alarm found, schedule providernet connectivity test")
-        network_helper.schedule_providernet_connectivity_test(auth_info=auth_info, con_ssh=con_ssh)
 
     res = True
     remaining_alarms = None

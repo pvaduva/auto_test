@@ -66,7 +66,7 @@ def test_ping_between_two_vms(guest_os, vm1_vifs, vm2_vifs, skip_for_ovs):
 
     LOG.tc_step("Create a favor dedicated cpu policy")
     flavor_id = nova_helper.create_flavor(name='dedicated', guest_os=guest_os, cleanup='function')[1]
-    nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
+    nova_helper.set_flavor(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
     tenant_net_id = network_helper.get_tenant_net_id()
@@ -78,7 +78,7 @@ def test_ping_between_two_vms(guest_os, vm1_vifs, vm2_vifs, skip_for_ovs):
         nics = _compose_nics(vifs_for_vm, net_ids=net_ids, image_id=image_id, guest_os=guest_os)
         net_types = ['mgmt', 'data', 'internal'][:len(nics)]
         LOG.tc_step("Create a volume from {} image".format(guest_os))
-        vol_id = cinder_helper.create_volume(name='vol-{}'.format(guest_os), image_id=image_id, guest_image=guest_os,
+        vol_id = cinder_helper.create_volume(name='vol-{}'.format(guest_os), source_id=image_id, guest_image=guest_os,
                                              cleanup='function')[1]
 
         LOG.tc_step("Boot a {} vm with {} vifs from above flavor and volume".format(guest_os, vifs_for_vm))

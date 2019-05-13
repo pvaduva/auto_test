@@ -647,8 +647,6 @@ class SSHClient:
             if not exit_code == 0:
                 raise exceptions.CommonError("scp unsuccessfully")
 
-            if not self.file_exists(file_path=dest_path):
-                raise exceptions.CommonError("{} does not exist after download".format(dest_path))
         except:
             if cleanup:
                 LOG.info("Attempt to remove {} to cleanup the system due to scp failed".format(dest_path))
@@ -899,7 +897,7 @@ class SSHClient:
             cmd = 'grep -q "{}" {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH)
             if self.exec_cmd(cmd) != 0:
                 LOG.info("Adding public key to {}".format(AUTHORIZED_KEYS_FPATH))
-                self.exec_cmd('echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
+                self.exec_cmd(r'echo -e "{}\n" >> {}'.format(ssh_key, AUTHORIZED_KEYS_FPATH))
                 self.exec_cmd("chmod 700 ~/.ssh/ && chmod 644 {}".format(AUTHORIZED_KEYS_FPATH))
 
     def get_host(self):
@@ -1172,7 +1170,7 @@ class VMSSHClient(SSHFromSSH):
 
         # This needs to be modified in centos case.
         if not password:
-            ssh_options = " -i {}{}".format(ProjVar.get_var('KEYFILE_PATH'), _SSH_OPTS_UBUNTU_VM)
+            ssh_options = " -i {}{}".format(ProjVar.get_var('NATBOX_KEYFILE_PATH'), _SSH_OPTS_UBUNTU_VM)
         else:
             ssh_options = _SSH_OPTS
 

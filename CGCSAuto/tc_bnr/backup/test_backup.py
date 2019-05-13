@@ -39,15 +39,13 @@ def collect_logs(msg):
 
     Returns:
     """
-
+    active_controller = ControllerClient.get_active_controller()
     try:
         LOG.info('collecting logs: ' + msg)
-        active_controller = ControllerClient.get_active_controller()
         collect_tis_logs(active_controller)
     except pexpect.exceptions.TIMEOUT:
         active_controller.flush()
         active_controller.exec_cmd('cat /etc/buid.info')
-        pass
 
 
 @fixture(scope='function')
@@ -179,7 +177,7 @@ def backup_sysconfig_images(backup_info):
         image_ids = glance_helper.get_images()
         for img_id in image_ids:
             prop_key = 'store'
-            image_properties = glance_helper.get_image_properties(img_id, prop_key)
+            image_properties = glance_helper.get_image_properties(img_id, prop_key, rtn_dict=True)
             LOG.debug('image store backends:{}'.format(image_properties))
 
             if image_properties and image_properties.get(prop_key, None) == 'rbd':
@@ -192,7 +190,7 @@ def backup_sysconfig_images(backup_info):
             else:
                 LOG.warn('No property found!!! for image {}, properties:{}'.format(img_id, image_properties))
                 prop_key = 'direct_url'
-                direct_url = glance_helper.get_image_properties(img_id, prop_key)
+                direct_url = glance_helper.get_image_properties(img_id, prop_key)[0]
                 LOG.info(
                     'found direct_url, still consider it as rbd based image, exporting it: {}, stores:{}'.format(
                         img_id, image_properties))
@@ -477,9 +475,9 @@ def adjust_cinder_quota(con_ssh, increase, backup_info):
 
     LOG.info('lvm space: free:{}, total:{}'.format(free_space, total_space))
 
-    quotas = ['gigabytes', 'per_volume_gigabytes', 'volumes']
+    quotas = ['gigabytes', 'per-volume-gigabytes', 'volumes']
     tenant = backup_info['tenant']
-    cinder_quotas = cinder_helper.get_quotas(quotas=quotas, auth_info=tenant, con_ssh=con_ssh)
+    cinder_quotas = vm_helper.get_quotas(quotas=quotas, auth_info=tenant, con_ssh=con_ssh)
     LOG.info('Cinder quotas:{}'.format(cinder_quotas))
 
     max_total_volume_size = int(cinder_quotas[0])
@@ -488,27 +486,20 @@ def adjust_cinder_quota(con_ssh, increase, backup_info):
 
     current_volumes = cinder_helper.get_volumes(auth_info=Tenant.get('admin'), con_ssh=con_ssh)
 
-    LOG.info('Cinder VOLUME usage: current number of volumes:{}, max allowed:{}, all limites:{}'.format(
-        len(current_volumes), max_volumes, cinder_quotas))
-
-    LOG.info('max total: {}, max per volume:{}, max number of volumes:{}'.format(
-        max_total_volume_size, max_per_volume_size, max_volumes))
+    LOG.info('Cinder VOLUME usage: current number of volumes:{}, quotas for {}: {}, '.format(
+        len(current_volumes), quotas, cinder_quotas))
 
     if 0 < max_total_volume_size < free_space:
         free_space = max_total_volume_size
 
     new_volume_limit = len(current_volumes) + increase
-    if 0 < max_volumes < new_volume_limit:
+    if 0 <= max_volumes < new_volume_limit:
         LOG.info('Not enough quota for number of cinder volumes, increase it to:{} from:{}'.format(
             new_volume_limit, max_volumes))
-        try:
-            cinder_helper.update_quotas(tenant=tenant['user'],
-                                        con_ssh=con_ssh,
-                                        auth_info=Tenant.get('admin'),
-                                        volumes=new_volume_limit)
-        except Exception as e:
+        code, output = vm_helper.set_quotas(tenant, con_ssh=con_ssh, volumes=new_volume_limit, fail_ok=True)
+        if code > 0:
             LOG.info('Failed to increase the Cinder quota for number of volumes to:{} from:{}, error:{}'.format(
-                new_volume_limit, max_volumes, e))
+                new_volume_limit, max_volumes, output))
             increase = max_volumes - len(current_volumes)
 
     return increase, free_space, max_per_volume_size
@@ -602,33 +593,13 @@ def adjust_vm_quota(vm_count, con_ssh, backup_info=None):
         None
     """
 
-    quotas = {'instances': {}, 'cores': {}, 'ram': {}}
-    limit_usage = ['limit', 'reserved', 'in_use']
     tenant = backup_info['tenant']
+    quota_details = vm_helper.get_quota_details_info('compute', resources='instances', tenant=tenant)['instances']
+    min_instances_quota = vm_count + quota_details['in use'] + quota_details['reserved']
 
-    quota_keys = list(quotas.keys())
-    LOG.info('TODO: quotas:{}, limit_usage:{}, tenant:{}'.format(quotas, limit_usage, tenant))
-    for limit in limit_usage:
-        limit_values = nova_helper.get_quotas(quotas=quota_keys, detail=limit, auth_info=tenant, con_ssh=con_ssh)
-        for i in range(len(quota_keys)):
-            key = quota_keys[i]
-            # value = quotas.get(key)
-            quotas[key][limit] = limit_values[i]
-
-    LOG.info('TODO:{}'.format(quotas))
-
-    new_quotas = {'instances': 0, 'cores': 0, 'ram': 0}
-    free_quota = int(quotas['instances']['limit'])
-    free_quota -= int(quotas['instances']['in_use'])
-    free_quota -= int(quotas['instances']['reserved'])
-    LOG.info('free_quota:{}'.format(free_quota))
-    if vm_count > free_quota:
-        LOG.info('Not enough quota for VM instances, increase {}'.format(vm_count - free_quota))
-        new_quotas['instances'] = vm_count
-        new_quotas['cores'] = 2 * vm_count
-        new_quotas['ram'] = 2048 * vm_count
-        LOG.info('TODO: update quotas with:{}'.format(new_quotas))
-        nova_helper.update_quotas(tenant=tenant['user'], con_ssh=con_ssh, **new_quotas)
+    if min_instances_quota > quota_details['limit']:
+        LOG.info('Insufficient quota for instances, increase to: {}'.format(min_instances_quota))
+        vm_helper.ensure_vms_quotas(vms_num=min_instances_quota, tenant=tenant, con_ssh=con_ssh)
 
 
 def pb_launch_vms(con_ssh, image_ids, backup_info=None):
@@ -743,6 +714,8 @@ def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
 
         con_ssh:
             - current ssh connection
+
+        vm_ids
     Return:
         None
     """
@@ -770,8 +743,6 @@ def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
     if original_host == current_host:
         LOG.info('backup_info:{}'.format(backup_info))
         LOG.warn('VM is still on its original host, live-migration failed? original host:{}'.format(original_host))
-        vm_info = nova_helper.get_vms_info(target)
-        LOG.info('detailed VM info: {}'.format(vm_info))
 
     original_host = current_host
     vm_helper.cold_migrate_vm(target)
@@ -779,8 +750,6 @@ def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
     LOG.info('After code-migration, host:{}'.format(current_host))
     if original_host == current_host:
         LOG.warn('VM is still on its original host, code-migration failed? original host:{}'.format(original_host))
-        vm_info = nova_helper.get_vms_info(target)
-        LOG.info('detailed VM info: {}'.format(vm_info))
 
 
 def lock_unlock_host(backup_info, con_ssh, vms):
@@ -895,4 +864,3 @@ def get_backup_file_name_prefix(backup_info):
         core_name += '.ceph'
 
     return core_name
-

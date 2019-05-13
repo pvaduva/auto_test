@@ -50,12 +50,12 @@ def test_qos_update(setup_qos):
 def setup_qos(request, no_ovs):
     LOG.fixture_step("Creating new QoS")
     scheduler = {'weight': 100}
-    qos_new = network_helper.create_qos(scheduler=scheduler, description="Test QoS")[1]
+    qos_new = network_helper.create_qos(scheduler=scheduler, description="Test QoS", cleanup='function')[1]
     LOG.fixture_step("Retrieving network ids and Qos'")
     internal_net_id = network_helper.get_internal_net_id()
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    qos_internal = network_helper.get_net_info(net_id=internal_net_id, field='wrs-tm:qos')
-    qos_mgmt = network_helper.get_net_info(net_id=mgmt_net_id, field='wrs-tm:qos')
+    qos_internal = network_helper.get_network_values(network=internal_net_id, fields='wrs-tm:qos')[0]
+    qos_mgmt = network_helper.get_network_values(network=mgmt_net_id, fields='wrs-tm:qos')[0]
 
     def reset():
         LOG.fixture_step("Resetting QoS for tenant and internal networks")

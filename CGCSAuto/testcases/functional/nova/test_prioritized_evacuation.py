@@ -22,17 +22,19 @@ VALID_OPERATIONS = ('reboot', 'force_reboot')
 TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 
 
-def get_vm_priority_metadata(vm_id, fail_ok=False):
-    return vm_helper.get_vm_meta_data(vm_id, meta_data_names=[VMMetaData.EVACUATION_PRIORITY], fail_ok=fail_ok)
+def get_vm_priority_metadata(vm_id):
+    properties = nova_helper.get_vm_values(vm_id, fields='properties')[0]
+    evac_priority = properties.get(VMMetaData.EVACUATION_PRIORITY, None)
+    return evac_priority
 
 
 def set_evacuate_priority(vm_id, priority, fail_ok=False):
     data = {VMMetaData.EVACUATION_PRIORITY: priority}
-    return vm_helper.set_vm_meta_data(vm_id, data, fail_ok=fail_ok, check_after_set=True)
+    return vm_helper.set_vm(vm_id, fail_ok=fail_ok, **data)
 
 
 def delete_evacuate_priority(vm_id, fail_ok=False):
-    return vm_helper.delete_vm_meta_data(vm_id, [VMMetaData.EVACUATION_PRIORITY], fail_ok=fail_ok)
+    return vm_helper.unset_vm(vm_id, [VMMetaData.EVACUATION_PRIORITY], fail_ok=fail_ok)
 
 
 def verify_vim_evacuation_events(start_time, expected_orders):
@@ -128,7 +130,7 @@ class TestPrioritizedVMEvacuation:
     def check_vm_settings(self):
         LOG.tc_step('Check if the evacuation-priority actually set')
         for vm_info in self.vms_info.values():
-            recovery_priority = get_vm_priority_metadata(vm_info['vm_id'], fail_ok=False)
+            recovery_priority = get_vm_priority_metadata(vm_info['vm_id'])
             if not recovery_priority:
                 assert vm_info['priority'] is None, \
                     'Evacuation-Priority on VM is not set, expected priority:{}, actual:{}, vm_id:{}'.format(
@@ -195,25 +197,25 @@ class TestPrioritizedVMEvacuation:
         if operation == 'set':
             code, output = set_evacuate_priority(vm_id, priority, fail_ok=expecting_fail)
         else:
-            priorities_set = get_vm_priority_metadata(vm_id, fail_ok=True)
+            priorities_set = get_vm_priority_metadata(vm_id)
             expecting_fail = True if not priorities_set else False
             LOG.info('Attempt to delete evacuation-priority, expecting {}'.format('PASS' if expecting_fail else 'FAIL'))
             code, output = delete_evacuate_priority(vm_id, fail_ok=expecting_fail)
 
-        if 0 == code:
-            assert not expecting_fail, \
+        if not expecting_fail:
+            assert 0 == code, \
                 'Fail to set Evacuation-priority:{} to VM:{}\ncode={}\noutput={}'.format(priority, vm_id, code, output)
 
             LOG.info('OK, {} Evacuation-Priority was accepted, set to "{}" on VM:{}'.format(operation, priority, vm_id))
         else:
-            assert expecting_fail, \
+            assert 1 == code, \
                 'Fail to set Evacuation-priority:{} to VM:{}\ncode={}\noutput={}, expecting failing, but not'.format(
                     priority, vm_id, code, output)
 
             LOG.info('OK, attempt to change Evacuation-Priority to:"{}" on VM:{} failed as expected'.format(
                 priority, vm_id))
 
-        priorities_set = get_vm_priority_metadata(vm_id, fail_ok=True)
+        priorities_set = get_vm_priority_metadata(vm_id)
 
         actual_priority = None
         if priorities_set and VMMetaData.EVACUATION_PRIORITY in priorities_set:
@@ -260,7 +262,7 @@ class TestPrioritizedVMEvacuation:
                                           vm_host=self.current_host,
                                           cleanup='function')[1]
                 if sn < num_priorities:
-                    vm_helper.set_vm_meta_data(vm_id, {VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]})
+                    vm_helper.set_vm(vm_id, {VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]})
 
             LOG.info('OK, VM{} created: id={}\n'.format(sn, vm_id))
             self.vms_info[sn].update(vm_id=vm_id, vm_name=name, priority=self.prioritizing[sn])

@@ -33,8 +33,8 @@ class MThread(threading.Thread):
 
         Args:
             func (runnable): name of function to run. e.g. nova-helper.create_flavor. NOT nova_helper.create_flavor()
-            args:
-            kwargs:
+            *args:
+            **kwargs:
         """
         threading.Thread.__init__(self)
         MThread.total_threads += 1

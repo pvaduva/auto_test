@@ -25,7 +25,7 @@ def heartbeat_flavors():
     flavor_id = nova_helper.create_flavor('hb_flavor')[1]
     ResourceCleanup.add(resource_type='flavor', resource_id=flavor_id, scope='module')
     heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
+    nova_helper.set_flavor(flavor=flavor_id, **heartbeat_spec)
     flav_ids['True'] = flavor_id
 
     flavor_id = nova_helper.create_flavor('no_hb_flavor')[1]

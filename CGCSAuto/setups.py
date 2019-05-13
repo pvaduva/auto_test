@@ -4,11 +4,9 @@ import re
 import threading
 import time
 
-import pexpect
-
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
 from consts.cgcs import Prompt, MULTI_REGION_MAP, SUBCLOUD_PATTERN, SysType, DROPS
-from consts.filepaths import PrivKeyPath, WRSROOT_HOME, BuildServerPath
+from consts.filepaths import WRSROOT_HOME, BuildServerPath
 from consts.lab import Labs, add_lab_entry, NatBoxes, update_lab
 from consts.proj_vars import ProjVar, InstallVars
 from consts import build_server
@@ -78,143 +76,106 @@ def setup_natbox_ssh(natbox):
     return nat_ssh
 
 
-def copy_keyfiles(nat_ssh, con_ssh):
-    try:
-        nat_ssh.exec_cmd('mkdir -p ~/priv_keys/')
-        _copy_privkey_to_natbox(nat_ssh=nat_ssh, con_ssh=con_ssh)
-        _copy_pubkey(con_ssh=con_ssh)
-    except Exception:
-        LOG.error('Copy private/public key failed. Continue test session.')
-
-
-def _copy_pubkey(con_ssh):
-    with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
-        pubkey_path = '{}/key.pub'.format(WRSROOT_HOME)
-        if not con_0_ssh.file_exists(pubkey_path):
-            try:
-                LOG.info("Attempt to copy public key to both controllers and localhost if applicable")
-                # copy public key to key.pub
-                con_0_ssh.exec_cmd('cp {}/.ssh/*.pub {}'.format(WRSROOT_HOME, pubkey_path), expect_timeout=30)
-
-                if con_0_ssh.exec_cmd('nslookup controller-1')[0] == 0:
-                    # copy publickey to controller-1
-                    con_0_ssh.scp_on_source(source_path=pubkey_path, dest_path=pubkey_path,
-                                            dest_ip='controller-1',
-                                            dest_user=HostLinuxCreds.get_user(),
-                                            dest_password=HostLinuxCreds.get_password(), timeout=30)
-            except:
-                pass
-
-        # copy public key to localhost
-        if ProjVar.get_var('REMOTE_CLI') and con_0_ssh.file_exists(pubkey_path):
-            dest_path = os.path.join(ProjVar.get_var('TEMP_DIR'), 'key.pub')
-            common.scp_from_active_controller_to_localhost(source_path=pubkey_path, dest_path=dest_path, timeout=60)
-            LOG.info("Public key file copied to localhost")
-
-
-def _copy_privkey_to_natbox(con_ssh, nat_ssh=None, keyfile_path=None):
+def setup_keypair(con_ssh, nat_ssh=None):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
         nat_ssh (SSHClient): NATBox client
-        keyfile_path (str): Natbox path to scp keyfile to
         con_ssh (SSHClient)
     """
-
-    # Assume the tenant key-pair was added by lab_setup from exiting keys from controller-0:/home/wrsroot/.ssh
-    if not keyfile_path:
-        keyfile_path = ProjVar.get_var('KEYFILE_PATH')
-
     LOG.info("scp key file from controller to NATBox")
-    keyfile_name = keyfile_path.split(sep='/')[-1]
+    # keyfile path that can be specified in testcase config
+    keyfile_stx_origin = os.path.normpath(ProjVar.get_var('STX_KEYFILE_PATH'))
 
+    # keyfile will always be copied to wrsroot home dir first and update file permission
+    keyfile_stx_final = os.path.normpath(ProjVar.get_var('STX_KEYFILE_WRS_HOME'))
+    public_key_stx = '{}.pub'.format(keyfile_stx_final)
+    final_dir = os.path.dirname(keyfile_stx_final)
+
+    # keyfile will also be saved to /opt/platform as well, so it won't be lost during system upgrade.
+    keyfile_opt_pform = '/opt/platform/id_rsa'
+
+    # copy keyfile to following NatBox location. This can be specified in testcase config
+    keyfile_path_natbox = os.path.normpath(ProjVar.get_var('NATBOX_KEYFILE_PATH'))
+
+    auth_info = Tenant.get_primary()
+    keypair_name = auth_info.get('nova_keypair', 'keypair-{}'.format(auth_info['user']))
+    nova_keypair = nova_helper.get_keypairs(name=keypair_name, auth_info=auth_info)
+
+    if not con_ssh.file_exists(keyfile_stx_final):
+        with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
+            if not con_0_ssh.file_exists(keyfile_opt_pform):
+                if con_0_ssh.file_exists(keyfile_stx_origin):
+                    # Given private key file exists. Need to ensure public key exists in same dir.
+                    if not con_0_ssh.file_exists('{}.pub'.format(keyfile_stx_origin)) and not nova_keypair:
+                        raise FileNotFoundError('{}.pub is not found'.format(keyfile_stx_origin))
+                else:
+                    # Need to generate ssh key
+                    if nova_keypair:
+                        raise FileNotFoundError("Cannot find private key for existing nova keypair {}".
+                                                format(nova_keypair))
+
+                    con_0_ssh.exec_cmd("ssh-keygen -f '{}' -t rsa -N ''".format(keyfile_stx_origin), fail_ok=False)
+                    if not con_0_ssh.file_exists(keyfile_stx_origin):
+                        raise FileNotFoundError("{} not found after ssh-keygen".format(keyfile_stx_origin))
+
+                # keyfile_stx_origin and matching public key should now exist on controller-0
+                # copy keyfiles to home dir and opt platform dir
+                con_0_ssh.exec_cmd('cp {} {}'.format(keyfile_stx_origin, keyfile_stx_final), fail_ok=False)
+                con_0_ssh.exec_cmd('cp {}.pub {}'.format(keyfile_stx_origin, public_key_stx), fail_ok=False)
+                con_0_ssh.exec_sudo_cmd('cp {} {}'.format(keyfile_stx_final, keyfile_opt_pform), fail_ok=False)
+
+            # Make sure owner is wrsroot
+            # If private key exists in opt platform, then it must also exist in home dir
+            con_0_ssh.exec_sudo_cmd('chown wrsroot:wrs {}'.format(keyfile_stx_final), fail_ok=False)
+
+        # ssh private key should now exists under home dir and opt platform on controller-0
+        if con_ssh.get_hostname() != 'controller-0':
+            # copy file from controller-0 home dir to controller-1
+            con_ssh.scp_on_dest(source_user=HostLinuxCreds.get_user(),
+                                source_ip='controller-0',
+                                source_path='{}*'.format(keyfile_stx_final),
+                                source_pswd=HostLinuxCreds.get_password(),
+                                dest_path=final_dir, timeout=60)
+
+    if not nova_keypair:
+        LOG.info("Create nova keypair {} using public key {}".format(keypair_name, public_key_stx))
+        if not con_ssh.file_exists(public_key_stx):
+            con_ssh.scp_on_dest(source_user=HostLinuxCreds.get_user(), source_ip='controller-0',
+                                source_path=public_key_stx,
+                                source_pswd=HostLinuxCreds.get_password(),
+                                dest_path=public_key_stx, timeout=60)
+            con_ssh.exec_sudo_cmd('chown wrsroot:wrs {}'.format(public_key_stx), fail_ok=False)
+
+        if ProjVar.get_var('REMOTE_CLI'):
+            dest_path = os.path.join(ProjVar.get_var('TEMP_DIR'), os.path.basename(public_key_stx))
+            common.scp_from_active_controller_to_localhost(source_path=public_key_stx, dest_path=dest_path, timeout=60)
+            public_key_stx = dest_path
+            LOG.info("Public key file copied to localhost: {}".format(public_key_stx))
+
+        nova_helper.create_keypair(keypair_name, public_key=public_key_stx, auth_info=auth_info)
+
+    # ssh private key should now exist under keyfile_path
     if not nat_ssh:
         nat_ssh = NATBoxClient.get_natbox_client()
 
-    if not con_ssh.file_exists(keyfile_name):
-        if not con_ssh.file_exists(PrivKeyPath.OPT_PLATFORM):
-
-            gen_new_key = False
-            with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
-                if not con_0_ssh.file_exists(PrivKeyPath.WRS_HOME):
-                    gen_new_key = True
-
-            if gen_new_key and nova_helper.get_key_pair():
-                    raise exceptions.TiSError("Cannot find ssh keys for existing nova keypair.")
-
-            if gen_new_key:
-                with host_helper.ssh_to_host('controller-0', con_ssh=con_ssh) as con_0_ssh:
-                    passphrase_prompt_1 = '.*Enter passphrase.*'
-                    passphrase_prompt_2 = '.*Enter same passphrase again.*'
-
-                    con_0_ssh.send('ssh-keygen')
-                    index = con_0_ssh.expect([passphrase_prompt_1, '.*Enter file in which to save the key.*'])
-                    if index == 1:
-                        con_0_ssh.send()
-                        con_0_ssh.expect(passphrase_prompt_1)
-                        con_0_ssh.send()    # Enter empty passphrase
-
-                    con_0_ssh.expect(passphrase_prompt_2)
-                    con_0_ssh.send()    # Repeat passphrase
-                    con_0_ssh.expect(Prompt.CONTROLLER_0)
-
-            # ssh keys should now exist under wrsroot home dir on controller-0
-            active_con = con_ssh.get_hostname()
-            if active_con != 'controller-0':
-                con_ssh.send(
-                    'scp controller-0:{} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.WRS_HOME))
-
-                index = con_ssh.expect([Prompt.PASSWORD_PROMPT, Prompt.CONTROLLER_1, Prompt.ADD_HOST])
-                if index == 2:
-                    con_ssh.send('yes')
-                    index = con_ssh.expect([Prompt.PASSWORD_PROMPT, Prompt.CONTROLLER_1])
-                if index == 0:
-                    con_ssh.send(HostLinuxCreds.get_password())
-                    con_ssh.expect()
-
-                con_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
-                con_ssh.exec_cmd('rm {}'.format(PrivKeyPath.WRS_HOME))
-            else:
-                con_ssh.exec_sudo_cmd('cp {} {}'.format(PrivKeyPath.WRS_HOME, PrivKeyPath.OPT_PLATFORM), fail_ok=False)
-
-        # ssh private key should now exist under /opt/platform dir
-        cmd_1 = 'cp {} {}'.format(PrivKeyPath.OPT_PLATFORM, keyfile_name)
-        con_ssh.exec_sudo_cmd(cmd_1, fail_ok=False)
-
-        # change user from root to wrsroot
-        cmd_2 = 'chown wrsroot:wrs {}'.format(keyfile_name)
-        con_ssh.exec_sudo_cmd(cmd_2, fail_ok=False)
-
-    # ssh private key should now exist under keyfile_path
-    con_ssh.exec_cmd('stat {}'.format(keyfile_name), fail_ok=False)
-
+    nat_ssh.exec_cmd('mkdir -p {}'.format(os.path.dirname(keyfile_path_natbox)))
     tis_ip = ProjVar.get_var('LAB').get('floating ip')
     for i in range(10):
         try:
-            nat_ssh.flush()
-            cmd_3 = 'scp -v -o ConnectTimeout=30 {}@{}:{} {}'.format(
-                HostLinuxCreds.get_user(), tis_ip, keyfile_name, keyfile_path)
-            nat_ssh.send(cmd_3)
-            rtn_3_index = nat_ssh.expect([nat_ssh.get_prompt(), Prompt.PASSWORD_PROMPT, '.*\(yes/no\)\?.*'])
-            if rtn_3_index == 2:
-                nat_ssh.send('yes')
-                nat_ssh.expect(Prompt.PASSWORD_PROMPT)
-            elif rtn_3_index == 1:
-                nat_ssh.send(HostLinuxCreds.get_password())
-                nat_ssh.expect(timeout=30)
-            if nat_ssh.get_exit_code() == 0:
-                LOG.info("key file is successfully copied from controller to NATBox")
-                return
-        except pexpect.TIMEOUT as e:
-            LOG.warning(e.__str__())
-            nat_ssh.send_control()
-            nat_ssh.expect()
+            nat_ssh.scp_on_dest(source_ip=tis_ip,
+                                source_user=HostLinuxCreds.get_user(),
+                                source_pswd=HostLinuxCreds.get_password(),
+                                source_path=keyfile_stx_final,
+                                dest_path=keyfile_path_natbox, timeout=120)
+            LOG.info("private key is copied to NatBox: {}".format(keyfile_path_natbox))
+            break
+        except exceptions.SSHException as e:
+            if i == 9:
+                raise
 
-        except Exception as e:
-            LOG.warning(e.__str__())
+            LOG.info(e.__str__())
             time.sleep(10)
-
-    raise exceptions.CommonError("Failed to copy keyfile to NatBox")
 
 
 def boot_vms(is_boot):

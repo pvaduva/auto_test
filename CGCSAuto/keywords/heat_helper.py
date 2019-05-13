@@ -184,7 +184,7 @@ def delete_stack(stack_name, fail_ok=False, check_first=False, con_ssh=None, aut
 
     LOG.info("Deleting Heat Stack %s", stack_name)
     exitcode, output = cli.heat('stack-delete -y', stack_name, ssh_client=con_ssh, auth_info=auth_info,
-                                fail_ok=fail_ok, rtn_list=True)
+                                fail_ok=fail_ok, rtn_code=True)
     if exitcode == 1:
         LOG.warning("Delete heat stack request rejected.")
         return 1, output
@@ -246,7 +246,7 @@ def create_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_in
 
     LOG.info("Create Heat Stack %s", params_string)
     exitcode, output = cli.heat('stack-create', params_string, ssh_client=con_ssh, auth_info=auth_info,
-                                fail_ok=fail_ok, timeout=timeout, rtn_list=True)
+                                fail_ok=fail_ok, timeout=timeout, rtn_code=True)
     if exitcode == 1:
         LOG.warning("Create heat stack request rejected.")
         return 1, output
@@ -283,7 +283,7 @@ def update_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_in
 
     LOG.info("Create Heat Stack %s", params_string)
     exitcode, output = cli.heat('stack-update', params_string, ssh_client=con_ssh, auth_info=auth_info,
-                                fail_ok=fail_ok, rtn_list=True)
+                                fail_ok=fail_ok, rtn_code=True)
     if exitcode == 1:
         LOG.warning("Create heat stack request rejected.")
         return 1, output

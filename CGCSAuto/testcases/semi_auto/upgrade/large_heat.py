@@ -32,7 +32,7 @@ def pre_check(request):
             ProjVar.set_var(REMOTE_CLI=remote_cli)
         request.addfinalizer(revert)
 
-    network_helper.update_quotas(network=100)
+    vm_helper.set_quotas(networks=100)
     vm_helper.ensure_vms_quotas(cores_num=100, vols_num=100, vms_num=100)
 
     def list_status():

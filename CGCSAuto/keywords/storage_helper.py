@@ -464,7 +464,7 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
         if object_gib:
             args += ' object_pool_gib={}'.format(object_gib)
 
-    code, out = cli.system('storage-backend-modify', args, con_ssh, fail_ok=fail_ok, rtn_list=True)
+    code, out = cli.system('storage-backend-modify', args, con_ssh, fail_ok=fail_ok, rtn_code=True)
     if code > 0:
         return 1, out
 
@@ -753,7 +753,7 @@ def add_ceph_mon(host, ceph_mon_gib='20', ceph_mon_dev=None, con_ssh=None, fail_
 
     cmd = 'ceph-mon-add'.format(host)
 
-    rc, output = cli.system(cmd, host, ssh_client=con_ssh, rtn_list=True, fail_ok=fail_ok)
+    rc, output = cli.system(cmd, host, ssh_client=con_ssh, rtn_code=True, fail_ok=fail_ok)
     if rc != 0:
         msg = "CLI command {} failed to add ceph mon in host {}: {}".format(cmd, host, output)
         LOG.warning(msg)
@@ -1124,7 +1124,7 @@ def add_storage_ceph_osd(host, disk_uuid, journal_location=None, journal_size=No
         args += " --tier-uuid {}".format(tier_uuid)
 
     cmd += " {} {}{} {}".format(args, host, function if function else '', disk_uuid)
-    rc, output = cli.system(cmd, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+    rc, output = cli.system(cmd, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_code=True)
     if rc != 0:
         msg = "Fail to add ceph osd to host {} disk {}: {}".format(host, disk_uuid)
         LOG.warning(msg)

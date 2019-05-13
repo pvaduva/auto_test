@@ -15,10 +15,7 @@ def add_hosts_to_zone(request, add_admin_role_class, add_cgcsauto_zone, reserve_
         skip("Less than two up hosts have same storage backing")
 
     LOG.fixture_step("Update instance and volume quota to at least 10 and 20 respectively")
-    if nova_helper.get_quotas(quotas='instances')[0] < 10:
-        nova_helper.update_quotas(instances=10, cores=20)
-    if cinder_helper.get_quotas(quotas='volumes')[0] < 20:
-        cinder_helper.update_quotas(volumes=20)
+    vm_helper.ensure_vms_quotas()
 
     hosts_to_add = target_hosts[:2]
     nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=hosts_to_add)

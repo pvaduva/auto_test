@@ -1,13 +1,9 @@
 from pytest import fixture, mark, skip
+
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, heat_helper, host_helper, cinder_helper, network_helper, system_test_helper
-from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
-from utils.clients.ssh import ControllerClient
-from consts.auth import HostLinuxCreds, Tenant
-from consts.cgcs import GuestImages, HeatStackStatus
+from keywords import nova_helper, vm_helper, heat_helper, host_helper, system_test_helper
+from consts.auth import Tenant
 from consts.proj_vars import ProjVar
-from utils.multi_thread import MThread, Events
-from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unreserve_hosts_module
 
 
 @fixture(scope='function')
@@ -23,7 +19,7 @@ def pre_check(request):
     """
     hypervisors = host_helper.get_up_hypervisors()
     if len(hypervisors) < 3:
-        skip('System trest heat tests require 3+ hypervisors')
+        skip('System test heat tests require 3+ hypervisors')
 
     # disable remote cli for these testcases
     remote_cli = ProjVar.get_var('REMOTE_CLI')
@@ -33,10 +29,9 @@ def pre_check(request):
         def revert():
             ProjVar.set_var(REMOTE_CLI=remote_cli)
         request.addfinalizer(revert)
-    network_helper.update_quotas(network=600)
-    nova_helper.update_quotas(cores=1000, instances=1000, ram=7168000, server_groups=100, server_group_members=1000)
-    cinder_helper.update_quotas(volumes=1000)
-    network_helper.update_quotas(port=1000)
+
+    vm_helper.set_quotas(networks=600, ports=1000, volumes=1000, cores=1000, instances=1000, ram=7168000,
+                         server_groups=100, server_group_members=1000)
     system_test_helper.launch_lab_setup_tenants_vms()
 
     def list_status():
@@ -46,8 +41,9 @@ def pre_check(request):
             heat_helper.get_stack_resources(stack=stack, auth_info=Tenant.ADMIN)
 
         nova_helper.get_migration_list_table()
-        #system_test_helper.delete_lab_setup_tenants_vms()
+        # system_test_helper.delete_lab_setup_tenants_vms()
     request.addfinalizer(list_status)
+
 
 @mark.p1
 @mark.parametrize('number_of_hosts_to_lock', [
@@ -79,38 +75,18 @@ def _test_sys_evacuate_from_hosts(number_of_hosts_to_evac):
 
 
 def _test_sys_storage_reboot():
-    """
-
-    :param number_of_hosts_to_evac:
-    :return:
-    """
     system_test_helper.sys_reboot_storage()
 
 
 def _test_sys_standby_reboot():
-    """
-
-    :param number_of_hosts_to_evac:
-    :return:
-    """
     system_test_helper.sys_reboot_standby()
 
 
 def _test_sys_controlled_swact():
-    """
-
-    :param number_of_hosts_to_evac:
-    :return:
-    """
     system_test_helper.sys_controlled_swact()
 
 
 def _test_sys_uncontrolled_swact():
-    """
-
-    :param number_of_hosts_to_evac:
-    :return:
-    """
     system_test_helper.sys_uncontrolled_swact()
 
 

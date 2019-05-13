@@ -34,7 +34,7 @@ def heartbeat_flavor_vm(request):
     flavor_id = nova_helper.create_flavor()[1]
     ResourceCleanup.add(resource_type='flavor', resource_id=flavor_id, scope='module')
     heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
+    nova_helper.set_flavor(flavor=flavor_id, **heartbeat_spec)
 
     boot_source = 'image'
     vm_id = vm_helper.boot_vm(flavor=flavor_id, source=boot_source)[1]

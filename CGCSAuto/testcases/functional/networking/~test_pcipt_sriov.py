@@ -26,12 +26,12 @@ def vif_model_check(request):
     LOG.fixture_step("Create a flavor with dedicated cpu policy")
     flavor_id = nova_helper.create_flavor(name='dedicated', ram=2048, cleanup='module')[1]
     extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     LOG.fixture_step("Boot a base vm with above flavor and virtio nics")
 
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    pci_net_id, seg_id, pnet_name = network_helper.get_net_show_values(
+    pci_net_id, seg_id, pnet_name = network_helper.get_network_values(
         network=pci_net, fields=('id', 'provider:segmentation_id', 'provider:physical_network'))
 
     nics = [{'net-id': mgmt_net_id}, {'net-id': pci_net_id}]
@@ -40,8 +40,8 @@ def vif_model_check(request):
     if vif_model == 'pci-passthrough':
         pcipt_seg_ids[pci_net] = seg_id
         if extra_pcipt_net_name:
-            extra_pcipt_net, seg_id = network_helper.get_net_show_values(network=extra_pcipt_net_name,
-                                                                         fields=('id', 'provider:segmentation_id'))
+            extra_pcipt_net, seg_id = network_helper.get_network_values(network=extra_pcipt_net_name,
+                                                                        fields=('id', 'provider:segmentation_id'))
             nics.append({'net-id': extra_pcipt_net})
             nics_to_test.append({'net-id': extra_pcipt_net, 'vif-model': vif_model})
             pcipt_seg_ids[extra_pcipt_net_name] = seg_id
@@ -150,9 +150,7 @@ def _test_pci_resource_usage(vif_model_check):
 
     expt_change = 2 if vif_model == 'pci-passthrough' and extra_pcipt_net else 1
     vm_limit = int((total_val - pre_resource_value) / expt_change) if vif_model == 'pci-passthrough' else 5
-    inst_quota = nova_helper.get_quotas('instances')[0]
-    if inst_quota < vm_limit + 5:
-        nova_helper.update_quotas(instances=vm_limit + 5)
+    vm_helper.ensure_vms_quotas(vm_limit+5)
     vms_under_test = []
     for i in range(vm_limit):
         LOG.tc_step("Boot a vm with {} vif model on {} net".format(vif_model, net_type))
@@ -337,7 +335,7 @@ class TestVmPCIOperations:
         extra_specs = {k: str(v) for k, v in extra_specs.items() if v is not None}
 
         if extra_specs:
-            nova_helper.set_flavor_extra_specs(flavor_id, **extra_specs)
+            nova_helper.set_flavor(flavor_id, **extra_specs)
 
         return flavor_id
 
@@ -451,7 +449,7 @@ class TestVmPCIOperations:
         vm_helper.ping_vms_from_vm(
                 from_vm=self.base_vm, to_vms=self.vm_id, net_types=['mgmt', 'internal'])
 
-        self.vm_topology = nova_helper.get_vm_nova_show_value(vm_id=self.vm_id, field='wrs-res:topology')
+        self.vm_topology = nova_helper.get_vm_values(vm_id=self.vm_id, fields='wrs-res:topology')[0]
         vnic_type = 'direct' if self.vif_model == 'pci-sriov' else 'direct-physical'
         self.pci_nics = vm_helper.get_vm_nics_info(vm_id=self.vm_id, vnic_type=vnic_type)
         assert self.pci_nics
@@ -523,7 +521,7 @@ class TestVmPCIOperations:
         LOG.tc_step("Create a flavor with dedicated cpu policy and resize vm to new flavor")
         resize_flavor = nova_helper.create_flavor(name='dedicated', ram=2048, cleanup='function')[1]
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated'}
-        nova_helper.set_flavor_extra_specs(flavor=resize_flavor, **extra_specs)
+        nova_helper.set_flavor(flavor=resize_flavor, **extra_specs)
         vm_helper.resize_vm(self.vm_id, resize_flavor)
 
         LOG.tc_step("Check vm still reachable after resize")

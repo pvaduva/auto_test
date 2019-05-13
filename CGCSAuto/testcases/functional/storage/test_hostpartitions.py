@@ -382,7 +382,7 @@ def _test_create_partition_and_associate_with_pv_nova_local():
             LOG.tc_step("Associating partition {} with nova-local".format(uuid))
             # cmd = "host-pv-add -t partition {} nova-local {}".format(host, uuid)
             cmd = "host-pv-add {} nova-local {}".format(host, uuid)
-            rc, out = cli.system(cmd, rtn_list=True)
+            rc, out = cli.system(cmd, rtn_code=True)
             assert rc == 0, "Associating partition with PV failed"
 
             host_helper.unlock_host(host)
@@ -396,7 +396,7 @@ def _test_create_partition_and_associate_with_pv_nova_local():
             LOG.tc_step("Attempt to associate the In-Use partition with another PV")
             # cmd = "host-pv-add -t partition {} cgts-vg {}".format(host, uuid)
             cmd = "host-pv-add {} cgts-vg {}".format(host, uuid)
-            rc, out = cli.system(cmd, rtn_list=True)
+            rc, out = cli.system(cmd, rtn_code=True)
             assert rc != 0, "Partition association succeeded but was expected to fail"
             # Only test one disk on each host
             break
@@ -456,7 +456,7 @@ def _test_create_partition_and_associate_with_pv_cgts_vg():
             LOG.tc_step("Associating partition {} with cgts-vg".format(uuid))
             # cmd = "host-pv-add -t partition {} cgts-vg {}".format(host, uuid)
             cmd = "host-pv-add {} cgts-vg {}".format(host, uuid)
-            rc, out = cli.system(cmd, rtn_list=True)
+            rc, out = cli.system(cmd, rtn_code=True)
             assert rc == 0, "Associating partition with PV failed"
             LOG.tc_step("Check that partition is In-use state")
             partition_helper.wait_for_partition_status(host=host, uuid=uuid, final_status=PartitionStatus.IN_USE,
@@ -467,7 +467,7 @@ def _test_create_partition_and_associate_with_pv_cgts_vg():
             LOG.tc_step("Attempt to associate the In-Use partition with another PV")
             # cmd = "host-pv-add -t partition {} nova-local {}".format(host, uuid)
             cmd = "host-pv-add {} nova-local {}".format(host, uuid)
-            rc, out = cli.system(cmd, rtn_list=True)
+            rc, out = cli.system(cmd, rtn_code=True)
             assert rc != 0, "Partition association succeeded but was expected to fail"
             # Only test one disk on each host
             break
@@ -500,7 +500,7 @@ def test_assign_rootfs_disk_to_pv():
         uuid = rootfs[host]
         # cmd = "host-pv-add -t disk {} cgts-vg {}".format(host, uuid[0])
         cmd = "host-pv-add {} cgts-vg {}".format(host, uuid[0])
-        rc, out = cli.system(cmd, rtn_list=True, fail_ok=True)
+        rc, out = cli.system(cmd, rtn_code=True, fail_ok=True)
         assert rc != 0, "Expected PV creation to fail but instead succeeded"
 
 
@@ -923,7 +923,7 @@ def test_host_disk_wipe_rootfs():
         uuid = rootfs[host]
         LOG.tc_step("Attempting to wipe {} from {}".format(uuid[0], host))
         cmd = 'host-disk-wipe --confirm {} {}'.format(host, uuid[0])
-        rc, out = cli.system(cmd, rtn_list=True, fail_ok=True)
+        rc, out = cli.system(cmd, rtn_code=True, fail_ok=True)
         assert rc != 0, "Expected wipe disk to fail but instead succeeded"
 
 
@@ -962,14 +962,14 @@ def test_host_disk_wipe_unassigned_disk():
         disks = partition_helper.get_disks(host)
         for disk_uuid in disks:
             cmd = "host-disk-show {} {}".format(host, disk_uuid)
-            rc, out = cli.system(cmd, rtn_list=True)
+            rc, out = cli.system(cmd, rtn_code=True)
             size_gib = table_parser.get_value_two_col_table(table_parser.table(out), "size_gib")
             available_gib = table_parser.get_value_two_col_table(table_parser.table(out), "available_gib")
             if int(float(size_gib)) == int(float(available_gib)):
                 found_disk = True
                 LOG.tc_step("Attempting to wipe disk {} from host {}".format(disk_uuid, host))
                 cmd = 'host-disk-wipe --confirm {} {}'.format(host, disk_uuid)
-                rc, out = cli.system(cmd, rtn_list=True, fail_ok=True)
+                rc, out = cli.system(cmd, rtn_code=True, fail_ok=True)
                 assert rc == 0, "Expected wipe disk to pass but instead failed"
                 break
 

@@ -124,7 +124,7 @@ def test_migration_auto_converge(no_simplex):
 
     # add migration timout
     extra_specs = {FlavorSpec.LIVE_MIG_TIME_OUT: 300}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Get the heat file name to use")
     heat_template = _get_stress_ng_heat()
@@ -144,10 +144,6 @@ def test_migration_auto_converge(no_simplex):
 
     LOG.info("Verifying server creation via heat")
     vm_id = nova_helper.get_vm_id_from_name(vm_name='stress_ng', strict=False)
-
-    assert vm_id, "Error:vm was not created by stack"
-    LOG.info("Found VM %s", vm_id)
-
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:

@@ -37,7 +37,7 @@ def test_create_flavor(name, swap, ephemeral, storage, cpu_policy):
     LOG.info("Flavor id: {}".format(flavor_id))
     specs = {'aggregate_instance_extra_specs:storage': storage,
              'hw:cpu_policy': cpu_policy}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
+    nova_helper.set_flavor(flavor=flavor_id, **specs)
 
 
 @mark.parametrize('vm_count', [
@@ -86,7 +86,7 @@ def test_ping_vms_from_vm_various_images(vm_image):
     vol_size = 1
     if vm_image in ['ubuntu', 'centos']:
         vol_size = 8
-    vol_id = keywords.cinder_helper.create_volume(name='vol_' + vm_image, image_id=image_id, size=vol_size)[1]
+    vol_id = keywords.cinder_helper.create_volume(name='vol_' + vm_image, source_id=image_id, size=vol_size)[1]
     vm_id = vm_helper.boot_vm(source='volume', source_id=vol_id)[1]
 
     vm_helper.ping_vms_from_vm(from_vm=vm_id)

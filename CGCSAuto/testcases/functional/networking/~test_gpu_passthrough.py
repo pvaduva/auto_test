@@ -68,7 +68,7 @@ def test_gpu_passthrough(setup_alias):
     extra_spec = {FlavorSpec.PCI_PASSTHROUGH_ALIAS: '{}:{},{}:{}'.format(nova_gpu_alias, pf, nova_usb_alias, pf),
                   FlavorSpec.CPU_POLICY: 'dedicated'}
 
-    nova_helper.set_flavor_extra_specs(flavor_id, **extra_spec)
+    nova_helper.set_flavor(flavor_id, **extra_spec)
 
     initial_gpu_pfs_used = _calculate_pf_used(nova_gpu_alias)
     initial_usb_pfs_used = _calculate_pf_used(nova_usb_alias)

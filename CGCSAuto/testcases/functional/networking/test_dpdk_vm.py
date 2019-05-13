@@ -47,7 +47,7 @@ def launch_vm(vm_type, num_vcpu, host=None):
     ResourceCleanup.add('flavor', flavor_id)
     extra_specs = {FlavorSpec.VCPU_MODEL: 'SandyBridge', FlavorSpec.CPU_POLICY: 'dedicated',
                    FlavorSpec.MEM_PAGE_SIZE: '2048'}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     nic1 = {'net-id': network_helper.get_mgmt_net_id()}
     nic2 = {'net-id': network_helper.get_tenant_net_id()}
@@ -56,7 +56,7 @@ def launch_vm(vm_type, num_vcpu, host=None):
         nic2['vif-model'] = vif_model
         nic3['vif-model'] = vif_model
 
-    vol = cinder_helper.create_volume(image_id=img_id, cleanup='function')[1]
+    vol = cinder_helper.create_volume(source_id=img_id, cleanup='function')[1]
     host_info = {'avail_zone': 'nova', 'vm_host': host} if host else {}
     vm_id = vm_helper.boot_vm(name='dpdk-vm', nics=[nic1, nic2, nic3], flavor=flavor_id, user_data=_get_dpdk_user_data(),
                               source='volume', source_id=vol, cleanup='function', **host_info)[1]

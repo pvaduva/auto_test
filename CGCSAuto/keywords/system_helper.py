@@ -401,7 +401,7 @@ def get_alarms_table(uuid=True, show_suppress=False, query_key=None, query_value
     output = None
     for i in range(retry + 1):
         code, output = cli.fm('alarm-list', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True, use_telnet=use_telnet, con_telnet=con_telnet)
+                              rtn_code=True, use_telnet=use_telnet, con_telnet=con_telnet)
         if code == 0:
             table_ = table_parser.table(output, combine_multiline_entry=True)
             table_ = _compose_alarm_table(table_, uuid=uuid)
@@ -525,7 +525,7 @@ def unsuppress_all_events(ssh_con=None, fail_ok=False, auth_info=Tenant.get('adm
     LOG.info("Un-suppress all events")
     args = '--nowrap --nopaging'
     code, output = cli.fm('event-unsuppress-all', positional_args=args, ssh_client=ssh_con, fail_ok=fail_ok,
-                          auth_info=auth_info, rtn_list=True)
+                          auth_info=auth_info, rtn_code=True)
 
     if code == 1:
         return 1, output
@@ -819,7 +819,7 @@ def delete_alarms(alarms=None, fail_ok=False, con_ssh=None, auth_info=Tenant.get
     res = {}
     failed_clis = []
     for alarm in alarms:
-        code, out = cli.fm('alarm-delete', alarm, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+        code, out = cli.fm('alarm-delete', alarm, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True,
                            use_telnet=use_telnet, con_telnet=con_telnet)
         res[alarm] = code, out
 
@@ -1152,7 +1152,7 @@ def modify_system(fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'), **k
     attr_values_ = ['--{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
     args_ = ' '.join(attr_values_)
 
-    code, output = cli.system('modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+    code, output = cli.system('modify', args_, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_code=True)
 
     if code == 1:
         return 1, output
@@ -1409,13 +1409,13 @@ def set_retention_period(period, name='metering_time_to_live', fail_ok=True, che
 
     args = '{} {} {}={}'.format(service, section, name, period)
     code, output = cli.system('service-parameter-modify', args, auth_info=auth_info, ssh_client=con_ssh,
-                              timeout=SysInvTimeout.RETENTION_PERIOD_MODIFY, fail_ok=fail_ok, rtn_list=True)
+                              timeout=SysInvTimeout.RETENTION_PERIOD_MODIFY, fail_ok=fail_ok, rtn_code=True)
 
     if code == 1:
         return 1, output
 
     code, output = cli.system('service-parameter-apply', service, auth_info=auth_info, ssh_client=con_ssh,
-                              timeout=SysInvTimeout.RETENTION_PERIOD_MODIFY, fail_ok=fail_ok, rtn_list=True)
+                              timeout=SysInvTimeout.RETENTION_PERIOD_MODIFY, fail_ok=fail_ok, rtn_code=True)
     if code == 1:
         return 2, output
 
@@ -1547,7 +1547,7 @@ def set_dns_servers(nameservers, with_action_option=None, check_first=True, fail
 
     LOG.info('args_:{}'.format(args_))
     code, output = cli.system('dns-modify', args_, ssh_client=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
-                              auth_info=auth_info, fail_ok=fail_ok, rtn_list=True, timeout=SysInvTimeout.DNS_MODIFY)
+                              auth_info=auth_info, fail_ok=fail_ok, rtn_code=True, timeout=SysInvTimeout.DNS_MODIFY)
     if code == 1:
         return 1, output
 
@@ -1626,7 +1626,7 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
             args_str = ' '.join([args_str, key, str(value)])
 
     code, output = cli.system('host-memory-modify {}'.format(args_str), "{} {}".format(host, proc_id),
-                              ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+                              ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_code=True)
 
     if code == 1:
         return 1, output
@@ -1665,7 +1665,7 @@ def __suppress_unsuppress_event(alarm_id, suppress=True, check_first=False, fail
             LOG.info(msg)
             return -1, msg
 
-    code, output = cli.fm(cmd, '--alarm_id ' + alarm_id, ssh_client=con_ssh, rtn_list=True, fail_ok=fail_ok)
+    code, output = cli.fm(cmd, '--alarm_id ' + alarm_id, ssh_client=con_ssh, rtn_code=True, fail_ok=fail_ok)
 
     if code == 1:
         return 1, output
@@ -1763,7 +1763,7 @@ def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_i
             args_str = ' '.join([args_str, key, str(value)])
 
     code, output = cli.system('host-memory-modify {}'.format(args_str), "{} {}".format(host, proc_id),
-                              ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_list=True)
+                              ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_code=True)
 
     if code == 1:
         return 1, output
@@ -1886,7 +1886,7 @@ def create_storage_profile(host, profile_name='', con_ssh=None):
     cmd = 'storprofile-add {} {}'.format(profile_name, host)
 
     table_ = table_parser.table(cli.system(cmd, ssh_client=con_ssh, fail_ok=False, auth_info=Tenant.get('admin'),
-                                           rtn_list=False))
+                                           rtn_code=False))
     uuid = table_parser.get_value_two_col_table(table_, 'uuid')
 
     return uuid
@@ -1932,7 +1932,7 @@ def delete_storage_profile(profile='', con_ssh=None):
 
     cmd = 'storprofile-delete {}'.format(profile)
 
-    cli.system(cmd, ssh_client=con_ssh, fail_ok=False, auth_info=Tenant.get('admin'), rtn_list=False)
+    cli.system(cmd, ssh_client=con_ssh, fail_ok=False, auth_info=Tenant.get('admin'), rtn_code=False)
 
 
 def get_host_cpu_list_table(host, con_ssh=None, auth_info=Tenant.get('admin')):
@@ -2413,7 +2413,7 @@ def create_service_parameter(service, section, name, value, con_ssh=None, fail_o
 
     LOG.info("Creating service parameter")
     args = service + ' ' + section + ' ' + name + '=' + value
-    res, out = cli.system('service-parameter-add', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+    res, out = cli.system('service-parameter-add', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_code=True)
 
     if res == 1:
         return 1, out
@@ -2475,7 +2475,7 @@ def modify_service_parameter(service, section, name, value, apply=False, con_ssh
     auth_info = dict(Tenant.get('admin'))
     if service == 'identity' and section == 'config' and name == 'token_expiration':
         auth_info['region'] = 'RegionOne'
-    res, out = cli.system('service-parameter-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+    res, out = cli.system('service-parameter-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_code=True,
                           auth_info=auth_info)
 
     if res == 1:
@@ -2516,7 +2516,7 @@ def delete_service_parameter(uuid, con_ssh=None, fail_ok=False, check_first=True
         if uuid not in uuids:
             return -1, "There is no service parameter with uuid {}".format(uuid)
 
-    res, out = cli.system('service-parameter-delete', uuid, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True)
+    res, out = cli.system('service-parameter-delete', uuid, ssh_client=con_ssh, fail_ok=fail_ok, rtn_code=True)
 
     if res == 1:
         return 1, out
@@ -2549,7 +2549,7 @@ def apply_service_parameters(service, wait_for_config=True, timeout=300, con_ssh
 
     """
     LOG.info("Applying service parameters {}".format(service))
-    res, out = cli.system('service-parameter-apply', service, rtn_list=True, fail_ok=fail_ok, auth_info=auth_info,
+    res, out = cli.system('service-parameter-apply', service, rtn_code=True, fail_ok=fail_ok, auth_info=auth_info,
                           ssh_client=con_ssh)
 
     if res == 1:
@@ -2771,7 +2771,7 @@ def activate_upgrade(con_ssh=None, fail_ok=False):
         (1, <stderr>)   # cli returns stderr, applicable if fail_ok is true
 
     """
-    rc, output = cli.system('upgrade-activate', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
+    rc, output = cli.system('upgrade-activate', ssh_client=con_ssh, fail_ok=True, rtn_code=True)
     if rc != 0:
         err_msg = "CLI system uprade-activate failed: {}".format(output)
         LOG.warning(err_msg)
@@ -2848,7 +2848,7 @@ def complete_upgrade(con_ssh=None, fail_ok=False):
         (1, <stderr>)   # cli returns stderr, applicable if fail_ok is true
 
     """
-    rc, output = cli.system('upgrade-complete', ssh_client=con_ssh, fail_ok=True, rtn_list=True)
+    rc, output = cli.system('upgrade-complete', ssh_client=con_ssh, fail_ok=True, rtn_code=True)
     if rc != 0:
         err_msg = "CLI system upgrade-complete rejected: {}".format(output)
         LOG.warning(err_msg)
@@ -3249,7 +3249,7 @@ def enable_murano(con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
     """
 
     res, output = cli.system('service-enable murano', ssh_client=con_ssh, auth_info=auth_info,
-                             fail_ok=fail_ok, rtn_list=True)
+                             fail_ok=fail_ok, rtn_code=True)
     if res == 1:
         return 1, output
 
@@ -3271,7 +3271,7 @@ def disable_murano(con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
     """
 
     res, output = cli.system('service-disable murano', ssh_client=con_ssh, auth_info=auth_info,
-                             fail_ok=fail_ok, rtn_list=True)
+                             fail_ok=fail_ok, rtn_code=True)
     if res == 1:
         return 1, output
 
@@ -3298,7 +3298,7 @@ def get_host_ifnames_by_address(host, rtn_val='ifname', address=None, id_=None, 
     """
 
     table_ = table_parser.table(cli.system('host-addr-list', host, ssh_client=con_ssh, auth_info=auth_info,
-                                           fail_ok=fail_ok, rtn_list=True)[1])
+                                           fail_ok=fail_ok, rtn_code=True)[1])
     args_dict = {
         'uuid': id_,
         'address': address,
@@ -3330,7 +3330,7 @@ def get_host_addr_list(host, rtn_val='address', ifname=None, id_=None, con_ssh=N
     """
 
     table_ = table_parser.table(cli.system('host-addr-list', host, ssh_client=con_ssh, auth_info=auth_info,
-                                           fail_ok=fail_ok, rtn_list=True)[1])
+                                           fail_ok=fail_ok, rtn_code=True)[1])
     args_dict = {
         'id': id_,
         'ifname': ifname,
@@ -3690,7 +3690,7 @@ def create_snmp_comm(comm_string, rtn_val='uuid', fail_ok=False, con_ssh=None, a
     """
     args = '-c "{}"'.format(comm_string)
     code, out = cli.system('snmp-comm-add', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                           rtn_list=True)
+                           rtn_code=True)
 
     if code > 0:
         return 1, out
@@ -3717,7 +3717,7 @@ def create_snmp_trapdest(comm_string, ip_addr, rtn_val='uuid', fail_ok=False, co
     """
     args = '-c "{}" -i "{}"'.format(comm_string, ip_addr)
     code, out = cli.system('snmp-trapdest-add', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                           rtn_list=True)
+                           rtn_code=True)
 
     if code > 0:
         return 1, out
@@ -3792,7 +3792,7 @@ def delete_snmp_comm(comms, check_first=True, fail_ok=False, con_ssh=None, auth_
     LOG.info('Deleting SNMP community strings: {}'.format(comms))
     comms = ' '.join(['"{}"'.format(comm) for comm in comms])
     code, out = cli.system('snmp-comm-delete', comms, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                           rtn_list=True)
+                           rtn_code=True)
 
     post_comms = get_snmp_comms(con_ssh=con_ssh, auth_info=auth_info)
     undeleted_comms = [comm for comm in comms if comm in post_comms]
@@ -3827,7 +3827,7 @@ def delete_snmp_trapdest(ip_addrs, fail_ok=False, con_ssh=None, auth_info=Tenant
     for ip_addr in ip_addrs:
         arg += '"{}" '.format(ip_addr)
     code, out = cli.system('snmp-trapdest-delete', arg, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                           rtn_list=True)
+                           rtn_code=True)
 
     return code, out
 
@@ -3854,7 +3854,7 @@ def get_oam_ips():
 def modify_oam_ips(arg_str, fail_ok=False):
     cmd = "oam-modify" + arg_str
     LOG.info('In modify_oam_ips. cmd:{}'.format(cmd))
-    code, output = cli.system(cmd, rtn_list=True, fail_ok=fail_ok)
+    code, output = cli.system(cmd, rtn_code=True, fail_ok=fail_ok)
     if code != 0:
         return code, output
 
@@ -3904,7 +3904,7 @@ def modify_spectre_meltdown_version(version='spectre_meltdown_all', check_first=
 
     LOG.info("Set spectre_meltdown version to {}".format(version))
     code, output = cli.system('modify -S {}'.format(version), ssh_client=con_ssh, fail_ok=fail_ok,
-                              rtn_list=True)
+                              rtn_code=True)
     if code > 0:
         return 1, output
 
@@ -4022,7 +4022,15 @@ def get_networks(rtn_val='type', con_ssh=None, **kwargs):
     return table_parser.get_values(table_, target_header=rtn_val, **kwargs)
 
 
-def update_ml2_extension_drivers(drivers, enable=True, auth_info=Tenant.get('admin'), con_ssh=None):
+def add_ml2_extension_drivers(drivers, auth_info=Tenant.get('admin'), con_ssh=None):
+    return __update_ml2_extension_drivers(drivers=drivers, enable=True, auth_info=auth_info, con_ssh=con_ssh)
+
+
+def remove_ml2_extension_drivers(drivers, auth_info=Tenant.get('admin'), con_ssh=None):
+    return __update_ml2_extension_drivers(drivers=drivers, enable=False, auth_info=auth_info, con_ssh=con_ssh)
+
+
+def __update_ml2_extension_drivers(drivers, enable=True, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Enable port security extension driver via helm-override-update if not already enabled
 
@@ -4171,7 +4179,7 @@ def modify_ptp(enabled=None, mode=None, transport=None, mechanism=None, fail_ok=
             return -1, 'No parameter chage'
 
     code, output = cli.system('ptp-modify', arg_str, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
-                              rtn_list=True)
+                              rtn_code=True)
     if code > 0:
         return 1, output
 
@@ -4299,7 +4307,7 @@ def modify_ntp(enabled=None, ntp_servers=None, check_first=True, fail_ok=False, 
                 return -1, msg
 
     code, out = cli.system('ntp-modify', arg.strip(), fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
-                           rtn_list=True)
+                           rtn_code=True)
     if code > 0:
         return 1, out
 
@@ -4479,7 +4487,7 @@ def create_data_network(name, net_type='vlan', mode=None, mtu=None, port_num=Non
     }
     args = '{} {} {}'.format(common.parse_args(args_dict), name, net_type)
     code, output = cli.system('datanetwork-add', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True)
+                              rtn_code=True)
     if code > 0:
         return 1, output
 
@@ -4517,7 +4525,7 @@ def get_data_network_values(datanetwork, fields=('uuid',), fail_ok=False, con_ss
 
     """
     code, output = cli.system('datanetwork-show', datanetwork, ssh_client=con_ssh, auth_info=auth_info,
-                              fail_ok=fail_ok, rtn_list=True)
+                              fail_ok=fail_ok, rtn_code=True)
     if code > 0:
         return None
 
@@ -4543,7 +4551,7 @@ def delete_data_network(uuid, fail_ok=False, con_ssh=None, auth_info=Tenant.get(
 
     """
     code, output = cli.system('datanetwork-delete', uuid, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_list=True)
+                              rtn_code=True)
     if code > 0:
         return 1, output
 

@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from consts.auth import Tenant
 from consts.cgcs import FlavorSpec
 from consts.timeout import VMTimeout
-from keywords import vm_helper, nova_helper, network_helper, host_helper, common
+from keywords import vm_helper, nova_helper, network_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -62,9 +62,8 @@ def get_pci_net(request, vif_model, primary_tenant, primary_tenant_name, other_t
 
             request.addfinalizer(revert_tenant)
 
-    pci_net_id = network_helper._get_net_ids(net_name=pci_net_name)[0]
-    pnet_name = network_helper.get_net_info(net_id=pci_net_id, field='provider:physical_network')
-    # pnet_id = network_helper.get_providernets(name=pnet_name, rtn_val='id', strict=True)[0]
+    pci_net_id = network_helper.get_net_id_from_name(net_name=pci_net_name)
+    pnet_name = network_helper.get_network_values(network=pci_net_id, fields='provider:physical_network')[0]
     pnet_id = None
     LOG.info("PCI network selected to boot vm: {}".format(pci_net_name))
     if vif_model == 'pci-sriov':
@@ -86,11 +85,10 @@ def get_pci_vm_nics(vif_model, pci_net_id, other_pci_net_id=None):
 @fixture(scope='module')
 def pci_prep():
     primary_tenant = Tenant.get_primary()
-    primary_tenant_name = common.get_tenant_name(primary_tenant)
-    other_tenant = Tenant.TENANT2 if primary_tenant_name == 'tenant1' else Tenant.TENANT1
-
-    nova_helper.update_quotas(tenant='tenant1', cores=100)
-    nova_helper.update_quotas(tenant='tenant2', cores=100)
+    other_tenant = Tenant.get_secondary()
+    primary_tenant_name = primary_tenant['tenant']
+    vm_helper.set_quotas(tenant=primary_tenant_name, cores=100)
+    vm_helper.set_quotas(tenant=other_tenant['tenant'], cores=100)
     return primary_tenant, primary_tenant_name, other_tenant
 
 
@@ -206,7 +204,7 @@ class TestSriov:
         flavor_id = nova_helper.create_flavor(name='dedicated_{}vcpu'.format(vm_vcpus), ram=1024, vcpus=vm_vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id, scope='module')
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'preferred'}
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+        nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
         # Boot vms with 2 {} vifs each, and wait for pingable
         LOG.tc_step("Boot {} vms with 2 {} vifs each".format(vm_num, vif_model))
@@ -280,14 +278,14 @@ class TestPcipt:
         vm_vcpus = int(min_cores_per_proc / (vm_num / 2))
 
         LOG.fixture_step("Get seg_id for {} for vlan tagging on pci-passthough device later".format(pci_net_id))
-        seg_id = network_helper.get_net_info(net_id=pci_net_id, field='segmentation_id', strict=False,
-                                             auto_info=Tenant.get('admin'))
+        seg_id = network_helper.get_network_values(network=pci_net_id, fields='segmentation_id', strict=False,
+                                                   auth_info=Tenant.get('admin'))[0]
         assert seg_id, 'Segmentation id of pci net {} is not found'.format(pci_net_id)
 
         if other_pcipt_net_name:
-            extra_pcipt_seg_id = network_helper.get_net_info(net_id=other_pcipt_net_name, field='segmentation_id',
-                                                             strict=False,
-                                                             auto_info=Tenant.get('admin'))
+            extra_pcipt_seg_id = network_helper.get_network_values(network=other_pcipt_net_name,
+                                                                   fields='segmentation_id', strict=False,
+                                                                   auth_info=Tenant.get('admin'))[0]
             seg_id = {pci_net_name: seg_id,
                       other_pcipt_net_name: extra_pcipt_seg_id}
 
@@ -333,7 +331,7 @@ class TestPcipt:
         flavor_id = nova_helper.create_flavor(name='dedicated_{}vcpu'.format(vm_vcpus), ram=1024, vcpus=vm_vcpus)[1]
         ResourceCleanup.add('flavor', flavor_id, scope='module')
         extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'preferred'}
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+        nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
         # Boot vms with 2 {} vifs each, and wait for pingable
         LOG.tc_step("Boot {} vms with 2 {} vifs each".format(vm_num, vif_model))

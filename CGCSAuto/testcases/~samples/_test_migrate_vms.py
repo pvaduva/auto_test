@@ -16,7 +16,7 @@ def less_than_two_hypervisors():
 
 # skip condition based on specific data set
 def vm_tenant2_image_unavailable():
-    table_ = table_parser.table(cli.nova('list', ssh_client=None))   # auth_info unspecified, so it will run cli with primary tenant
+    table_ = table_parser.table(cli.openstack('server list', ssh_client=None))   # auth_info unspecified, so it will run cli with primary tenant
     return 'tenant2-image' not in table_parser.get_column(table_, 'Name')
 
 

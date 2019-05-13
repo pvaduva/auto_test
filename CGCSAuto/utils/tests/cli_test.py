@@ -21,8 +21,8 @@ def teardown_module():
 def test_nova():
     LOG.tc_func_start()
     ProjVar.set_var(SOURCE_CREDENTIAL=True)
-    cli.nova('list')
-    cli.nova('list', auth_info=None)
+    cli.openstack('server list')
+    cli.openstack('server list', auth_info=None)
     ProjVar.set_var(SOURCE_CREDENTIAL=None)
     LOG.tc_func_end()
 
@@ -44,7 +44,7 @@ def test_system():
 
 def test_auth_tenant():
     LOG.tc_func_start()
-    cli.nova('list', auth_info=auth.Tenant.TENANT1)
+    cli.openstack('server list', auth_info=auth.Tenant.TENANT1)
     LOG.tc_func_end()
 
 if __name__ == '__main__':

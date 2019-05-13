@@ -22,7 +22,7 @@ def snat_setups(request):
 
     for auth_info in [primary_tenant, other_tenant]:
         tenant_router = network_helper.get_tenant_router(auth_info=auth_info)
-        is_dvr_router = network_helper.get_router_info(router_id=tenant_router, field='distributed')
+        is_dvr_router = network_helper.get_router_values(router_id=tenant_router, fields='distributed')[0]
         if find_dvr == is_dvr_router:
             LOG.fixture_step("Setting primary tenant to {}".format(common.get_tenant_name(auth_info)))
             Tenant.set_primary(auth_info)
@@ -31,14 +31,12 @@ def snat_setups(request):
         skip("No {} router found on system.".format(request.param))
 
     LOG.fixture_step("Update router to enable SNAT")
-    network_helper.update_router_ext_gateway_snat(enable_snat=True)     # Check snat is handled by the keyword
+    network_helper.set_router_gateway(enable_snat=True)     # Check snat is handled by the keyword
 
     def disable_snat():
         LOG.fixture_step("Disable SNAT on tenant router")
         try:
-            network_helper.update_router_ext_gateway_snat(enable_snat=False)
-        except:
-            raise
+            network_helper.set_router_gateway(enable_snat=False)
         finally:
             LOG.fixture_step("Revert primary tenant to {}".format(primary_tenant_name))
             Tenant.set_primary(primary_tenant)
@@ -53,9 +51,8 @@ def snat_setups(request):
         assert ping_res is False, "VM can still be ping'd from outside after SNAT enabled without floating ip."
 
     LOG.fixture_step("Create a floating ip and associate it to VM")
-    floatingip = network_helper.create_floating_ip()[1]
-    ResourceCleanup.add('floating_ip', floatingip, scope='module')
-    network_helper.associate_floating_ip(floatingip, vm_id, fip_val='ip')
+    floatingip = network_helper.create_floating_ip(cleanup='module')[1]
+    network_helper.associate_floating_ip_to_vm(floatingip, vm_id)
 
     LOG.fixture_step("Ping vm's floating ip from NatBox and ensure it's reachable")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=60, use_fip=True)
@@ -66,7 +63,7 @@ def snat_setups(request):
 @fixture()
 def enable_snat_as_teardown(request):
     def enable_snat_teardown():
-        network_helper.update_router_ext_gateway_snat(enable_snat=True)
+        network_helper.set_router_gateway(enable_snat=True)
     request.addfinalizer(enable_snat_teardown)
 
 
@@ -109,7 +106,7 @@ def test_snat_vm_actions(snat_setups, snat):
     vm_ = snat_setups[0]
     snat = True if snat == 'snat_enabled' else False
     LOG.tc_step("Update tenant router external gateway to set SNAT to {}".format(snat))
-    network_helper.update_router_ext_gateway_snat(enable_snat=snat)
+    network_helper.set_router_gateway(enable_snat=snat)
 
     # Allow router update to complete, since we've seen cases where ping vm pass but ssh fail
     time.sleep(30)
@@ -164,7 +161,7 @@ def test_snat_vm_actions(snat_setups, snat):
     LOG.tc_step("Resize the vm to a flavor with 2 dedicated cpus and verify ping from VM")
     new_flv = nova_helper.create_flavor(name='ded', vcpus=2)[1]
     ResourceCleanup.add('flavor', new_flv, scope='module')
-    nova_helper.set_flavor_extra_specs(new_flv, **{FlavorSpec.CPU_POLICY: 'dedicated'})
+    nova_helper.set_flavor(new_flv, **{FlavorSpec.CPU_POLICY: 'dedicated'})
 
     vm_helper.resize_vm(vm_, new_flv)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, use_fip=snat)
@@ -207,7 +204,7 @@ def test_snat_evacuate_vm(snat_setups, snat):
 
     snat = True if snat == 'snat_enabled' else False
     LOG.tc_step("Update tenant router external gateway to set SNAT to {}".format(snat))
-    network_helper.update_router_ext_gateway_snat(enable_snat=snat)
+    network_helper.set_router_gateway(enable_snat=snat)
 
     time.sleep(30)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=True)
@@ -262,7 +259,7 @@ def test_snat_computes_lock_reboot(snat_setups):
         - Disable SNAT on router    (module)
 
     """
-    hypervisors = host_helper.get_hypervisors(state='up', status='enabled')
+    hypervisors = host_helper.get_hypervisors(state='up')
     if len(hypervisors) > 3:
         skip("More than 3 hypervisors on system. Skip to reduce run time.")
 
@@ -333,7 +330,7 @@ def test_snat_reset_router_ext_gateway(snat_setups):
     vm_helper.ping_ext_from_vm(vm_, use_fip=True)
 
     LOG.tc_step("Disassociate floatingip from vm and verify it's successful.")
-    network_helper.disassociate_floating_ip(floating_ip=fip)
+    network_helper.unset_floating_ip(floating_ip=fip, port=True)
     # assert not network_helper.get_floating_ip_info(fip=fip, field='fixed_ip_address'), \
     #     "Floating ip {} still attached to fixed ip".format(fip)
 
@@ -344,13 +341,13 @@ def test_snat_reset_router_ext_gateway(snat_setups):
     assert ping_res is False, "VM can still be ping'd from outside after clearing router gateway."
 
     LOG.tc_step("Set router gateway with the same fixed ip")
-    network_helper.set_router_gateway(clear_first=False, fixed_ip=fixed_ip, enable_snat=True)
+    network_helper.set_router_gateway(clear_first=False, fixed_ips=fixed_ip, enable_snat=True)
 
     LOG.tc_step("Verify SNAT is enabled by default after setting router gateway.")
     assert network_helper.get_router_ext_gateway_info()['enable_snat'], "SNAT is not enabled by default."
 
     LOG.tc_step("Associate floating ip to vm")
-    network_helper.associate_floating_ip(floating_ip=fip, vm_id=vm_)
+    network_helper.associate_floating_ip_to_vm(floating_ip=fip, vm_id=vm_)
 
     LOG.tc_step("Verify vm can ping to and be ping'd from outside")
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, fail_ok=False)

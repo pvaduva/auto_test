@@ -15,7 +15,7 @@ def setup_port_security():
         common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=TiSPath.USERDATA)
 
     LOG.fixture_step("Enable port security ml2 extension driver on system")
-    system_helper.update_ml2_extension_drivers(drivers='port_security')
+    system_helper.add_ml2_extension_drivers(drivers='port_security')
 
     LOG.fixture_step("Select neutron networks to test")
     internal_net_id = network_helper.get_internal_net_id()
@@ -58,7 +58,7 @@ def test_neutron_port_security(setup_port_security, port_security):
 
     port_security_enabled = True if port_security == 'enabled' else False
     LOG.tc_step("Ensure port security is {} on neutron networks".format(port_security))
-    internal_net_port_security = eval(network_helper.get_net_show_values(internal_net_id, 'port_security_enabled')[0])
+    internal_net_port_security = eval(network_helper.get_network_values(internal_net_id, 'port_security_enabled')[0])
     if internal_net_port_security is not port_security_enabled:
         LOG.info('Set port security to {} on existing neutron networks'.format(port_security))
         networks = network_helper.get_networks(auth_info=Tenant.get('admin'))

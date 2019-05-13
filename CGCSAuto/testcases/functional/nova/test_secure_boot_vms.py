@@ -63,7 +63,7 @@ def create_image_with_metadata(guest_os, property_key, values, disk_format, cont
             image_ids.append(image_id)
 
             LOG.tc_step("Verify image property is set correctly via glance image-show.")
-            actual_property_val = glance_helper.get_image_properties(image_id, property_key)[property_key]
+            actual_property_val = glance_helper.get_image_properties(image_id, property_key)[0]
             assert value.lower() == actual_property_val.lower(), \
                 "Actual image property {} value - {} is different than set value - {}".format(
                     property_key, actual_property_val, value)
@@ -93,7 +93,7 @@ def test_vm_actions_secure_boot_vm():
     ResourceCleanup.add('flavor', flavor_id)
     # boot a vm using the above image
     for image_id in image_ids:
-        volume_ids.append(cinder_helper.create_volume(image_id=image_id[0], size=5, cleanup='function')[1])
+        volume_ids.append(cinder_helper.create_volume(source_id=image_id[0], size=5, cleanup='function')[1])
 
     block_device_dic = [{'id': volume_ids[1], 'source': 'volume', 'bootindex': 0},
                         {'id': volume_ids[0], 'source': 'volume', 'bootindex': 1}]
@@ -138,7 +138,7 @@ def test_lock_unlock_secure_boot_vm():
     ResourceCleanup.add('flavor', flavor_id)
     # boot a vm using the above image
     for image_id in image_ids:
-        volume_ids.append(cinder_helper.create_volume(image_id=image_id[0], size=5, cleanup='function')[1])
+        volume_ids.append(cinder_helper.create_volume(source_id=image_id[0], size=5, cleanup='function')[1])
 
     block_device_dic = [{'id': volume_ids[1], 'source': 'volume', 'bootindex': 0},
                         {'id': volume_ids[0], 'source': 'volume', 'bootindex': 1}]
@@ -178,7 +178,7 @@ def test_host_reboot_secure_boot_vm():
     ResourceCleanup.add('flavor', flavor_id)
     # boot a vm using the above image
     for image_id in image_ids:
-        volume_ids.append(cinder_helper.create_volume(image_id=image_id[0], size=5, cleanup='function')[1])
+        volume_ids.append(cinder_helper.create_volume(source_id=image_id[0], size=5, cleanup='function')[1])
 
     block_device_dic = [{'id': volume_ids[1], 'source': 'volume', 'bootindex': 0},
                         {'id': volume_ids[0], 'source': 'volume', 'bootindex': 1}]

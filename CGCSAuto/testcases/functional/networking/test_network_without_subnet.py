@@ -4,14 +4,14 @@ from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 from consts.cgcs import VMStatus
-from keywords import network_helper, nova_helper, vm_helper, system_helper
+from keywords import network_helper, vm_helper, system_helper
 
 
 @fixture(scope='module')
 def base_vm(setups):
     LOG.fixture_step("Create a network without subnet with port security disabled")
     net_without_subnet = network_helper.create_network(name='net_without_subnet', port_security=False,
-                                                  cleanup='module')[1]
+                                                       cleanup='module')[1]
     
     LOG.fixture_step("Create a VM with one nic using network without subnet")
     mgmt_nic = {'net-id': network_helper.get_mgmt_net_id()}
@@ -30,16 +30,13 @@ def setups(request):
         skip("Feature only supported by AVS")
     
     LOG.fixture_step("Add port_security service parameter")
-    system_helper.update_ml2_extension_drivers(drivers='port_security')
+    system_helper.add_ml2_extension_drivers(drivers='port_security')
 
-    network_quota = network_helper.get_quota('network')
-    instance_quota = nova_helper.get_quotas('instances')[0]
-    network_helper.update_quotas(network=network_quota + 5)
-    nova_helper.update_quotas(instances=instance_quota + 5)
+    instance_quota, network_quota = vm_helper.get_quotas(quotas=('instances', 'networks'))
+    vm_helper.set_quotas(networks=network_quota+5, instances=instance_quota+5)
 
     def _revert_quota():
-        network_helper.update_quotas(network=network_quota)
-        nova_helper.update_quotas(instances=instance_quota)
+        vm_helper.set_quotas(networks=network_quota, instances=instance_quota)
     request.addfinalizer(_revert_quota)
 
 
@@ -105,7 +102,8 @@ def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_param, vif_mod
                                             port_ip=ip_addrs[0], init_port_ip=init_ip)
 
 
-def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, net_without_subnet, attach_param):
+def _pre_action_network_without_subnet(base_vm_id, vm_under_test, vm_actions, vif_model, net_without_subnet,
+                                       attach_param):
 
     """
 

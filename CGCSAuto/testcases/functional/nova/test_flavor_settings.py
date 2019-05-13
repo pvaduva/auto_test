@@ -25,7 +25,7 @@ def test_flavor_default_specs():
     LOG.tc_step("Create flavor with minimal input.")
     flavor = nova_helper.create_flavor(cleanup='function', add_extra_specs=False)[1]
 
-    extra_specs = nova_helper.get_flavor_extra_specs(flavor=flavor)
+    extra_specs = nova_helper.get_flavor_properties(flavor=flavor)
     LOG.tc_step("Check local_image storage is by default included in flavor extra specs")
     assert not extra_specs, "Flavor {} extra specs is not empty by default: {}".format(flavor, extra_specs)
 
@@ -59,9 +59,9 @@ def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):
         extra_spec = {extra_spec_name: value}
 
         LOG.tc_step("Set flavor extra spec to: {} and verify extra spec is set successfully.".format(extra_spec))
-        nova_helper.set_flavor_extra_specs(flavor=flavor_to_test, **extra_spec)
+        nova_helper.set_flavor(flavor=flavor_to_test, **extra_spec)
 
-        post_extra_spec = nova_helper.get_flavor_extra_specs(flavor=flavor_to_test)
+        post_extra_spec = nova_helper.get_flavor_properties(flavor=flavor_to_test)
         assert post_extra_spec[extra_spec_name] == value, "Actual flavor extra specs: {}".format(post_extra_spec)
 
 

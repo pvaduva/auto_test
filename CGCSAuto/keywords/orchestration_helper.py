@@ -72,7 +72,7 @@ def create_strategy(orchestration, controller_apply_type=None, storage_apply_typ
             args += ' {} {}'.format(key, val)
 
     LOG.info("Creating {} orchestration strategy with arguments: {} {}".format(orchestration, cmd, args))
-    rc, output = cli.sw_manager(cmd, args, ssh_client=conn_ssh,  fail_ok=fail_ok, rtn_list=True)
+    rc, output = cli.sw_manager(cmd, args, ssh_client=conn_ssh, fail_ok=fail_ok, rtn_code=True)
     LOG.info("Verifying if the {} orchestration strategy is created".format(orchestration))
     if rc != 0:
         msg = "Create {} strategy failed: {}".format(orchestration, output)
@@ -152,7 +152,7 @@ def apply_strategy(orchestration, timeout=OrchestrationPhaseTimeout.APPLY, conn_
     else:
         cmd = "upgrade-strategy apply"
 
-    rc, output = cli.sw_manager(cmd, ssh_client=conn_ssh,  fail_ok=fail_ok, rtn_list=True)
+    rc, output = cli.sw_manager(cmd, ssh_client=conn_ssh, fail_ok=fail_ok, rtn_code=True)
 
     if rc != 0:
         return 1, output
@@ -223,7 +223,7 @@ def delete_strategy(orchestration, check_first=True, fail_ok=False, conn_ssh=Non
             elif strategy_state == OrchStrategyState.ABORTING:
                 wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.ABORT)
 
-    rc, output = cli.sw_manager(cmd, 'delete', ssh_client=conn_ssh, fail_ok=fail_ok, rtn_list=True)
+    rc, output = cli.sw_manager(cmd, 'delete', ssh_client=conn_ssh, fail_ok=fail_ok, rtn_code=True)
 
     if rc != 0:
         return 1, output

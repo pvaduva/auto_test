@@ -29,7 +29,7 @@ def configure_murano(request):
                 for p in pk_ids:
                     murano_helper.delete_package(p)
 
-                ret, out = murano_helper.enable_disable_murano(enable=False, enable_disable_murano_agent=True,
+                ret, out = murano_helper.enable_disable_murano(enable=False, enable_disable_agent=True,
                                                                fail_ok=True)
                 assert ret == 0, "Murano disable failed"
 
@@ -37,7 +37,7 @@ def configure_murano(request):
 
     # enable Murano and murano agent
     LOG.fixture_step("Enable Murano and Murano aget... ")
-    ret, out = murano_helper.enable_disable_murano(enable_disable_murano_agent=True)
+    ret, out = murano_helper.enable_disable_murano(enable_disable_agent=True)
     assert ret == 0, "Murano enable failed"
 
 
@@ -73,7 +73,7 @@ def test_murano(configure_murano):
     LOG.tc_step("Setting and Updating  Murano image... ")
     properties = '{\"title\": \"Debain 8 image with murano agent\", \"type\": \"linux\"}'
     args = '--property murano_image_info=\'{}\' {}'.format(properties, img_id)
-    cli.openstack('image set', args,  auth_info=Tenant.get('admin'), rtn_list=True)
+    cli.openstack('image set', args, auth_info=Tenant.get('admin'), rtn_code=True)
 
     LOG.info('Image properties have been updated')
 

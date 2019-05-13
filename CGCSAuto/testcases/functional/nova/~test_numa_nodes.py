@@ -42,7 +42,7 @@ def test_flavor_setting_numa_negative(vcpus, vswitch_affinity, numa_nodes, numa0
             specs[key] = val
 
     LOG.tc_step("Attempt to set following extra spec to flavor {} and ensure it's rejected: {}".format(flv_id, specs))
-    code, output = nova_helper.set_flavor_extra_specs(flv_id, fail_ok=True, **specs)
+    code, output = nova_helper.set_flavor(flv_id, fail_ok=True, **specs)
     assert 1 == code, "Invalid extra spec is not rejected. Details: {}".format(output)
     assert eval(expt_err) in output, "Expected error message is not found"
 
@@ -53,7 +53,7 @@ def flavor_2_nodes(request):
     Create basic flavor with 2 vcpus
     """
     flavor = nova_helper.create_flavor('two_numa_nodes', vcpus=2)[1]
-    nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.NUMA_NODES: 2})
+    nova_helper.set_flavor(flavor, **{FlavorSpec.NUMA_NODES: 2})
 
     def delete():
         nova_helper.delete_flavors(flavor)
@@ -91,11 +91,11 @@ def test_2_nodes_set_guest_numa_node_value(flavor_2_nodes, cpu_policy, numa_0, n
     """
 
     LOG.tc_step("Set flavor cpu_policy spec to {}.".format(cpu_policy))
-    nova_helper.set_flavor_extra_specs(flavor=flavor_2_nodes, **{FlavorSpec.CPU_POLICY: cpu_policy})
+    nova_helper.set_flavor(flavor=flavor_2_nodes, **{FlavorSpec.CPU_POLICY: cpu_policy})
 
     args = {FlavorSpec.NUMA_0: numa_0, FlavorSpec.NUMA_1: numa_1}
     LOG.tc_step("Set flavor numa_node spec(s) to {} and verify setting succeeded".format(args))
-    nova_helper.set_flavor_extra_specs(flavor=flavor_2_nodes, **args)
+    nova_helper.set_flavor(flavor=flavor_2_nodes, **args)
 
 
 @mark.parametrize(('cpu_policy', 'numa_0', 'numa_1'), [
@@ -104,11 +104,11 @@ def test_2_nodes_set_guest_numa_node_value(flavor_2_nodes, cpu_policy, numa_0, n
 ])
 def test_2_nodes_set_numa_node_values_reject(flavor_2_nodes, cpu_policy, numa_0, numa_1):
     LOG.tc_step("Set flavor cpu_policy spec to {}.".format(cpu_policy))
-    nova_helper.set_flavor_extra_specs(flavor=flavor_2_nodes, **{FlavorSpec.CPU_POLICY: cpu_policy})
+    nova_helper.set_flavor(flavor=flavor_2_nodes, **{FlavorSpec.CPU_POLICY: cpu_policy})
 
     args = {FlavorSpec.NUMA_0: numa_0, FlavorSpec.NUMA_1: numa_1}
     LOG.tc_step("Attempt set flavor numa_node spec(s) to {} and verify setting rejected".format(args))
-    code, msg = nova_helper.set_flavor_extra_specs(flavor=flavor_2_nodes, fail_ok=True, **args)
+    code, msg = nova_helper.set_flavor(flavor=flavor_2_nodes, fail_ok=True, **args)
     assert 1 == code
 
 
@@ -118,7 +118,7 @@ def flavor_1_node(request):
     Create basic flavor with 2 vcpus and 1 numa node
     """
     flavor = nova_helper.create_flavor('one_numa_node', vcpus=2)[1]
-    nova_helper.set_flavor_extra_specs(flavor, **{FlavorSpec.NUMA_NODES: 1})
+    nova_helper.set_flavor(flavor, **{FlavorSpec.NUMA_NODES: 1})
 
     def delete():
         nova_helper.delete_flavors(flavor)
@@ -154,7 +154,7 @@ def test_1_node_set_guest_numa_node_value_invalid(flavor_1_node, numa_node_spec)
     """
 
     LOG.tc_step("Attempt to set flavor numa_node spec(s) to {} and verify cli is rejected.".format(numa_node_spec))
-    code, output = nova_helper.set_flavor_extra_specs(flavor=flavor_1_node, fail_ok=True, **numa_node_spec)
+    code, output = nova_helper.set_flavor(flavor=flavor_1_node, fail_ok=True, **numa_node_spec)
     assert code == 1, "Expect nova flavor-key set cli to be rejected. Actual: {}".format(output)
 
 
@@ -179,33 +179,33 @@ def flavor_unset(request):
 @mark.p3
 def test_1_node_unset_numa_nodes(flavor_unset):
     LOG.tc_step("Set number of numa nodes to 1 in extra specs")
-    nova_helper.set_flavor_extra_specs(flavor_unset, **{FlavorSpec.NUMA_NODES: 1})
+    nova_helper.set_flavor(flavor_unset, **{FlavorSpec.NUMA_NODES: 1})
 
     LOG.tc_step("Set numa_node.0 spec.")
-    nova_helper.set_flavor_extra_specs(flavor_unset, **{FlavorSpec.NUMA_0: 0})
+    nova_helper.set_flavor(flavor_unset, **{FlavorSpec.NUMA_0: 0})
     LOG.tc_step("Unset numa_node.0 spec and ensure it's successful.")
-    nova_helper.unset_flavor_extra_specs(flavor_unset, FlavorSpec.NUMA_0)
+    nova_helper.unset_flavor(flavor_unset, FlavorSpec.NUMA_0)
 
     LOG.tc_step("Set numa_node.0 spec.")
-    nova_helper.set_flavor_extra_specs(flavor_unset, **{FlavorSpec.NUMA_0: 0})
+    nova_helper.set_flavor(flavor_unset, **{FlavorSpec.NUMA_0: 0})
     LOG.tc_step("Unset numa_nodes spec and ensure it's successful.")
-    nova_helper.unset_flavor_extra_specs(flavor_unset, FlavorSpec.NUMA_0)
+    nova_helper.unset_flavor(flavor_unset, FlavorSpec.NUMA_0)
 
 
 @mark.p3
 def test_2_nodes_unset_numa_nodes(flavor_unset):
     LOG.tc_step("Set number of numa nodes to 2 in extra specs")
-    nova_helper.set_flavor_extra_specs(flavor_unset, **{FlavorSpec.NUMA_NODES: 2})
+    nova_helper.set_flavor(flavor_unset, **{FlavorSpec.NUMA_NODES: 2})
 
     LOG.tc_step("Set numa_node.0 and numa_node.1 specs.")
-    nova_helper.set_flavor_extra_specs(flavor_unset, **{FlavorSpec.NUMA_0: 0, FlavorSpec.NUMA_1: 1})
+    nova_helper.set_flavor(flavor_unset, **{FlavorSpec.NUMA_0: 0, FlavorSpec.NUMA_1: 1})
     LOG.tc_step("Unset numa_node.0 and numa_node.1 specs and ensure it's successful.")
-    nova_helper.unset_flavor_extra_specs(flavor_unset, [FlavorSpec.NUMA_0, FlavorSpec.NUMA_1])
+    nova_helper.unset_flavor(flavor_unset, [FlavorSpec.NUMA_0, FlavorSpec.NUMA_1])
 
     LOG.tc_step("Set numa_node.0 and numa_node.1 specs.")
-    nova_helper.set_flavor_extra_specs(flavor_unset, **{FlavorSpec.NUMA_0: 1, FlavorSpec.NUMA_1: 0})
+    nova_helper.set_flavor(flavor_unset, **{FlavorSpec.NUMA_0: 1, FlavorSpec.NUMA_1: 0})
     LOG.tc_step("Unset numa_node.0, numa_node.1, and numa_nodes specs and ensure it's successful.")
-    nova_helper.unset_flavor_extra_specs(flavor_unset, [FlavorSpec.NUMA_NODES, FlavorSpec.NUMA_0, FlavorSpec.NUMA_1])
+    nova_helper.unset_flavor(flavor_unset, [FlavorSpec.NUMA_NODES, FlavorSpec.NUMA_0, FlavorSpec.NUMA_1])
 
 
 @mark.p3
@@ -228,12 +228,12 @@ def test_2_nodes_unset_numa_nodes_reject(flavor_unset):
 
     """
     LOG.tc_step("Set number of numa nodes to 2 and guest numa nodes values in extra specs")
-    nova_helper.set_flavor_extra_specs(flavor_unset,
-                                       **{FlavorSpec.NUMA_NODES: 2, FlavorSpec.NUMA_0: 0, FlavorSpec.NUMA_1: 1})
+    nova_helper.set_flavor(flavor_unset,
+                           **{FlavorSpec.NUMA_NODES: 2, FlavorSpec.NUMA_0: 0, FlavorSpec.NUMA_1: 1})
 
     LOG.tc_step("Attempt to unset numa_nodes extra spec with guest numa node extra spec, and verify cli is rejected.")
-    code, output = nova_helper.unset_flavor_extra_specs(flavor_2_nodes, fail_ok=True, extra_specs=FlavorSpec.NUMA_NODES,
-                                                        check_first=False)
+    code, output = nova_helper.unset_flavor(flavor_2_nodes, fail_ok=True, properties=FlavorSpec.NUMA_NODES,
+                                            check_first=False)
     assert code == 1, "Expect nova flavor-key unset cli to be rejected. Actual: {}".format(output)
 
 
@@ -276,15 +276,15 @@ def test_0_node_set_guest_numa_node_value_reject(flavor_0_node):
     numa_node_spec_0 = {FlavorSpec.NUMA_1: 0}
 
     LOG.tc_step("Attempt to set guest numa node extra spec without numa_nodes extra spec, and verify cli is rejected.")
-    code, output = nova_helper.set_flavor_extra_specs(flavor=flavor_0_node, fail_ok=True, **numa_node_spec_0)
+    code, output = nova_helper.set_flavor(flavor=flavor_0_node, fail_ok=True, **numa_node_spec_0)
     assert 1 == code, "Expect nova flavor-key set cli to be rejected. Actual: {}".format(output)
 
 
 @mark.p3
 def test_0_node_unset_numa_nodes_reject(flavor_0_node):
     LOG.tc_step("Attempt to unset numa nodes spec when it's not in the spec, and verify cli is rejected.")
-    code, output = nova_helper.unset_flavor_extra_specs(flavor_0_node, FlavorSpec.NUMA_NODES, fail_ok=True,
-                                                        check_first=False)
+    code, output = nova_helper.unset_flavor(flavor_0_node, FlavorSpec.NUMA_NODES, fail_ok=True,
+                                            check_first=False)
     assert 1 == code, "Expect nova flavor-key unset cli to be rejected. Actual: {}".format(output)
 
 
@@ -335,7 +335,7 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, no_sim
         extra_specs[FlavorSpec.NUMA_1] = numa_node1
 
     LOG.tc_step("Set following extra specs for flavor {}: {}.".format(extra_specs, flavor))
-    nova_helper.set_flavor_extra_specs(flavor, **extra_specs)
+    nova_helper.set_flavor(flavor, **extra_specs)
 
     LOG.tc_step("Boot vm with flavor {}.".format(flavor))
     vm_id = vm_helper.boot_vm(flavor=flavor, cleanup='function')[1]

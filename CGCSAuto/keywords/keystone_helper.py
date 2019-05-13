@@ -122,7 +122,7 @@ def add_or_remove_role(add_=True, role='admin', project=None, user=None, domain=
     sub_cmd += ' {}'.format(role)
 
     cmd = 'role add' if add_ else 'role remove'
-    res, out = cli.openstack(cmd, sub_cmd, rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh,
+    res, out = cli.openstack(cmd, sub_cmd, rtn_code=True, fail_ok=fail_ok, ssh_client=con_ssh,
                              auth_info=auth_info)
 
     if res == 1:
@@ -238,7 +238,7 @@ def update_user(user, name=None, project=None, password=None, project_doamin=Non
     arg += user
 
     code, output = cli.openstack('user set', arg, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok,
-                                 rtn_list=True)
+                                 rtn_code=True)
 
     if code == 1:
         return code, output
@@ -431,7 +431,7 @@ def create_project(name=None, rtn_val='ID', domain=None, parent=None, descriptio
     arg_str = common.parse_args(args_dict=arg_dict, repeat_arg=True)
     arg_str += ' {}'.format(name)
 
-    code, output = cli.openstack('project create', arg_str, auth_info=auth_info, ssh_client=con_ssh, rtn_list=True,
+    code, output = cli.openstack('project create', arg_str, auth_info=auth_info, ssh_client=con_ssh, rtn_code=True,
                                  fail_ok=fail_ok)
     if code > 0:
         return 1, output
@@ -488,7 +488,7 @@ def create_user(name=None, rtn_val='name', domain=None, project=None, project_do
     arg_str = '{} {}'.format(common.parse_args(args_dict=arg_dict), name)
 
     code, output = cli.openstack('user create', arg_str, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
-                                 rtn_list=True)
+                                 rtn_code=True)
     if code > 0:
         return 1, output
 

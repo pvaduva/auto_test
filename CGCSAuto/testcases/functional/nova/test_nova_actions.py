@@ -48,10 +48,10 @@ def test_nova_actions(guest_os, cpu_pol, actions):
     if cpu_pol is not None:
         specs = {FlavorSpec.CPU_POLICY: cpu_pol}
         LOG.tc_step("Add following extra specs: {}".format(specs))
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
+        nova_helper.set_flavor(flavor=flavor_id, **specs)
 
     LOG.tc_step("Create a volume from {} image".format(guest_os))
-    vol_id = cinder_helper.create_volume(name='vol-' + guest_os, guest_image=guest_os, image_id=img_id)[1]
+    vol_id = cinder_helper.create_volume(name='vol-' + guest_os, source_id=img_id, guest_image=guest_os)[1]
     ResourceCleanup.add('volume', vol_id)
 
     LOG.tc_step("Boot a vm from above flavor and volume")
@@ -125,13 +125,13 @@ class TestVariousGuests:
         if cpu_pol is not None:
             specs = {FlavorSpec.CPU_POLICY: cpu_pol}
             LOG.tc_step("Add following extra specs: {}".format(specs))
-            nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
+            nova_helper.set_flavor(flavor=flavor_id, **specs)
 
         source_id = image_id
         if boot_source == 'volume':
             LOG.tc_step("Create a volume from {} image".format(guest_os))
-            code, vol_id = cinder_helper.create_volume(name='vol-' + guest_os, image_id=image_id, guest_image=guest_os,
-                                                       fail_ok=True)
+            code, vol_id = cinder_helper.create_volume(name='vol-' + guest_os, source_id=image_id, fail_ok=True,
+                                                       guest_image=guest_os)
             ResourceCleanup.add('volume', vol_id)
 
             assert 0 == code, "Issue occurred when creating volume"

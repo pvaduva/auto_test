@@ -1,23 +1,21 @@
-from  pytest import fixture
-from keywords import network_helper
+from pytest import fixture
+
 from utils.tis_log import LOG
-from keywords import vm_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from keywords import network_helper, vm_helper
 
 
 ######################################################################################
 # us57685_Test Strategy for US57685_AVR_FIP (Accelerated Virtual router Floating IP) #
 ######################################################################################
 
-@fixture(scope='module', autouse=True)
-def fip_setups(request):
-    # Create FIP and Associate VM to FIP
-    floating_ip = network_helper.create_floating_ip()[1]
-    ResourceCleanup.add('floating_ip', floating_ip, scope='module')
 
+@fixture(scope='module', autouse=True)
+def fip_setups():
+    # Create FIP and Associate VM to FIP
+    floating_ip = network_helper.create_floating_ip(cleanup='module')[1]
     vm_id = vm_helper.boot_vm(cleanup='module')[1]
 
-    network_helper.associate_floating_ip(floating_ip=floating_ip, vm_id=vm_id)
+    network_helper.associate_floating_ip_to_vm(floating_ip=floating_ip, vm_id=vm_id)
 
     return vm_id, floating_ip
 
@@ -27,7 +25,7 @@ def obsolete_test_fip(fip_setups):
     Test VM Floating IP  over VM launch, live-migration, cold-migration, pause/unpause, etc
 
     Args:
-        vm (str): vm created by module level test fixture
+        fip_setups: test fixture
 
     Test Setups (module):
         - Create a floating ip

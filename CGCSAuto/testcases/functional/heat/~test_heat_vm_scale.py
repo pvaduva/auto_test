@@ -55,14 +55,14 @@ def __launch_vm_scale_stack():
     image = GuestImages.DEFAULT_GUEST
     high_val = 50
     template_path = os.path.join(ProjVar.get_var('USER_FILE_DIR'), HEAT_SCENARIO_PATH, template_name)
-    key_pair = vm_helper.get_any_keypair()
+    key_pair = vm_helper.get_default_keypair()
     net_id = network_helper.get_mgmt_net_id()
     network = network_helper.get_net_name_from_id(net_id=net_id)
 
     flavor_id = nova_helper.create_flavor(name='heartbeat')[1]
     ResourceCleanup.add('flavor', flavor_id, scope='module')
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     params_string = '-f {} -P FLAVOR={} -P KEYPAIR={} -P IMAGE={} -P NETWORK={} -P HIGH_VALUE={} {}'.\
         format(template_path, flavor_id, key_pair, image, network, high_val, stack_name)
@@ -72,7 +72,6 @@ def __launch_vm_scale_stack():
 
     LOG.fixture_step("Verify first VM is created via heat stack for auto scaling")
     vm_id = nova_helper.get_vm_id_from_name(vm_name=stack_name, strict=False)
-    assert vm_id
 
     return stack_name, vm_id
 

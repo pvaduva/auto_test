@@ -94,7 +94,7 @@ def _boot_vm_vcpu_model(flv_model=None, img_model=None, boot_source='volume', av
     flv_id = nova_helper.create_flavor(name='vcpu_{}'.format(flv_model))[1]
     ResourceCleanup.add('flavor', flv_id)
     if flv_model:
-        nova_helper.set_flavor_extra_specs(flavor=flv_id,  **{FlavorSpec.VCPU_MODEL: flv_model})
+        nova_helper.set_flavor(flavor=flv_id, **{FlavorSpec.VCPU_MODEL: flv_model})
 
     if img_model:
         image_id = glance_helper.create_image(name='vcpu_{}'.format(img_model), cleanup='function',
@@ -105,7 +105,7 @@ def _boot_vm_vcpu_model(flv_model=None, img_model=None, boot_source='volume', av
     if boot_source == 'image':
         source_id = image_id
     else:
-        source_id = cinder_helper.create_volume(name='vcpu_model', image_id=image_id)[1]
+        source_id = cinder_helper.create_volume(name='vcpu_model', source_id=image_id)[1]
         ResourceCleanup.add('volume', source_id)
 
     code, vm, msg, vol = vm_helper.boot_vm(name='vcpu_model', flavor=flv_id, source=boot_source, source_id=source_id,
@@ -167,7 +167,7 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source, cpu_models_supporte
 
         expt_fault = VCPUSchedulerErr.CPU_MODEL_UNAVAIL
         res_bool, vals = vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR')
-        err = nova_helper.get_vm_nova_show_value(vm, field='fault')
+        err = nova_helper.get_vm_fault_message(vm)
 
         assert res_bool, "VM did not reach expected error state. Actual: {}".format(vals)
         assert re.search(expt_fault, err), "Incorrect fault reported. Expected: {} Actual: {}" \
@@ -316,7 +316,7 @@ def _create_flavor_vcpu_model(vcpu_model, root_disk_size=None):
     flv_id = nova_helper.create_flavor(name='vcpu_model_{}'.format(vcpu_model), root_disk=root_disk_size)[1]
     ResourceCleanup.add('flavor', flv_id)
     if vcpu_model:
-        nova_helper.set_flavor_extra_specs(flavor=flv_id, **{FlavorSpec.VCPU_MODEL: vcpu_model})
+        nova_helper.set_flavor(flavor=flv_id, **{FlavorSpec.VCPU_MODEL: vcpu_model})
 
     return flv_id
 
@@ -350,9 +350,9 @@ def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy, cpu_models_supp
     name = '{}_{}'.format(vcpu_model, thread_policy)
     flv_id = nova_helper.create_flavor(name=name, vcpus=2)[1]
     ResourceCleanup.add('flavor', flv_id)
-    nova_helper.set_flavor_extra_specs(flavor=flv_id, **{FlavorSpec.VCPU_MODEL: vcpu_model,
-                                                         FlavorSpec.CPU_POLICY: 'dedicated',
-                                                         FlavorSpec.CPU_THREAD_POLICY: thread_policy})
+    nova_helper.set_flavor(flavor=flv_id, **{FlavorSpec.VCPU_MODEL: vcpu_model,
+                                             FlavorSpec.CPU_POLICY: 'dedicated',
+                                             FlavorSpec.CPU_THREAD_POLICY: thread_policy})
 
     code, vm, msg, vol = vm_helper.boot_vm(name=name, flavor=flv_id, fail_ok=True, cleanup='function')
     ht_hosts = host_helper.get_hypersvisors_with_config(hyperthreaded=True, up_only=True)
@@ -466,7 +466,7 @@ def test_vmx_setting():
 
     LOG.tc_step("Set extra specs for flavor of vcpu model {}".format(host_cpu_model))
     extra_specs = {FlavorSpec.NESTED_VMX: True, FlavorSpec.VCPU_MODEL: host_cpu_model}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Create VM for vcpu model {}".format(host_cpu_model))
     code, vm, msg, vol = vm_helper.boot_vm(flavor=flavor_id, cleanup='function', fail_ok=False)

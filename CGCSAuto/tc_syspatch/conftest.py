@@ -44,7 +44,6 @@ def setup_test_session():
     Returns:
 
     """
-    print("Syspatch test session ...")
     patch_dir = PatchingVars.get_patching_var('PATCH_DIR')
     if not patch_dir:
         patch_base_dir = PatchingVars.get_patching_var('PATCH_BASE_DIR')
@@ -61,12 +60,8 @@ def setup_test_session():
     setups.copy_test_files()
 
     global natbox_ssh
-    natbox = ProjVar.get_var('NATBOX')
-    if natbox['ip'] == 'localhost':
-        natbox_ssh = 'localhost'
-    else:
-        natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('KEYFILE_PATH'))
-        setups.copy_keyfiles(nat_ssh=natbox_ssh, con_ssh=con_ssh)
+    natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('NATBOX'))
+    setups.setup_keypair(nat_ssh=natbox_ssh, con_ssh=con_ssh)
 
     # set build id to be used to upload/write test results
     setups.set_build_info(con_ssh)
@@ -74,24 +69,10 @@ def setup_test_session():
     setups.set_session(con_ssh=con_ssh)
 
 
-@pytest.fixture(scope='function', autouse=True)
-def reconnect_before_test():
-    """
-    Before each test function start, Reconnect to TIS via ssh if disconnection is detected
-    """
-    print("Sys-patch test reconnect before test ...")
-    con_ssh.flush()
-    con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
-    if natbox_ssh and isinstance(natbox_ssh, SSHClient):
-        natbox_ssh.flush()
-        natbox_ssh.connect(retry=False)
-
-
 def pytest_collectstart():
     """
     Set up the ssh session at collectstart. Because skipif condition is evaluated at the collecting test cases phase.
     """
-    print("Sys-patch collectstart ...")
     global con_ssh
     lab = ProjVar.get_var("LAB")
     if 'vbox' in lab['short_name']:
@@ -105,7 +86,9 @@ def pytest_collectstart():
 
 
 def pytest_runtest_teardown():
-
     if not con_ssh._is_connected():
         con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     con_ssh.flush()
+    if natbox_ssh:
+        natbox_ssh.flush()
+        natbox_ssh.connect(retry=False)

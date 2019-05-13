@@ -55,7 +55,7 @@ def get_aggregated_measures(rtn_val='value', resource_type=None, metrics=None, s
     if query_str:
         args += ' --query "{}"'.format(query_str)
 
-    code, out = cli.openstack('metric measures aggregation', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_list=True,
+    code, out = cli.openstack('metric measures aggregation', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_code=True,
                               auth_info=auth_info)
     if code > 0:
         return 1, out
@@ -93,7 +93,7 @@ def get_metric_value(metric_id=None, metric_name=None, resource_id=None, rtn_val
                 raise ValueError("resource_id needs to be provided when using metric_name")
             arg = '"{}"'.format(metric_name)
 
-    code, output = cli.openstack('openstack metric show', arg, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+    code, output = cli.openstack('openstack metric show', arg, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True,
                                  fail_ok=fail_ok)
     if code > 0:
         return output
@@ -129,7 +129,7 @@ def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=True, 
 
     arg += grep_str
 
-    code, output = cli.openstack('metric list', arg, ssh_client=con_ssh, auth_info=auth_info, rtn_list=True,
+    code, output = cli.openstack('metric list', arg, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True,
                                  fail_ok=fail_ok)
     if code > 0:
         return []

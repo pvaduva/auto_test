@@ -70,7 +70,7 @@ def _test_vm_autorecovery_reboot_host(target_host):
         ResourceCleanup.add('flavor', flavor_id)
 
         extra_specs = {FlavorSpec.GUEST_HEARTBEAT: str(heartbeat)}
-        nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+        nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
         LOG.tc_step("Boot a vm with above flavor")
         vm_id = vm_helper.boot_vm(flavor=flavor_id, cleanup='function')[1]

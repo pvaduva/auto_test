@@ -26,8 +26,8 @@ def test_kpi_cinder_volume_creation(collect_kpi):
     init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
     image = glance_helper.get_guest_image(guest_os='tis-centos-guest-qcow2', cleanup='function')
 
-    vol_id = cinder_helper.create_volume(name='20g', cleanup='function', size=20, image_id=image)[1]
-    vol_updated = cinder_helper.get_volume_show_values(vol_id, 'updated_at').split('.')[0]
+    vol_id = cinder_helper.create_volume(name='20g', source_id=image, size=20, cleanup='function')[1]
+    vol_updated = cinder_helper.get_volume_show_values(vol_id, 'updated_at')[0].split('.')[0]
 
     code_download, out_download = \
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=ImageDownload.NAME, host=None,

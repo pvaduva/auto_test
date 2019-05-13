@@ -1,16 +1,8 @@
-import re
-import time
-import random
-from pytest import mark, skip, fixture
+from pytest import skip, fixture
 
 from utils.tis_log import LOG
-from utils.multi_thread import MThread, Events
-
-from consts.cgcs import FlavorSpec, ServerGroupMetadata
-from consts.reasons import SkipHypervisor
-from consts.cli_errs import SrvGrpErr
-from keywords import nova_helper, vm_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
+from consts.cgcs import FlavorSpec
+from keywords import nova_helper, vm_helper
 
 
 @fixture(scope='module')
@@ -22,15 +14,13 @@ def setups(no_simplex):
 
     LOG.fixture_step("Create a flavor with server group messaging enabled")
     flavor_id = nova_helper.create_flavor('srv_grp_msg', storage_backing=storage_backing)[1]
-    nova_helper.set_flavor_extra_specs(flavor_id, **{FlavorSpec.SRV_GRP_MSG: True})
+    nova_helper.set_flavor(flavor_id, **{FlavorSpec.SRV_GRP_MSG: True})
 
     LOG.fixture_step("Create affinity and anti-affinity server groups")
     affinity_grp = nova_helper.create_server_group(policy='affinity')[1]
-    anti_affinity_grp = nova_helper.create_server_group(policy='anti_affinity')[1]
 
-    if len(hosts) < 3:
-        LOG.fixture_step("Turn on best effort flag for anti-affinity group due to less than 3 computes on system")
-        nova_helper.set_server_group_metadata(anti_affinity_grp, **{ServerGroupMetadata.BEST_EFFORT: True})
+    policy = 'soft_anti_affinity' if len(hosts) < 3 else 'anti_affinity'
+    anti_affinity_grp = nova_helper.create_server_group(policy=policy)[1]
 
     return hosts, flavor_id, {'affinity': affinity_grp, 'anti_affinity': anti_affinity_grp}
 
@@ -57,7 +47,7 @@ def test_launch_server_group_vms(setups):
             vm_name = '{}_{}'.format(policy, source)
             vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, hint={'group': srv_grp_id}, source=source)[1]
 
-            server_group_output = nova_helper.get_vm_nova_show_values(vm_id, ['wrs-sg:server_group'])[0]
+            server_group_output = nova_helper.get_vm_values(vm_id, 'wrs-sg:server_group')[0]
             assert srv_grp_id in server_group_output, \
                 'Server group info does not appear in nova show for vm {}'.format(vm_id)
 

@@ -1,8 +1,7 @@
-from pytest import fixture, mark, skip
+from pytest import fixture, skip
 
 from utils.tis_log import LOG
 from keywords import vm_helper, network_helper, nova_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module', autouse=True)
@@ -10,11 +9,11 @@ def update_net_quota(request):
     if not system_helper.is_avs():
         skip('Feature only supported by AVS')
 
-    network_quota = network_helper.get_quota('network')
-    network_helper.update_quotas(network=network_quota + 6)
+    network_quota = vm_helper.get_quotas('networks')[0]
+    vm_helper.set_quotas(networks=network_quota + 6)
 
     def _revert_quota():
-        network_helper.update_quotas(network=network_quota)
+        vm_helper.set_quotas(networks=network_quota)
     request.addfinalizer(_revert_quota)
 
 
@@ -80,13 +79,12 @@ def test_port_trunking():
 
     LOG.tc_step("Create Networks to be used by trunk")
     for net in network_names:
-        net_ids.append(network_helper.create_network(name=net)[1])
-        ResourceCleanup.add('network', net_ids[-1])
+        net_ids.append(network_helper.create_network(name=net, cleanup='function')[1])
 
     LOG.tc_step("Create Subnet on the Network Created")
     for sub, network in zip(sub_nets, net_ids):
-        subnet_ids.append(network_helper.create_subnet(net_id=network, cidr=sub, no_gateway=True)[1])
-        ResourceCleanup.add('subnet', subnet_ids[-1])
+        subnet_ids.append(network_helper.create_subnet(network=network, subnet_range=sub, gateway='none',
+                                                       cleanup='function')[1])
 
     # Create Trunks
     LOG.tc_step("Create Parent port for trunk 1")
@@ -106,8 +104,8 @@ def test_port_trunking():
                     {'port': t1_sub_port2_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_2}]
 
     LOG.tc_step("Create port trunk 1")
-    trunk1_id = network_helper.create_trunk(t1_parent_port_id, name='trunk-1', sub_ports=t1_sub_ports)[1]
-    ResourceCleanup.add('trunk', trunk1_id)
+    trunk1_id = network_helper.create_trunk(t1_parent_port_id, name='trunk-1', sub_ports=t1_sub_ports,
+                                            cleanup='function')[1]
 
     LOG.tc_step("Boot a VM with mgmt net and trunk port")
     mgmt_net_id = network_helper.get_mgmt_net_id()
@@ -126,18 +124,15 @@ def test_port_trunking():
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 2")
     t2_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk2_subport_1, mac_addr=t2_parent_port_mac,
                                                  wrs_vif=vif_model, cleanup='function')[1]
-    ResourceCleanup.add('port', t2_sub_port1_id)
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 2")
     t2_sub_port2_id = network_helper.create_port(net_ids[2], name=trunk2_subport_2, mac_addr=t2_parent_port_mac,
                                                  wrs_vif=vif_model, cleanup='function')[1]
-    ResourceCleanup.add('port', t2_sub_port2_id)
 
     t2_sub_ports = [{'port': t2_sub_port1_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_1},
                     {'port': t2_sub_port2_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_2}]
 
     LOG.tc_step("Create port trunk 2")
-    trunk2_id = network_helper.create_trunk(t2_parent_port_id, name='trunk-2')[1]
-    ResourceCleanup.add('trunk', trunk2_id)
+    trunk2_id = network_helper.create_trunk(t2_parent_port_id, name='trunk-2', cleanup='function')[1]
 
     LOG.tc_step("Boot a VM with mgmt net and trunk port")
     mgmt_net_id = network_helper.get_mgmt_net_id()
@@ -147,7 +142,7 @@ def test_port_trunking():
     vm2_id = vm_helper.boot_vm(name='vm-with-trunk2-port', nics=nics_2, cleanup='function')[1]
 
     LOG.tc_step("Add the sub ports to the second truck")
-    network_helper.add_trunk_subports(trunk2_id, sub_ports=t2_sub_ports)
+    network_helper.set_trunk(trunk2_id, sub_ports=t2_sub_ports)
 
     LOG.tc_step("Setup VLAN interfaces inside guest")
     _bring_up_vlan_interface(vm2_id, 'eth1', [segment_1])
@@ -165,7 +160,7 @@ def test_port_trunking():
 
     # unset the subport on trunk_1 and try the ping (it will fail)
     LOG.tc_step("Removing a subport from trunk and ping on vlan interface inside guest")
-    ret_code_10 = network_helper.remove_trunk_subports(trunk1_id, sub_ports=[t1_sub_port1_id])[0]
+    ret_code_10 = network_helper.unset_trunk(trunk1_id, sub_ports=[t1_sub_port1_id])[0]
     assert ret_code_10 == 0, "Subports not removed as expected."
 
     with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
@@ -176,7 +171,7 @@ def test_port_trunking():
     # set the subport on trunk_1 and try the ping (it will work)
     LOG.tc_step(" Add back the subport to trunk and ping on vlan interface inside guest")
     t1_sub_port = [{'port': t1_sub_port1_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_1}]
-    network_helper.add_trunk_subports(trunk1_id, sub_ports=t1_sub_port)
+    network_helper.set_trunk(trunk1_id, sub_ports=t1_sub_port)
 
     with vm_helper.ssh_to_vm_from_natbox(vm2_id) as vm2_ssh:
         LOG.tc_step("Ping on vlan interface from guest")
@@ -206,7 +201,7 @@ def test_port_trunking():
 
         vm_host = nova_helper.get_vm_host(vm2_id)
 
-        vm_on_target_host = nova_helper.get_vms_on_hypervisor(vm_host)
+        vm_on_target_host = nova_helper.get_vms_on_host(vm_host)
 
     LOG.tc_step("Reboot VMs host {} and ensure vms are evacuated to other host".format(vm_host))
     vm_helper.evacuate_vms(host=vm_host, vms_to_check=vm2_id, ping_vms=True)
@@ -220,7 +215,7 @@ def test_port_trunking():
         network_helper.ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
 
     LOG.tc_step("Attempt to delete trunk when in use, expect pass for AVS only")
-    code = network_helper.delete_trunk(trunk_id=trunk1_id, fail_ok=True)[0]
+    code = network_helper.delete_trunks(trunks=trunk1_id, fail_ok=True)[0]
 
     if system_helper.is_avs():
         assert 0 == code, "Failed to delete port trunk when it's used by a running VM wiht AVS"
@@ -261,13 +256,12 @@ def test_port_trunking_basic():
 
     LOG.tc_step("Create Networks to be used by trunk")
     for net in network_names:
-        net_ids.append(network_helper.create_network(name=net)[1])
-        ResourceCleanup.add('network', net_ids[-1])
+        net_ids.append(network_helper.create_network(name=net, cleanup='function')[1])
 
     LOG.tc_step("Create Subnet on the Network Created")
     for sub, network in zip(sub_nets, net_ids):
-        subnet_ids.append(network_helper.create_subnet(net_id=network, cidr=sub, no_gateway=True)[1])
-        ResourceCleanup.add('subnet', subnet_ids[-1])
+        subnet_ids.append(network_helper.create_subnet(network=network, subnet_range=sub, gateway='none',
+                                                       cleanup='function')[1])
 
     # Create Trunks
     LOG.tc_step("Create Parent port for trunk 1")
@@ -289,18 +283,18 @@ def test_port_trunking_basic():
                     {'port': t1_sub_port2_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_2}]
 
     LOG.tc_step("Create port trunk 1")
-    trunk1_id = network_helper.create_trunk(t1_parent_port_id, name='trunk-1', sub_ports=t1_sub_ports)[1]
-    ResourceCleanup.add('trunk', trunk1_id)
+    trunk1_id = network_helper.create_trunk(t1_parent_port_id, name='trunk-1', sub_ports=t1_sub_ports,
+                                            cleanup='function')[1]
 
     LOG.tc_step("Attempt to add a port with same segment id and verify it's rejected")
     t1_sub_port2 = [{'port': t1_sub_port3_id, 'segmentation-type': 'vlan', 'segmentation-id': segment_1}]
-    ret_code = network_helper.add_trunk_subports(trunk1_id, t1_sub_port2, fail_ok=True)[0]
+    ret_code = network_helper.set_trunk(trunk1_id, t1_sub_port2, fail_ok=True)[0]
     assert ret_code == 1, "Subport addition with the same vlan id is not rejected."
 
     LOG.tc_step("Attempt to add subport with out of range vlan id, and verify it's rejected")
     out_of_range_id = 5000
     t1_sub_port3 = [{'port': t1_sub_port3_id, 'segmentation-type': 'vlan', 'segmentation-id': out_of_range_id}]
-    ret_code_2 = network_helper.add_trunk_subports(trunk1_id, t1_sub_port3, fail_ok=True)[0]
+    ret_code_2 = network_helper.set_trunk(trunk1_id, t1_sub_port3, fail_ok=True)[0]
     assert ret_code_2 == 1, "Subport addition with out of range vlan id is not rejected."
 
     LOG.tc_step("Attempt to delete a port that is used by the trunk, and verify it's rejected")

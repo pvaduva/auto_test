@@ -515,7 +515,7 @@ def create_flavor(vm_type, flavor_type=None, name=core_flavor_name):
         extra_specs['sw:wrs:auto_recovery'] = 'true'
 
     flavor_id = nova_helper.create_flavor(name=name)[1]
-    nova_helper.set_flavor_extra_specs(flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor_id, **extra_specs)
 
     if flavor_type is not None:
         g_flavors[flavor_type] = flavor_id

@@ -15,7 +15,7 @@ def keypairs_pg(tenant_home_pg_container, request):
     LOG.fixture_step('Go to Project > Compute > Key Pairs')
     keypairs_pg = keypairspage.KeypairsPage(tenant_home_pg_container.driver, port=tenant_home_pg_container.port)
     keypairs_pg.go_to_target_page()
-    keypairs_list = nova_helper.get_key_pair()
+    keypairs_list = nova_helper.get_keypairs()
     if KEYPAIR_NAME in keypairs_list:
         keypairs_pg.delete_keypair(KEYPAIR_NAME)
 

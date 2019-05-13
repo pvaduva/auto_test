@@ -117,7 +117,7 @@ class TestLocalStorage:
         return ''
 
     def import_storprofile_profile(self, profile_file=None):
-        rtn_code, msg = cli.system('profile-import {}'.format(profile_file), rtn_list=True)
+        rtn_code, msg = cli.system('profile-import {}'.format(profile_file), rtn_code=True)
         LOG.info('rtn:{}, msg:{}'.format(rtn_code, msg))
         return rtn_code, msg
 

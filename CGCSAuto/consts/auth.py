@@ -18,7 +18,8 @@ class Tenant:
         'password': __PASSWORD,
         'tenant': 'tenant1',
         'auth_url': __URL,
-        'region': __REGION
+        'region': __REGION,
+        'nova_keypair': 'keypair-tenant1'
     }
 
     TENANT2 = {
@@ -26,7 +27,8 @@ class Tenant:
         'password': __PASSWORD,
         'tenant': 'tenant2',
         'auth_url': __URL,
-        'region': __REGION
+        'region': __REGION,
+        'nova_keypair': 'keypair-tenant2'
     }
 
     @classmethod
@@ -260,7 +262,7 @@ class SvcCgcsAuto:
     HOME = '/home/svc-cgcsauto'
     SANDBOX = '/sandbox'
     HOSTNAME = 'yow-cgcs-test'
-    PROMPT = '[\[]?svc-cgcsauto@.*\$[ ]?'
+    PROMPT = r'[\[]?svc-cgcsauto@.*\$[ ]?'
 
 
 class CliAuth:
@@ -339,4 +341,3 @@ class CumulusCreds:
         'auth_url': AUTH_URL,
         'region': 'RegionOne'
     }
-

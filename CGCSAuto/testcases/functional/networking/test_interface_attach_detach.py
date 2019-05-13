@@ -88,8 +88,8 @@ def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_f
     flavor_id = nova_helper.create_flavor(vcpus=1, guest_os=guest_os, cleanup='function')[1]
 
     LOG.tc_step("Create a volume from {} image".format(guest_os))
-    code, vol_id = cinder_helper.create_volume(name='vol-' + guest_os, image_id=image_id, guest_image=guest_os,
-                                               fail_ok=True, cleanup='function')
+    code, vol_id = cinder_helper.create_volume(name='vol-' + guest_os, source_id=image_id, fail_ok=True,
+                                               guest_image=guest_os, cleanup='function')
     assert 0 == code, "Issue occurred when creating volume"
     source_id = vol_id
 

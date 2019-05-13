@@ -13,14 +13,16 @@ from consts.timeout import ImageTimeout
 from keywords import common, system_helper, host_helper, dc_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils import table_parser, cli, exceptions
-from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
+from utils.clients.ssh import ControllerClient, get_cli_client
 from utils.tis_log import LOG
 
 
-def get_images(images=None, rtn_val='id', auth_info=Tenant.get('admin'), con_ssh=None, strict=True, exclude=False, **kwargs):
+def get_images(long=False, images=None, rtn_val='id', auth_info=Tenant.get('admin'), con_ssh=None, strict=True,
+               exclude=False, **kwargs):
     """
     Get a list of image id(s) that matches the criteria
     Args:
+        long (bool)
         images (str|list): ids of images to filter from
         rtn_val(str): id or name
         auth_info (dict):
@@ -34,12 +36,10 @@ def get_images(images=None, rtn_val='id', auth_info=Tenant.get('admin'), con_ssh
     Returns (list): list of image ids
 
     """
-    table_ = table_parser.table(cli.glance('image-list', ssh_client=con_ssh, auth_info=auth_info))
+    args = '--long' if long else ''
+    table_ = table_parser.table(cli.openstack('image list', args, ssh_client=con_ssh, auth_info=auth_info))
     if images:
         table_ = table_parser.filter_table(table_, ID=images)
-
-    if not kwargs:
-        return table_parser.get_column(table_, rtn_val)
 
     return table_parser.get_values(table_, rtn_val, strict=strict, exclude=exclude, **kwargs)
 
@@ -58,19 +58,20 @@ def get_image_id_from_name(name=None, strict=False, fail_ok=True, con_ssh=None, 
         Return a random image_id that match the name. else return an empty string
 
     """
-    table_ = table_parser.table(cli.glance('image-list', ssh_client=con_ssh, auth_info=auth_info))
     if name is None:
         name = GuestImages.DEFAULT_GUEST
 
-    image_ids = table_parser.get_values(table_, 'ID', strict=strict, Name=name)
-    image_id = '' if not image_ids else image_ids[0]
-
-    if not image_id:
+    matching_images = get_images(name=name, auth_info=auth_info, con_ssh=con_ssh, strict=strict)
+    if not matching_images:
+        image_id = ''
         msg = "No existing image found with name: {}".format(name)
-        if fail_ok:
-            LOG.warning(msg)
-        else:
+        LOG.warning(msg)
+        if not fail_ok:
             raise exceptions.CommonError(msg)
+    else:
+        image_id = matching_images[0]
+        if len(matching_images) > 1:
+            LOG.warning('More than one glace image found with name {}. Select {}.'.format(name, image_id))
 
     return image_id
 
@@ -248,9 +249,9 @@ def ensure_image_storage_sufficient(guest_os, con_ssh=None):
         return True, image_file_size
 
 
-def create_image(name=None, image_id=None, source_image_file=None,
-                 disk_format=None, container_format=None, min_disk=None, min_ram=None, public=None,
-                 protected=None, cache_raw=False, store=None, wait=None, timeout=ImageTimeout.CREATE, con_ssh=None,
+def create_image(name=None, image_id=None, source_image_file=None, volume=None, visibility='public',force=None,
+                 store=None, disk_format=None, container_format=None, min_disk=None, min_ram=None, tags=None,
+                 protected=None, project=None, project_domain=None, timeout=ImageTimeout.CREATE, con_ssh=None,
                  auth_info=Tenant.get('admin'), fail_ok=False, ensure_sufficient_space=True, sys_con_for_dc=True,
                  wait_for_subcloud_sync=True, cleanup=None, hw_vif_model=None, **properties):
     """
@@ -260,18 +261,21 @@ def create_image(name=None, image_id=None, source_image_file=None,
         name (str): string to be included in image name
         image_id (str): id for the image to be created
         source_image_file (str): local image file to create image from. DefaultImage will be used if unset
+        volume (str)
         disk_format (str): One of these: ami, ari, aki, vhd, vmdk, raw, qcow2, vdi, iso
         container_format (str):  One of these: ami, ari, aki, bare, ovf
         min_disk (int): Minimum size of disk needed to boot image (in gigabytes)
         min_ram (int):  Minimum amount of ram needed to boot image (in megabytes)
-        public (bool): Make image accessible to the public. True if unset.
+        visibility (str): public|private|shared|community
         protected (bool): Prevent image from being deleted.
-        cache_raw (bool): Convert the image to RAW in the background and store it for fast access
         store (str): Store to upload image to
-        wait: Wait for the conversion of the image to RAW to finish before returning the image
+        force (bool)
+        tags (str|tuple|list)
+        project (str|None)
+        project_domain (str|None)
         timeout (int): max seconds to wait for cli return
         con_ssh (SSHClient):
-        auth_info (dict):
+        auth_info (dict|None):
         fail_ok (bool):
         ensure_sufficient_space (bool)
         sys_con_for_dc (bool): create image on system controller if it's distributed cloud
@@ -282,7 +286,7 @@ def create_image(name=None, image_id=None, source_image_file=None,
 
     Returns (tuple): (rtn_code(int), message(str))      # 1, 2 only applicable if fail_ok=True
         - (0, <id>, "Image <id> is created successfully")
-        - (1, <id or ''>, <stderr>)     # glance image-create cli rejected
+        - (1, <id or ''>, <stderr>)     # openstack image create cli rejected
         - (2, <id>, "Image status is not active.")
     """
 
@@ -291,13 +295,15 @@ def create_image(name=None, image_id=None, source_image_file=None,
     default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2]
 
     file_path = source_image_file
-    if not file_path:
+    if not file_path and not volume:
         img_dir = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
         file_path = "{}/{}".format(img_dir, default_guest_img)
-    if 'win' in file_path and 'os_type' not in properties:
-        properties['os_type'] = 'windows'
-    elif 'ge_edge' in file_path and 'hw_firmware_type' not in properties:
-        properties['hw_firmware_type'] = 'uefi'
+
+    if file_path:
+        if 'win' in file_path and 'os_type' not in properties:
+            properties['os_type'] = 'windows'
+        elif 'ge_edge' in file_path and 'hw_firmware_type' not in properties:
+            properties['hw_firmware_type'] = 'uefi'
 
     if hw_vif_model:
         properties[ImageMetadata.VIF_MODEL] = hw_vif_model
@@ -343,37 +349,33 @@ def create_image(name=None, image_id=None, source_image_file=None,
         else:
             disk_format = 'qcow2'
 
-    optional_args = {
+    args_dict = {
         '--id': image_id,
-        '--name': name,
-        '--visibility': 'private' if public is False else 'public',
-        '--protected': protected,
         '--store': store,
         '--disk-format': disk_format,
         '--container-format': container_format if container_format else 'bare',
         '--min-disk': min_disk,
         '--min-ram': min_ram,
         '--file': file_path,
-        # '--wait': 0 if wait else 1
+        '--force': True if force else None,
+        '--protected': True if protected else None,
+        '--unprotected': True if protected is False else None,
+        '--tag': tags,
+        '--property': properties,
+        '--project': project,
+        '--project-domain': project_domain,
+        '--volume': volume,
     }
-    optional_args_str = ''
-    if cache_raw:
-        optional_args_str += ' --cache-raw'
-    if properties:
-        for key, value in properties.items():
-            optional_args_str = "{} --property {}={}".format(optional_args_str, key, value)
-
-    for key, value in optional_args.items():
-        if value is not None:
-            optional_args_str = ' '.join([optional_args_str, key, str(value)])
+    if visibility:
+        args_dict['--{}'.format(visibility)] = True
+    args_ = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True, vals_sep=','), name)
 
     try:
-        LOG.info("Creating image {}...".format(name))
-        LOG.info("glance image-create {}".format(optional_args_str))
-        code, output = cli.glance('image-create', optional_args_str, ssh_client=con_ssh, fail_ok=fail_ok,
-                                  auth_info=create_auth, timeout=timeout, rtn_list=True)
+        LOG.info("Creating image {} with args: {}".format(name, args_))
+        code, output = cli.openstack('image create', args_, ssh_client=con_ssh, fail_ok=fail_ok,
+                                     auth_info=create_auth, timeout=timeout, rtn_code=True)
     except:
-        # This is added to help debugging image-create failure in case of insufficient space
+        # This is added to help debugging image create failure in case of insufficient space
         con_ssh.exec_cmd('df -h', fail_ok=True, get_exit_code=False)
         raise
 
@@ -382,10 +384,10 @@ def create_image(name=None, image_id=None, source_image_file=None,
     if cleanup and actual_id:
         ResourceCleanup.add('image', actual_id, scope=cleanup)
 
-    if code == 1:
+    if code > 1:
         return 1, actual_id, output
 
-    in_active = wait_for_image_states(actual_id, con_ssh=con_ssh, auth_info=create_auth, fail_ok=fail_ok)
+    in_active = wait_for_image_status(actual_id, con_ssh=con_ssh, auth_info=create_auth, fail_ok=fail_ok)
     if not in_active:
         return 2, actual_id, "Image status is not active."
 
@@ -428,15 +430,13 @@ def wait_for_image_appear(image_id, auth_info=None, timeout=900, fail_ok=False):
     return False
 
 
-def wait_for_image_states(image_id, status='active', timeout=ImageTimeout.STATUS_CHANGE, check_interval=3,
+def wait_for_image_status(image_id, status='active', timeout=ImageTimeout.STATUS_CHANGE, check_interval=3,
                           fail_ok=True, con_ssh=None, auth_info=None):
+
+    actual_status = None
     end_time = time.time() + timeout
     while time.time() < end_time:
-        table_ = table_parser.table(cli.glance('image-show', image_id, ssh_client=con_ssh, auth_info=auth_info))
-        actual_status = table_parser.get_value_two_col_table(table_, 'status')
-        # table_ = table_parser.table(cli.glance('image-list', ssh_client=con_ssh, auth_info=auth_info))
-        # actual_status = table_parser.get_values(table_, 'Status', ID=image_id)[0]
-
+        actual_status = get_image_show_values(image_id, fields='status', auth_info=auth_info, con_ssh=con_ssh)[0]
         if status.lower() == actual_status.lower():
             LOG.info("Image {} has reached status: {}".format(image_id, status))
             return True
@@ -455,7 +455,7 @@ def wait_for_image_states(image_id, status='active', timeout=ImageTimeout.STATUS
 def _wait_for_images_deleted(images, timeout=ImageTimeout.STATUS_CHANGE, fail_ok=True,
                              check_interval=3, con_ssh=None, auth_info=Tenant.get('admin')):
     """
-        check if a specific field still exist in a specified column of glance image-list
+    check if a specific field still exist in a specified column of openstack image list
 
     Args:
         images (list|str):
@@ -475,9 +475,7 @@ def _wait_for_images_deleted(images, timeout=ImageTimeout.STATUS_CHANGE, fail_ok
     imgs_deleted = []
     end_time = time.time() + timeout
     while time.time() < end_time:
-        table_ = table_parser.table(cli.glance('image-list', ssh_client=con_ssh, auth_info=auth_info))
-        existing_imgs = table_parser.get_column(table_, 'ID')
-
+        existing_imgs = get_images(con_ssh=con_ssh, auth_info=auth_info)
         for img in imgs_to_check:
             if img not in existing_imgs:
                 imgs_to_check.remove(img)
@@ -490,22 +488,24 @@ def _wait_for_images_deleted(images, timeout=ImageTimeout.STATUS_CHANGE, fail_ok
     else:
         if fail_ok:
             return False, tuple(imgs_deleted)
-        raise exceptions.TimeoutException("Timed out waiting for all given images to be removed from glance image-list"
-                                          ". Given images: {}. Images still exist: {}.".format(images, imgs_to_check))
+        raise exceptions.TimeoutException("Timed out waiting for all given images to be removed from openstack "
+                                          "image list. Given images: {}. Images still exist: {}.".
+                                          format(images, imgs_to_check))
 
 
-def image_exists(image_id, con_ssh=None, auth_info=Tenant.get('admin')):
+def image_exists(image, image_val='ID', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Args:
-        image_id:
+        image:
+        image_val: Name or ID
         con_ssh:
         auth_info
 
-    Returns:
+    Returns (bool):
 
     """
-    exit_code, output = cli.glance('image-show', image_id, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
-    return exit_code == 0
+    images = get_images(auth_info=auth_info, con_ssh=con_ssh, rtn_val=image_val)
+    return image in images
 
 
 def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok=False, con_ssh=None,
@@ -516,13 +516,14 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
 
     Args:
         images (list|str): ids of images to delete
-        timeout (int): max time wait for cli to return, and max time wait for images to remove from glance image-list
+        timeout (int): max time wait for cli to return, and max time wait for images to remove from openstack image list
         check_first (bool): whether to check if images exist before attempt to delete
         fail_ok (bool):
         con_ssh (SSHClient):
         auth_info (dict):
         sys_con_for_dc (bool): For DC system, whether to delete image on SystemController.
-        del_subcloud_cache (bool): Whether to delete glance cache on subclouds after glance image-deleted.
+        wait_for_subcloud_sync (bool)
+        del_subcloud_cache (bool): Whether to delete glance cache on subclouds after glance image deleted.
             glance image cache will expire on subcloud after 24 hours otherwise.
     Returns (tuple):
         (-1, "None of the given image(s) exist on system. Do nothing.")
@@ -531,41 +532,36 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
         (2, "Delete image cli ran successfully but some image(s) <ids> did not disappear within <timeout> seconds")
     """
     if not images:
-        return
+        return -1, "No image provided to delete"
 
     LOG.info("Deleting image(s): {}".format(images))
-
     if isinstance(images, str):
         images = [images]
-    images_to_check = list(images)
+    else:
+        images = list(images)
 
     if check_first:
-        imgs_to_del = get_images(images_to_check, auth_info=auth_info, con_ssh=con_ssh)
+        existing_images = get_images(images=images, auth_info=auth_info, con_ssh=con_ssh)
+        imgs_to_del = list(set(existing_images) & set(images))
         if not imgs_to_del:
             msg = "None of the given image(s) exist on system. Do nothing."
             LOG.info(msg)
             return -1, msg
-
-        if not imgs_to_del == images:
-            LOG.info("Some image(s) don't exist. Given images: {}. images to delete: {}.".
-                     format(images, imgs_to_del))
     else:
-        imgs_to_del = images
+        imgs_to_del = list(images)
 
-    imgs_to_del_str = ' '.join(imgs_to_del)
+    args_ = ' '.join(imgs_to_del)
 
     if sys_con_for_dc and ProjVar.get_var('IS_DC'):
         con_ssh = ControllerClient.get_active_controller('RegionOne')
         auth_info = Tenant.get(tenant_dictname=auth_info['tenant'], dc_region='SystemController')
 
-    LOG.debug("images to delete: {}".format(imgs_to_del))
-    exit_code, cmd_output = cli.glance('image-delete', imgs_to_del_str, ssh_client=con_ssh, fail_ok=fail_ok,
-                                       rtn_list=True, auth_info=auth_info, timeout=timeout)
-
-    if exit_code == 1:
+    exit_code, cmd_output = cli.openstack('image delete', args_, ssh_client=con_ssh, fail_ok=fail_ok,
+                                          rtn_code=True, auth_info=auth_info, timeout=timeout)
+    if exit_code > 1:
         return 1, cmd_output
 
-    LOG.info("Waiting for images to be removed from glance image-list: {}".format(imgs_to_del))
+    LOG.info("Waiting for images to be removed from openstack image list: {}".format(imgs_to_del))
     all_deleted, images_deleted = _wait_for_images_deleted(imgs_to_del, fail_ok=fail_ok, con_ssh=con_ssh,
                                                            auth_info=auth_info, timeout=timeout)
 
@@ -594,38 +590,65 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
     return 0, "image(s) deleted successfully"
 
 
-def get_image_properties(image, property_keys, auth_info=Tenant.get('admin'), con_ssh=None):
+def get_image_properties(image, property_keys, rtn_dict=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
 
     Args:
         image (str): id of image
-        property_keys (str|list): list of metadata key(s) to get value(s) for
+        property_keys (str|list\tuple): list of metadata key(s) to get value(s) for
+        rtn_dict (bool): whether to return list or dict
         auth_info (dict): Admin by default
         con_ssh (SSHClient):
 
-    Returns (dict): image metadata in a dictionary.
+    Returns (dict|list): image metadata in a dictionary.
         Examples: {'hw_mem_page_size': small}
     """
     if isinstance(property_keys, str):
         property_keys = [property_keys]
 
-    for property_key in property_keys:
-        str(property_key).replace(':', '_')
+    property_keys = [k.strip().lower().replace(':', '_').replace('-', '_') for k in property_keys]
+    properties = get_image_show_values(image, fields='properties', auth_info=auth_info, con_ssh=con_ssh)[0]
 
-    table_ = table_parser.table(cli.glance('image-show', image, ssh_client=con_ssh, auth_info=auth_info))
-    results = {}
-    for property_key in property_keys:
-        property_key = property_key.strip()
-        value = table_parser.get_value_two_col_table(table_, property_key, strict=True)
-        if value:
-            results[property_key] = value
-
-    return results
+    if rtn_dict:
+        return {k: properties[k] for k in property_keys}
+    else:
+        return [properties[k] for k in property_keys]
 
 
-def get_image_value(image, field, auth_info=Tenant.get('admin'), con_ssh=None):
-    table_ = table_parser.table(cli.glance('image-show', image, ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_value_two_col_table(table_, field)
+def get_image_show_values(image, fields, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
+    """
+    Get glance image values from openstack image show
+    Args:
+        image:
+        fields:
+        auth_info:
+        con_ssh:
+        fail_ok
+
+    Returns (list):
+
+    """
+    if isinstance(fields, str):
+        fields = (fields, )
+    code, output = cli.openstack('image show', image, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
+                                 rtn_code=True)
+    if code > 0:
+        return [None]*len(fields)
+
+    table_ = table_parser.table(output)
+    values = []
+    for field in fields:
+        field = field.lower().strip()
+        value = table_parser.get_value_two_col_table(table_, field, merge_lines=True)
+        if field == 'properties':
+            value = table_parser.convert_value_to_dict(value)
+        elif field in ('min_disk', 'min_ram', 'protected', 'size', 'virtual_size'):
+            try:
+                value = eval(value)
+            except NameError:
+                pass
+        values.append(value)
+    return values
 
 
 def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=None):
@@ -725,7 +748,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None, use
         # copy non-default img from test server
         dest_dir = ProjVar.get_var('USER_FILE_DIR')
 
-        if check_disk and os.path.abspath(dest_dir) == os.path.abspath(WRSROOT_HOME):
+        if check_disk and os.path.abspath(dest_dir) == os.path.normpath(WRSROOT_HOME):
             # Assume image file should not be present on system since large image file should get removed
             if not con_ssh:
                 con_ssh = ControllerClient.get_active_controller()
@@ -738,8 +761,6 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None, use
         try:
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
                                   container_format='bare', fail_ok=False, cleanup=cleanup)[1]
-        except:
-            raise
         finally:
             if rm_image and not re.search('cgcs-guest|tis-centos|ubuntu_14', guest_os):
                 con_ssh = ControllerClient.get_active_controller()
@@ -777,7 +798,7 @@ def set_unset_image_vif_multiq(image, set_=True, fail_ok=False, con_ssh=None, au
     else:
         cmd += ' hw_vif_multiqueue_enabled'
 
-    res, out = cli.openstack(cmd, rtn_list=True, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    res, out = cli.openstack(cmd, rtn_code=True, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
 
     return res, out
 
@@ -814,7 +835,7 @@ def unset_image(image, properties=None, tags=None, con_ssh=None, auth_info=Tenan
         raise ValueError("Nothing to unset. Please specify property or tag to unset")
 
     args = ' '.join(args) + ' {}'.format(image)
-    code, out = cli.openstack('image unset', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_list=True)
+    code, out = cli.openstack('image unset', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_code=True)
     if code > 0:
         return 1, out
 
@@ -939,7 +960,7 @@ def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None
         raise ValueError("Nothing to set")
 
     args += ' {}'.format(image)
-    code, out = cli.openstack('image set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_list=True)
+    code, out = cli.openstack('image set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_code=True)
     if code > 0:
         return 1, out
 
@@ -972,7 +993,6 @@ def check_image_settings(image, check_dict, unset=False, con_ssh=None, auth_info
         actual_val = table_parser.get_value_two_col_table(post_tab, field=field, merge_lines=True)
         if field == 'properties':
             actual_vals = actual_val.split(', ')
-            #actual_vals = re.compile("\,\s(?!\'|\")").split(actual_val)
             actual_vals = ((val.split('=')) for val in actual_vals)
             actual_dict = {k.strip(): v.strip() for k, v in actual_vals}
             if unset:
@@ -981,11 +1001,6 @@ def check_image_settings(image, check_dict, unset=False, con_ssh=None, auth_info
             else:
                 for key, val in expt_val.items():
                     actual = actual_dict[key]
-                    # if '{' in actual and '}' in actual and ( actual[0] == "'" or actual[0] == '"'):
-                    #     if actual[0] == "'":
-                    #         actual = re.sub(r'^\'|\'$', '', actual)
-                    #     else:
-                    #         actual = re.sub(r'^\"|\"$', '', actual)
                     try:
                         actual = eval(actual)
                     except NameError:

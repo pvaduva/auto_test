@@ -14,10 +14,7 @@ from testfixtures.recover_hosts import HostsToRecover
 @fixture(scope='module', autouse=True)
 def update_quotas(add_admin_role_module):
     LOG.fixture_step("Update instance and volume quota to at least 10 and 20 respectively")
-    if nova_helper.get_quotas(quotas='instances')[0] < 10:
-        nova_helper.update_quotas(instances=10, cores=20)
-    if cinder_helper.get_quotas(quotas='volumes')[0] < 20:
-        cinder_helper.update_quotas(volumes=20)
+    vm_helper.ensure_vms_quotas()
 
 
 @fixture(scope='module')
@@ -92,7 +89,6 @@ class TestDefaultGuest:
 
         Args:
             storage_backing: storage backing under test
-            add_admin_role_class (None): test fixture to add admin role to primary tenant
 
         Skip conditions:
             - Less than two hosts configured with storage backing under test
@@ -191,7 +187,7 @@ class TestDefaultGuest:
                          'disks': vm_helper.get_vm_devices_via_virsh(vm5)}
 
         LOG.tc_step("Check all VMs are booted on {}".format(target_host))
-        vms_on_host = nova_helper.get_vms_on_hypervisor(hostname=target_host)
+        vms_on_host = nova_helper.get_vms_on_host(hostname=target_host)
         vms = [vm1, vm2, vm3, vm4, vm5]
         assert set(vms) <= set(vms_on_host), "VMs booted on host: {}. Current vms on host: {}".format(vms, vms_on_host)
 
@@ -272,7 +268,7 @@ class TestDefaultGuest:
                         FlavorSpec.NUMA_NODES: 1,
                         FlavorSpec.NUMA_0: 0
                         }
-        nova_helper.set_flavor_extra_specs(flavor1, **extra_specs1)
+        nova_helper.set_flavor(flavor1, **extra_specs1)
 
         LOG.tc_step("Create flavor with 1 vcpu, set on host numa node 1")
         flavor2 = nova_helper.create_flavor('numa_vm', vcpus=1)[1]
@@ -281,7 +277,7 @@ class TestDefaultGuest:
                         FlavorSpec.NUMA_NODES: 1,
                         FlavorSpec.NUMA_0: 1
                         }
-        nova_helper.set_flavor_extra_specs(flavor2, **extra_specs2)
+        nova_helper.set_flavor(flavor2, **extra_specs2)
 
         LOG.tc_step("Create flavor with 1 vcpu, set on host numa node 1")
         flavor3 = nova_helper.create_flavor('numa_vm', vcpus=2)[1]
@@ -291,7 +287,7 @@ class TestDefaultGuest:
                         FlavorSpec.NUMA_0: 1,
                         FlavorSpec.NUMA_1: 0
                         }
-        nova_helper.set_flavor_extra_specs(flavor3, **extra_specs3)
+        nova_helper.set_flavor(flavor3, **extra_specs3)
 
         LOG.tc_step("Boot vm with cpu on host node 0")
         vm1 = vm_helper.boot_vm(flavor=flavor1, avail_zone='nova', vm_host=target_host, cleanup='function')[1]
@@ -309,7 +305,7 @@ class TestDefaultGuest:
         check_vm_numa_topology(vm3, 2, 1, 0)
 
         LOG.tc_step("Check all VMs are booted on {}".format(target_host))
-        vms_on_host = nova_helper.get_vms_on_hypervisor(hostname=target_host)
+        vms_on_host = nova_helper.get_vms_on_host(hostname=target_host)
         vms = [vm1, vm2, vm3]
         assert set(vms) <= set(vms_on_host), "VMs booted on host: {}. Current vms on host: {}".format(vms, vms_on_host)
 
@@ -374,7 +370,7 @@ class TestOneHostAvail:
         host_helper.reboot_hosts(target_host)
 
         LOG.tc_step("Check vms are in Active state after host come back up")
-        res, active_vms, inactive_vms = vm_helper.wait_for_vms_values(vms=vms, values=VMStatus.ACTIVE, timeout=600)
+        res, active_vms, inactive_vms = vm_helper.wait_for_vms_values(vms=vms, value=VMStatus.ACTIVE, timeout=600)
 
         vms_host_err = []
         for vm in vms:

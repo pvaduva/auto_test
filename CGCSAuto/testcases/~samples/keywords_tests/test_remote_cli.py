@@ -47,7 +47,7 @@ def test_remote_cli():
     RemoteCLIClient.get_remote_cli_client()
 
     nova_helper.get_basic_flavor()
-    cinder_helper.get_qos_list()
+    cinder_helper.get_volume_qos_list()
     glance_helper.get_images()
     system_helper.get_computes()
     ceilometer_helper.get_alarms()

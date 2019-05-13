@@ -145,7 +145,7 @@ def _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_typ
         specs[FlavorSpec.CPU_POLICY] = cpu_pol
 
     LOG.tc_step("Add following extra specs: {}".format(specs))
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **specs)
+    nova_helper.set_flavor(flavor=flavor_id, **specs)
 
     boot_source = 'volume' if vm_type == 'volume' else 'image'
     LOG.tc_step("Boot a vm from {}".format(boot_source))

@@ -37,7 +37,7 @@ def _test_vm_with_health_check_failure():
     ResourceCleanup.add('flavor', flavor_id)
 
     extra_specs = {FlavorSpec.GUEST_HEARTBEAT: 'True'}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **extra_specs)
+    nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     vm_id = vm_helper.boot_vm(name='vm_with_hb', flavor=flavor_id, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)

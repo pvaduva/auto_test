@@ -1,19 +1,20 @@
 import time
 import re
+
 from pytest import fixture, mark
+
 from utils.tis_log import LOG
 from keywords import vm_helper, network_helper, glance_helper
-from testfixtures.fixture_resources import ResourceCleanup
 from consts.cgcs import PING_LOSS_RATE
 
 
 @fixture(scope='module', autouse=True)
 def update_net_quota(request):
-    network_quota = network_helper.get_quota('network')
-    network_helper.update_quotas(network=network_quota + 2)
+    network_quota = vm_helper.get_quotas('networks')[0]
+    vm_helper.set_quotas(networks=network_quota + 2)
 
     def _revert_quota():
-        network_helper.update_quotas(network=network_quota)
+        vm_helper.set_quotas(networks=network_quota)
     request.addfinalizer(_revert_quota)
 
 
@@ -57,6 +58,7 @@ def _get_ipv6_for_eth(ssh_client, eth_name):
     else:
         LOG.warning("Cannot find ipv6 addr for eth1")
         return ''
+
 
 __PING_LOSS_MATCH = re.compile(PING_LOSS_RATE)
 
@@ -124,14 +126,12 @@ def test_ipv6_subnet(vif_model, skip_for_ovs):
 
     LOG.tc_step("Create Networks to setup IPV6 subnet")
     for net in network_names:
-        net_ids.append(network_helper.create_network(name=net)[1])
-        ResourceCleanup.add('network', net_ids[-1])
+        net_ids.append(network_helper.create_network(name=net, cleanup='function')[1])
 
     LOG.tc_step("Create IPV6 Subnet on the Network Created")
     for sub, network in zip(sub_nets, net_ids):
-        subnet_ids.append(network_helper.create_subnet(net_id=network, ip_version=6, dns_servers=dns_server,
-                                                       cidr=sub, no_gateway=True)[1])
-        ResourceCleanup.add('subnet', subnet_ids[-1])
+        subnet_ids.append(network_helper.create_subnet(network=network, ip_version=6, dns_servers=dns_server,
+                                                       subnet_range=sub, gateway='none', cleanup='function')[1])
 
     LOG.tc_step("Boot a VM with mgmt net and Network with IPV6 subnet")
     mgmt_net_id = network_helper.get_mgmt_net_id()

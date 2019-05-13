@@ -3,12 +3,11 @@ import time
 
 from pytest import skip, mark
 
-from consts.cgcs import ImageStatus
 from consts.auth import Tenant
 from consts.reasons import SkipStorageBacking
 from keywords import vm_helper, nova_helper, glance_helper, cinder_helper, host_helper, storage_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
-from utils import cli, table_parser
+from utils import cli
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
@@ -46,20 +45,13 @@ def test_create_snapshot_using_boot_from_image_vm():
 
     # nova image-create generates a glance image
     LOG.tc_step("Create a snapshot based on that VM")
-    nova_cmd = "image-create {} {}".format(vm_id, snapshot_name)
-    cli.nova(nova_cmd, ssh_client=con_ssh, rtn_list=True, fail_ok=False)
-    # exception will be thrown if nova cmd rejected
-    image_id = glance_helper.get_image_id_from_name(name=snapshot_name, strict=True, fail_ok=False)
-    ResourceCleanup.add('image', image_id)
-
-    LOG.tc_step("Wait for the snapshot to become active")
-    glance_helper.wait_for_image_states(image_id, status=ImageStatus.ACTIVE)
+    image_id = vm_helper.create_image_from_vm(vm_id, cleanup='function')[1]
 
     image_filename = '/home/wrsroot/images/temp'
     LOG.tc_step("Download the image snapshot")
-    glance_cmd = "image-download --file {} {}".format(image_filename, image_id)
+    glance_cmd = "image save --file {} {}".format(image_filename, image_id)
     # Throw exception if glance cmd rejected
-    cli.glance(glance_cmd, ssh_client=con_ssh, fail_ok=False)
+    cli.openstack(glance_cmd, ssh_client=con_ssh, fail_ok=False)
 
     # Downloading should be good enough for validation.  If the file is
     # zero-size, download will report failure.
@@ -112,9 +104,8 @@ def test_create_snapshot_using_boot_from_volume_vm():
     image_uuid = vol_size = None
     for image in image_list:
         image_uuid = image
-        image_prop_s = glance_helper.get_image_properties(image_uuid, "size")
-        image_prop_d = glance_helper.get_image_properties(image_uuid, "disk_format")
-        if image_prop_s['size'] == "0" or image_prop_d['disk_format'] != "raw":
+        image_prop_s, image_prop_d = glance_helper.get_image_properties(image_uuid, ("size", "disk_format"))
+        if str(image_prop_s) == "0" or image_prop_d != "raw":
             continue
         else:
             divisor = 1024 * 1024 * 1024
@@ -129,8 +120,8 @@ def test_create_snapshot_using_boot_from_volume_vm():
     # is not supported yet.
     volume_types = cinder_helper.get_volume_types(rtn_val='Name')
     vol_type = 'iscsi' if any('emc' in t for t in volume_types) else None
-    vol_id = cinder_helper.create_volume(image_id=image_uuid, size=vol_size, vol_type=vol_type, fail_ok=False)[1]
-    ResourceCleanup.add('volume', vol_id)
+    vol_id = cinder_helper.create_volume(source_id=image_uuid, vol_type=vol_type, size=vol_size, fail_ok=False,
+                                         cleanup='function')[1]
 
     LOG.tc_step("Boot VM using newly created bootable volume")
     vm_id = vm_helper.boot_vm(source="volume", source_id=vol_id, cleanup='function')[1]
@@ -140,47 +131,24 @@ def test_create_snapshot_using_boot_from_volume_vm():
     # nova image-create generates a glance image of 0 size
     # real snapshot is stored in cinder
     LOG.tc_step("Create a snapshot based on that VM")
-    nova_cmd = "image-create {} {}".format(vm_id, snapshot_name)
-    cli.nova(nova_cmd, ssh_client=con_ssh, rtn_list=True, fail_ok=False)
-    image_id = glance_helper.get_image_id_from_name(name=snapshot_name)
-    ResourceCleanup.add('image', image_id)
+    code, image_id, snapshot_id = vm_helper.create_image_from_vm(vm_id, image_name=snapshot_name, cleanup='function',
+                                                                 expt_cinder_snapshot=True)
 
-    LOG.tc_step("Wait for the snapshot to become active")
-    glance_helper.wait_for_image_states(image_id, status=ImageStatus.ACTIVE, fail_ok=False)
-
-    cinder_snapshotname = "snapshot for {}".format(snapshot_name)
-    LOG.tc_step("Get snapshot ID of {}".format(cinder_snapshotname))
-    snapshot_id = cinder_helper.get_vol_snapshot(name=cinder_snapshotname)
-    assert snapshot_id, "Snapshot was not found"
-    ResourceCleanup.add('vol_snapshot', snapshot_id)
     vol_name = "vol_from_snapshot"
-
     # Creates volume from snapshot
-    LOG.tc_step("Create cinder snapshot")
-    snapshot_vol_id = cinder_helper.create_volume(name=vol_name, snapshot_id=snapshot_id, cleanup='function')[1]
+    LOG.tc_step("Create cinder volume from vm snapshot")
+    snapshot_vol_id = cinder_helper.create_volume(name=vol_name, source_id=snapshot_id, source_type='snapshot',
+                                                  cleanup='function')[1]
 
     # Creates an image
     LOG.tc_step("Upload cinder volume to image")
     image_name = "cinder_upload"
-    cmd = "upload-to-image {} {}".format(snapshot_vol_id, image_name)
-    rc, out = cli.cinder(cmd, ssh_client=con_ssh, rtn_list=True)
-    assert rc == 0, "Upload of volume to image failed"
-    image_id = glance_helper.get_image_id_from_name(name=cinder_snapshotname)
-    ResourceCleanup.add('image', image_id)
-    print("Uploading volume to image {}".format(image_id))
-
-    LOG.tc_step("Wait for the uploaded image to become active")
-    image_id = glance_helper.get_image_id_from_name(name=image_name)
-    ResourceCleanup.add('image', image_id)
-    glance_helper.wait_for_image_states(image_id, status=ImageStatus.SAVING, fail_ok=True, timeout=30)
-    glance_helper.wait_for_image_states(image_id, status=ImageStatus.ACTIVE, fail_ok=False, timeout=240)
-    print("Waiting for {} to be active".format(image_id))
+    glance_helper.create_image(name=image_name, volume=snapshot_vol_id, auth_info=None, cleanup='function')
 
     image_filename = '/home/wrsroot/images/temp'
     LOG.tc_step("Download the image snapshot")
-    image_id = glance_helper.get_image_id_from_name(name=snapshot_name)
-    cmd = "image-download --file {} {}".format(image_filename, image_id)
-    cli.glance(cmd, ssh_client=con_ssh, fail_ok=False)
+    cmd = "image save --file {} {}".format(image_filename, image_id)
+    cli.openstack(cmd, ssh_client=con_ssh, fail_ok=False)
 
     # Downloading should be good enough for validation.  If the file is
     # zero-size, download will report failure.
@@ -213,8 +181,6 @@ def test_attempt_to_delete_volume_associated_with_snapshot():
     image is more complex if the original file is no longer on the filesystem.
     """
 
-    con_ssh = ControllerClient.get_active_controller()
-
     LOG.tc_step("Get available images")
     image_list = glance_helper.get_images()
 
@@ -225,9 +191,8 @@ def test_attempt_to_delete_volume_associated_with_snapshot():
     image_uuid = vol_size = None
     for image in image_list:
         image_uuid = image
-        image_prop_s = glance_helper.get_image_properties(image_uuid, "size")
-        image_prop_d = glance_helper.get_image_properties(image_uuid, "disk_format")
-        if image_prop_s['size'] == "0" or image_prop_d['disk_format'] != "raw":
+        image_prop_s, image_prop_d = glance_helper.get_image_properties(image_uuid, ("size", "disk_format"))
+        if str(image_prop_s) == "0" or image_prop_d != "raw":
             continue
         else:
             divisor = 1024 * 1024 * 1024
@@ -243,31 +208,20 @@ def test_attempt_to_delete_volume_associated_with_snapshot():
     # is not supported yet.
     volume_types = cinder_helper.get_volume_types(rtn_val='Name')
     vol_type = 'iscsi' if any('emc' in t for t in volume_types) else None
-    vol_id = cinder_helper.create_volume(image_id=image_uuid, size=vol_size, vol_type=vol_type, fail_ok=False,
+    vol_id = cinder_helper.create_volume(source_id=image_uuid, vol_type=vol_type, size=vol_size, fail_ok=False,
                                          cleanup='function')[1]
 
     LOG.tc_step("Boot VM using newly created bootable volume")
     vm_id = vm_helper.boot_vm(source="volume", source_id=vol_id, cleanup='function')[1]
     assert vm_id, "Failed to boot VM"
-    vm_name = nova_helper.get_vm_name_from_id(vm_id)
-    snapshot_name = vm_name + "_snapshot"
 
     # nova image-create generates a glance image of 0 size
     # real snapshot is stored in cinder
     LOG.tc_step("Create a snapshot based on that VM")
-    nova_cmd = "image-create {} {}".format(vm_id, snapshot_name)
-    cli.nova(nova_cmd, ssh_client=con_ssh, rtn_list=True, fail_ok=False)
-
-    LOG.tc_step("Wait for the snapshot to become active")
-    image_id = glance_helper.get_image_id_from_name(name=snapshot_name)
-    ResourceCleanup.add('image', image_id)
-    glance_helper.wait_for_image_states(image_id, status=ImageStatus.ACTIVE)
-
-    cinder_snapshotname = "snapshot for {}".format(snapshot_name)
-    LOG.tc_step("Get snapshot ID of {}".format(cinder_snapshotname))
-    snapshot_id = cinder_helper.get_vol_snapshot(name=cinder_snapshotname)
-    ResourceCleanup.add('vol_snapshot', snapshot_id)
-    assert snapshot_id, "Snapshot was not found"
+    vm_name = nova_helper.get_vm_name_from_id(vm_id)
+    snapshot_name = vm_name + "_snapshot"
+    code, image_id, snapshot_id = vm_helper.create_image_from_vm(vm_id, image_name=snapshot_name, cleanup='function',
+                                                                 expt_cinder_snapshot=True)
 
     # We're deleting the VM, but leaving the volume and the snapshot
     LOG.tc_step("Delete the VM")
@@ -284,22 +238,6 @@ def test_attempt_to_delete_volume_associated_with_snapshot():
     # This step has been failing on ip33-36 and sm-1 due to volume delete rejected. After a minute or so,
     # it was accepted though.
     cinder_helper.delete_volumes(vol_id, fail_ok=False)
-
-
-def create_snapshot_from_instance(vm_id, name):
-    exit_code, output = cli.nova('image-create --poll {} {}'.format(vm_id, name), auth_info=Tenant.get('admin'),
-                                 fail_ok=True, timeout=400)
-    image_names = glance_helper.get_images(rtn_val='name')
-    if name in image_names:  # covers if image creation wasn't completely successful but somehow still produces an image
-        img_id = glance_helper.get_image_id_from_name(name=name, strict=True, auth_info=Tenant.get('admin'),
-                                                      fail_ok=False)
-        ResourceCleanup.add('image', img_id)
-        image_show_table = table_parser.table(cli.glance('image-show', img_id))
-        snap_size = int(table_parser.get_value_two_col_table(image_show_table, 'size'))
-        LOG.info("size of snapshot {} is {} or around {} GiB".format(name, snap_size, (snap_size / 1073741824)))
-    else:
-        snap_size = 0
-    return exit_code, output, snap_size
 
 
 # Obsolete for ceph.
@@ -386,22 +324,20 @@ def _test_snapshot_large_vm_negative(add_admin_role_module, inst_backing):
     # Make first snapshot
     storage_before = snapshot_space_gb
     LOG.tc_step("Create snapshots, current {} GiB of free space".format(storage_before))
-    exit_code, output, original_snap_size = create_snapshot_from_instance(vm_id, name="snapshot0")
-    assert exit_code == 0, "First snapshot failed"
+    vm_helper.create_image_from_vm(vm_id, image_name="snapshot0", cleanup='function')
 
     storage_left = storage_helper.get_storage_usage(service='glance', backend_type=backend_type)
-
     space_taken = storage_before - storage_left
     assert snapshot_range_min <= space_taken <= snapshot_range_max, \
         "Space occupied by snapshot not in expected range, size is {}".format(space_taken)
 
     init_time = common.get_date_in_format(date_format="%Y-%m-%d %T")
     LOG.tc_step("First snapshot created, {} GiB of storage left, attempt second snapshot".format(storage_left))
-    exit_code, output, snap_size = create_snapshot_from_instance(vm_id, name="snapshot1")
+    exit_code = vm_helper.create_image_from_vm(vm_id, image_name="snapshot1", fail_ok=True, cleanup='function')[0]
     time.sleep(10)
 
     storage_after = storage_helper.get_storage_usage(service='glance', backend_type=backend_type)
-    assert exit_code != 0, "Snapshot succeeded when it was expected to fail"
+    assert exit_code == 1, "Snapshot succeeded when it was expected to fail"
     assert storage_left - 0.02 <= storage_after <= storage_left + 0.02, \
         "Free capacity has changed to {} even though 2nd snapshot failed (expected to be 0.01 within)".\
         format(storage_after, storage_left)

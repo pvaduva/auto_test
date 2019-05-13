@@ -6,14 +6,13 @@ from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
 from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper, cinder_helper, glance_helper,\
-    host_helper, common, system_helper
+    host_helper, common, system_helper, vm_helper
 
 from consts.heat import Heat, HeatUpdate
 from consts.cgcs import HEAT_PATH, HeatStackStatus
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from consts.reasons import SkipSysType
-from testfixtures.fixture_resources import ResourceCleanup
 
 
 def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, auth_info=None, fail_ok=False):
@@ -48,7 +47,7 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
         port_name = getattr(Heat, template_name)['port_name']
         if port_name is None:
             port_name = stack_name
-        resource_found = network_helper.get_neutron_port(name=port_name)
+        resource_found = network_helper.get_ports(port_name=port_name)
 
     elif to_verify is 'neutron_provider_net_range':
         resource_found = network_helper.get_network_segment_ranges(rtn_val='name', physical_network='sample_physnet_X')
@@ -58,10 +57,10 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
 
     elif to_verify is 'vm':
         vm_name = getattr(Heat, template_name)['vm_name']
-        resource_found = nova_helper.get_vm_id_from_name(vm_name=vm_name, strict=False)
+        resource_found = nova_helper.get_vms(vms=vm_name, strict=False)
 
     elif to_verify is 'nova_flavor':
-        resource_found = nova_helper.get_flavor(name='sample-flavor')
+        resource_found = nova_helper.get_flavors(name='sample-flavor')
 
     elif to_verify is 'neutron_net':
         resource_found = network_helper.get_tenant_net_id(net_name='sample-net')
@@ -95,16 +94,16 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
             resource_found = subnets
             if resource_found:
                 item_verified = to_verify
-                router_subnets = network_helper.get_router_subnets(router_id=router_id, auth_info=auth_info)
+                router_subnets = network_helper.get_router_subnets(router=router_id, auth_info=auth_info)
                 resource_found = resource_found[0] in router_subnets
 
     elif to_verify is 'security_group':
         resource_found = network_helper.get_security_groups(name='SecurityGroupDeluxe')
     elif to_verify is 'key_pair':
         kp_name = getattr(Heat, template_name)['key_pair_name']
-        resource_found = nova_helper.get_key_pair(name=kp_name)
+        resource_found = nova_helper.get_keypairs(name=kp_name)
     elif to_verify is 'neutron_qos':
-        resource_found = network_helper.get_qos(name='SampleQoS', auth_info=auth_info)
+        resource_found = network_helper.get_qos_policies(name='SampleQoS', auth_info=auth_info)
     else:
         raise ValueError("Unknown item to verify: {}".format(to_verify))
 
@@ -149,7 +148,7 @@ def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False,
     params_str = ''.join(cmd_list)
     LOG.info("Executing command: heat %s stack-update", params_str)
     exitcode, output = cli.heat('stack-update', params_str, ssh_client=ssh_client, fail_ok=fail_ok,
-                                auth_info=auth_info, rtn_list=True)
+                                auth_info=auth_info, rtn_code=True)
 
     if exitcode == 1:
         LOG.warning("Update heat stack request rejected.")
@@ -249,19 +248,20 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 
 @fixture(scope='module', autouse=True)
 def revert_quota(request):
+
+    original_quotas = vm_helper.get_quota_details_info('network', detail=False)
     tenants_quotas = {}
-    quota_tab = table_parser.table(cli.neutron('quota-list', auth_info=Tenant.get('admin')))
-    tenants = table_parser.get_column(quota_tab, 'tenant_id')
-    for tenant_id in set(tenants):
-        network_quota = network_helper.get_quota('network', tenant_id=tenant_id)
-        subnet_quota = network_helper.get_quota('subnet', tenant_id=tenant_id)
+
+    for tenant_id, quotas_dict in original_quotas.items():
+        network_quota = quotas_dict['networks']
+        subnet_quota = quotas_dict['subnets']
         tenants_quotas[tenant_id] = (network_quota, subnet_quota)
 
     def revert():
         LOG.fixture_step("Revert network quotas to original values.")
         for tenant_id_, quotas in tenants_quotas.items():
             network_quota_, subnet_quota_ = quotas
-            network_helper.update_quotas(tenant_id=tenant_id_, network=network_quota_, subnet=subnet_quota_)
+            vm_helper.set_quotas(tenant=tenant_id, networks=network_quota_, subnets=subnet_quota_)
     request.addfinalizer(revert)
 
     return tenants_quotas
@@ -322,7 +322,7 @@ def test_heat_template(template_name, revert_quota):
         tenants_quotas = revert_quota
         for tenant_id, quotas in tenants_quotas.items():
             network_quota, subnet_quota = quotas
-            network_helper.update_quotas(tenant_id=tenant_id, network=network_quota+10, subnet=subnet_quota+10)
+            vm_helper.set_quotas(tenant=tenant_id, networks=network_quota+10, subnets=subnet_quota+10)
 
     elif template_name == 'OS_Nova_Server.yaml':
         # create new image to do update later

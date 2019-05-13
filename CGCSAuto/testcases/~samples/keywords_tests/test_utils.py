@@ -75,7 +75,7 @@ def test_cli_timeout():
     cli.fm('event-list', fail_ok=True, timeout=3)
 
     LOG.tc_step("nova list")
-    cli.nova('list', '--a', fail_ok=False)
+    cli.openstack('server list', '--a', fail_ok=False)
 
     LOG.tc_step("cat log")
     # This fails because of the terminal display is slower than cat cmd. No easy solution so far.
@@ -85,4 +85,4 @@ def test_cli_timeout():
     con_ssh.exec_cmd('cat /var/log/sm-scheduler.log', expect_timeout=3)
 
     LOG.tc_step('nova list')
-    cli.nova('list', '--a', fail_ok=False)
+    cli.openstack('server list', '--a', fail_ok=False)

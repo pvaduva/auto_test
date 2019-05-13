@@ -35,7 +35,7 @@ def heartbeat_flavor_vm(request):
     flavor_id = nova_helper.create_flavor()[1]
     ResourceCleanup.add(resource_type='flavor', resource_id=flavor_id, scope='module')
     heartbeat_spec = {FlavorSpec.GUEST_HEARTBEAT: heartbeat}
-    nova_helper.set_flavor_extra_specs(flavor=flavor_id, **heartbeat_spec)
+    nova_helper.set_flavor(flavor=flavor_id, **heartbeat_spec)
 
     # use volume to boot a vm by default
     vm_id = vm_helper.boot_vm(flavor=flavor_id)[1]
@@ -58,7 +58,7 @@ def heartbeat_flavor_vm(request):
     def unlock_host():
         # must delete VM before flavors
         vm_helper.delete_vms(vm_id, delete_volumes=True)
-        nova_helper.delete_flavors(flavor_ids=flavor_id, fail_ok=True)
+        nova_helper.delete_flavors(flavors=flavor_id, fail_ok=True)
         # wait for hostname to be back in host list in nova
         host_helper.wait_for_hypervisors_up(vm_host)
     request.addfinalizer(unlock_host)
