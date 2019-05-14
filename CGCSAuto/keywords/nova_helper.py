@@ -115,8 +115,10 @@ def create_flavor(name=None, flavor_id=None, vcpus=1, ram=1024, root_disk=None, 
                         properties, hosts_in_aggregate = get_aggregate_values(aggregate_name,
                                                                               fields=('properties', 'hosts'),
                                                                               con_ssh=con_ssh, auth_info=auth_info)
-                    if FlavorSpec.STORAGE_BACKING not in properties:
-                        set_aggregate(aggregate_name, properties={FlavorSpec.STORAGE_BACKING: inst_backing},
+
+                    property_key = FlavorSpec.STORAGE_BACKING.split(':')[-1].strip()
+                    if property_key not in properties:
+                        set_aggregate(aggregate_name, properties={property_key: inst_backing},
                                       con_ssh=con_ssh, auth_info=auth_info)
 
                     if expt_hosts != hosts_in_aggregate:
