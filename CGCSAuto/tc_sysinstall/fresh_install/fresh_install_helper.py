@@ -1450,8 +1450,8 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
 
     """
 
-    if not InstallVars.get_install_var("EXTRACT_DEPLOY_CONFIG"):
-        return 0
+    # if not InstallVars.get_install_var("EXTRACT_DEPLOY_CONFIG"):
+    #     return 0
 
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
 
