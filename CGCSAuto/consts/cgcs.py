@@ -263,9 +263,7 @@ class FlavorSpec:
     CPU_THREAD_POLICY = 'hw:cpu_thread_policy'
     VCPU_SCHEDULER = 'hw:wrs:vcpu:scheduler'
     MIN_VCPUS = "hw:wrs:min_vcpus"
-    # STORAGE_BACKING = 'aggregate_instance_extra_specs:storage'
-    STORAGE_BACKING = 'stx_storage'
-    # LOCAL_STORAGE = 'aggregate_instance_extra_specs:localstorage'
+    STORAGE_BACKING = 'aggregate_instance_extra_specs:stx_storage'
     DISK_READ_BYTES = 'quota:disk_read_bytes_sec'
     DISK_READ_IOPS = 'quota:disk_read_iops_sec'
     DISK_WRITE_BYTES = 'quota:disk_write_bytes_sec'

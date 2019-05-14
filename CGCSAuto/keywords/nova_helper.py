@@ -107,7 +107,8 @@ def create_flavor(name=None, flavor_id=None, vcpus=1, ram=1024, root_disk=None, 
                     expt_hosts = sorted(sys_inst_backing[inst_backing])
                     aggregate_name = STORAGE_AGGREGATE[inst_backing]
                     if aggregate_name not in aggregates:
-                        create_aggregate(name=aggregate_name, check_first=False, con_ssh=con_ssh, auth_info=auth_info)
+                        create_aggregate(name=aggregate_name, avail_zone='nova', check_first=False,
+                                         con_ssh=con_ssh, auth_info=auth_info)
                         properties = {}
                         hosts_in_aggregate = []
                     else:
