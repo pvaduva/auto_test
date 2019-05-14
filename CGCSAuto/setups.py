@@ -847,7 +847,10 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
         guest_server, guest_image = guest_image.split(':', 1)
 
     iso_server = patch_server = helm_chart_server = bs
-    iso_path = iso_path if iso_path else os.path.join(host_build_dir, BuildServerPath.ISO_PATH)
+    if not iso_path:
+        iso_path_in_build_dir = BuildServerPath.ISO_PATH_CENGN if '/import/' in host_build_dir \
+            else BuildServerPath.ISO_PATH
+        iso_path = os.path.join(host_build_dir, iso_path_in_build_dir)
     if ':/' in iso_path:
         iso_server, iso_path = iso_path.split(':', 1)
     if patch_dir and ':/' in patch_dir:

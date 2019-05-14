@@ -111,10 +111,14 @@ def pytest_configure(config):
             heat_templates = os.path.join(host_build_dir_path, heat_templates)
 
         if not helm_chart_path:
-            helm_chart_path = os.path.join(host_build_dir_path, BuildServerPath.STX_HELM_CHARTS)
+            helm_path_in_build = BuildServerPath.STX_HELM_CHARTS_CENGN if '/import/' in host_build_dir_path \
+                else BuildServerPath.STX_HELM_CHARTS
+            helm_chart_path = os.path.join(host_build_dir_path, helm_path_in_build)
 
         if boot_type.lower() in ('usb_burn', 'pxe_iso', 'iso_feed') and not iso_path:
-            iso_path = os.path.join(host_build_dir_path, BuildServerPath.ISO_PATH)
+            iso_path_in_build = BuildServerPath.ISO_PATH_CENGN if '/import/' in host_build_dir_path \
+                else BuildServerPath.ISO_PATH
+            iso_path = os.path.join(host_build_dir_path, iso_path_in_build)
 
         install_conf = setups.write_installconf(
             lab=lab_arg, controller=controller, compute=compute, storage=storage,

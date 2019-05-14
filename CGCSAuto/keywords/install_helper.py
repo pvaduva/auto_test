@@ -4407,12 +4407,12 @@ def download_stx_helm_charts(lab, server, stx_helm_charts_path=None):
     Returns:
 
     """
-    if lab is None or server is None:
+    if not lab or not server:
         raise ValueError("The lab dictionary and build server object must be specified")
 
-    if stx_helm_charts_path is None:
-        stx_helm_charts_path = os.path.join(BuildServerPath.STX_HOST_BUILDS_DIR, BuildServerPath.LATEST_BUILD,
-                                            BuildServerPath.STX_HELM_CHARTS)
+    if not stx_helm_charts_path:
+        stx_helm_charts_path = os.path.join(BuildServerPath.DEFAULT_HOST_BUILD_PATH,
+                                            BuildServerPath.DEFAULT_HELM_CHARTS)
 
     server_ssh = server.ssh_conn
     if server_ssh.exec_cmd('test -d {}'.format(stx_helm_charts_path), rm_date=False)[0] == 0:

@@ -89,8 +89,12 @@ class BuildServerPath:
     HEAT_TEMPLATES = 'export/heat-templates'
     LAB_CONF_DIR_PREV = 'std/repo/addons/wr-cgcs/layers/cgcs/extras.ND/lab'
     LAB_CONF_DIR = "lab"
-    STX_HELM_CHARTS = 'outputs/helm-charts'
-    ISO_PATH = 'outputs/iso/bootimage.iso'
+    STX_HELM_CHARTS_CENGN = 'outputs/helm-charts'
+    ISO_PATH_CENGN = 'outputs/iso/bootimage.iso'
+    ISO_PATH = 'export/bootimage.iso'
+    STX_HELM_CHARTS = 'helm-charts'
+    DEFAULT_HELM_CHARTS = STX_HELM_CHARTS_CENGN
+    DEFAULT_ISO = ISO_PATH_CENGN
 
     HEAT_TEMPLATES_EXTS = {'16.10': HEAT_TEMPLATES_PREV, '17.06': HEAT_TEMPLATES_PREV, '18.03': HEAT_TEMPLATES_PREV,
                            'default': HEAT_TEMPLATES}
