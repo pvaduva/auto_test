@@ -200,6 +200,13 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         LOG.info("Downloading lab config files")
         install_helper.download_lab_config_files(lab, build_server, load_path, conf_server=lab_files_server,
                                                  lab_file_dir=lab_files_dir)
+
+        LOG.info("Download helm charts to active controller ...")
+        helm_chart_path = InstallVars.get_install_var("HELM_CHART_PATH")
+        if not helm_chart_server:
+            helm_chart_server = build_server
+        install_helper.download_stx_helm_charts(lab, helm_chart_server, stx_helm_charts_path=helm_chart_path)
+
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -207,13 +214,6 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
     if not InstallVars.get_install_var("DEPLOY_OPENSTACK"):
         controller0_node = lab['controller-0']
         controller0_node.telnet_conn.exec_cmd("touch .no_openstack_install")
-
-    LOG.info("WK: Downloading the helm charts to active controller ...")
-    helm_chart_path = InstallVars.get_install_var("HELM_CHART_PATH")
-    if not helm_chart_server:
-        helm_chart_server = build_server
-
-    install_helper.download_stx_helm_charts(lab, helm_chart_server, stx_helm_charts_path=helm_chart_path)
 
 
 def set_license_var(sys_version=None, sys_type=None):

@@ -132,9 +132,6 @@ def test_standard_install(install_setup):
     fresh_install_helper.unlock_hosts(['controller-1'], con_ssh=controller0_node.ssh_conn)
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
-    # WK1 - adding ceph mon to compute-0
-    fresh_install_helper.add_ceph_ceph_mon_to_host(controller0_node, 'compute-0')
-
     # Unlock computes
     fresh_install_helper.unlock_hosts([host_ for host_ in hosts if 'compute' in host_],
                                       con_ssh=controller0_node.ssh_conn)
