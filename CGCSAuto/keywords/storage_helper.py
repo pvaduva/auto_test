@@ -8,7 +8,7 @@ import time
 
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
-from consts.cgcs import EventLogID, BackendState, BackendTask, MULTI_REGION_MAP
+from consts.cgcs import EventLogID, BackendState, BackendTask
 from consts.timeout import HostTimeout
 
 from keywords import system_helper, host_helper, keystone_helper
@@ -72,7 +72,7 @@ def get_num_osds(con_ssh=None):
     cmd = 'ceph -s'
 
     rtn_code, out = con_ssh.exec_cmd(cmd)
-    osds = re.search('(\d+) osds', out)
+    osds = re.search(r'(\d+) osds', out)
     if osds.group(1):
         LOG.info('There are {} OSDs on the system'.format(osds.group(1)))
         return int(osds.group(1))
@@ -183,6 +183,7 @@ def get_mon_pid(mon_host):
             return pid.group(1), msg
     # FIXME
     msg = 'Corresponding ceph-mon pid for {} was not found'.format(mon_host)
+    LOG.warning(msg)
 
 
 def get_osds(host=None, con_ssh=None):
@@ -236,7 +237,7 @@ def is_osd_up(osd_id, con_ssh=None):
         (bool) True if OSD is up, False if OSD is down
     """
 
-    cmd = "ceph osd tree | grep 'osd.{}\s'".format(osd_id)
+    cmd = r"ceph osd tree | grep 'osd.{}\s'".format(osd_id)
     rtn_code, out = con_ssh.exec_cmd(cmd, expect_timeout=60)
     if re.search('up', out):
         return True
@@ -279,7 +280,7 @@ def get_storage_group(host):
 
     host_table = table_parser.table(cli.system('host-show', host))
     peers = table_parser.get_value_two_col_table(host_table, 'peers', merge_lines=True)
-    storage_group = re.search('(group-\d+)', peers)
+    storage_group = re.search(r'(group-\d+)', peers)
     msg = 'Unable to determine replication group for {}'.format(host)
     assert storage_group, msg
     storage_group = storage_group.group(0)
@@ -400,7 +401,7 @@ def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
     image_path = location + "/" + image_name
     cmd = 'qemu-img info {}'.format(image_path)
     rtn_code, out = con_ssh.exec_cmd(cmd)
-    virtual_size = re.search('virtual size: (\d+\.*\d*[M|G])', out)
+    virtual_size = re.search(r'virtual size: (\d+\.*\d*[M|G])', out)
     msg = 'Unable to determine size of image {}'.format(image_name)
     assert virtual_size.group(0), msg
     # If the size is less than 1G, round to 1
@@ -495,13 +496,13 @@ def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, ob
 
 def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_interval=5):
     end_time = time.time() + timeout
+    output = None
     while time.time() < end_time:
         rc, output = is_ceph_healthy(con_ssh=con_ssh)
         if rc:
             return True
 
         time.sleep(check_interval)
-
     else:
         err_msg = "Ceph is not healthy  within {} seconds: {}".format(timeout, output)
         if fail_ok:
@@ -686,7 +687,7 @@ def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ce
     cmd += " {}".format(backend)
     controler_ssh = con_ssh if con_ssh else ControllerClient.get_active_controller()
     controler_ssh.send(cmd)
-    index = controler_ssh.expect([controler_ssh.prompt, '\[yes/N\]'])
+    index = controler_ssh.expect([controler_ssh.prompt, r'\[yes/N\]'])
     if index == 1:
         controler_ssh.send('yes')
         controler_ssh.expect()
@@ -701,13 +702,11 @@ def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ce
         return rc, output
 
 
-def add_ceph_mon(host, ceph_mon_gib='20', ceph_mon_dev=None, con_ssh=None, fail_ok=False):
+def add_ceph_mon(host, con_ssh=None, fail_ok=False):
     """
 
     Args:
         host:
-        ceph_mon_gib:
-        ceph_mon_dev:
         con_ssh:
         fail_ok:
 
@@ -724,7 +723,7 @@ def add_ceph_mon(host, ceph_mon_gib='20', ceph_mon_dev=None, con_ssh=None, fail_
             raise exceptions.CLIRejected(msg)
 
     if not con_ssh:
-        con_ssh =  ControllerClient.get_active_controller()
+        con_ssh = ControllerClient.get_active_controller()
 
     existing_ceph_mons = get_ceph_mon_values(con_ssh=con_ssh)
     if host in existing_ceph_mons:
@@ -777,7 +776,7 @@ def wait_for_ceph_mon_configured(host, state=None, timeout=HostTimeout.CEPH_MON_
     while time.time() < end_time:
         state = get_ceph_mon_state(host,  con_ssh=con_ssh)
         if state == 'configured':
-           return True, state, None
+            return True, state, None
 
         time.sleep(check_interval)
 
@@ -937,25 +936,6 @@ def auto_mount_fs(ssh_client, fs, mount_on=None, fs_type=None, check_first=True)
     ssh_client.exec_sudo_cmd('cat /etc/fstab', get_exit_code=False)
 
 
-def get_storage_usage(service='cinder', backend_type=None, backend_name=None, rtn_val='free capacity (GiB)',
-                      con_ssh=None, auth_info=Tenant.get('admin')):
-    auth_info_tmp = dict(auth_info)
-    region = ProjVar.get_var('REGION')
-    if region != 'RegionOne' and region in MULTI_REGION_MAP:
-        if service != 'cinder':
-            auth_info_tmp['region'] = 'RegionOne'
-
-    kwargs = {}
-    if backend_type:
-        kwargs['backend type'] = backend_type
-    if backend_name:
-        kwargs['backend name'] = backend_name
-
-    table_ = table_parser.table(cli.system('storage-usage-list --nowrap', ssh_client=con_ssh, auth_info=auth_info_tmp))
-    val = table_parser.get_values(table_, rtn_val, service=service, **kwargs)[0]
-    return float(val)
-
-
 def modify_swift(enable=True, check_first=True, fail_ok=False, apply=True, con_ssh=None):
     """
     Enable/disable swift service
@@ -1081,15 +1061,9 @@ def get_storage_tier_values(cluster, rtn_val='uuid', con_ssh=None, auth_info=Ten
 
     """
 
-    table_ = table_parser.table(cli.system('storage-tier-list {}'.format(cluster), ssh_client=con_ssh),
-                                combine_multiline_entry=True)
-    if table_:
-        if filters:
-            table_ = table_parser.filter_table(table_, **filters)
-        values = table_parser.get_column(table_, rtn_val)
-        return values
-    else:
-        return []
+    table_ = table_parser.table(cli.system('storage-tier-list {}'.format(cluster), ssh_client=con_ssh,
+                                           auth_info=auth_info), combine_multiline_entry=True)
+    return table_parser.get_values(table_, **filters)
 
 
 def add_storage_ceph_osd(host, disk_uuid, journal_location=None, journal_size=None, function=None, tier_uuid=None,
@@ -1126,7 +1100,7 @@ def add_storage_ceph_osd(host, disk_uuid, journal_location=None, journal_size=No
     cmd += " {} {}{} {}".format(args, host, function if function else '', disk_uuid)
     rc, output = cli.system(cmd, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_code=True)
     if rc != 0:
-        msg = "Fail to add ceph osd to host {} disk {}: {}".format(host, disk_uuid)
+        msg = "Fail to add ceph osd to host {} disk {}".format(host, disk_uuid)
         LOG.warning(msg)
         if fail_ok:
             return 1, msg
