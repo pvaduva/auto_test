@@ -111,8 +111,11 @@ def test_standard_install(install_setup):
     else:
         fresh_install_helper.configure_controller_(controller0_node)
 
+    fresh_install_helper.check_ansible_configured_mgmt_interface(controller0_node, lab)
+
     fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTITIAL)
 
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
     fresh_install_helper.unlock_active_controller(controller0_node)
 

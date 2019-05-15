@@ -3429,10 +3429,9 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             cmd = 'echo "{}" | sudo -S {} {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file,
                                                         extra_option)
         else:
-            config_cmd = 'ansible-playbook /usr/share/ansible/stx-ansible/playbooks/bootstrap/bootstrap.yml -e ' \
+            cmd = 'ansible-playbook /usr/share/ansible/stx-ansible/playbooks/bootstrap/bootstrap.yml -e ' \
                          '"override_files_dir={} ansible_become_pass={}"'\
                 .format(WRSROOT_HOME, HostLinuxCreds.get_password())
-            cmd = 'echo "{}" | sudo -S {}'.format(HostLinuxCreds.get_password(), config_cmd)
 
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT, fail_ok=True)

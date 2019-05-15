@@ -1531,3 +1531,26 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
+
+
+def check_ansible_configured_mgmt_interface(controller0_node, lab):
+    """
+
+    Args:
+        controller0_node:
+        lab:
+        ansible:
+
+    Returns:
+
+    """
+    host = 'controller-0'
+    if controller0_node.telnet_conn is None:
+        controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
+
+    ansible = True if controller0_node.telnet_conn.exec_cmd("test -f {}localhost.yml".format(WRSROOT_HOME),
+                                                            fail_ok=True)[0] == 0 else False
+    simplex = install_helper.is_simplex(lab)
+    if ansible and not simplex:
+        LOG.info("LAB uses ansible and removing the lo mgmt interface in controller-0 if present; ")
+        controller0_node.telnet_conn.exec_cmd("system host-if-modify {} lo -c none".format(host), fail_ok=True)
