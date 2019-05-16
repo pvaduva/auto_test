@@ -102,7 +102,14 @@ def test_storage_install(install_setup):
         fresh_install_helper.configure_subcloud(controller0_node, lab_files_server, subcloud=install_subcloud,
                                                 final_step=final_step)
     else:
-        fresh_install_helper.configure_controller(controller0_node, banner=True, branding=True)
+        fresh_install_helper.configure_controller_(controller0_node, banner=True, branding=True)
+
+    fresh_install_helper.check_ansible_configured_mgmt_interface(controller0_node, lab)
+
+    #fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTITIAL)
+
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+    fresh_install_helper.unlock_active_controller(controller0_node)
 
     controller0_node.telnet_conn.hostname = "controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)

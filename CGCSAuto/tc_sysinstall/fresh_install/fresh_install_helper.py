@@ -584,9 +584,9 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
         if len(hostnames) == 1:
             host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400,
                                     check_hypervisor_up=False, check_webservice_up=False)
+            kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=HostTimeout.NODES_STATUS_READY)
         else:
             host_helper.unlock_hosts(hostnames, con_ssh=con_ssh, fail_ok=False, check_nodes_ready=False)
-        kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=HostTimeout.NODES_STATUS_READY)
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
