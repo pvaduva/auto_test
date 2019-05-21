@@ -11,7 +11,7 @@ from consts.lab import Labs, add_lab_entry, NatBoxes, update_lab
 from consts.proj_vars import ProjVar, InstallVars
 from consts import build_server
 from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper, \
-    install_helper, vlm_helper, dc_helper
+    install_helper, vlm_helper, dc_helper, container_helper
 from utils import exceptions, lab_info
 from utils import local_host
 from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, NATBoxClient, PASSWORD_PROMPT, SSHFromSSH
@@ -83,6 +83,10 @@ def setup_keypair(con_ssh, nat_ssh=None):
         nat_ssh (SSHClient): NATBox client
         con_ssh (SSHClient)
     """
+    if not container_helper.is_stx_openstack_deployed(con_ssh=con_ssh):
+        LOG.info("stx-openstack is not applied. Skip nova keypair config.")
+        return
+
     LOG.info("scp key file from controller to NATBox")
     # keyfile path that can be specified in testcase config
     keyfile_stx_origin = os.path.normpath(ProjVar.get_var('STX_KEYFILE_PATH'))
