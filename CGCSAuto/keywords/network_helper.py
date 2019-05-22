@@ -2986,7 +2986,7 @@ def collect_networking_info(time_stamp, routers=None, vms=None, sep_file=None, c
     if hosts:
         is_avs = system_helper.is_avs(con_ssh=con_ssh)
         vswitch_type = 'avs' if is_avs else 'ovs'
-        LOG.info("Collect {}.info for {} router(s) on router host(s): ".format(vswitch_type, routers, hosts))
+        LOG.info("Collect {}.info for {} router(s) on router host(s): {}".format(vswitch_type, routers, hosts))
         for host in hosts:
             collect_vswitch_info_on_host(host, vswitch_type, collect_extra_ovs=(not is_avs), time_stamp=time_stamp,
                                          con_ssh=con_ssh)
@@ -3026,6 +3026,8 @@ def get_network_agents(rtn_val='Host', agent_host=None, router=None, network=Non
     convert = False
     if isinstance(rtn_val, str):
         rtn_val = (rtn_val, )
+        convert = True
+
     values = []
     for field in rtn_val:
         values.append(table_parser.get_column(table_, field))
