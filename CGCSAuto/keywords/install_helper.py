@@ -3432,6 +3432,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             cmd = 'ansible-playbook /usr/share/ansible/stx-ansible/playbooks/bootstrap/bootstrap.yml -e ' \
                          '"override_files_dir={} ansible_become_pass={}"'\
                 .format(WRSROOT_HOME, HostLinuxCreds.get_password())
+            con_telnet.set_prompt(r'.*:~\$\s?')
 
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT, fail_ok=True)
