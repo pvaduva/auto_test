@@ -49,8 +49,14 @@ def test_kube_system_services(controller):
                 coredns_pending = True
                 continue
 
-            assert PodStatus.RUNNING == pod_status, "Pod {} status is {} instead of {}".\
-                format(pod_name, pod_status, PodStatus.RUNNING)
+            valid_status = [PodStatus.RUNNING]
+            if 'audit-' in pod_name:
+                valid_status.append(PodStatus.COMPLETED)
+            elif 'init-' in pod_name:
+                valid_status = [PodStatus.COMPLETED]
+
+            assert pod_status in valid_status, "Pod {} status is {} instead of {}".\
+                format(pod_name, pod_status, valid_status)
 
         services = ('kube-dns', 'tiller-deploy')
         LOG.tc_step("Check kube-system services on {}: {}".format(controller, services))

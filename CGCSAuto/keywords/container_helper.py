@@ -12,11 +12,13 @@ from consts.filepaths import TiSPath
 from keywords import system_helper, host_helper
 
 
-def exec_helm_upload_cmd(sub_cmd, timeout=120, con_ssh=None, fail_ok=False):
+def exec_helm_upload_cmd(tarball, repo=None, timeout=120, con_ssh=None, fail_ok=False):
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    cmd = 'helm-upload {}'.format(sub_cmd)
+    if not repo:
+        repo = 'starlingx'
+    cmd = 'helm-upload {} {}'.format(repo, tarball)
     con_ssh.send(cmd)
     pw_prompt = Prompt.PASSWORD_PROMPT
     prompts = [con_ssh.prompt, pw_prompt]
@@ -45,11 +47,12 @@ def exec_docker_cmd(sub_cmd, args, timeout=120, con_ssh=None, fail_ok=False):
     return code, output
 
 
-def upload_helm_charts(tar_file, delete_first=False, con_ssh=None, timeout=120, fail_ok=False):
+def upload_helm_charts(tar_file, repo=None, delete_first=False, con_ssh=None, timeout=120, fail_ok=False):
     """
     Upload helm charts via helm-upload cmd
     Args:
         tar_file:
+        repo
         delete_first:
         con_ssh:
         timeout:
@@ -65,7 +68,9 @@ def upload_helm_charts(tar_file, delete_first=False, con_ssh=None, timeout=120, 
         con_ssh = ControllerClient.get_active_controller()
 
     helm_dir = os.path.normpath(TiSPath.HELM_CHARTS_DIR)
-    file_path = os.path.join(helm_dir, os.path.basename(tar_file))
+    if not repo:
+        repo = 'starlingx'
+    file_path = os.path.join(helm_dir, repo, os.path.basename(tar_file))
     current_host = con_ssh.get_hostname()
     controllers = [current_host]
     if not system_helper.is_simplex(con_ssh=con_ssh):
@@ -78,7 +83,7 @@ def upload_helm_charts(tar_file, delete_first=False, con_ssh=None, timeout=120, 
                 if host_ssh.file_exists(file_path):
                     host_ssh.exec_sudo_cmd('rm -f {}'.format(file_path))
 
-    code, output = exec_helm_upload_cmd(sub_cmd=tar_file, timeout=timeout, con_ssh=con_ssh, fail_ok=fail_ok)
+    code, output = exec_helm_upload_cmd(tarball=tar_file, repo=repo, timeout=timeout, con_ssh=con_ssh, fail_ok=fail_ok)
     if code != 0:
         return 1, output
 

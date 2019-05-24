@@ -107,7 +107,7 @@ class ComputeHostsTable(HostsTable):
 
 class HostInventoryPage(basepage.BasePage):
 
-    PARTIAL_URL = 'admin/inventory'
+    PARTIAL_URL = 'admin'
 
     HOSTS_TABLE_NAME_COLUMN = 'Host Name'
     HOSTS_TABLE_ADMIN_STATE_COLUMN = 'Admin State'
