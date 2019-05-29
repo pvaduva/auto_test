@@ -52,6 +52,7 @@ def pytest_configure(config):
     helm_chart_path = config.getoption('helm_chart_path')
     no_manage = config.getoption('no_manage')
     extract_deploy_config = config.getoption('extract_deploy_config')
+    vswitch_type_none = config.getoption('vswitch_type_none')
 
     if lab_arg:
         lab_dict = setups.get_lab_dict(lab_arg)
@@ -141,7 +142,7 @@ def pytest_configure(config):
             no_openstack=no_openstack, ipv6_config=ipv6_config,
             helm_chart_path=helm_chart_path, no_manage=no_manage,
             deploy_openstack_from_controller_1=deploy_openstack_from_controller_1,
-            extract_deploy_config=extract_deploy_config)
+            extract_deploy_config=extract_deploy_config, vswitch_type_none=vswitch_type_none)
 
     frame_str = '*'*len('Install Arguments:')
     print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))

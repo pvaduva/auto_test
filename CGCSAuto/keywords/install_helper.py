@@ -789,7 +789,7 @@ def run_infra_post_install_setup():
 
 
 def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=None, timeout=3600, repeat=1,
-                     fail_ok=True):
+                     fail_ok=True, last_run=False):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
@@ -829,10 +829,12 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
     #rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout, fail_ok=fail_ok)
     #if rc != 0:
     rc = 1
+    attempts = attempts if not last_run else 3
+
     while rc != 0 and attempts > 0:
         rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout)
         attempts -= 1
-        time.sleep(1)
+        time.sleep(2)
 
     if rc != 0:
         msg = " {} run failed: {}".format(script, msg)

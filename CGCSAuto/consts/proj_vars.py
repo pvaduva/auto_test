@@ -136,7 +136,8 @@ class InstallVars:
                          helm_chart_path=None,
                          helm_chart_server=None,
                          no_manage=False,
-                         extract_deploy_config=False):
+                         extract_deploy_config=False,
+                         vswitch_type_none=False):
 
         cls.__var_dict = {
             'LAB': lab,
@@ -189,7 +190,8 @@ class InstallVars:
             'CONTROLLER0_CEPH_MON_DEVICE': controller0_ceph_mon_device,
             'CONTROLLER1_CEPH_MON_DEVICE': controller1_ceph_mon_device,
             'CEPH_MON_GIB': ceph_mon_gib,
-            'EXTRACT_DEPLOY_CONFIG': extract_deploy_config
+            'EXTRACT_DEPLOY_CONFIG': extract_deploy_config,
+            'VSWITCH_TYPE_NONE': vswitch_type_none
         }
 
     @classmethod

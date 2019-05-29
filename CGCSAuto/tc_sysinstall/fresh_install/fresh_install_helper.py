@@ -592,7 +592,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None, repeat=1):
+def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None, repeat=1, last_run=False):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     ovs = InstallVars.get_install_var("OVS") if ovs is None else ovs
     if conf_file is None:
@@ -601,12 +601,22 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None, repeat=1):
         if con_ssh.exec_cmd("test -f {}_ovs.conf".format(conf_file))[0] == 0:
             LOG.debug("setting up ovs lab_setup configuration")
             con_ssh.exec_cmd("rm {}.conf; mv {}_ovs.conf {}.conf".format(conf_file, conf_file, conf_file))
+        vswitch_type_none = InstallVars.get_install_var("VSWITCH_TYPE_NONE")
+        if vswitch_type_none:
+            con_ssh.exec_cmd("sed -i \'s/VSWITCH_TYPE=\"ovs-dpdk\"/VSWITCH_TYPE=\"none\"/g\' {}.conf"
+                             .format(conf_file))
+            rc, output = con_ssh.exec_cmd("grep \'VSWITCH_PCPU=\' {}.conf".format(conf_file), fail_ok=True)
+            if rc == 0:
+                con_ssh.exec_cmd("sed -i \"s/{}/VSWITCH_PCPU=0/g\" {}.conf".format(output.strip(), conf_file))
+            else:
+                con_ssh.exec_cmd("echo \'VSWITCH_PCPU=0\' >> {}.conf".format(conf_file))
+
     test_step = "Run lab setup"
     LOG.tc_step(test_step)
     if do_step(test_step):
         LOG.info("running lab_setup.sh")
-        install_helper.run_setup_script(conf_file=conf_file, con_ssh=con_ssh, fail_ok=False, config=True, timeout=7200,
-                                        repeat=repeat)
+        install_helper.run_setup_script(conf_file=conf_file, con_ssh=con_ssh, config=True, timeout=7200,
+                                        repeat=repeat, fail_ok=False, last_run=last_run)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))

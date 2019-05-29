@@ -603,7 +603,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                        boot="feed", iso_path=None, security="standard", low_latency=False, stop=None,
                        kubernetes=False, dc_float_ip=None, install_subcloud=None, no_openstack=False,
                        ipv6_config=False, helm_chart_path=None, no_manage=False,
-                       deploy_openstack_from_controller_1=False, extract_deploy_config=False):
+                       deploy_openstack_from_controller_1=False, extract_deploy_config=False, vswitch_type_none=False):
 
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
@@ -901,7 +901,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                  helm_chart_path=helm_chart_path,
                                  helm_chart_server=helm_chart_server,
                                  no_manage=no_manage,
-                                 extract_deploy_config=extract_deploy_config
+                                 extract_deploy_config=extract_deploy_config,
+                                 vswitch_type_none=vswitch_type_none
                                  )
 
 

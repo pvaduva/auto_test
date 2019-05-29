@@ -588,6 +588,7 @@ def pytest_addoption(parser):
     helm_chart_path_help = 'Full path to Helm charts files. Default is <build-dir>/std/build-helm/stx'
     unmanaged_install_help = 'flag to leave subcloud as unmanaged after install.'
     extract_deploy_help = "flag whether to extract deployment yaml files"
+    vswitch_type_none_help = "flag to reset the vswitch type to none type before running labsetup."
 
     # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',
@@ -619,6 +620,8 @@ def pytest_addoption(parser):
                      help=unmanaged_install_help)
     parser.addoption('--extract-deploy-config', '--extract-deploy', '--ext-deploy',  dest='extract_deploy_config',
                      action='store_true', default=False, help=extract_deploy_help)
+    parser.addoption('--vswitch-type-none',  '--vswitch-none',  dest='vswitch_type_none',
+                     action='store_true', default=False, help=vswitch_type_none_help)
 
     # Note --lab is also a lab fresh_install option, when config file is not provided.
 
