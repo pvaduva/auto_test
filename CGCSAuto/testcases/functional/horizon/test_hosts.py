@@ -233,7 +233,10 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
             horizon_header = horizon_port_table.HEADERS_MAP[cli_header]
             horizon_row_dict = horizon_row_dict_port_table[ethernet_name]
             cli_row_dict = cli_row_dict_port_table[ethernet_name]
-            cli_val = cli_row_dict[cli_header]
+            if cli_header not in cli_row_dict and cli_header == 'mac address':
+                cli_val = cli_row_dict['macaddress']
+            else:
+                cli_val = cli_row_dict[cli_header]
             horizon_val = horizon_row_dict[horizon_header]
             # Solve table parser issue: MAC Address returns list eg: ['a4:bf:01:35:4a:', '32']
             if isinstance(cli_val, list):

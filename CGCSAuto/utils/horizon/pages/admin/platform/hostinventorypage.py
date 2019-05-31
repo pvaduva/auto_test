@@ -319,7 +319,7 @@ class PortsTable(tables.TableRegion):
     HEADERS_MAP = {
         # Accelerate not in the cli table
         'name': 'Name',
-        'macaddress': 'MAC Address',
+        'mac address': 'MAC Address',
         'pci address': 'PCI Address',
         'processor': 'Processor',
         'auto neg': 'Auto Negotiation',
@@ -347,7 +347,7 @@ class LLDPTable(tables.TableRegion):
         'local_port': 'Name',
         'port_identifier': 'Neighbor',
         'port_description': 'Port Description',
-        'ttl': 'Time To Live (Rx)',
+        # 'ttl': 'Time To Live (Rx)', This one is dynamic, horizon exists delay
         'system_name': 'System Name',
         'dot3_max_frame': 'Max Frame Size'
     }
