@@ -598,11 +598,11 @@ def _collect_telnet_logs(telnet_ip, telnet_port, end_event, prompt, hostname, ti
 
 
 def set_install_params(installconf_path, lab=None, skip=None, resume=False, controller0_ceph_mon_device=None, drop=None,
-                       patch_dir=None, ovs=False, build_server=None, tis_build_dir="latest_build",
-                       boot_server=None, controller1_ceph_mon_device=None, ceph_mon_gib=None, wipedisk=False,
-                       boot="feed", iso_path=None, security="standard", low_latency=False, stop=None,
-                       kubernetes=False, dc_float_ip=None, install_subcloud=None, no_openstack=False,
-                       ipv6_config=False, helm_chart_path=None, no_manage=False,
+                       patch_dir=None, ovs=False, vswitch_type="ovs-dpdk", build_server=None,
+                       tis_build_dir="latest_build", boot_server=None, controller1_ceph_mon_device=None,
+                       ceph_mon_gib=None, wipedisk=False, boot="feed", iso_path=None, security="standard",
+                       low_latency=False, stop=None, kubernetes=False, dc_float_ip=None, install_subcloud=None,
+                       no_openstack=False, ipv6_config=False, helm_chart_path=None, no_manage=False,
                        deploy_openstack_from_controller_1=False, extract_deploy_config=False, vswitch_type_none=False):
 
     if not lab and not installconf_path:
@@ -616,7 +616,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                              guest_image=None, heat_templates=None, security=security,
                                              low_latency=low_latency, stop=stop, skip=skip, resume=resume,
                                              boot_server=boot_server, boot=boot, iso_path=iso_path, ovs=ovs,
-                                             patch_dir=patch_dir, kubernetes=kubernetes, helm_chart_path=helm_chart_path)
+                                             vswitch_type=vswitch_type, patch_dir=patch_dir, kubernetes=kubernetes,
+                                             helm_chart_path=helm_chart_path)
 
     # print("Setting Install vars : {} ".format(locals()))
 
@@ -706,6 +707,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     conf_guest_image = conf_files['GUEST_IMAGE_PATH']
     conf_heat_templates = conf_files['HEAT_TEMPLATES']
     conf_ovs = eval(conf_files['OVS_CONFIG'])
+    conf_vswitch_type = conf_files['VSWITCH_TYPE']
     conf_kuber = eval(conf_files['KUBERNETES_CONFIG'])
     conf_helm_chart = conf_files['HELM_CHART_PATH']
     if conf_files_server:
@@ -725,6 +727,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     if conf_heat_templates:
         heat_templates = conf_heat_templates
     ovs = conf_ovs
+    vswitch_type = conf_vswitch_type
     kubernetes = conf_kuber
 
     helm_chart_path = conf_helm_chart
@@ -894,6 +897,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                  dc_float_ip=dc_float_ip,
                                  install_subcloud=install_subcloud,
                                  ovs=ovs,
+                                 vswitch_type=vswitch_type,
                                  kubernetes=kubernetes,
                                  deploy_openstack=not no_openstack,
                                  deploy_openstack_from_controller_1=deploy_openstack_from_controller_1,
@@ -908,7 +912,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
 
 def write_installconf(lab, controller, lab_files_dir, build_server, files_server, tis_build_dir,
                       compute, storage, patch_dir, license_path, guest_image, heat_templates, boot, iso_path,
-                      low_latency, security, stop, ovs,  boot_server, resume, skip, kubernetes, helm_chart_path):
+                      low_latency, security, stop, ovs, vswitch_type,  boot_server, resume, skip, kubernetes,
+                      helm_chart_path):
 
     """
     Writes a file in ini format of the fresh_install variables
@@ -931,6 +936,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, files_server
         security
         stop
         ovs
+        vswitch_type
         boot_server
         resume
         skip
@@ -988,6 +994,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, files_server
                   "BOOT_IF_SETTINGS_PATH": '',
                   "HOST_BULK_ADD_PATH": '',
                   "OVS_CONFIG": str(ovs),
+                  "VSWITCH_TYPE": vswitch_type,
                   "KUBERNETES_CONFIG": str(kubernetes),
                   "HELM_CHART_PATH": helm_chart_path if helm_chart_path else ''}
 

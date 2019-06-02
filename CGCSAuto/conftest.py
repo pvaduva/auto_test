@@ -589,6 +589,11 @@ def pytest_addoption(parser):
     unmanaged_install_help = 'flag to leave subcloud as unmanaged after install.'
     extract_deploy_help = "flag whether to extract deployment yaml files"
     vswitch_type_none_help = "flag to reset the vswitch type to none type before running labsetup."
+    vswitch_type_help = 'Select the vswitch type to install. Default is pxe. Options are: \n' \
+                        'ovs \n' \
+                        'ovs-dpdk: a default value \n' \
+                        'avs \n' \
+                        'none'
 
     # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir', action='store', metavar='DIR',
@@ -620,6 +625,8 @@ def pytest_addoption(parser):
                      help=unmanaged_install_help)
     parser.addoption('--extract-deploy-config', '--extract-deploy', '--ext-deploy',  dest='extract_deploy_config',
                      action='store_true', default=False, help=extract_deploy_help)
+    parser.addoption('--vswitch-type', dest='vswitch_type_list', action='store', default='ovs-dpdk',
+                     help=vswitch_type_help)
     parser.addoption('--vswitch-type-none',  '--vswitch-none',  dest='vswitch_type_none',
                      action='store_true', default=False, help=vswitch_type_none_help)
 

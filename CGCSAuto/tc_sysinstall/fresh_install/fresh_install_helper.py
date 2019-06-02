@@ -1260,7 +1260,13 @@ def wait_for_hosts_ready(hosts,  lab=None, timeout=120):
     if not controller0_node.ssh_conn:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout)
+    ready, not_ready = kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout,
+                                                        fail_ok=True)
+
+    if not ready:
+        LOG.warning("Nodes {} not ready checking floating ip issue ...".format(not_ready))
+        setups.arp_for_fip(lab, controller0_node.ssh_conn )
+        kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout)
 
 
 def wait_for_hosts_to_be_online(hosts,  lab=None):

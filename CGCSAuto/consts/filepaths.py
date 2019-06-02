@@ -78,9 +78,12 @@ class BuildServerPath:
     STX_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/StarlingX_Upstream_build'
     STX_RELEASE_DIR = '/localdisk/loadbuild/jenkins/StarlingX_18.10'
     STX_MASTER_CENGN_DIR = '/import/mirrors/cengn/master/centos'
+    EAR_HOST_BUILDS_DIR = '/localdisk/loadbuild/jenkins/TC_19.05_Build'
+
     DEFAULT_HOST_BUILDS_DIR = STX_MASTER_CENGN_DIR
     DEFAULT_GUEST_IMAGE_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_Guest/latest_build/export/tis-centos-guest.img'
     LATEST_BUILD = 'latest_build'
+    EAR_HOST_BUILD_PATH = '{}/{}'.format(EAR_HOST_BUILDS_DIR, LATEST_BUILD)
     DEFAULT_HOST_BUILD_PATH = '{}/latest_build'.format(DEFAULT_HOST_BUILDS_DIR)
     DEFAULT_LICENSE_PATH = '/folk/cgts/lab/license.lic'
     DEFAULT_PATCH_DIR = '/folk/cgts/patches-to-verify/'
@@ -115,6 +118,7 @@ class BuildServerPath:
         TITANIUM_R6_BUILD = 'Titanium_R6_build'
         STARLINGX_18_10 = 'StarlingX_18.10'
         STARLINGX_UPSTREAM = 'StarlingX_Upstream_build'
+        TC_19_05_BUILD = 'TC_19.05_Build'
 
         R2_VERSION_SEARCH_REGEX = r'(?:15.12|CGTS_2.0)'
         R3_VERSION_SEARCH_REGEX = r'(?:_16.10|CGCS_3.0)'

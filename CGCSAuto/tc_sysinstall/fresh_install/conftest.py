@@ -53,6 +53,7 @@ def pytest_configure(config):
     no_manage = config.getoption('no_manage')
     extract_deploy_config = config.getoption('extract_deploy_config')
     vswitch_type_none = config.getoption('vswitch_type_none')
+    vswitch_type = config.getoption('vswitch_type_list')
 
     if lab_arg:
         lab_dict = setups.get_lab_dict(lab_arg)
@@ -106,15 +107,19 @@ def pytest_configure(config):
             lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '')
 
         if not heat_templates:
-            heat_templates = os.path.join(BuildServerPath.STX_HOST_BUILDS_DIR, 'latest_full_build',
-                                          BuildServerPath.HEAT_TEMPLATES)
+            if BuildServerPath.BldsDirNames.TC_19_05_BUILD in host_build_dir_path:
+                heat_templates = os.path.join(BuildServerPath.EAR_HOST_BUILD_PATH, BuildServerPath.HEAT_TEMPLATES)
+            else:
+                heat_templates = os.path.join(BuildServerPath.STX_HOST_BUILDS_DIR, 'latest_full_build',
+                                              BuildServerPath.HEAT_TEMPLATES)
         elif not os.path.isabs(heat_templates):
             heat_templates = os.path.join(host_build_dir_path, heat_templates)
 
         if not helm_chart_path:
-            helm_path_in_build = BuildServerPath.STX_HELM_CHARTS_CENGN if '/import/' in host_build_dir_path \
-                else BuildServerPath.STX_HELM_CHARTS
-            helm_chart_path = os.path.join(host_build_dir_path, helm_path_in_build)
+            helm_path_in_build = BuildServerPath.STX_HELM_CHARTS_CENGN if '/import/' in host_build_dir_path or '19.05' \
+                in host_build_dir_path else BuildServerPath.STX_HELM_CHARTS
+            helm_chart_path = os.path.join(BuildServerPath.STX_MASTER_CENGN_DIR, BuildServerPath.LATEST_BUILD,
+                                           helm_path_in_build)
 
         if boot_type.lower() in ('usb_burn', 'pxe_iso', 'iso_feed') and not iso_path:
             iso_path_in_build = BuildServerPath.ISO_PATH_CENGN if '/import/' in host_build_dir_path \
@@ -128,7 +133,7 @@ def pytest_configure(config):
             build_server=build_server, files_server=files_server,
             license_path=install_license, guest_image=guest_image,
             heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
-            security=security, low_latency=low_lat, stop=stop_step, ovs=ovs,
+            security=security, low_latency=low_lat, stop=stop_step, ovs=ovs, vswitch_type=vswitch_type,
             boot_server=boot_server, resume=resume_install, skip=skiplist,
             kubernetes=kubernetes, helm_chart_path=helm_chart_path)
 
@@ -137,7 +142,7 @@ def pytest_configure(config):
             installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
             controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
             boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
-            patch_dir=patch_dir, ovs=ovs, boot_server=boot_server, dc_float_ip=dc_float_ip,
+            patch_dir=patch_dir, ovs=ovs, vswitch_type=vswitch_type, boot_server=boot_server, dc_float_ip=dc_float_ip,
             install_subcloud=sublcoud_name, kubernetes=kubernetes,
             no_openstack=no_openstack, ipv6_config=ipv6_config,
             helm_chart_path=helm_chart_path, no_manage=no_manage,
