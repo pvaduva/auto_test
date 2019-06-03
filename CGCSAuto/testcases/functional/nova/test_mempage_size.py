@@ -10,7 +10,7 @@ from consts.cgcs import FlavorSpec, ImageMetadata, NovaCLIOutput
 from keywords import nova_helper, vm_helper, system_helper, cinder_helper, host_helper, glance_helper
 
 
-MEMPAGE_HEADERS = ('vm_total_4K', 'vm_hp_avail_2M', 'vm_hp_avail_1G')
+MEMPAGE_HEADERS = ('app_total_4K', 'app_hp_avail_2M', 'app_hp_avail_1G')
 
 
 def skip_4k_for_ovs(mempage_size):
@@ -445,8 +445,8 @@ def test_compute_mempage_vars(hosts=None):
 
     for host in hosts:
         LOG.info("---Check {} memory info in system host-memory-list and on host".format(host))
-        headers = ['vs_hp_size(MiB)', 'vs_hp_total', 'vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G',
-                   'vm_hp_avail_2M', 'vm_hp_avail_1G']
+        headers = ['vs_hp_size(MiB)', 'vs_hp_total', 'app_total_4K', 'app_hp_total_2M', 'app_hp_total_1G',
+                   'app_hp_avail_2M', 'app_hp_avail_1G']
         cli_vars = check_meminfo_via_sysinv_nova_cli(host=host, headers=headers)
         check_memconfs_on_host(host=host, cli_vars=cli_vars)
 

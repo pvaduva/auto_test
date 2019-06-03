@@ -63,8 +63,8 @@ def test_modify_memory_when_unlocked_negative(get_host):
 #
 #     pre_mem_tab = system_helper.get_host_mem_list(host=hostname)
 #     pre_procs = table_parser.get_column(pre_mem_tab, 'processor')
-#     pre_2m_pages = table_parser.get_column(pre_mem_tab, 'vm_hp_total_2M')
-#     pre_1g_pages = table_parser.get_column(pre_mem_tab, 'vm_hp_total_1G')
+#     pre_2m_pages = table_parser.get_column(pre_mem_tab, 'app_hp_total_2M')
+#     pre_1g_pages = table_parser.get_column(pre_mem_tab, 'app_hp_total_1G')
 #
 #     HostsToRecover.add(hostname, scope='module')
 #

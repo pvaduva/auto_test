@@ -1599,7 +1599,7 @@ def set_host_1g_pages(host, proc_id=0, hugepage_num=None, fail_ok=False, auth_in
     """
     LOG.info("Setting 1G memory to: {}".format(hugepage_num))
     mem_vals = get_host_mem_values(
-        host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
+        host, ['app_total_4K', 'app_hp_total_2M', 'app_hp_total_1G', 'app_hp_avail_2M', 'mem_avail(MiB)', ],
         proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)[int(proc_id)]
 
     pre_4k_total, pre_2m_total, pre_1g_total, pre_2m_avail, pre_mem_avail = [int(val) for val in mem_vals]
@@ -1730,7 +1730,7 @@ def set_host_4k_pages(host, proc_id=1, smallpage_num=None, fail_ok=False, auth_i
     """
     LOG.info("Setting host {}'s proc_id {} to contain {} 4k pages".format(host, proc_id, smallpage_num))
     mem_vals = get_host_mem_values(
-        host, ['vm_total_4K', 'vm_hp_total_2M', 'vm_hp_total_1G', 'vm_hp_avail_2M', 'mem_avail(MiB)', ],
+        host, ['app_total_4K', 'app_hp_total_2M', 'app_hp_total_1G', 'app_hp_avail_2M', 'mem_avail(MiB)', ],
         proc_id=proc_id, con_ssh=con_ssh, auth_info=auth_info)[proc_id]
 
     page_4k_total, page_2m_total, page_1g_total, page_2m_avail, mem_avail = [int(val) for val in mem_vals]
@@ -1780,7 +1780,7 @@ def get_host_mem_values(host, headers, proc_id=None, wait_for_update=True, con_s
         host (str): hostname
         headers (list|tuple):
         proc_id (int|str|None|tuple|list): such as 0, '1'
-        wait_for_update (bool): wait for vm_hp_pending_2M and vm_hp_pending_1G to be None (CGTS-7499)
+        wait_for_update (bool): wait for app_hp_pending_2M and app_hp_pending_1G to be None (CGTS-7499)
         con_ssh (SSHClient):
         auth_info (dict):
         rtn_dict
@@ -1803,8 +1803,8 @@ def get_host_mem_values(host, headers, proc_id=None, wait_for_update=True, con_s
     if wait_for_update:
         end_time = time.time() + 330
         while time.time() < end_time:
-            pending_2m = [eval(mem) for mem in table_parser.get_column(table_, 'vm_hp_pending_2M')]
-            pending_1g = [eval(mem) for mem in table_parser.get_column(table_, 'vm_hp_pending_1G')]
+            pending_2m = [eval(mem) for mem in table_parser.get_column(table_, 'app_hp_pending_2M')]
+            pending_1g = [eval(mem) for mem in table_parser.get_column(table_, 'app_hp_pending_1G')]
 
             for i in range(len(pending_2m)):
                 if (pending_2m[i] is not None) or (pending_1g[i] is not None):

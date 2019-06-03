@@ -1818,7 +1818,7 @@ def get_values_virsh_xmldump(instance_name, host_ssh, tag_paths, target_type='el
 
 
 def _get_actual_mems(host):
-    headers = ('mem_avail(MiB)', 'vm_hp_total_1G', 'vm_hp_pending_1G')
+    headers = ('mem_avail(MiB)', 'app_hp_total_1G', 'app_hp_pending_1G')
     displayed_mems = system_helper.get_host_mem_values(host=host, headers=headers, wait_for_update=False)
 
     actual_mems = {}
@@ -1856,7 +1856,7 @@ def wait_for_mempage_update(host, proc_id=None, expt_1g=None, timeout=420, auth_
         raise ValueError("proc_id and expt_1g have to be the same type")
 
     pending_2m = pending_1g = -1
-    headers = ['vm_hp_total_1G', 'vm_hp_pending_1G', 'vm_hp_pending_2M']
+    headers = ['app_hp_total_1G', 'app_hp_pending_1G', 'app_hp_pending_2M']
     current_time = time.time()
     end_time = current_time + timeout
     pending_end_time = current_time + 120

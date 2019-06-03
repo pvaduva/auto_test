@@ -73,7 +73,7 @@ def ensure_sufficient_4k_pages(request):
 
     for host in hypervisors:
         LOG.fixture_step("Modify 4k page numbers to 600000 for {}".format(host))
-        num_4k_pages = system_helper.get_host_mem_values(host, ['vm_total_4K'], proc_id=(0, 1))
+        num_4k_pages = system_helper.get_host_mem_values(host, ['app_total_4K'], proc_id=(0, 1))
         proc0_num_4k_page = int(num_4k_pages[0][0])
         proc1_num_4k_page = int(num_4k_pages[1][0])
 

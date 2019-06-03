@@ -311,7 +311,7 @@ def check_host_cpu_and_memory(host, expt_shared_cpu, expt_1g_page):
         assert len(shared_cores_[proc]) == expt_shared_cpu[proc], "Actual shared cpu count is different than expected"
 
     LOG.info("Check {} 1g page config: {}".format(host, expt_1g_page))
-    mempages_1g = system_helper.get_host_mem_values(host, headers=('vm_hp_total_1G',))
+    mempages_1g = system_helper.get_host_mem_values(host, headers=('app_hp_total_1G',))
     for proc in expt_1g_page:
         assert mempages_1g[proc][0] == expt_1g_page[proc], "Actual 1g page is differnt than expected"
 
