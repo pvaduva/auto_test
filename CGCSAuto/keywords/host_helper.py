@@ -1832,7 +1832,7 @@ def _get_actual_mems(host):
             raise exceptions.SysinvError('system host-memory-modify is not rejected when 2M pages exceeds mem_avail')
 
         # Processor 0:No available space for 2M huge page allocation, max 2M VM pages: 27464
-        actual_mem = int(re.findall(r'max 2M VM pages: (\d+)', output)[0]) * 2
+        actual_mem = int(re.findall(r'max 2M pages: (\d+)', output)[0]) * 2
         actual_mems[proc] = (actual_mem, actual_1g)
 
     return actual_mems

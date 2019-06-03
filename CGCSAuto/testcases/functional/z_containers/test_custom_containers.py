@@ -195,7 +195,8 @@ def test_push_docker_image_to_local_registry(controller):
         LOG.tc_step("Remove {} from local registry if exists".format(TEST_IMAGE))
         con_ssh.exec_sudo_cmd('rm -rf {}/{}'.format(TiSPath.DOCKER_REPO, TEST_IMAGE))
 
-        reg_addr = container_helper.get_docker_reg_addr(con_ssh=con_ssh)
+        #reg_addr = container_helper.get_docker_reg_addr(con_ssh=con_ssh)
+        reg_addr = "registry.local:9001"
         target_name = '{}/{}'.format(reg_addr, TEST_IMAGE)
 
         LOG.tc_step("Tag image with local registry")
