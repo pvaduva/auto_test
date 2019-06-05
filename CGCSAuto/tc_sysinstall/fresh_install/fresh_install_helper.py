@@ -1512,12 +1512,12 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
         cmd2 = None
         if run_deploy:
             if stage == DEPLOY_INTITIAL:
-                cmd1 = "{} build -n {} -o {}_initial.yaml".format(deploy_tool_full_path, lab_name, lab_name)
+                cmd1 = "{} build -s {} -o {}_initial.yaml".format(deploy_tool_full_path, lab_name, lab_name)
             elif stage == DEPLOY_INTERIM:
-                cmd1 = "{} build -n {} -o {}_before.yaml".format(deploy_tool_full_path, lab_name, lab_name)
+                cmd1 = "{} build -s {} -o {}_before.yaml".format(deploy_tool_full_path, lab_name, lab_name)
             else:
-                cmd1 = "{} build -n {} -o {}.yaml --minimal-config".format(deploy_tool_full_path, lab_name, lab_name)
-                cmd2 = "{} build -n {} -o {}_full.yaml".format(deploy_tool_full_path, lab_name, lab_name)
+                cmd1 = "{} build -s {} -o {}.yaml --minimal-config".format(deploy_tool_full_path, lab_name, lab_name)
+                cmd2 = "{} build -s {} -o {}_full.yaml".format(deploy_tool_full_path, lab_name, lab_name)
 
             if cmd1:
                 rc, output = controller0_node.ssh_conn.exec_cmd("source /etc/platform/openrc; " + cmd1)
