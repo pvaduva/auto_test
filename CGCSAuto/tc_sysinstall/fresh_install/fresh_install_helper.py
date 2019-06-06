@@ -21,7 +21,7 @@ from consts.proj_vars import ProjVar, InstallVars
 DEPLOY_TOOL = 'deploy'
 DEPLOY_SOUCE_PATH = '/folk/cgts/lab/bin/'
 DEPLOY_DEST_PATH = '/home/wrsroot/'
-DEPLOY_RESULTS_DEST_PATH = '/folk/cgts/lab/deployment/'
+DEPLOY_RESULTS_DEST_PATH = '/folk/cgts/lab/deployment-manager/generated-configs/'
 DEPLOY_INTITIAL = 'initial'
 DEPLOY_INTERIM = 'interim'
 DEPLOY_LAST = 'last'
@@ -1540,6 +1540,7 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                 rc, output = controller0_node.ssh_conn.rsync(yaml_files, server.server_ip, DEPLOY_RESULTS_DEST_PATH,
                                                              dest_user=SvcCgcsAuto.USER,
                                                              dest_password=SvcCgcsAuto.PASSWORD,
+                                                             extra_opts=["--chmod=Fugo=rw"],
                                                              pre_opts=pre_opts, fail_ok=True)
                 if rc != 0:
                     LOG.warning("Fail to copy {} to  destination {}:{}".format(yaml_files, server.name,
