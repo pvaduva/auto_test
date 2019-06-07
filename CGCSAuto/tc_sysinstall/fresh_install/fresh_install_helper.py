@@ -1501,6 +1501,8 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
             if rc != 0:
                 err_msg = err_msg + output
             run_deploy = True if rc == 0 else False
+            if run_deploy:
+                controller0_node.ssh_conn.exec_cmd("mkdir -p {}deploy_yaml_files".format(DEPLOY_DEST_PATH))
         else:
             run_deploy = True
 
@@ -1529,22 +1531,46 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                     LOG.warning("The deploy command {} failed: {}".format(cmd2, output))
 
             # check if yaml files are generated:
-            yaml_files = "{}{}*.yaml".format(WRSROOT_HOME, lab_name)
+            yaml_files = "{}{}_*.yaml".format(WRSROOT_HOME, lab_name)
+            last_file = "{}{}.yaml".format(WRSROOT_HOME, lab_name)
             cmd = "ls {}".format(yaml_files)
+            unfiltered_dest_results_path = DEPLOY_RESULTS_DEST_PATH + "unfiltered/"
             if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
                 if not server.server_ip:
                    rc, server_ip = server.ssh_conn.exec_cmd("hostname -i")
                    if rc == 0:
                        server.server_ip = server_ip.strip()
+
                 pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
-                rc, output = controller0_node.ssh_conn.rsync(yaml_files, server.server_ip, DEPLOY_RESULTS_DEST_PATH,
+                rc, output = controller0_node.ssh_conn.rsync(yaml_files, server.server_ip, unfiltered_dest_results_path,
                                                              dest_user=SvcCgcsAuto.USER,
                                                              dest_password=SvcCgcsAuto.PASSWORD,
                                                              extra_opts=["--chmod=Fugo=rw"],
                                                              pre_opts=pre_opts, fail_ok=True)
                 if rc != 0:
                     LOG.warning("Fail to copy {} to  destination {}:{}".format(yaml_files, server.name,
-                                                                               DEPLOY_RESULTS_DEST_PATH))
+                                                                               unfiltered_dest_results_path))
+                else:
+                    controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(yaml_files, WRSROOT_HOME))
+            if stage == DEPLOY_LAST:
+                cmd = "ls {}".format(last_file)
+                if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
+                    if not server.server_ip:
+                       rc, server_ip = server.ssh_conn.exec_cmd("hostname -i")
+                       if rc == 0:
+                           server.server_ip = server_ip.strip()
+
+                    pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
+                    rc, output = controller0_node.ssh_conn.rsync(yaml_files, server.server_ip, DEPLOY_RESULTS_DEST_PATH,
+                                                                 dest_user=SvcCgcsAuto.USER,
+                                                                 dest_password=SvcCgcsAuto.PASSWORD,
+                                                                 extra_opts=["--chmod=Fugo=rw"],
+                                                                 pre_opts=pre_opts, fail_ok=True)
+                    if rc != 0:
+                        LOG.warning("Fail to copy {} to  destination {}:{}".format(last_file, server.name,
+                                                                                   DEPLOY_RESULTS_DEST_PATH))
+                    else:
+                        controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(last_file, WRSROOT_HOME))
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
