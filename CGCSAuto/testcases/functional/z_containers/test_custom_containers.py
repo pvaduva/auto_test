@@ -271,13 +271,12 @@ def test_upload_charts_via_helm_upload(copy_test_apps):
 def cleanup_kubectl_create_app(request):
     LOG.info("Delete {} pod if exists before test run".format(RESOURCE_CONSUMER_APP_NAME))
     if kube_helper.get_pods(namespace='default', name=RESOURCE_CONSUMER_APP_NAME, strict=False):
-        kube_helper.delete_pods(pod_names=RESOURCE_CONSUMER_APP_NAME, pods_types=('deployment', 'service'))
+        kube_helper.delete_pods(pod_names=RESOURCE_CONSUMER_APP_NAME, types_to_delete=('deployment', 'service'))
 
     def delete_kubectl_create_app():
+        LOG.info("Delete {} pod if exists after test run".format(RESOURCE_CONSUMER_APP_NAME))
         if kube_helper.get_pods(namespace='default', name=RESOURCE_CONSUMER_APP_NAME, strict=False):
-            LOG.info("Delete {} pod if exists after test run".format(RESOURCE_CONSUMER_APP_NAME))
-            # kube_helper.delete_kubectl_app(pod_names=RESOURCE_CONSUMER_APP_NAME, fail_ok=True)
-            kube_helper.delete_pods(pod_names=RESOURCE_CONSUMER_APP_NAME, pods_types=('deployment', 'service'),
+            kube_helper.delete_pods(pod_names=RESOURCE_CONSUMER_APP_NAME, types_to_delete=('deployment', 'service'),
                                     namespace='default')
     request.addfinalizer(delete_kubectl_create_app)
 
@@ -331,5 +330,4 @@ def test_kubectl_create_app(cleanup_kubectl_create_app):
         kube_helper.wait_for_pods(pod_names=pod_name, namespace=None, fail_ok=False)
 
     LOG.tc_step("Delete {} test app".format(pod_app_name))
-    # kube_helper.delete_kubectl_app(pod_names=pod_app_name, fail_ok=True)
-    kube_helper.delete_pods(pod_names=pod_app_name, pods_types=('deployment', 'service'), namespace='default')
+    kube_helper.delete_pods(pod_names=pod_app_name, types_to_delete=('deployment', 'service'), namespace='default')

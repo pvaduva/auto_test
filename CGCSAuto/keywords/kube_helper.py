@@ -319,14 +319,15 @@ def wait_for_pods_gone(pod_names, types='pod', namespace=None, timeout=120, chec
     raise exceptions.KubeError(msg)
 
 
-def delete_pods(pod_names=None, select_all=None, pods_types='pod', namespace=None, recursive=None, selectors=None,
+def delete_pods(pod_names=None, select_all=None, types_to_delete='pod', pods_to_check='pod',  namespace=None, recursive=None, selectors=None,
                 con_ssh=None, fail_ok=False, check_both_controllers=True):
     """
     Delete pods via kubectl delete
     Args:
         pod_names (None|str|list|tuple):
         select_all (None|bool):
-        pods_types (str|list|tuple):
+        types_to_delete (str|list|tuple):
+        pods_to_check (str|list|tuple):
         namespace (None|str):
         recursive (bool):
         selectors (None|dict):
@@ -348,10 +349,10 @@ def delete_pods(pod_names=None, select_all=None, pods_types='pod', namespace=Non
     }
 
     arg_str = common.parse_args(args_dict=arg_dict, vals_sep=',')
-    if pods_types:
-        if isinstance(pods_types, str):
-            pods_types = [pods_types]
-        arg_str = '{} {}'.format(','.join(pods_types), arg_str).strip()
+    if types_to_delete:
+        if isinstance(types_to_delete, str):
+            types_to_delete = [types_to_delete]
+        arg_str = '{} {}'.format(','.join(types_to_delete), arg_str).strip()
 
     if pod_names:
         if isinstance(pod_names, str):
@@ -365,8 +366,8 @@ def delete_pods(pod_names=None, select_all=None, pods_types='pod', namespace=Non
         return 1, output
 
     LOG.info("Check pod is not running on current host")
-    res, remaining = wait_for_pods_gone(pod_names=pod_names, types=pods_types, namespace=namespace, con_ssh=con_ssh,
-                                        fail_ok=fail_ok)
+    res, remaining = wait_for_pods_gone(pod_names=pod_names, types=pods_to_check, namespace=namespace, con_ssh=con_ssh,
+                                        fail_ok=fail_ok, strict=False)
     if not res:
         return 2, remaining
 
@@ -375,8 +376,8 @@ def delete_pods(pod_names=None, select_all=None, pods_types='pod', namespace=Non
         con_name = 'controller-1' if con_ssh.get_hostname() == 'controller-0' else 'controller-0'
         from keywords import host_helper
         with host_helper.ssh_to_host(hostname=con_name, con_ssh=con_ssh) as other_con:
-            res, remaining = wait_for_pods_gone(pod_names=pod_names, namespace=namespace, types=pods_types,
-                                                con_ssh=other_con, fail_ok=fail_ok)
+            res, remaining = wait_for_pods_gone(pod_names=pod_names, namespace=namespace, types=pods_to_check,
+                                                con_ssh=other_con, fail_ok=fail_ok, strict=False)
             if not res:
                 return 3, remaining
 
