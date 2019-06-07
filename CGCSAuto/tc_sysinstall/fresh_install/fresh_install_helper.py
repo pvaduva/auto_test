@@ -1561,7 +1561,7 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                            server.server_ip = server_ip.strip()
 
                     pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
-                    rc, output = controller0_node.ssh_conn.rsync(yaml_files, server.server_ip, DEPLOY_RESULTS_DEST_PATH,
+                    rc, output = controller0_node.ssh_conn.rsync(last_file, server.server_ip, DEPLOY_RESULTS_DEST_PATH,
                                                                  dest_user=SvcCgcsAuto.USER,
                                                                  dest_password=SvcCgcsAuto.PASSWORD,
                                                                  extra_opts=["--chmod=Fugo=rw"],
