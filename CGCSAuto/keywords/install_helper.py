@@ -4422,7 +4422,7 @@ def download_stx_helm_charts(lab, server, stx_helm_charts_path=None):
     if server_ssh.exec_cmd('test -d {}'.format(stx_helm_charts_path), rm_date=False)[0] == 0:
         charts = 'stx-openstack-1.0-*.tgz'
         if server_ssh.exec_cmd('test -f {}/{}'.format(stx_helm_charts_path, charts), rm_date=False)[0] != 0:
-            charts = 'helm-charts-manifest-centos-stable-versioned.tgz'
+            charts = 'helm-charts-stx-openstack-centos-stable-versioned.tgz'
             if server_ssh.exec_cmd('test -f {}/{}'.format(stx_helm_charts_path, charts), rm_date=False)[0] != 0:
                 raise ValueError('Helm charts not found on {}:{}'.format(server.name, stx_helm_charts_path))
         stx_helm_charts_path = '{}/{}'.format(stx_helm_charts_path, charts)
