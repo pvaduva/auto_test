@@ -6,13 +6,9 @@ from consts.filepaths import WRSROOT_HOME
 
 
 class ProjVar:
-    __var_dict = {'BUILD_ID': None,
-                  'BUILD_SERVER': None,
-                  'JOB': None,
-                  'BUILD_BY': None,
-                  'BUILD_PATH': None,
+    __var_dict = {'BUILD_PATH': None,
                   'LOG_DIR': None,
-                  'SOURCE_CREDENTIAL': None,
+                  'SOURCE_OPENRC': False,
                   'SW_VERSION': [],
                   'PATCH': None,
                   'SESSION_ID': None,
@@ -37,16 +33,17 @@ class ProjVar:
                   'VSWITCH_TYPE': None,
                   'IS_DC': False,
                   'PRIMARY_SUBCLOUD': None,
-                  'BUILD_INFO': None,
+                  'BUILD_INFO': {},
                   'TEMP_DIR': '',
                   'INSTANCE_BACKING': {},
                   'OPENSTACK_DEPLOYED': None,
+                  'DEFAULT_INSTANCE_BACKING': None,
                   'STX_KEYFILE_PATH': '{}/.ssh/id_rsa'.format(WRSROOT_HOME)
                   }
 
     @classmethod
-    def set_vars(cls, lab, natbox, logdir, tenant, is_boot, collect_all, report_all, report_tag, openstack_cli,
-                 always_collect, horizon_visible):
+    def init_vars(cls, lab, natbox, logdir, tenant, collect_all, report_all, report_tag,
+                  always_collect, horizon_visible):
 
         labname = lab['short_name']
 
@@ -62,13 +59,11 @@ class ProjVar:
             'GUEST_LOGS_DIR': logdir + '/guest_logs/',
             'PRIMARY_TENANT': tenant,
             'LAB': lab,
-            'BOOT_VMS': is_boot,
             'NATBOX': natbox,
             'COLLECT_ALL': collect_all,
             'ALWAYS_COLLECT': always_collect,
             'REPORT_ALL': report_all,
             'REPORT_TAG': report_tag,
-            'OPENSTACK_CLI': openstack_cli,
             'KPI_PATH': logdir + '/kpi.ini',
             'HORIZON_VISIBLE': horizon_visible
         })

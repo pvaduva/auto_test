@@ -13,12 +13,12 @@ def service_params(request):
     service = 'identity'
     section = 'config'
     name = 'token_expiration'
-    exp_time = system_helper.get_service_parameter_values(rtn_value='value', service=service, section=section,
+    exp_time = system_helper.get_service_parameter_values(field='value', service=service, section=section,
                                                           name=name)[0]
 
     def cleanup():
         LOG.fixture_step("Verifying service parameter {} {} {} is at default value".format(service, section, name))
-        res = system_helper.get_service_parameter_values(rtn_value='value', service=service, section=section,
+        res = system_helper.get_service_parameter_values(field='value', service=service, section=section,
                                                          name=name)[0]
         if res != exp_time:
             LOG.fixture_step("Resetting service parameter {} {} {} to default of {}".format(service, section,
@@ -45,12 +45,12 @@ def _test_token_expiry(service_params):
     expire_times = [6000, 7200, 3000, 15500, 3600]
     service, section, name = service_params
     LOG.tc_step("Verify that token_expiration parameter is defined")
-    default_exp_time = system_helper.get_service_parameter_values(rtn_value='value', service=service, section=section,
+    default_exp_time = system_helper.get_service_parameter_values(field='value', service=service, section=section,
                                                                   name=name)[0]
     assert int(default_exp_time) == 3600, "Default token_expiration value not 3600, actually {}".format(default_exp_time)
 
     LOG.tc_step("Verify that tokens now expire after expected time")
-    token_expire_time = html_helper.get_user_token(rtn_value='expires')
+    token_expire_time = html_helper.get_user_token(field='expires')
     expt_time = time.time() + int(default_exp_time)
     expt_datetime = datetime.datetime.utcfromtimestamp(expt_time).isoformat()
     time_diff = common.get_timedelta_for_isotimes(expt_datetime, token_expire_time).total_seconds()
@@ -73,7 +73,7 @@ def _test_token_expiry(service_params):
             system_helper.modify_service_parameter(service, section, name, str(expire_time), apply=True)
 
             LOG.tc_step("Verify that tokens now expire after expected time")
-            token_expire_time = html_helper.get_user_token(rtn_value='expires')
+            token_expire_time = html_helper.get_user_token(field='expires')
             expt_time = time.time() + expire_time
             expt_datetime = datetime.datetime.utcfromtimestamp(expt_time).isoformat()
             time_diff = common.get_timedelta_for_isotimes(expt_datetime, token_expire_time).total_seconds()

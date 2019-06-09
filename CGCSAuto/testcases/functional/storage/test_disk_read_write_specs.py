@@ -7,18 +7,19 @@
 ###
 
 
-from pytest import fixture, mark, skip
+from pytest import fixture, mark, param
 
+import keywords.host_helper
 from utils.tis_log import LOG
 
 from consts.cgcs import QoSSpec, FlavorSpec
-from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper
+from keywords import nova_helper, vm_helper, host_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
 def hosts_with_backing():
-    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
 
     LOG.fixture_step("Hosts with {} backing: {}".format(storage_backing, hosts))
     return storage_backing, hosts
@@ -36,20 +37,20 @@ class TestQoS:
         return flavor, hosts
 
     @mark.parametrize(('qos_spec', 'qos_spec_val'), [
-        mark.p1((QoSSpec.READ_BYTES, 10485769)),
-        mark.p1((QoSSpec.READ_BYTES, 200000000)),
-        mark.p2((QoSSpec.READ_BYTES, 419430400)),
-        mark.p2((QoSSpec.WRITE_BYTES, 10485769)),
-        mark.p2((QoSSpec.WRITE_BYTES, 400000000)),
-        mark.p2((QoSSpec.WRITE_BYTES, 419430400)),
-        mark.p2((QoSSpec.TOTAL_BYTES, 10485769)),
-        mark.p2((QoSSpec.TOTAL_BYTES, 419430400)),
-        mark.p2((QoSSpec.READ_IOPS, 200)),
-        mark.p2((QoSSpec.READ_IOPS, 5000)),
-        mark.p2((QoSSpec.WRITE_IOPS, 200)),
-        mark.p2((QoSSpec.WRITE_IOPS, 5000)),
-        mark.p2((QoSSpec.TOTAL_IOPS, 200)),
-        mark.p1((QoSSpec.TOTAL_IOPS, 5000)),
+        param(QoSSpec.READ_BYTES, 10485769, marks=mark.p3),
+        param(QoSSpec.READ_BYTES, 200000000, marks=mark.p3),
+        param(QoSSpec.READ_BYTES, 419430400, marks=mark.p3),
+        param(QoSSpec.WRITE_BYTES, 10485769, marks=mark.p3),
+        param(QoSSpec.WRITE_BYTES, 400000000, marks=mark.p3),
+        param(QoSSpec.WRITE_BYTES, 419430400, marks=mark.p3),
+        param(QoSSpec.TOTAL_BYTES, 10485769, marks=mark.p3),
+        param(QoSSpec.TOTAL_BYTES, 419430400, marks=mark.p3),
+        param(QoSSpec.READ_IOPS, 200, marks=mark.p3),
+        param(QoSSpec.READ_IOPS, 5000, marks=mark.p3),
+        param(QoSSpec.WRITE_IOPS, 200, marks=mark.p3),
+        param(QoSSpec.WRITE_IOPS, 5000, marks=mark.p3),
+        param(QoSSpec.TOTAL_IOPS, 200, marks=mark.p3),
+        param(QoSSpec.TOTAL_IOPS, 5000, marks=mark.p3),
         ])
     def test_disk_read_write_qos_specs(self, qos_spec, qos_spec_val, flavor_for_qos_test):
         """
@@ -97,16 +98,16 @@ class TestQoS:
         LOG.tc_step("Boot vm from above volume that has the disk QoS info")
         vm_id = vm_helper.boot_vm(name_str, flavor=flavor, source='volume', source_id=volume_id, cleanup='function')[1]
 
-        vm_host = nova_helper.get_vm_host(vm_id)
+        vm_host = vm_helper.get_vm_host(vm_id)
         assert vm_host in expt_hosts
 
-        instance_name = nova_helper.get_vm_instance_name(vm_id)
+        instance_name = vm_helper.get_vm_instance_name(vm_id)
 
         LOG.tc_step("Check VM disk {} is {} via 'virsh dumpxml' on {}".format(qos_spec, qos_spec_val, vm_host))
 
         with host_helper.ssh_to_host(vm_host) as host_ssh:
 
-            sed_cmd = "sed -n 's:.*<" + qos_spec + ">\(.*\)</" + qos_spec + ">.*:\\1:p' "
+            sed_cmd = r"sed -n 's:.*<" + qos_spec + r">\(.*\)</" + qos_spec + r">.*:\\1:p' "
             dump_xml_cmd = "virsh dumpxml " + instance_name + " | " + sed_cmd
 
             code, dump_xml_output = host_ssh.exec_sudo_cmd(cmd=dump_xml_cmd)
@@ -119,18 +120,18 @@ class TestQoS:
 class TestFlavor:
 
     @mark.parametrize(('disk_spec_name', 'disk_spec_val'), [
-        mark.p2((FlavorSpec.DISK_READ_BYTES,   10485769)),
-        mark.p2((FlavorSpec.DISK_READ_BYTES,   419430400)),
-        mark.p2((FlavorSpec.DISK_READ_IOPS,    200)),
-        mark.p2((FlavorSpec.DISK_READ_IOPS,    5000)),
-        mark.p2((FlavorSpec.DISK_WRITE_BYTES,  10485769)),
-        mark.p2((FlavorSpec.DISK_WRITE_BYTES,  419430400)),
-        mark.p2((FlavorSpec.DISK_WRITE_IOPS,   200)),
-        mark.p2((FlavorSpec.DISK_WRITE_IOPS,   5000)),
-        mark.p2((FlavorSpec.DISK_TOTAL_BYTES,  10000000)),
-        mark.p2((FlavorSpec.DISK_TOTAL_BYTES,  419430400)),
-        mark.p2((FlavorSpec.DISK_TOTAL_IOPS,   500)),
-        mark.p2((FlavorSpec.DISK_TOTAL_IOPS,   5000)),
+        param(FlavorSpec.DISK_READ_BYTES, 10485769, marks=mark.p3),
+        param(FlavorSpec.DISK_READ_BYTES, 419430400, marks=mark.p3),
+        param(FlavorSpec.DISK_READ_IOPS, 200, marks=mark.p3),
+        param(FlavorSpec.DISK_READ_IOPS, 5000, marks=mark.p3),
+        param(FlavorSpec.DISK_WRITE_BYTES, 10485769, marks=mark.p3),
+        param(FlavorSpec.DISK_WRITE_BYTES, 419430400, marks=mark.p3),
+        param(FlavorSpec.DISK_WRITE_IOPS, 200, marks=mark.p3),
+        param(FlavorSpec.DISK_WRITE_IOPS, 5000, marks=mark.p3),
+        param(FlavorSpec.DISK_TOTAL_BYTES, 10000000, marks=mark.p3),
+        param(FlavorSpec.DISK_TOTAL_BYTES, 419430400, marks=mark.p3),
+        param(FlavorSpec.DISK_TOTAL_IOPS, 500, marks=mark.p3),
+        param(FlavorSpec.DISK_TOTAL_IOPS, 5000, marks=mark.p3),
     ])
     def test_disk_read_write_flavor_specs(self, disk_spec_name, disk_spec_val, hosts_with_backing):
         """
@@ -174,10 +175,10 @@ class TestFlavor:
         boot_source = 'image'
         vm_id = vm_helper.boot_vm(name_str, flavor=flavor_id, source=boot_source, cleanup='function')[1]
 
-        vm_host = nova_helper.get_vm_host(vm_id)
+        vm_host = vm_helper.get_vm_host(vm_id)
         assert vm_host in expt_hosts, "VM host is not on {} host".format(storage_backing)
 
-        instance_name = nova_helper.get_vm_instance_name(vm_id)
+        instance_name = vm_helper.get_vm_instance_name(vm_id)
 
         LOG.tc_step("Check VM spec {} is {} via 'virsh dumpxml' on {}".format(disk_spec_str, disk_spec_val, vm_host))
 
@@ -185,7 +186,7 @@ class TestFlavor:
 
             # TODO: parse after virsh dump. Otherwise debugging is difficult upon test failure.
 
-            sed_cmd = "sed -n 's:.*<"+disk_spec_str+">\(.*\)</"+disk_spec_str+">.*:\\1:p' "
+            sed_cmd = r"sed -n 's:.*<"+disk_spec_str+r">\(.*\)</"+disk_spec_str+r">.*:\\1:p' "
 
             dump_xml_cmd = "virsh dumpxml " + instance_name + " | " + sed_cmd
             code, dump_xml_output = comp_ssh.exec_sudo_cmd(cmd=dump_xml_cmd)

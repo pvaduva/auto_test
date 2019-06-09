@@ -1,5 +1,5 @@
 import time
-from pytest import mark, fixture, skip
+from pytest import mark, fixture, skip, param
 
 from keywords import host_helper, system_helper, keystone_helper, security_helper
 from utils.tis_log import LOG
@@ -14,7 +14,7 @@ def _revert_admin_pw(request):
     def _revert():
         # revert password
         LOG.fixture_step("Reverting admin password to '{}'".format(prev_pswd))
-        keystone_helper.update_user('admin', password=prev_pswd)
+        keystone_helper.set_user('admin', password=prev_pswd)
 
         LOG.fixture_step("Sleep for 120 seconds after admin password change")
         time.sleep(120)  # CGTS-6928
@@ -29,8 +29,8 @@ def less_than_two_cons():
 
 @mark.usefixtures('check_alarms')
 @mark.parametrize(('scenario'), [
-    # mark.p1('lock_standby_change_pswd'),
-    mark.p1('change_pswd_swact'),
+    # param('lock_standby_change_pswd', marks=mark.p1),
+    param('change_pswd_swact', marks=mark.p1),
 ])
 # disable the  test cases for now due to password change for admin is not ready yet
 def _test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
@@ -60,7 +60,7 @@ def _test_admin_password(scenario, less_than_two_cons, _revert_admin_pw):
     post_pswd = '!{}9'.format(prev_pswd)
 
     LOG.tc_step('Changing admin password to {}'.format(post_pswd))
-    code, output = keystone_helper.update_user('admin', password=post_pswd)
+    code, output = keystone_helper.set_user('admin', password=post_pswd)
 
     assert "Warning: 'admin' password changed. Please wait 5 minutes before Locking/Unlocking the controllers" in output
     LOG.tc_step("Sleep for 120 seconds after admin password change")

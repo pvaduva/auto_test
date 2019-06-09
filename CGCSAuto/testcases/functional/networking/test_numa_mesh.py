@@ -19,7 +19,7 @@ def _test_set_cpu_cores_denied_unlocked_host():
         assert 'Host must be locked' in msg
 
         LOG.tc_step("Verify one ore more cpu cores are assigned to Platform and vSwitch.")
-        table_ = table_parser.table(cli.system('host-cpu-list', host))
+        table_ = table_parser.table(cli.system('host-cpu-list', host)[1])
 
         platform_cores = table_parser.get_values(table_, 'log_core', assigned_function='Platform')
 

@@ -53,7 +53,7 @@ def test_horizon_create_delete_instance(instances_pg):
 
     mgmt_net_name = '-'.join([Tenant.get_primary()['tenant'], 'mgmt', 'net'])
     flavor_name = nova_helper.get_basic_flavor(rtn_id=False)
-    guest_img = GuestImages.DEFAULT_GUEST
+    guest_img = GuestImages.DEFAULT['guest']
 
     LOG.tc_step('Create new instance {}'.format(instance_name))
     instances_pg.create_instance(instance_name,

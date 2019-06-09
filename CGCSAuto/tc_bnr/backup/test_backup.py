@@ -2,8 +2,7 @@ import os
 import re
 import time
 import random
-import configparser
-import pexpect.exceptions
+import pexpect
 
 from pytest import fixture, skip
 
@@ -12,21 +11,12 @@ from consts.build_server import Server
 from consts.cgcs import TIS_BLD_DIR_REGEX, BackupRestore, PREFIX_BACKUP_FILE
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import InstallVars, ProjVar, BackupVars
-
-from keywords import cinder_helper
-from keywords import common
-from keywords import host_helper
-from keywords import html_helper
-from keywords import install_helper
-from keywords import keystone_helper
-from keywords import glance_helper
-from keywords import nova_helper
-from keywords import system_helper
-from keywords import vm_helper
-
 from utils.clients.ssh import ControllerClient, NATBoxClient
 from utils.tis_log import LOG
 from setups import collect_tis_logs
+from keywords import cinder_helper, common, host_helper, html_helper, install_helper, glance_helper, \
+    system_helper, vm_helper, keystone_helper
+
 
 cinder_export_deprecated = '2018-09-12'
 
@@ -43,7 +33,7 @@ def collect_logs(msg):
     try:
         LOG.info('collecting logs: ' + msg)
         collect_tis_logs(active_controller)
-    except pexpect.exceptions.TIMEOUT:
+    except pexpect.exceptions.ExceptionPexpect:
         active_controller.flush()
         active_controller.exec_cmd('cat /etc/buid.info')
 
@@ -204,7 +194,7 @@ def backup_sysconfig_images(backup_info):
                     LOG.warn('non-rbd based image, skip it:  {}, store:{}'.format(img_id, image_properties))
 
 
-def is_cinder_export_supported(build_info):
+def is_cinder_export_supported():
     """
     Check if CLI 'cinder export' is no longer supported on the specified load
 
@@ -215,8 +205,9 @@ def is_cinder_export_supported(build_info):
          True - CLI 'cinder export' is still supported
          False - CLI 'cinder export' is not suppported anymore
     """
-
-    return build_info.get('BUILD_ID', '9999') < cinder_export_deprecated
+    build_id = system_helper.get_build_info()['BUILD_ID']
+    build_id = build_id if build_id else '9999'
+    return build_id < cinder_export_deprecated
 
 
 def backup_cinder_volumes(backup_info):
@@ -237,7 +228,7 @@ def backup_cinder_volumes(backup_info):
     copy_to_usb = backup_info.get('copy_to_usb', None)
     cinder_backup = backup_info.get('cinder_backup', False)
 
-    if not is_cinder_export_supported(get_build_info()):
+    if not is_cinder_export_supported():
         LOG.warning('cinder export is NOT supported on this load, forced to use "cinder backup-xxxx"')
         cinder_backup = True
 
@@ -351,11 +342,12 @@ def backup_load_iso_image(backup_info):
     backup_dest_path = backup_info['backup_dest_full_path']
 
     load_path = ProjVar.get_var('BUILD_PATH')
-    build_id = ProjVar.get_var('BUILD_ID')
+    build_info = system_helper.get_build_info()
+    build_id = build_info['BUILD_ID']
     assert re.match(TIS_BLD_DIR_REGEX, build_id), "Invalid Build Id pattern"
 
-    build_server = ProjVar.get_var('BUILD_SERVER')
-    if not (build_server and build_server.strip()):
+    build_server = build_info['BUILD_SERVER']
+    if not build_server:
         build_server = BuildServerPath.DEFAULT_BUILD_SERVER     # default
 
     with host_helper.ssh_to_build_server(bld_srv=build_server) as build_server_conn:
@@ -410,36 +402,6 @@ def backup_load_iso_image(backup_info):
         common.scp_from_active_controller_to_test_server(os.path.join(WRSROOT_HOME, "bootimage.iso"), backup_dest_path)
         LOG.info(" The backup build iso file copied to local test server: {}".format(backup_dest_path))
         return True
-
-
-def get_build_info():
-    """
-    Read in and parse the /etc/build.info and return a dictionary.
-
-    Return:
-        dictionary contains all information from /etc/buid.info
-    """
-
-    build_info = {}
-    try:
-        LOG.info('Getting build information')
-        output = r'[dummy-head]\n' + system_helper.get_buildinfo()
-
-        LOG.info('output:{}'.format(output))
-
-        config = configparser.ConfigParser()
-        config.read_string(output)
-
-        for section in config.sections():
-            LOG.info('section:{}'.format(section))
-            for name, value in config.items(section):
-                LOG.info('name:{}, value:{}'.format(name, value))
-                build_info.update(name=value)
-
-    except Exception as e:
-        LOG.warn('failed to read build.info:{}'.format(e))
-
-    return build_info
 
 
 def adjust_cinder_quota(con_ssh, increase, backup_info):
@@ -679,7 +641,7 @@ def pre_backup_setup(backup_info, con_ssh):
     tenant = Tenant.TENANT1
     backup_info['tenant'] = tenant
 
-    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant['user'], con_ssh=con_ssh)[0]
+    tenant_id = keystone_helper.get_projects(field='ID', name=tenant['user'], con_ssh=con_ssh)[0]
     LOG.info('Using tenant:{} in the pre-backup test, details:{}'.format(tenant_id, tenant))
     LOG.info('Deleting VMs for pre-backup system-wide test')
     vm_helper.delete_vms()
@@ -733,11 +695,11 @@ def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
     target = random.choice(vm_ids)
     LOG.info('-OK, test migration of VM:{}'.format(target))
 
-    original_host = nova_helper.get_vm_host(target)
+    original_host = vm_helper.get_vm_host(target)
     LOG.info('Original host:{}'.format(original_host))
 
     vm_helper.live_migrate_vm(target)
-    current_host = nova_helper.get_vm_host(target)
+    current_host = vm_helper.get_vm_host(target)
     LOG.info('After live-migration, host:{}'.format(original_host))
 
     if original_host == current_host:
@@ -746,7 +708,7 @@ def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
 
     original_host = current_host
     vm_helper.cold_migrate_vm(target)
-    current_host = nova_helper.get_vm_host(target)
+    current_host = vm_helper.get_vm_host(target)
     LOG.info('After code-migration, host:{}'.format(current_host))
     if original_host == current_host:
         LOG.warn('VM is still on its original host, code-migration failed? original host:{}'.format(original_host))
@@ -774,9 +736,9 @@ def lock_unlock_host(backup_info, con_ssh, vms):
     target_vm = random.choice(vms)
     LOG.info('lock and unlock the host of VM:{}'.format(target_vm))
 
-    target_host = nova_helper.get_vm_host(target_vm, con_ssh=con_ssh)
+    target_host = vm_helper.get_vm_host(target_vm, con_ssh=con_ssh)
     if target_host == active_controller_name:
-        if not system_helper.is_simplex():
+        if not system_helper.is_aio_simplex():
             LOG.warning('Attempt to lock the active controller on a non-simplex system')
             host_helper.swact_host()
 
@@ -785,7 +747,7 @@ def lock_unlock_host(backup_info, con_ssh, vms):
     LOG.info('lock and unlock:{}'.format(target_host))
 
     host_helper.lock_host(target_host)
-    if not system_helper.is_simplex():
+    if not system_helper.is_aio_simplex():
         LOG.info('check if the VM is pingable')
         vm_helper.ping_vms_from_natbox(target_vm)
     else:
@@ -794,10 +756,8 @@ def lock_unlock_host(backup_info, con_ssh, vms):
     LOG.info('unlock:{}'.format(target_host))
     host_helper.unlock_host(target_host)
 
-    host_helper.wait_for_host_values(target_host,
-                                     administrative='unlocked',
-                                     availability='available',
-                                     vim_progress_status='services-enabled')
+    system_helper.wait_for_host_values(target_host, administrative='unlocked', availability='available',
+                                       vim_progress_status='services-enabled')
     for tried in range(5):
         pingable, message = vm_helper.ping_vms_from_natbox(target_vm, fail_ok=(tried < 4))
         if pingable:

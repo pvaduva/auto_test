@@ -25,10 +25,10 @@ def test_dc_dead_office_recovery_central(reserve_unreserve_all_hosts_module_cent
     """
     LOG.tc_step("Boot 5 vms with various boot_source, disks, etc")
     vms = vm_helper.boot_vms_various_types()
-    central_auth = Tenant.get('admin', dc_region='SystemController')
-    hosts = system_helper.get_hostnames(auth_info=central_auth)
+    central_auth = Tenant.get('admin_platform', dc_region='SystemController')
+    hosts = system_helper.get_hosts(auth_info=central_auth)
     managed_subclouds = dc_helper.get_subclouds(mgmt='managed', avail='online')
-    hosts_to_check = system_helper.get_hostnames(auth_info=central_auth, availability=['available', 'online'])
+    hosts_to_check = system_helper.get_hosts(availability=['available', 'online'], auth_info=central_auth)
     LOG.info("Online or Available hosts before power-off: {}".format(hosts_to_check))
 
     LOG.tc_step("Powering off hosts in multi-processes to simulate power outage: {}".format(hosts))

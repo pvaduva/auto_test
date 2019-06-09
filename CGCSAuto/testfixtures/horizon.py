@@ -24,25 +24,20 @@ def driver(request):
 
 @fixture(scope='function')
 def admin_home_pg(driver, request):
-    return __login_base(request=request, driver=driver, auth_info=Tenant.get('admin'))
+    return __login_base(request=request, driver=driver, auth_info=Tenant.get('admin_platform'))
 
 
 @fixture(scope='function')
 def admin_home_pg_container(driver, request):
-    return __login_base(request=request, driver=driver, auth_info=Tenant.get('admin'), container=True)
-
-
-@fixture(scope='function')
-def tenant_home_pg(driver, request):
-    return __login_base(request=request, driver=driver, auth_info=Tenant.get_primary())
+    return __login_base(request=request, driver=driver, auth_info=Tenant.get('admin'))
 
 
 @fixture(scope='function')
 def tenant_home_pg_container(driver, request):
-    return __login_base(request=request, driver=driver, auth_info=Tenant.get_primary(), container=True)
+    return __login_base(request=request, driver=driver, auth_info=Tenant.get_primary())
 
 
-def __login_base(request, driver, auth_info=None, container=False):
+def __login_base(request, driver, auth_info, port=None):
 
     horizon.test_result = False
     if not auth_info:
@@ -51,7 +46,8 @@ def __login_base(request, driver, auth_info=None, container=False):
     user = auth_info['user']
     password = auth_info['password']
     project = auth_info['tenant']
-    port = 31000 if container else None
+    if not port and not auth_info.get('platform'):
+        port = 31000
 
     gmttime = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
     video_path = ProjVar.get_var('LOG_DIR') + '/horizon/' + str(gmttime) + '.mp4'

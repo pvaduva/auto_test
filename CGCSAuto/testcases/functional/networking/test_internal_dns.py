@@ -3,7 +3,7 @@ import time
 from pytest import fixture, mark
 
 from consts.cgcs import EventLogID
-from keywords import nova_helper, host_helper, system_helper, network_helper, vm_helper
+from keywords import host_helper, system_helper, network_helper, vm_helper
 from utils.tis_log import LOG
 
 DEFAULT_DNS_SERVERS = ['147.11.57.133', '128.224.144.130', '147.11.57.128']
@@ -130,7 +130,7 @@ def func_recover(request):
             LOG.fixture_step("Config out-of-date alarm(s) present, check {} and lock/unlock if host config out-of-date".
                              format(HOSTS_AFFECTED))
             for host in HOSTS_AFFECTED:
-                if host_helper.get_hostshow_value(host, 'config_status') == 'Config out-of-date':
+                if system_helper.get_host_values(host, 'config_status')[0] == 'Config out-of-date':
                     LOG.info("Lock/unlock {} to clear config out-of-date status".format(host))
                     host_helper.lock_unlock_hosts(hosts=host)
                 HOSTS_AFFECTED.remove(host)
@@ -211,8 +211,8 @@ def test_ping_between_vms_using_hostnames(func_recover):
     nics = [{"net-id": mgmt_net_id}]
     vm1_id = vm_helper.boot_vm(nics=nics, cleanup='function')[1]
     vm2_id = vm_helper.boot_vm(nics=nics, cleanup='function')[1]
-    vm1_name = nova_helper.get_vm_name_from_id(vm1_id)
-    vm2_name = nova_helper.get_vm_name_from_id(vm2_id)
+    vm1_name = vm_helper.get_vm_name_from_id(vm1_id)
+    vm2_name = vm_helper.get_vm_name_from_id(vm2_id)
 
     LOG.tc_step("Log into each VM and ping the other VM using the hostname")
     cmd = "ping -c 3 {}".format(vm2_name)
@@ -237,8 +237,8 @@ def test_ping_between_vms_using_hostnames(func_recover):
     LOG.tc_step("Launch two VMs using the same network")
     vm1_id = vm_helper.boot_vm(nics=nics, cleanup='function')[1]
     vm2_id = vm_helper.boot_vm(nics=nics, cleanup='function')[1]
-    vm1_name = nova_helper.get_vm_name_from_id(vm1_id)
-    vm2_name = nova_helper.get_vm_name_from_id(vm2_id)
+    vm1_name = vm_helper.get_vm_name_from_id(vm1_id)
+    vm2_name = vm_helper.get_vm_name_from_id(vm2_id)
 
     LOG.tc_step("Log into each VM and ping the other VM using the hostname")
     cmd = "ping -c 3 {}".format(vm2_name)

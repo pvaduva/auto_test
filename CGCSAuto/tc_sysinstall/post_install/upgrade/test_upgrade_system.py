@@ -1,14 +1,13 @@
 import time
+
 from utils.tis_log import LOG
 from keywords import system_helper, host_helper, install_helper, storage_helper, upgrade_helper
 from consts.filepaths import BuildServerPath
-from consts.proj_vars import UpgradeVars
 from consts.cgcs import HostAvailState, HostOperState
 from consts.timeout import HostTimeout
 
 
 def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
-
     lab = upgrade_setup['lab']
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']
@@ -19,12 +18,12 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     force = False
 
     controller0 = lab['controller-0']
-    if not host_helper.is_host_provisioned(controller0.name):
+    if not upgrade_helper.is_host_provisioned(controller0.name):
         rc, output = upgrade_helper.upgrade_host_lock_unlock(controller0.name)
         assert rc == 0, "Failed to lock/unlock host {}: {}".format(controller0.name, output)
 
     # update health query
-    #system_upgrade_health = list(upgrade_helper.get_system_health_query_upgrade())
+    # system_upgrade_health = list(upgrade_helper.get_system_health_query_upgrade())
     system_upgrade_health = list(upgrade_helper.get_system_health_query_upgrade_2())
 
     LOG.tc_step("Checking system health for upgrade .....")
@@ -41,7 +40,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
                 rc, output = upgrade_helper.upgrade_host_lock_unlock('controller-0')
                 assert rc == 0, "Failed to lock/unlock host {}: {}".format('controller-0', output)
                 time.sleep(60)
-                #system_upgrade_health[2]["swact"][0] = False
+                # system_upgrade_health[2]["swact"][0] = False
         if system_upgrade_health[2]["swact"][0]:
             LOG.info("Swact Required: {}".format(system_upgrade_health[2]["swact"][1]))
             host_helper.swact_host('controller-0')
@@ -55,7 +54,6 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
 
     else:
         assert False, "System health query upgrade failed: {}".format(system_upgrade_health[1])
-
 
     # if system_upgrade_health[0] == 0:
     #     LOG.info("System health OK for upgrade......")
@@ -114,11 +112,11 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     time.sleep(60)
 
     # Before Swacting ensure the controller-1 is in available state
-    if not host_helper.wait_for_host_values("controller-1", timeout=600, fail_ok=True,
-                                            operational=HostOperState.ENABLED,
-                                            availability=HostAvailState.AVAILABLE):
+    if not system_helper.wait_for_host_values("controller-1", timeout=600, fail_ok=True,
+                                              operational=HostOperState.ENABLED,
+                                              availability=HostAvailState.AVAILABLE):
         err_msg = " Swacting to controller-1 is not possible because controller-1 is not in available state " \
-              "within  the specified timeout"
+                  "within  the specified timeout"
         assert False, err_msg
 
     # Swact to standby contime.sleep(60)  troller-1
@@ -134,7 +132,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
     controller0 = lab['controller-0']
 
     # open vlm console for controller-0 for boot through mgmt interface
-    if not 'vbox' in lab['name']:
+    if 'vbox' not in lab['name']:
         LOG.info("Opening a vlm console for controller-0 .....")
         install_helper.open_vlm_console_thread("controller-0", upgrade=True)
 
@@ -187,7 +185,7 @@ def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):
 
     # Delete the previous load
     LOG.tc_step("Deleting  {} load... ".format(current_version))
-    system_helper.delete_imported_load()
+    upgrade_helper.delete_imported_load()
     LOG.tc_step("Delete  previous load version {}".format(current_version))
 
     LOG.tc_step("Downloading images to upgraded {} lab ".format(upgrade_version))

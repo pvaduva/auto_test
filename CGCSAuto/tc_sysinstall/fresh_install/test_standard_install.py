@@ -122,6 +122,7 @@ def test_standard_install(install_setup):
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+    install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
     fresh_install_helper.bulk_add_hosts(lab=lab, con_ssh=controller0_node.ssh_conn)
     fresh_install_helper.boot_hosts(boot_device)

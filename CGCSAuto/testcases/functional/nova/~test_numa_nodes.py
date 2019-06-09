@@ -1,6 +1,6 @@
 import re
 
-from pytest import fixture, mark, skip
+from pytest import fixture, mark, skip, param
 
 from utils import table_parser
 from utils.tis_log import LOG
@@ -99,8 +99,8 @@ def test_2_nodes_set_guest_numa_node_value(flavor_2_nodes, cpu_policy, numa_0, n
 
 
 @mark.parametrize(('cpu_policy', 'numa_0', 'numa_1'), [
-    mark.p2(('dedicated', 1, 1)),
-    mark.p2(('dedicated', 0, 0)),
+    param('dedicated', 1, 1, marks=mark.p3),
+    param('dedicated', 0, 0, marks=mark.p3),
 ])
 def test_2_nodes_set_numa_node_values_reject(flavor_2_nodes, cpu_policy, numa_0, numa_1):
     LOG.tc_step("Set flavor cpu_policy spec to {}.".format(cpu_policy))
@@ -294,9 +294,9 @@ def test_0_node_unset_numa_nodes_reject(flavor_0_node):
 
 
 @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'numa_node1'), [
-    mark.p2((2, 1, 0, None)),
-    mark.nightly((2, 2, 1, 0)),
-    mark.p2((1, 1, 1, None)),
+    param(2, 1, 0, None, marks=mark.p3),
+    param(2, 2, 1, 0, marks=mark.p1),
+    param(1, 1, 1, None, marks=mark.p3),
 ])
 def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, no_simplex, check_numa_num):
     """
@@ -393,7 +393,7 @@ def test_vm_numa_node_settings(vcpus, numa_nodes, numa_node0, numa_node1, no_sim
     if system_helper.is_avs():
         # TC5069
         LOG.tc_step("Check via vshell that all vNICs are associated with the host NUMA node that guest numa0 maps to")
-        host = nova_helper.get_vm_host(vm_id)
+        host = vm_helper.get_vm_host(vm_id)
         actual_ports = network_helper.get_ports(vm_id)
         with host_helper.ssh_to_host(host) as compute_ssh:
             for port_id in actual_ports:

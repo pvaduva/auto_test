@@ -20,10 +20,10 @@ def teardown_module():
 
 def test_nova():
     LOG.tc_func_start()
-    ProjVar.set_var(SOURCE_CREDENTIAL=True)
+    ProjVar.set_var(SOURCE_OPENRC=True)
     cli.openstack('server list')
     cli.openstack('server list', auth_info=None)
-    ProjVar.set_var(SOURCE_CREDENTIAL=None)
+    ProjVar.set_var(SOURCE_OPENRC=None)
     LOG.tc_func_end()
 
 
@@ -36,9 +36,9 @@ def test_system():
         raise Exception("you should fail!")
     except CLIRejected:
         LOG.info("nova test passed without authentication")
-    ProjVar.set_var(SOURCE_CREDENTIAL=True)
+    ProjVar.set_var(SOURCE_OPENRC=True)
     cli.system('host-list', auth_info=None)
-    ProjVar.set_var(SOURCE_CREDENTIAL=None)
+    ProjVar.set_var(SOURCE_OPENRC=None)
     LOG.tc_func_end()
 
 

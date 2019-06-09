@@ -1,7 +1,8 @@
 import pytest
+
 from utils.tis_log import LOG
 from utils.rest import Rest
-from keywords import system_helper, host_helper
+from keywords import system_helper
 import string
 
 
@@ -32,9 +33,9 @@ def test_GET_ihosts_host_id_shortUUID(sysinv_rest):
     path = "/ihosts/{}/addresses"
     r = sysinv_rest
     LOG.info(path)
-    LOG.info(system_helper.get_hostnames())
-    for host in system_helper.get_hostnames():
-        uuid = host_helper.get_hostshow_value(host, 'uuid')
+    LOG.info(system_helper.get_hosts())
+    for host in system_helper.get_hosts():
+        uuid = system_helper.get_host_values(host, 'uuid')[0]
         LOG.info("host: {} uuid: {}".format(host, uuid))
         message = "Using requests GET {} with proper authentication"
         LOG.tc_step(message.format(path))
@@ -70,9 +71,9 @@ def test_GET_ihosts_host_id_invalidUUID(sysinv_rest):
     path = "/ihosts/{}/addresses"
     r = sysinv_rest
     LOG.info(path)
-    LOG.info(system_helper.get_hostnames())
-    for host in system_helper.get_hostnames():
-        uuid = host_helper.get_hostshow_value(host, 'uuid')
+    LOG.info(system_helper.get_hosts())
+    for host in system_helper.get_hosts():
+        uuid = system_helper.get_host_values(host, 'uuid')[0]
         LOG.info("host: {} uuid: {}".format(host, uuid))
         message = "Using requests GET {} with proper authentication"
         LOG.tc_step(message.format(path))
@@ -114,9 +115,9 @@ def _test_GET_ihosts_host_id_uppercaseUUID(sysinv_rest):
     path = "/ihosts/{}/addresses"
     r = sysinv_rest
     LOG.info("This test case will FAIL until CGTS-8265 is resolved")
-    LOG.info(system_helper.get_hostnames())
-    for host in system_helper.get_hostnames():
-        uuid = host_helper.get_hostshow_value(host, 'uuid')
+    LOG.info(system_helper.get_hosts())
+    for host in system_helper.get_hosts():
+        uuid = system_helper.get_host_values(host, 'uuid')[0]
         message = "Using requests GET {} with proper authentication"
         LOG.tc_step(message.format(path))
 

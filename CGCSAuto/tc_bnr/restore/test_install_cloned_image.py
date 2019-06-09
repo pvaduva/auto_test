@@ -8,11 +8,11 @@ from consts.build_server import Server, get_build_server_info
 from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
-from keywords import install_helper, host_helper, system_helper
 from utils import node
 from utils.clients.ssh import ControllerClient
 from utils.clients.local import LocalHostClient
 from utils.tis_log import LOG
+from keywords import install_helper, host_helper, system_helper
 
 
 @pytest.fixture(scope='session')
@@ -67,7 +67,6 @@ def install_clone_setup():
 def test_install_cloned_image(install_clone_setup):
 
     controller1 = 'controller-1'
-    controller0 = 'controller-0'
 
     lab = InstallVars.get_install_var('LAB')
     install_output_dir = ProjVar.get_var('LOG_DIR')
@@ -139,11 +138,11 @@ def test_install_cloned_image(install_clone_setup):
         LOG.info("waiting for {} to boot ...".format(controller1))
 
         LOG.info("Verifying {} is Locked, Disabled and Online ...".format(controller1))
-        host_helper.wait_for_hosts_states(controller1, check_interval=20, use_telnet=True,
-                                          con_telnet=controller0_node.telnet_conn,
-                                          administrative=HostAdminState.LOCKED,
-                                          operational=HostOperState.DISABLED,
-                                          availability=HostAvailState.ONLINE)
+        system_helper.wait_for_hosts_states(controller1, check_interval=20, use_telnet=True,
+                                            con_telnet=controller0_node.telnet_conn,
+                                            administrative=HostAdminState.LOCKED,
+                                            operational=HostOperState.DISABLED,
+                                            availability=HostAvailState.ONLINE)
 
         LOG.info("Unlocking {} ...".format(controller1))
 
@@ -163,7 +162,7 @@ def test_install_cloned_image(install_clone_setup):
     install_helper.update_oam_for_cloned_system(system_mode=system_mode)
 
     LOG.tc_step ("Downloading lab specific license, config and scripts ....")
-    software_version = system_helper.get_system_software_version()
+    software_version = system_helper.get_sw_version()
     load_path = BuildServerPath.LATEST_HOST_BUILD_PATHS[software_version]
     install_helper.download_lab_config_files(lab, install_clone_setup['build_server'], load_path)
 
@@ -176,7 +175,7 @@ def test_install_cloned_image(install_clone_setup):
 
     time.sleep(30)
     LOG.tc_step ("Checking config status of controller-0 and perform lock/unlock if necessary...")
-    if host_helper.get_hostshow_value('controller-0', 'config_status') == 'Config out-of-date':
+    if system_helper.get_host_values('controller-0', 'config_status')[0] == 'Config out-of-date':
         host_helper.lock_unlock_controllers()
 
     LOG.tc_step("Verifying system health after restore ...")

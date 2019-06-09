@@ -6,11 +6,11 @@ from pytest import fixture
 from consts.proj_vars import ProjVar
 from consts.cgcs import FlavorSpec
 from consts.filepaths import TiSPath, HeatTemplate, TestServerPath, WRSROOT_HOME
-from keywords import vm_helper, nova_helper, common, heat_helper, network_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
 from utils import exceptions
-from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+from utils.clients.ssh import ControllerClient
+from testfixtures.fixture_resources import ResourceCleanup
+from keywords import vm_helper, nova_helper, common, heat_helper, network_helper, system_helper
 
 
 @fixture(scope='module', autouse=True)
@@ -58,7 +58,7 @@ def _get_stress_ng_heat(con_ssh=None):
 
     # tenant nets names were hardcoded in heat file. They need to be updated when systems don't have those networks.
     # Update heat file if less than 3 tenant-nets configured.
-    tenant_nets = network_helper.get_tenant_net_ids(rtn_val='name')
+    tenant_nets = network_helper.get_tenant_net_ids(field='name')
     net_count = len(tenant_nets)
     if net_count <= 3:
         LOG.info("Less than 3 tenant networks configured. Update heat template.")
@@ -130,20 +130,13 @@ def test_migration_auto_converge(no_simplex):
     heat_template = _get_stress_ng_heat()
 
     stack_name = vm_name = 'stress_ng'
-    cmd_list = ['-f %s' % heat_template,
-                "-P flavor=%s" % flavor_id,
-                "-P name=%s" % vm_name,
-                stack_name]
-    params_string = ' '.join(cmd_list)
-
     LOG.tc_step("Creating heat stack")
-    code, msg = heat_helper.create_stack(stack_name=stack_name, params_string=params_string)
-    # add the heat stack name for deletion in teardown
-    ResourceCleanup.add(resource_type='heat_stack', resource_id=stack_name)
+    code, msg = heat_helper.create_stack(stack_name=stack_name, template=heat_template,
+                                         parameters={'flavor': flavor_id, 'name': vm_name}, cleanup='function')
     assert code == 0, "Failed to create heat stack"
 
     LOG.info("Verifying server creation via heat")
-    vm_id = nova_helper.get_vm_id_from_name(vm_name='stress_ng', strict=False)
+    vm_id = vm_helper.get_vm_id_from_name(vm_name='stress_ng', strict=False)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:

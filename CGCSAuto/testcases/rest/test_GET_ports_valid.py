@@ -1,13 +1,15 @@
 import pytest
+
 from utils.tis_log import LOG
 from utils.rest import Rest
-from keywords import system_helper
+from keywords import system_helper, host_helper, storage_helper
 
 
 @pytest.fixture(scope='module')
 def sysinv_rest():
     r = Rest('sysinv', platform=True)
     return r
+
 
 # @pytest.mark.parametrize(
 #     'authorize_valid,resource_valid,expected_status', [
@@ -58,7 +60,7 @@ def sysinv_rest():
 
 @pytest.mark.parametrize(('authorize_valid', 'resource_valid', 'expected_status'), [
     (True, True, 200),
-    (True, False,400),
+    (True, False, 400),
     (False, True, 401)
 ])
 def test_GET_networks_valid(sysinv_rest, authorize_valid, resource_valid, expected_status):
@@ -80,7 +82,7 @@ def test_GET_networks_valid(sysinv_rest, authorize_valid, resource_valid, expect
     r = sysinv_rest
     path = "/networks/{}"
     if resource_valid:
-        network_list = system_helper.get_network_values()
+        network_list = system_helper.get_system_networks()
     else:
         network_list = ['ffffffffffff-ffff-ffff-ffff-ffffffffffff']
 
@@ -124,7 +126,7 @@ def test_GET_clusters_valid(sysinv_rest, authorize_valid, resource_valid, expect
     r = sysinv_rest
     path = "/clusters/{}"
     if resource_valid:
-        cluster_list = system_helper.get_cluster_values()
+        cluster_list = system_helper.get_clusters()
     else:
         cluster_list = ['ffffffff-ffff-ffff-ffff-ffffffffffff']
 
@@ -187,7 +189,7 @@ def test_GET_ialarms_valid(sysinv_rest, authorize_valid, resource_valid, expecte
             LOG.tc_step(message.format(expected_status))
             message = "Expected code of expected_status - received {} and message {}"
             assert status_code == expected_status, message.format(expected_status, status_code, text)
-            
+
 
 # @pytest.mark.parametrize(
 #     'authorize_valid,resource_valid,expected_status', [
@@ -261,7 +263,7 @@ def test_GET_devices(sysinv_rest, authorize_valid, resource_valid, expected_stat
     r = sysinv_rest
     path = "/devices/{}"
 
-    hostnames = system_helper.get_hostnames()
+    hostnames = system_helper.get_hosts()
     for host in hostnames:
         res = path.format(host)
         message = "Using requests GET {} with proper authentication"
@@ -346,10 +348,10 @@ def test_GET_idisks(sysinv_rest):
     """
     r = sysinv_rest
     path = "/idisks/{}"
-    hostnames = system_helper.get_hostnames()
+    hostnames = system_helper.get_hosts()
     for host in hostnames:
-        disk_table = system_helper.get_disk_values(host)
-        for disk_uuid in disk_table:
+        disk_uuids = storage_helper.get_host_disks(host)
+        for disk_uuid in disk_uuids:
             res = path.format(disk_uuid)
             message = "Using requests GET {} with proper authentication"
             LOG.tc_step(message.format(res))
@@ -438,11 +440,11 @@ def test_GET_lldp_agents(sysinv_rest, authorize_valid, resource_valid, expected_
     """
     r = sysinv_rest
     path = "/lldp_agents/{}"
-    hostnames = system_helper.get_hostnames()
+    hostnames = system_helper.get_hosts()
     for host in hostnames:
         LOG.info(host)
         if resource_valid:
-            lldp_table = system_helper.get_host_lldp_agent_table(host)
+            lldp_table = host_helper.get_host_lldp_agents(host)
         else:
             lldp_table = ['ffffffff-ffff-ffff-ffff-ffffffffffff']
         LOG.info(lldp_table)
@@ -485,11 +487,11 @@ def test_GET_lldp_neighbors(sysinv_rest, authorize_valid, resource_valid, expect
     """
     r = sysinv_rest
     path = "/lldp_neighbors/{}"
-    hostnames = system_helper.get_hostnames()
+    hostnames = system_helper.get_hosts()
     for host in hostnames:
         LOG.info(host)
         if resource_valid:
-            lldp_table = system_helper.get_host_lldp_neighbor_table(host)
+            lldp_table = host_helper.get_host_lldp_neighbors(host)
         else:
             lldp_table = ['ffffffff-ffff-ffff-ffff-ffffffffffff']
         LOG.info(lldp_table)
@@ -582,9 +584,9 @@ def test_GET_services(sysinv_rest, authorize_valid, resource_valid, expected_sta
     r = sysinv_rest
     path = "/services/{}"
     if resource_valid:
-        service_list = system_helper.get_service_list_table()
+        service_list = system_helper.get_services()
     else:
-        service_list = ['ffffffff-ffff-ffff-ffff-ffffffffffff']        
+        service_list = ['ffffffff-ffff-ffff-ffff-ffffffffffff']
     for service in service_list:
         LOG.info(service)
         res = path.format(service)
@@ -607,7 +609,7 @@ def test_GET_services(sysinv_rest, authorize_valid, resource_valid, expected_sta
     (True, False, 400),
     (False, True, 401)
 ]
-)
+                         )
 def test_GET_servicenodes(sysinv_rest, authorize_valid, resource_valid, expected_status):
     """
     Test GET of <resource> with valid authentication.
@@ -627,9 +629,9 @@ def test_GET_servicenodes(sysinv_rest, authorize_valid, resource_valid, expected
     r = sysinv_rest
     path = "/servicenodes/{}"
     if resource_valid:
-        service_list = system_helper.get_servicenodes_list_table()
+        service_list = system_helper.get_servicenodes()
     else:
-        service_list = ['ffffffff-ffff-ffff-ffff-ffffffffffff']        
+        service_list = ['ffffffff-ffff-ffff-ffff-ffffffffffff']
     for service in service_list:
         LOG.info(service)
         res = path.format(service)
@@ -673,9 +675,9 @@ def test_GET_servicegroup(sysinv_rest, authorize_valid, resource_valid, expected
     r = sysinv_rest
     path = "/servicegroup/{}"
     if resource_valid:
-        service_list = system_helper.get_servicegroups_list_table()
+        service_list = system_helper.get_servicegroups()
     else:
-        service_list = ['ffffffff-ffff-ffff-ffff-ffffffffffff']        
+        service_list = ['ffffffff-ffff-ffff-ffff-ffffffffffff']
     for service in service_list:
         LOG.info(service)
         res = path.format(service)
@@ -719,8 +721,8 @@ def test_GET_service_parameter(sysinv_rest, authorize_valid, resource_valid, exp
     r = sysinv_rest
     path = "/service_parameter/{}"
     if resource_valid:
-        service_list = system_helper.get_service_parameter_values(rtn_value='uuid')
-    else: 
+        service_list = system_helper.get_service_parameter_values(field='uuid')
+    else:
         service_list = ['ffffffff-ffff-ffff-ffff-ffffffffffff']
     for service in service_list:
         LOG.info(service)

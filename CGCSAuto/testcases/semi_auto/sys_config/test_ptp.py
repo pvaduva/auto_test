@@ -15,7 +15,7 @@ def default_config(request):
 
     """
 
-    ptp_default = system_helper.get_ptp_vals(rtn_val=['enabled', 'mode', 'transport', 'mechanism'])
+    ptp_default = system_helper.get_ptp_values(fields=['enabled', 'mode', 'transport', 'mechanism'])
     LOG.info('Ptp values= {} {}'.format(ptp_default[0], ptp_default[1]))
 
     def restore_default_confg():
@@ -82,7 +82,7 @@ def test_ptp_parameter_modify(mode, transport, mechanism, default_config):
     """
 
     LOG.tc_step("PTP Enabled check")
-    ptp_enabled = system_helper.get_ptp_vals(rtn_val='enabled')
+    ptp_enabled = system_helper.get_ptp_values(fields='enabled')
     if ptp_enabled[0] != 'True':
         system_helper.modify_ntp(enabled=False, clear_alarm=False)
         system_helper.modify_ptp(enabled=True, clear_alarm=False)

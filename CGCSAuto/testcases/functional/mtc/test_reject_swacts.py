@@ -121,7 +121,7 @@ def test_swact_compute_negative():
         - Attempt to swact from a compute
 
     """
-    computes = system_helper.get_hostnames(personality='compute')
+    computes = system_helper.get_hosts(personality='compute')
     if not computes:
         skip("No compute host in system")
 

@@ -27,11 +27,10 @@ import string
 from pytest import fixture, mark, skip
 
 from consts.cgcs import PartitionStatus
-from keywords import system_helper, host_helper, partition_helper
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-
+from keywords import system_helper, host_helper, storage_helper
 
 CP_TIMEOUT = 120
 DP_TIMEOUT = 120
@@ -50,13 +49,13 @@ def restore_partitions_teardown(request):
 
         for host in partitions_to_restore:
             device_node, size_gib, uuid = partitions_to_restore[host][0:3]
-            available_gib = partition_helper.get_disk_info(host, device_node, "available_gib")
+            available_gib = storage_helper.get_host_disk_values(host, device_node, "available_gib")[0]
             total_free = float(available_gib) - int(size_gib)
             LOG.info("Restoring deleted partition on host {} with device_node {} and size {}".format(
-                    host, device_node, size_gib))
-            rc, out = partition_helper.create_partition(host, device_node, int(size_gib))
+                host, device_node, size_gib))
+            rc, out = storage_helper.create_host_partition(host, device_node, int(size_gib))
             assert rc == 0, "Partition creation failed"
-            gib_after_create = partition_helper.get_disk_info(host, device_node, "available_gib")
+            gib_after_create = storage_helper.get_host_disk_values(host, device_node, "available_gib")[0]
             assert float(gib_after_create) == total_free, \
                 "Expected available_gib to be {} after creation but instead was {}".format(total_free, gib_after_create)
 
@@ -75,24 +74,26 @@ def delete_partitions_teardown(request):
             LOG.info("Partitions to restore for {}: {}".format(host, partitions_to_restore[host]))
             for i in range(len(partitions_to_restore[host]) - 1, -1, -1):
                 uuid = partitions_to_restore[host][i]
-                device_node = partition_helper.get_partition_info(host, uuid, "device_node")
+                device_node, partition_gib = storage_helper.get_host_partition_values(host, uuid,
+                                                                                      ("device_node", "size_gib"))
                 device_node = device_node.rstrip(string.digits)
                 if device_node.startswith("/dev/nvme"):
                     device_node = device_node[:-1]
-                partition_gib = partition_helper.get_partition_info(host, uuid, "size_gib")
-                available_gib = partition_helper.get_disk_info(host, device_node, "available_gib")
+
+                available_gib = storage_helper.get_host_disk_values(host, device_node, "available_gib")[0]
                 total_free = float(available_gib) + float(partition_gib)
                 LOG.info("Deleting partition on host {} with uuid {}".format(host, uuid))
-                rc, out = partition_helper.delete_partition(host, uuid)
+                rc, out = storage_helper.delete_host_partition(host, uuid)
                 assert rc == 0, "Partition deletion failed"
                 # Wait a few seconds for disk space release
-                gib_after_del = partition_helper.get_disk_info(host, device_node, "available_gib")
+                gib_after_del = storage_helper.get_host_disk_values(host, device_node, "available_gib")[0]
                 LOG.info("GIB Before: {}".format(total_free))
                 LOG.info("GIB After: {}".format(gib_after_del))
                 gib_after_del = float(gib_after_del)
                 offset = 1
                 assert total_free - offset <= gib_after_del <= total_free + offset, \
-                    "Expected available_gib to be {} after deletion but instead was {}".format(total_free, gib_after_del)
+                    "Expected available_gib to be {} after deletion but instead was {}".format(total_free,
+                                                                                               gib_after_del)
 
     request.addfinalizer(teardown)
 
@@ -114,13 +115,13 @@ def test_delete_host_partitions():
     global partitions_to_restore
     partitions_to_restore = {}
 
-    computes = system_helper.get_hostnames(personality="compute")
+    computes = system_helper.get_hosts(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
     usable_disks = False
     for host in hosts:
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if not free_disks:
             continue
 
@@ -132,11 +133,11 @@ def test_delete_host_partitions():
                 continue
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
+            rc, out = storage_helper.create_host_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
             assert rc == 0, "Partition creation was expected to succeed but instead failed"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
-            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
+            storage_helper.wait_for_host_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
             # Only test one disk on each host
@@ -169,13 +170,13 @@ def test_increase_host_partition_size():
     global partitions_to_restore
     partitions_to_restore = {}
 
-    computes = system_helper.get_hostnames(personality="compute")
+    computes = system_helper.get_hosts(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
     usable_disks = False
     for host in hosts:
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if not free_disks:
             continue
 
@@ -187,22 +188,22 @@ def test_increase_host_partition_size():
                 continue
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
+            rc, out = storage_helper.create_host_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
             assert rc == 0, "Partition creation was expected to succeed but instead failed"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
-            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
+            storage_helper.wait_for_host_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
 
-            device_node = partition_helper.get_partition_info(host, uuid, "device_node")
+            device_node = storage_helper.get_host_partition_values(host, uuid, "device_node")[0]
             device_node = device_node.rstrip(string.digits)
             if device_node.startswith("/dev/nvme"):
                 device_node = device_node[:-1]
             LOG.tc_step("Modifying partition {} from size 1 to size {} from host {} on device node {}".format(
-                    uuid, int(size_gib) - 2, host, device_node))
-            partition_helper.modify_partition(host, uuid, str(int(size_gib) - 2))
-            new_disk_available_gib = partition_helper.get_disk_info(host, device_node, "available_gib")
+                uuid, int(size_gib) - 2, host, device_node))
+            storage_helper.modify_host_partition(host, uuid, str(int(size_gib) - 2))
+            new_disk_available_gib = storage_helper.get_host_disk_values(host, device_node, "available_gib")[0]
             assert 0 <= int(float(new_disk_available_gib)) <= 3, \
                 "Expected disk space to be consumed but instead we have {} available".format(new_disk_available_gib)
             # Only test one disk on each host
@@ -239,13 +240,13 @@ def test_create_multiple_partitions_on_single_host():
     global partitions_to_restore
     partitions_to_restore = {}
 
-    computes = system_helper.get_hostnames(personality="compute")
+    computes = system_helper.get_hosts(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
     usable_disks = False
     for host in hosts:
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if not free_disks:
             continue
 
@@ -257,13 +258,13 @@ def test_create_multiple_partitions_on_single_host():
                 continue
             usable_disks = True
             LOG.info("Creating first partition on {}".format(host))
-            rc1, out1 = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
+            rc1, out1 = storage_helper.create_host_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
             LOG.info("Creating second partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=True)
+            rc, out = storage_helper.create_host_partition(host, disk_uuid, "1", fail_ok=True)
             assert rc != 0, "Partition creation was expected to fail but was instead successful"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out1), "uuid")
-            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
+            storage_helper.wait_for_host_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
             # Only test one disk on each host
@@ -294,14 +295,14 @@ def test_create_many_small_host_partitions_on_a_single_host():
     global partitions_to_restore
     partitions_to_restore = {}
 
-    computes = system_helper.get_hostnames(personality="compute")
+    computes = system_helper.get_hosts(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
     usable_disks = False
     for host in hosts:
         partitions_to_restore[host] = []
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if not free_disks:
             continue
         for disk_uuid in free_disks:
@@ -315,7 +316,7 @@ def test_create_many_small_host_partitions_on_a_single_host():
             LOG.info("Creating partition on {}".format(host))
             # partitions_to_restore[host] = []
             for i in range(0, num_partitions):
-                uuid = partition_helper.create_partition(host, disk_uuid, partition_chunks)[1]
+                uuid = storage_helper.create_host_partition(host, disk_uuid, partition_chunks)[1]
                 partitions_to_restore[host].append(uuid)
             # Only test one disk on each host
             break
@@ -353,18 +354,18 @@ def _test_create_partition_and_associate_with_pv_nova_local():
     global partitions_to_restore
     partitions_to_restore = {}
 
-    if system_helper.is_small_footprint():
+    if system_helper.is_aio_system():
         hosts = system_helper.get_controllers()
     else:
-        hosts = system_helper.get_hostnames(personality="compute")
+        hosts = system_helper.get_hosts(personality="compute")
 
     if len(hosts) == 0:
         skip("No valid nodes to test with")
 
     usable_disks = False
     for host in hosts:
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if not free_disks:
             continue
         for uuid in free_disks:
@@ -375,28 +376,28 @@ def _test_create_partition_and_associate_with_pv_nova_local():
             usable_disks = True
             host_helper.lock_host(host)
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, uuid, "1")
+            rc, out = storage_helper.create_host_partition(host, uuid, "1")
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
             LOG.tc_step("Associating partition {} with nova-local".format(uuid))
             # cmd = "host-pv-add -t partition {} nova-local {}".format(host, uuid)
             cmd = "host-pv-add {} nova-local {}".format(host, uuid)
-            rc, out = cli.system(cmd, rtn_code=True)
+            rc, out = cli.system(cmd)
             assert rc == 0, "Associating partition with PV failed"
 
             host_helper.unlock_host(host)
             LOG.tc_step("Check that partition is In-use state")
-            partition_helper.wait_for_partition_status(host=host, uuid=uuid, final_status=PartitionStatus.IN_USE,
-                                                       interim_status=PartitionStatus.READY, timeout=CP_TIMEOUT)
+            storage_helper.wait_for_host_partition_status(host=host, uuid=uuid, final_status=PartitionStatus.IN_USE,
+                                                          interim_status=PartitionStatus.READY, timeout=CP_TIMEOUT)
 
             LOG.tc_step("Attempt to delete In-Use partition")
-            rc, out = partition_helper.delete_partition(host, uuid, fail_ok=True)
+            rc, out = storage_helper.delete_host_partition(host, uuid, fail_ok=True)
             assert rc != 0, "Partition deletion was expected to fail but instead passed"
             LOG.tc_step("Attempt to associate the In-Use partition with another PV")
             # cmd = "host-pv-add -t partition {} cgts-vg {}".format(host, uuid)
             cmd = "host-pv-add {} cgts-vg {}".format(host, uuid)
-            rc, out = cli.system(cmd, rtn_code=True)
+            rc, out = cli.system(cmd)
             assert rc != 0, "Partition association succeeded but was expected to fail"
             # Only test one disk on each host
             break
@@ -433,14 +434,14 @@ def _test_create_partition_and_associate_with_pv_cgts_vg():
     global partitions_to_restore
     partitions_to_restore = {}
 
-    if not system_helper.is_small_footprint():
+    if not system_helper.is_aio_system():
         skip("This test requires an AIO system.")
 
     hosts = system_helper.get_controllers()
 
     for host in hosts:
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if not free_disks:
             continue
         for uuid in free_disks:
@@ -449,25 +450,25 @@ def _test_create_partition_and_associate_with_pv_cgts_vg():
                 LOG.tc_step("Skip this disk due to insufficient space")
                 continue
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, uuid, "1")
+            rc, out = storage_helper.create_host_partition(host, uuid, "1")
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
             LOG.tc_step("Associating partition {} with cgts-vg".format(uuid))
             # cmd = "host-pv-add -t partition {} cgts-vg {}".format(host, uuid)
             cmd = "host-pv-add {} cgts-vg {}".format(host, uuid)
-            rc, out = cli.system(cmd, rtn_code=True)
+            rc, out = cli.system(cmd)
             assert rc == 0, "Associating partition with PV failed"
             LOG.tc_step("Check that partition is In-use state")
-            partition_helper.wait_for_partition_status(host=host, uuid=uuid, final_status=PartitionStatus.IN_USE,
-                                                       interim_status=PartitionStatus.READY, timeout=CP_TIMEOUT)
+            storage_helper.wait_for_host_partition_status(host=host, uuid=uuid, final_status=PartitionStatus.IN_USE,
+                                                          interim_status=PartitionStatus.READY, timeout=CP_TIMEOUT)
             LOG.tc_step("Attempt to delete In-Use partition")
-            rc, out = partition_helper.delete_partition(host, uuid, fail_ok=True)
+            rc, out = storage_helper.delete_host_partition(host, uuid, fail_ok=True)
             assert rc != 0, "Partition deletion was expected to fail but instead passed"
             LOG.tc_step("Attempt to associate the In-Use partition with another PV")
             # cmd = "host-pv-add -t partition {} nova-local {}".format(host, uuid)
             cmd = "host-pv-add {} nova-local {}".format(host, uuid)
-            rc, out = cli.system(cmd, rtn_code=True)
+            rc, out = cli.system(cmd)
             assert rc != 0, "Partition association succeeded but was expected to fail"
             # Only test one disk on each host
             break
@@ -491,16 +492,16 @@ def test_assign_rootfs_disk_to_pv():
     * None
     """
 
-    computes = system_helper.get_hostnames(personality="compute")
+    computes = system_helper.get_hosts(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
-    rootfs = partition_helper.get_rootfs(hosts)
+    rootfs = storage_helper.get_hosts_rootfs(hosts)
 
     for host in rootfs:
         uuid = rootfs[host]
         # cmd = "host-pv-add -t disk {} cgts-vg {}".format(host, uuid[0])
         cmd = "host-pv-add {} cgts-vg {}".format(host, uuid[0])
-        rc, out = cli.system(cmd, rtn_code=True, fail_ok=True)
+        rc, out = cli.system(cmd, fail_ok=True)
         assert rc != 0, "Expected PV creation to fail but instead succeeded"
 
 
@@ -532,7 +533,7 @@ def test_attempt_host_unlock_during_partition_creation():
     global partitions_to_restore
     partitions_to_restore = {}
 
-    computes = system_helper.get_hostnames(personality="compute")
+    computes = system_helper.get_hosts(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
     # Filter out active controller
@@ -542,8 +543,8 @@ def test_attempt_host_unlock_during_partition_creation():
 
     usable_disks = False
     for host in hosts:
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if not free_disks:
             continue
 
@@ -558,7 +559,7 @@ def test_attempt_host_unlock_during_partition_creation():
             host_helper.lock_host(host)
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, uuid, int(size_gib), wait=False)
+            rc, out = storage_helper.create_host_partition(host, uuid, int(size_gib), wait=False)
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
@@ -568,7 +569,7 @@ def test_attempt_host_unlock_during_partition_creation():
             assert rc_ != 0, "Unlock attempt unexpectedly passed"
 
             LOG.tc_step("wait for partition to be created")
-            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
+            storage_helper.wait_for_host_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
 
             # Only test one disk on each host
             break
@@ -592,14 +593,14 @@ def test_create_zero_sized_host_partition():
     * None
     """
 
-    computes = system_helper.get_hostnames(personality="compute")
+    computes = system_helper.get_hosts(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
     for host in hosts:
-        disks = partition_helper.get_disks(host)
+        disks = storage_helper.get_host_disks(host)
         for uuid in disks:
             LOG.tc_step("Attempt to create zero sized partition on uuid {} on host {}".format(uuid, host))
-            rc, out = partition_helper.create_partition(host, uuid, "0", fail_ok=True)
+            rc, out = storage_helper.create_host_partition(host, uuid, "0", fail_ok=True)
             assert rc != 0, "Partition creation was expected to fail but instead succeeded"
             # Let's do this for one disk only on each host
             break
@@ -624,13 +625,13 @@ def test_decrease_host_partition_size():
     global partitions_to_restore
     partitions_to_restore = {}
 
-    computes = system_helper.get_hostnames(personality="compute")
+    computes = system_helper.get_hosts(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
     usable_disks = False
     for host in hosts:
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if not free_disks:
             continue
 
@@ -642,20 +643,19 @@ def test_decrease_host_partition_size():
                 continue
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
+            rc, out = storage_helper.create_host_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
             assert rc == 0, "Partition creation was expected to succeed but instead failed"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
-            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
+            storage_helper.wait_for_host_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
 
-            device_node = partition_helper.get_partition_info(host, uuid, "device_node")
-            size_gib = partition_helper.get_partition_info(host, uuid, "size_gib")
+            device_node, size_gib = storage_helper.get_host_partition_values(host, uuid, ("device_node", "size_gib"))
             total_size = int(size_gib) - 1
             LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on device node {}".format(
-                        uuid, int(size_gib), str(total_size), host, device_node[:-1]))
-            rc, out = partition_helper.modify_partition(host, uuid, str(total_size), fail_ok=True)
+                uuid, int(size_gib), str(total_size), host, device_node[:-1]))
+            rc, out = storage_helper.modify_host_partition(host, uuid, str(total_size), fail_ok=True)
             assert rc != 0, "Expected partition modification to fail and instead it succeeded"
             # Only test one disk on each host
             break
@@ -685,13 +685,13 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
     global partitions_to_restore
     partitions_to_restore = {}
 
-    computes = system_helper.get_hostnames(personality="compute")
+    computes = system_helper.get_hosts(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
     usable_disks = False
     for host in hosts:
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if not free_disks:
             continue
 
@@ -703,22 +703,22 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
                 continue
             usable_disks = True
             LOG.info("Creating partition on {}".format(host))
-            rc, out = partition_helper.create_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
+            rc, out = storage_helper.create_host_partition(host, disk_uuid, "1", fail_ok=False, wait=False)
             assert rc == 0, "Partition creation was expected to succeed but instead failed"
             # Check that first disk was created
             uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
-            partition_helper.wait_for_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
+            storage_helper.wait_for_host_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
 
-            device_node = partition_helper.get_partition_info(host, uuid, "device_node")
+            device_node = storage_helper.get_host_partition_values(host, uuid, "device_node")[0]
             device_node = device_node.rstrip(string.digits)
             if device_node.startswith("/dev/nvme"):
                 device_node = device_node[:-1]
             size_gib += 1
             LOG.tc_step("Modifying partition {} from size 1 to size {} from host {} on device node {}".format(
-                    uuid, int(size_gib), host, device_node))
-            rc, out = partition_helper.modify_partition(host, uuid, str(int(size_gib)), fail_ok=True)
+                uuid, int(size_gib), host, device_node))
+            rc, out = storage_helper.modify_host_partition(host, uuid, str(int(size_gib)), fail_ok=True)
             assert rc != 0, "Expected partition modification to fail and instead it succeeded"
             LOG.info(out)
             # Only test one disk on each host
@@ -758,8 +758,8 @@ def test_create_partition_using_valid_uuid_of_another_host():
     donor = None
     LOG.tc_step("Determine which hosts have free disks")
     for host in hosts:
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if free_disks:
             donor = host
             break
@@ -769,7 +769,7 @@ def test_create_partition_using_valid_uuid_of_another_host():
 
     for uuid in free_disks:
         LOG.info("Creating partition on {} using disk from {}".format(sut, donor))
-        rc, out = partition_helper.create_partition(sut, uuid, int(free_disks[uuid]), fail_ok=True)
+        rc, out = storage_helper.create_host_partition(sut, uuid, int(free_disks[uuid]), fail_ok=True)
         assert rc != 0, "Partition creation should be rejected but instead it was successful"
         # Break since we only need to do this once
         break
@@ -796,12 +796,12 @@ def test_modify_second_last_partition():
     global partitions_to_restore
     partitions_to_restore = {}
 
-    computes = system_helper.get_hostnames(personality="compute")
+    computes = system_helper.get_hosts(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
     for host in hosts:
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if not free_disks:
             continue
 
@@ -815,16 +815,16 @@ def test_modify_second_last_partition():
                 continue
 
             LOG.info("Creating first partition on {}".format(host))
-            uuid = partition_helper.create_partition(host, disk_uuid, partition_size)[1]
+            uuid = storage_helper.create_host_partition(host, disk_uuid, partition_size)[1]
             partitions_to_restore[host].append(uuid)
 
             LOG.info("Creating second partition on {}".format(host))
-            uuid1 = partition_helper.create_partition(host, disk_uuid, partition_size)[1]
+            uuid1 = storage_helper.create_host_partition(host, disk_uuid, partition_size)[1]
             partitions_to_restore[host].append(uuid1)
 
             LOG.tc_step("Modifying partition {} from size {} to size {} from host {} on disk {}".format(
-                    uuid, partition_size, int(partition_size) + 1, host, disk_uuid))
-            rc, out = partition_helper.modify_partition(host, uuid, int(partition_size) + 1, fail_ok=True)
+                uuid, partition_size, int(partition_size) + 1, host, disk_uuid))
+            rc, out = storage_helper.modify_host_partition(host, uuid, int(partition_size) + 1, fail_ok=True)
             assert rc != 0, "Partition modification was expected to fail but instead was successful"
 
 
@@ -849,13 +849,13 @@ def test_create_partition_using_non_existent_device_node():
     device_node = "/dev/sdz"
     size_gib = "1"
 
-    computes = system_helper.get_hostnames(personality="compute")
+    computes = system_helper.get_hosts(personality="compute")
     hosts = system_helper.get_controllers() + computes
 
     for host in hosts:
         LOG.tc_step("Creating partition on host {} with size {} using device node {}".format(host, size_gib,
                                                                                              device_node))
-        rc, out = partition_helper.create_partition(host, device_node, size_gib, fail_ok=True)
+        rc, out = storage_helper.create_host_partition(host, device_node, size_gib, fail_ok=True)
         assert rc != 0, "Partition creation was successful"
 
 
@@ -881,12 +881,12 @@ def test_create_host_partition_on_storage():
 
     LOG.tc_step("Gather the disks available on each host")
     for host in hosts:
-        disks = partition_helper.get_disks(host)
-        free_disks = partition_helper.get_disks_with_free_space(host, disks)
+        disks = storage_helper.get_host_disks(host)
+        free_disks = storage_helper.get_host_disks_with_free_space(host, disks)
         if not free_disks:
             continue
         for uuid in free_disks:
-            rc, out = partition_helper.create_partition(host, uuid, int(free_disks[uuid]), fail_ok=True)
+            rc, out = storage_helper.create_host_partition(host, uuid, int(free_disks[uuid]), fail_ok=True)
             assert rc != 0, "Partition creation was successful"
 
 
@@ -912,18 +912,18 @@ def test_host_disk_wipe_rootfs():
     Assumptions:
     - None
     """
-    computes = system_helper.get_hostnames(personality="compute")
-    storage = system_helper.get_hostnames(personality="storage")
+    computes = system_helper.get_hosts(personality="compute")
+    storage = system_helper.get_hosts(personality="storage")
     hosts = system_helper.get_controllers() + computes + storage
 
     LOG.tc_step("Gather rootfs disks")
-    rootfs = partition_helper.get_rootfs(hosts)
+    rootfs = storage_helper.get_hosts_rootfs(hosts)
 
     for host in rootfs:
         uuid = rootfs[host]
         LOG.tc_step("Attempting to wipe {} from {}".format(uuid[0], host))
         cmd = 'host-disk-wipe --confirm {} {}'.format(host, uuid[0])
-        rc, out = cli.system(cmd, rtn_code=True, fail_ok=True)
+        rc, out = cli.system(cmd, fail_ok=True)
         assert rc != 0, "Expected wipe disk to fail but instead succeeded"
 
 
@@ -952,28 +952,26 @@ def test_host_disk_wipe_unassigned_disk():
     Assumptions:
     - None
     """
-    computes = system_helper.get_hostnames(personality="compute", availability="available")
-    controllers = system_helper.get_hostnames(personality="controller", availability="available")
+    computes = system_helper.get_hosts(personality="compute", availability="available")
+    controllers = system_helper.get_hosts(personality="controller", availability="available")
     hosts = controllers + computes
 
     found_disk = False
     for host in hosts:
         LOG.info("Query disks on host {}".format(host))
-        disks = partition_helper.get_disks(host)
+        disks = storage_helper.get_host_disks(host)
         for disk_uuid in disks:
             cmd = "host-disk-show {} {}".format(host, disk_uuid)
-            rc, out = cli.system(cmd, rtn_code=True)
+            rc, out = cli.system(cmd)
             size_gib = table_parser.get_value_two_col_table(table_parser.table(out), "size_gib")
             available_gib = table_parser.get_value_two_col_table(table_parser.table(out), "available_gib")
             if int(float(size_gib)) == int(float(available_gib)):
                 found_disk = True
                 LOG.tc_step("Attempting to wipe disk {} from host {}".format(disk_uuid, host))
                 cmd = 'host-disk-wipe --confirm {} {}'.format(host, disk_uuid)
-                rc, out = cli.system(cmd, rtn_code=True, fail_ok=True)
+                rc, out = cli.system(cmd, fail_ok=True)
                 assert rc == 0, "Expected wipe disk to pass but instead failed"
                 break
 
     if not found_disk:
         skip("No unassigned disks to run test")
-
-

@@ -1,8 +1,9 @@
 import time
 from pytest import fixture, mark, skip
+
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
-from keywords import vm_helper, host_helper, network_helper, nova_helper, system_helper
+from keywords import vm_helper, host_helper, network_helper, system_helper
 from testfixtures.recover_hosts import HostsToRecover
 
 
@@ -14,7 +15,7 @@ def check_system():
         skip("Less than 3 hypervisors on system. Skip the test.")
 
     LOG.info("check if the lab has vxlan enabled network")
-    providernets = system_helper.get_data_networks(rtn_val='name', network_type='vxlan')
+    providernets = system_helper.get_data_networks(field='name', network_type='vxlan')
     if not providernets:
         skip("Vxlan provider-net not configured")
 
@@ -144,7 +145,7 @@ def test_robustness_service_function_chaining(protocol, nsh_aware, same_host, ad
                                        nsh_aware, symmetric, load_balancing=False)
 
     LOG.info("Get the host to reboot where the VMs launched")
-    hosts_to_reboot = nova_helper.get_vms_hosts(vm_ids=vm_ids)
+    hosts_to_reboot = vm_helper.get_vms_hosts(vm_ids=vm_ids)
 
     LOG.tc_step("Reboot VMs host {} and ensure vms are evacuated to other host".format(hosts_to_reboot))
     vm_helper.evacuate_vms(host=hosts_to_reboot, vms_to_check=vm_ids, ping_vms=True)
@@ -363,7 +364,6 @@ def test_load_balancing_chained_service_function(protocol, nsh_aware, same_host,
 
 
 def _setup_vm(vm_ids, hosts_to_boot):
-
     """
     Set up source and destination vm
     Args:
@@ -391,7 +391,6 @@ def _setup_vm(vm_ids, hosts_to_boot):
 
 
 def _setup_sfc_vm(sfc_vm_ids, hosts_to_boot, mgmt_nic, internal_net_id):
-
     """
     Set up SFC vm
     Args:
@@ -428,7 +427,7 @@ def _install_sw_packages_in_vm(vm_id):
     Args:
         vm_id (str):
     """
-    with vm_helper.ssh_to_vm_from_natbox(vm_id,) as vm_ssh:
+    with vm_helper.ssh_to_vm_from_natbox(vm_id, ) as vm_ssh:
         vm_ssh.exec_sudo_cmd('yum install nc -y', searchwindowsize=100)
 
 
@@ -454,7 +453,6 @@ def _setup_port_pair(nsh_aware, ingress_port_id, egress_port_id):
 
 
 def _setup_port_pair_groups(port_pair_id):
-
     """
     create port pair group and add resource cleanup
     Args:
@@ -587,7 +585,6 @@ def _check_packets_forwarded_in_sfc_vm(source_vm_id, dest_vm_id, sfc_vm_ids, des
 
 def _ssh_to_dest_vm_and_wait_for_greetings(start_event, end_event, received_event, vm_id, dest_vm_internal_net_ip,
                                            greeting, port, protocol, load_balancing, timeout=300):
-
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as root_ssh:
         if load_balancing:
             LOG.info("Load balancing Enabled, using tcp_server app")
@@ -637,7 +634,6 @@ def _ssh_to_dest_vm_and_wait_for_greetings(start_event, end_event, received_even
 
 def _ssh_to_sfc_vm_and_wait_for_packets(start_event, end_event, received_event, vm_id, protocol, nsh_aware, symmetric,
                                         timeout=300):
-
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as root_ssh:
         LOG.info("Verify the tool received {} packets from VM1 to VM2 and you can see the pkts coming in"
                  .format(protocol))
@@ -659,6 +655,7 @@ def _ssh_to_sfc_vm_and_wait_for_packets(start_event, end_event, received_event, 
                 blob_list = 'Packet #{}'.format(packet_num)
             else:
                 blob_list = 'Packet #'
+
         # if nsh_aware:
         #     blob_list = 'Packet #{}'.format(packet_num)
 

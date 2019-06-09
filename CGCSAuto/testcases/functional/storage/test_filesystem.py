@@ -1,12 +1,11 @@
 import ast
 import math
-import re
 import time
 
 from pytest import fixture, skip, mark
 
-from consts.cgcs import EventLogID, HostAvailState, PartitionStatus
-from keywords import host_helper, system_helper, filesystem_helper, common, storage_helper, partition_helper
+from consts.cgcs import EventLogID, HostAvailState
+from keywords import host_helper, system_helper, common, storage_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
@@ -50,6 +49,7 @@ def post_check(request):
         if con_ssh.file_exists(file_path=file_path):
             con_ssh.exec_cmd(cmd)
             con_ssh.exec_sudo_cmd(rm_cmd)
+
     request.addfinalizer(rm_file)
 
 
@@ -69,10 +69,8 @@ def test_increase_controllerfs():
     Assumptions:
     - There is sufficient free space to allow for an increase, otherwise skip
       test.
+
     """
-
-    con_ssh = ControllerClient.get_active_controller()
-
     drbdfs_val = {}
     LOG.tc_step("Determine the space available for each drbd filesystem")
     if system_helper.is_storage_system():
@@ -81,7 +79,7 @@ def test_increase_controllerfs():
         drbd_filesystems = DRBDFS
 
     for fs in drbd_filesystems:
-        drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+        drbdfs_val[fs] = storage_helper.get_controllerfs_values(fs)[0]
         LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
         if fs == 'backup':
             drbdfs_val[fs] = drbdfs_val[fs] + 4
@@ -89,22 +87,18 @@ def test_increase_controllerfs():
             drbdfs_val[fs] = drbdfs_val[fs] + 1
         LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs]))
 
-    LOG.tc_step("Increase the size of all filesystems") 
-
-    attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in drbdfs_val.items()]
-    args_ = ' '.join(attr_values_)
-    filesystem_helper.modify_controllerfs(**drbdfs_val)
-
+    LOG.tc_step("Increase the size of all filesystems")
+    storage_helper.modify_controllerfs(**drbdfs_val)
     # Need to wait until the change takes effect before checking the
     # filesystems
     hosts = system_helper.get_controllers()
     for host in hosts:
-       system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                         entity_id="host={}".format(host),
-                                         timeout=600)
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                          entity_id="host={}".format(host),
+                                          timeout=600)
 
     LOG.tc_step("Confirm the underlying filesystem size matches what is expected")
-    filesystem_helper.check_controllerfs(**drbdfs_val)
+    storage_helper.check_controllerfs(**drbdfs_val)
 
 
 def test_increase_controllerfs_beyond_avail_space():
@@ -135,12 +129,13 @@ def test_increase_controllerfs_beyond_avail_space():
     for fs in DRBDFS:
         drbdfs_val = {}
         LOG.tc_step("Determine the space available for the filesystem")
-        drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+        drbdfs_val[fs] = storage_helper.get_controllerfs_values(fs)[0]
         LOG.info("{} is currently {}".format(fs, drbdfs_val[fs]))
         drbdfs_val[fs] = drbdfs_val[fs] + round(float(free_space)) + 10
 
         LOG.tc_step("Attempt to modify {} to {}".format(fs, drbdfs_val[fs]))
-        filesystem_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)
+        code = storage_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)[0]
+        assert 1 == code, "Filesystem modify succeeded while failure is expected: {}".format(drbdfs_val)
 
 
 @mark.parametrize('fsvalues', ['', '0', 'fds', '$@', '-1'])
@@ -164,7 +159,8 @@ def test_modify_controllerfs_invalidargs(fsvalues):
         drbdfs_val = {}
         LOG.tc_step("Set {} to invalid value {}".format(fs, fsvalues))
         drbdfs_val[fs] = fsvalues
-        filesystem_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)
+        code = storage_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)[0]
+        assert 1 == code, "Filesystem modify succeeded while failure is expected: {}".format(drbdfs_val)
 
 
 def test_decrease_controllerfs():
@@ -183,18 +179,16 @@ def test_decrease_controllerfs():
     Assumptions:
     - None
     """
-
-    con_ssh = ControllerClient.get_active_controller()
-
     for fs in DRBDFS:
         drbdfs_val = {}
         LOG.tc_step("Determine the current size of the filesystem")
-        drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+        drbdfs_val[fs] = storage_helper.get_controllerfs_values(fs)[0]
         LOG.info("{} is currently {}".format(fs, drbdfs_val[fs]))
         LOG.tc_step("Decrease the size of the filesystem")
         drbdfs_val[fs] = int(drbdfs_val[fs]) - 1
         LOG.tc_step("Attempt to decrease {} to {}".format(fs, drbdfs_val[fs]))
-        filesystem_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)
+        code = storage_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)[0]
+        assert 1 == code, "Filesystem modify succeeded while failure is expected: {}".format(drbdfs_val)
 
 
 @mark.usefixtures("freespace_check")
@@ -218,7 +212,7 @@ def test_controllerfs_mod_when_host_locked():
     - Unlock controller
     """
 
-    if system_helper.is_simplex():
+    if system_helper.is_aio_simplex():
         target_host = "controller-0"
     else:
         target_host = system_helper.get_standby_controller_name()
@@ -229,13 +223,14 @@ def test_controllerfs_mod_when_host_locked():
     drbdfs_val = {}
     fs = "backup"
     LOG.tc_step("Determine the current filesystem size")
-    drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+    drbdfs_val[fs] = storage_helper.get_controllerfs_values(fs)[0]
     LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
     drbdfs_val[fs] = int(drbdfs_val[fs]) + 1
     LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs]))
 
     LOG.tc_step("Increase the size of filesystems")
-    filesystem_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)
+    code = storage_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)[0]
+    assert 1 == code, "Filesystem modify succeeded while failure is expected: {}".format(drbdfs_val)
 
 
 @mark.usefixtures("freespace_check")
@@ -263,12 +258,12 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
     drbdfs_val = {}
     fs = "backup"
     LOG.tc_step("Increase the backup size before proceeding with rest of test")
-    drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+    drbdfs_val[fs] = storage_helper.get_controllerfs_values(fs)[0]
     LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
     drbdfs_val[fs] = int(drbdfs_val[fs]) + 5
     LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs]))
     LOG.tc_step("Increase the size of filesystems")
-    filesystem_helper.modify_controllerfs(**drbdfs_val)
+    storage_helper.modify_controllerfs(**drbdfs_val)
 
     hosts = system_helper.get_controllers()
     for host in hosts:
@@ -281,26 +276,27 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
                                           timeout=600)
 
     LOG.tc_step("Confirm the underlying filesystem size matches what is expected")
-    filesystem_helper.check_controllerfs(**drbdfs_val)
+    storage_helper.check_controllerfs(**drbdfs_val)
 
     drbdfs_val = {}
     fs = "database"
     LOG.tc_step("Determine the current filesystem size")
-    drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
-    LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
-    drbdfs_val[fs] = int(drbdfs_val[fs]) + 1
+    value = storage_helper.get_controllerfs_values(fs)[0]
+    LOG.info("Current value of {} is {}".format(fs, value))
+    drbdfs_val[fs] = int(value) + 1
     LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs]))
 
     LOG.tc_step("Increase the size of filesystems")
-    filesystem_helper.modify_controllerfs(**drbdfs_val)
+    storage_helper.modify_controllerfs(**drbdfs_val)
 
     LOG.tc_step("Attempt to increase the size of the filesystem again")
     drbdfs_val[fs] = int(drbdfs_val[fs]) + 1
-    filesystem_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)
+    code = storage_helper.modify_controllerfs(fail_ok=True, **drbdfs_val)[0]
+    assert 1 == code, "Filesystem modify succeeded while failure is expected: {}".format(drbdfs_val)
 
     # Appearance of sync alarm is delayed so wait for it to appear and then
     # clear
-    if not system_helper.is_simplex():
+    if not system_helper.is_aio_simplex():
         system_helper.wait_for_alarm(alarm_id=EventLogID.CON_DRBD_SYNC, timeout=300)
         system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC, timeout=300)
 
@@ -332,16 +328,15 @@ def test_modify_drdb_swact_then_reboot():
     LOG.tc_step("Determine the available free space on the system")
     cmd = "vgdisplay -C --noheadings --nosuffix -o vg_free --units g cgts-vg"
     rc, out = con_ssh.exec_sudo_cmd(cmd)
-    free_space = out.rstrip()
     free_space = out.lstrip()
     LOG.info("Available free space on the system is: {}".format(free_space))
     if float(free_space) <= 10:
         skip("Not enough free space to complete test.")
 
-    drbdfs_val = {} 
+    drbdfs_val = {}
     LOG.tc_step("Determine the space available for each drbd fs")
     for fs in drbdfs:
-        table_ = table_parser.table(cli.system('controllerfs-show {}'.format(fs)))
+        table_ = table_parser.table(cli.system('controllerfs-show {}'.format(fs))[1])
         drbdfs_val[fs] = table_parser.get_value_two_col_table(table_, 'size')
 
     LOG.info("Current fs values are: {}".format(drbdfs_val))
@@ -367,7 +362,7 @@ def test_modify_drdb_swact_then_reboot():
                                           entity_id="host={}".format(host),
                                           timeout=600)
     standby_cont = system_helper.get_standby_controller_name()
-    host_helper.wait_for_host_values(standby_cont, availability=HostAvailState.AVAILABLE)
+    system_helper.wait_for_host_values(standby_cont, availability=HostAvailState.AVAILABLE)
     host_helper.swact_host()
 
     act_cont = system_helper.get_active_controller_name()
@@ -376,8 +371,8 @@ def test_modify_drdb_swact_then_reboot():
     time.sleep(5)
 
     system_helper.wait_for_alarm_gone(alarm_id=EventLogID.HOST_RECOVERY_IN_PROGRESS,
-                                          entity_id="host={}".format(act_cont),
-                                          timeout=600)
+                                      entity_id="host={}".format(act_cont),
+                                      timeout=600)
 
 
 # TODO for Maria. Current issue: config out-of-date status is not cleared after lock/unlock standby controller
@@ -401,11 +396,9 @@ def _test_increase_ceph_mon():
     Enhancement:
     1.  Possibly check there is enough disk space for ceph-mon to increase.  Not sure if
     this is required since there always seems to be some space on the rootfs.
+
     """
-
-    con_ssh = ControllerClient.get_active_controller()
-
-    table_ = table_parser.table(cli.system("ceph-mon-list"))
+    table_ = table_parser.table(cli.system("ceph-mon-list")[1])
     ceph_mon_gib = table_parser.get_values(table_, "ceph_mon_gib", **{"hostname": "controller-0"})[0]
     LOG.info("ceph_mon_gib is currently: {}".format(ceph_mon_gib))
 
@@ -456,7 +449,7 @@ def _test_increase_ceph_mon():
     host_helper.unlock_host(active)
     system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id="host={}".format(active))
 
-    table_ = table_parser.table(cli.system("ceph-mon-list"))
+    table_ = table_parser.table(cli.system("ceph-mon-list")[1])
     ceph_mon_gib = table_parser.get_values(table_, "ceph_mon_gib", **{"hostname": "controller-0"})[0]
     assert ceph_mon_gib != new_ceph_mon_gib, "ceph-mon did not change"
 
@@ -484,7 +477,6 @@ def test_increase_extensionfs_with_alarm():
     """
     file_loc = "/opt/extension"
     cmd = "cd " + file_loc
-    rm_cmd = "rm testFile"
     file_path = file_loc + "/" + "testFile"
     drbdfs_val = {}
     fs = "extension"
@@ -492,52 +484,50 @@ def test_increase_extensionfs_with_alarm():
     active_controller = system_helper.get_active_controller_name()
 
     LOG.tc_step("Determine the space available for extension filesystem")
-    drbdfs_val[fs] = filesystem_helper.get_controllerfs(fs)
+    drbdfs_val[fs] = storage_helper.get_controllerfs_values(fs)[0]
     LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
 
     # get the 91% of the current size
     LOG.info("Will attempt to fill up the space to 90% of fs {} of value of {}".format(fs, drbdfs_val[fs]))
-    file_size = int((drbdfs_val[fs] * 0.91)*1000)
-    file_size= str(file_size) + "M"
+    file_size = int((drbdfs_val[fs] * 0.91) * 1000)
+    file_size = str(file_size) + "M"
     cmd1 = "fallocate -l {} testFile".format(file_size)
     con_ssh = ControllerClient.get_active_controller()
-    rc, out = con_ssh.exec_cmd(cmd)
-    rc, out = con_ssh.exec_sudo_cmd(cmd1)
+    con_ssh.exec_cmd(cmd)
+    con_ssh.exec_sudo_cmd(cmd1)
     if not con_ssh.file_exists(file_path=file_path):
         LOG.info("File {} is not created".format(file_path))
         return 0
 
-    #fill_in_fs(size=file_size)
+    # fill_in_fs(size=file_size)
     LOG.tc_step("Verifying that the alarm is created after filling the fs space in {}".format(fs))
     system_helper.wait_for_alarm(alarm_id="100.104", entity_id=active_controller, timeout=600, strict=False)
 
     # verify the controller is in degraded state
     LOG.tc_step("Verifying controller is degraded after filling the fs space in {}".format(fs))
-    host_helper.wait_for_host_values(active_controller,availability='degraded')
+    system_helper.wait_for_host_values(active_controller, availability='degraded')
 
     drbdfs_val[fs] = drbdfs_val[fs] + 2
 
     LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs]))
 
     LOG.tc_step("Increase the size of extension filesystem")
-    attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in drbdfs_val.items()]
-    args_ = ' '.join(attr_values_)
-    filesystem_helper.modify_controllerfs(**drbdfs_val)
+    storage_helper.modify_controllerfs(**drbdfs_val)
 
     # Need to wait until the change takes effect before checking the
     # filesystems
     hosts = system_helper.get_controllers()
     for host in hosts:
         system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                         entity_id="host={}".format(host),
-                                         timeout=600)
+                                          entity_id="host={}".format(host),
+                                          timeout=600)
         LOG.tc_step("Verifying that the alarm is cleared after increasing the fs space in {}".format(fs))
         system_helper.wait_for_alarm_gone(alarm_id="100.104", entity_id="host={}".format(host), timeout=600,
                                           strict=False)
 
     LOG.tc_step("Confirm the underlying filesystem size matches what is expected")
-    filesystem_helper.check_controllerfs(**drbdfs_val)
+    storage_helper.check_controllerfs(**drbdfs_val)
 
     # verify the controller is in available state
     LOG.tc_step("Verifying that the controller is in available state after increasing the fs space in {}".format(fs))
-    host_helper.wait_for_host_values(active_controller, availability='available')
+    system_helper.wait_for_host_values(active_controller, availability='available')

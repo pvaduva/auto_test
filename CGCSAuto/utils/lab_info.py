@@ -1,9 +1,8 @@
 import os
-import re
 import subprocess
 import sys
 
-from consts.auth import Tenant, HostLinuxCreds
+from consts.auth import HostLinuxCreds
 from consts.lab import Labs
 from consts.proj_vars import ProjVar
 from keywords import system_helper
@@ -33,26 +32,6 @@ def _get_patches(con_ssh, rtn_str=True):
     return patches
 
 
-def _get_build_info(con_ssh, *args):
-    """
-
-    Args:
-        con_ssh (SSHClient):
-        **args: 'SW_VERSION', 'BUILD_TARGET', 'BUILD_ID', 'BUILD_SERVER', etc...
-
-    Returns (list):
-
-    """
-    output = con_ssh.exec_cmd('cat /etc/build.info')[1]
-    vals = []
-    for arg in args:
-        val = re.findall('''{}=\"(.*)\"'''.format(arg.upper()), output)
-        val = val[0] if val else ''
-        vals.append(val)
-
-    return vals
-
-
 def get_build_id(labname=None, log_dir=None, con_ssh=None):
     """
 
@@ -69,20 +48,14 @@ def get_build_id(labname=None, log_dir=None, con_ssh=None):
         close = True
         con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
 
-    code, output = con_ssh.exec_cmd('cat /etc/build.info')
-    if code != 0:
-        build_id = ' '
-    else:
-        build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
-        if build_id and build_id[0] != 'n/a':
-            build_id = build_id[0]
+    build_info = system_helper.get_build_info(con_ssh=con_ssh)
+    build_id = build_info['BUILD_ID']
+    if not build_id or build_id.lower() == 'n/a':
+        build_id = build_info['BUILD_DATE']
+        if build_id and build_id.lower() != 'n/a':
+            build_id = build_id.rsplit(' ', 1)[0].replace(' ', '_').replace(':', '_')
         else:
-            build_date = re.findall('''BUILD_DATE=\"(.*)\"''', output)
-            if build_date and build_date[0] != 'n/a':
-                build_id = build_date[0].rsplit(' ', 1)[0]
-                build_id = str(build_id).replace(' ', '_').replace(':', '_')
-            else:
-                build_id = '_'
+            build_id = '_'
 
     if close:
         con_ssh.close()
@@ -109,7 +82,7 @@ def __get_lab_ssh(labname, log_dir=None):
         ProjVar.set_var(log_dir=log_dir)
 
     ProjVar.set_var(lab=lab)
-    ProjVar.set_var(source_admin=Tenant.get('admin'))
+    ProjVar.set_var(source_openrc=True)
     con_ssh = SSHClient(lab.get('floating ip'), HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                         CONTROLLER_PROMPT)
     con_ssh.connect()
@@ -166,8 +139,8 @@ def _get_sys_type(labname=None, log_dir=None, con_ssh=None):
         close = True
         con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
 
-    controllers, computes, storages = system_helper.get_hostnames_per_personality(con_ssh=con_ssh, source_rc=True,
-                                                                                  rtn_tuple=True)
+    controllers, computes, storages = system_helper.get_hosts_per_personality(con_ssh=con_ssh, source_rc=True,
+                                                                              rtn_tuple=True)
 
     sys_type = "{}+{}+{}".format(len(controllers), len(computes), len(storages)).replace('+0', '')
 
@@ -256,36 +229,22 @@ def get_lab_info(labname=None, log_dir=None):
     return build_id, sys_type
 
 
-def get_build_info(labname=None, log_dir=None):
-    con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
+def get_build_info(labname=None, log_dir=None, con_ssh=None):
+    if not con_ssh:
+        con_ssh = __get_lab_ssh(labname=labname, log_dir=log_dir)
 
     try:
-        code, output = con_ssh.exec_cmd('cat /etc/build.info')
+        build_info = system_helper.get_build_info(con_ssh=con_ssh)
+        build_id = build_info['BUILD_ID']
+        build_by = build_info['BUILD_BY']
+        job = build_info['JOB']
+        build_host = build_info['BUILD_HOST']
+        sw_version = build_info['SW_VERSION']
+
         build_path = ''
-        if code != 0:
-            build_id = build_host = job = build_by = sw_version = ''
-        else:
-            # get build_id
-            build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
-            build_id = build_id[0] if build_id else ''
+        if build_id.strip():
+            build_path = '/localdisk/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
 
-            # get build_host
-            build_host = re.findall('''BUILD_HOST=\"(.*)\"''', output)
-            build_host = build_host[0].split(sep='.')[0] if build_host else ''
-
-            # get jenkins job
-            job = re.findall('''JOB=\"(.*)\"''', output)
-            job = job[0] if job else ''
-
-            sw_version = re.findall('''SW_VERSION=\"(.*)\"''', output)
-            sw_version = sw_version[0] if sw_version else ''
-
-            # get build_by
-            build_by = re.findall('''BUILD_BY=\"(.*)\"''', output)
-            build_by = build_by[0] if build_by else ''
-
-            if build_id.strip():
-                build_path = '/localdisk/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
     finally:
         con_ssh.close()
 

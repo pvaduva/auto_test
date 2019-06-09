@@ -18,7 +18,7 @@ def admin_images_pg(admin_home_pg_container, request):
     images_pg = imagespage.ImagesPage(admin_home_pg_container.driver, port=admin_home_pg_container.port)
     images_pg.go_to_target_page()
     image_id = glance_helper.create_image(image_name)[1]
-    image_name = glance_helper.get_image_show_values(image_id, 'Name')[0]
+    image_name = glance_helper.get_image_values(image_id, 'Name')[0]
 
     def teardown():
         LOG.fixture_step('Back to Images page')
@@ -303,7 +303,7 @@ def tenant_images_pg(tenant_home_pg_container, request):
     images_pg.go_to_target_page()
     LOG.fixture_step('Create new image {}'.format(image_name))
     image_id = glance_helper.create_image(image_name, auth_info=Tenant.get_primary())[1]
-    image_name = glance_helper.get_image_show_values(image_id, 'Name')[0]
+    image_name = glance_helper.get_image_values(image_id, 'Name')[0]
 
     def teardown():
         LOG.fixture_step('Back to Images page')

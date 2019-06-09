@@ -2,6 +2,7 @@ import time
 
 from pytest import fixture, skip, mark
 
+import keywords.host_helper
 from consts.auth import Tenant
 from consts.cgcs import VMStatus, GuestImages
 from consts.proj_vars import ProjVar
@@ -20,7 +21,7 @@ def check_system():
     if len(host_helper.get_up_hypervisors()) < 2:
         skip("at least two computes are required")
 
-    if len(nova_helper.get_storage_backing_with_max_hosts()[1]) < 2:
+    if len(keywords.host_helper.get_storage_backing_with_max_hosts()[1]) < 2:
         skip("at least two hosts with the same storage backing are required")
 
 
@@ -152,7 +153,7 @@ def test_vm_with_a_large_volume_live_migrate(vms_, pre_alarm_):
         vm_id = vm['id']
 
         LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm_id))
-        vm_state = nova_helper.get_vm_status(vm_id)
+        vm_state = vm_helper.get_vm_status(vm_id)
 
         assert vm_state == VMStatus.ACTIVE, 'VM {} state is {}; Not in ACTIVATE state as expected'\
             .format(vm_id, vm_state)
@@ -216,7 +217,7 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
         vm_id = vm['id']
         vm_ids.append(vm_id)
         LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm_id))
-        vm_state = nova_helper.get_vm_status(vm_id)
+        vm_state = vm_helper.get_vm_status(vm_id)
         assert vm_state == VMStatus.ACTIVE, 'VM {} state is {}; Not in ACTIVATE state as expected'\
             .format(vm_id, vm_state)
 
@@ -229,8 +230,8 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
             .format(vm['display_name'])
 
     LOG.tc_step("Checking if live migration is required to put the vms to a single compute....")
-    host_0 = nova_helper.get_vm_host(vm_ids[0])
-    host_1 = nova_helper.get_vm_host(vm_ids[1])
+    host_0 = vm_helper.get_vm_host(vm_ids[0])
+    host_1 = vm_helper.get_vm_host(vm_ids[1])
 
     if host_0 != host_1:
         LOG.tc_step("Attempting to live migrate  vm {} to host {} ....".format((vms_[1])['display_name'], host_0))
@@ -240,7 +241,7 @@ def test_vm_with_large_volume_and_evacuation(vms_, pre_alarm_):
                                                                                       host_0)
 
     LOG.tc_step("Verify both VMs are in same host....")
-    assert host_0 == nova_helper.get_vm_host(vm_ids[1]), "VMs are not in the same compute host"
+    assert host_0 == vm_helper.get_vm_host(vm_ids[1]), "VMs are not in the same compute host"
 
     LOG.tc_step("Rebooting compute {} to initiate vm evacuation .....".format(host_0))
     vm_helper.evacuate_vms(host=host_0, vms_to_check=vm_ids, ping_vms=True)
@@ -294,7 +295,7 @@ def test_instantiate_a_vm_with_a_large_volume_and_cold_migrate(vms_, pre_alarm_)
         vm_id = vm['id']
 
         LOG.tc_step("Checking VM status; VM Instance id is: {}......".format(vm_id))
-        vm_state = nova_helper.get_vm_status(vm_id)
+        vm_state = vm_helper.get_vm_status(vm_id)
 
         assert vm_state == VMStatus.ACTIVE, 'VM {} state is {}; Not in ACTIVATE state as expected'\
             .format(vm_id, vm_state)
@@ -390,7 +391,7 @@ def test_instantiate_a_vm_with_multiple_volumes_and_migrate():
     LOG.tc_step("Login to VM and to check filesystem is rw mode after live migration....")
     assert is_vm_filesystem_rw(vm_id, rootfs=['vda', 'vdb']), 'After cold migration rootfs filesystem is not RW'
     LOG.tc_step("Testing VM evacuation.....")
-    before_host_0 = nova_helper.get_vm_host(vm_id)
+    before_host_0 = vm_helper.get_vm_host(vm_id)
 
     LOG.tc_step("Rebooting compute {} to initiate vm evacuation .....".format(before_host_0))
     vm_helper.evacuate_vms(host=before_host_0, vms_to_check=vm_id, ping_vms=True)
@@ -420,14 +421,14 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name=None):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id, timeout=240)
 
     if vm_image_name is None:
-        vm_image_name = GuestImages.DEFAULT_GUEST
+        vm_image_name = GuestImages.DEFAULT['guest']
 
     router_host = dhcp_host = None
     try:
         LOG.info("---------Collecting router and dhcp agent host info-----------")
         router_host = network_helper.get_router_host()
         mgmt_net = network_helper.get_mgmt_net_id()
-        dhcp_host = network_helper.get_network_agents(rtn_val='Host', network=mgmt_net)
+        dhcp_host = network_helper.get_network_agents(field='Host', network=mgmt_net)
 
         with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name, retry_timeout=300) as vm_ssh:
             if isinstance(rootfs, str):

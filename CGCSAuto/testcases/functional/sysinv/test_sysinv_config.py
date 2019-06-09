@@ -1,17 +1,14 @@
 import random
 import string
 import time
-from functools import wraps
+import functools
 
-from pytest import fixture
-from pytest import mark, skip
+from pytest import mark, skip, fixture
 
-from consts.auth import Tenant
 from consts.cgcs import SystemType
 from consts.timeout import SysInvTimeout
 from consts.proj_vars import ProjVar
-from keywords import network_helper
-from keywords import system_helper
+from keywords import network_helper, system_helper, kube_helper, ceilometer_helper
 from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -26,7 +23,7 @@ def id_gen(val):
 
 def repeat_checking(repeat_times=20, wait_time=6):
     def actual_decorator(func):
-        @wraps(func)
+        @functools.wraps(func)
         def wrapped_func(*args, **kwargs):
             cnt, output = 0, ''
             while cnt < repeat_times:
@@ -58,13 +55,13 @@ def test_system_type():
     """
 
     LOG.tc_step('Determine the real System Type the lab')
-    if system_helper.is_small_footprint():
+    if system_helper.is_aio_system():
         expt_system_type = SystemType.CPE
     else:
         expt_system_type = SystemType.STANDARD
 
     LOG.tc_step('Get System Type from system inventory')
-    table_ = table_parser.table(cli.system('show'))
+    table_ = table_parser.table(cli.system('show')[1])
     displayed_system_type = table_parser.get_value_two_col_table(table_, 'system_type')
 
     LOG.tc_step('Verify the expected System Type is the same as that from System Inventory')
@@ -88,7 +85,7 @@ def test_system_type_is_readonly():
     """
 
     LOG.tc_step('Determine the real System Type for the lab')
-    if system_helper.is_small_footprint():
+    if system_helper.is_aio_system():
         cur_system_type = SystemType.CPE
     else:
         cur_system_type = SystemType.STANDARD
@@ -97,8 +94,7 @@ def test_system_type_is_readonly():
     change_to_system_type = SystemType.CPE
     if cur_system_type == SystemType.CPE:
         change_to_system_type = SystemType.STANDARD
-    code, msg = system_helper.modify_system(fail_ok=True, con_ssh=None, auth_info=Tenant.get('admin'),
-                                            system_mode='{}'.format(change_to_system_type))
+    code, msg = system_helper.modify_system(fail_ok=True, system_mode='{}'.format(change_to_system_type))
 
     LOG.tc_step('Verify system rejected to change System Type to {}'.format(change_to_system_type))
     assert 1 == code, msg
@@ -112,13 +108,13 @@ class TestRetentionPeriod:
 
     # PM_SETTING_FILE = '/etc/ceilometer/ceilometer.conf'  # file where the Retention Period is stored
     PM_SETTING_FILE = '/etc/panko/panko.conf'  # file where the Retention Period is stored
-    MIN_RETENTION_PERIOD = 3600  # seconds of 1 hour, minimum value allowed
+    # MIN_RETENTION_PERIOD = 3600  # seconds of 1 hour, minimum value allowed
     MAX_RETENTION_PERIOD = 31536000  # seconds of 1 year, maximum value allowed
     SEARCH_KEY_FOR_RENTION_PERIOD = r'event_time_to_live'
     retention_period = 0
 
     @fixture(scope='class', autouse=True)
-    def backup_restore_rention_period(self, request):
+    def restore_retention_period(self, request):
         """
         Fixture to save the current retention period and restore it after test
 
@@ -127,20 +123,18 @@ class TestRetentionPeriod:
 
         """
         LOG.info('Backup Retention Period')
-        TestRetentionPeriod.retention_period = system_helper.get_retention_period_k8s()
+        TestRetentionPeriod.retention_period = ceilometer_helper.get_retention_period()
         LOG.info('Current Retention Period is {}'.format(TestRetentionPeriod.retention_period))
 
         def restore_retention_period():
             LOG.info('Restore Retention Period to its orignal value {}'.format(TestRetentionPeriod.retention_period))
-            system_helper.set_retention_period_k8s(int(TestRetentionPeriod.retention_period), fail_ok=True)
+            ceilometer_helper.set_retention_period(int(TestRetentionPeriod.retention_period), fail_ok=True)
 
         request.addfinalizer(restore_retention_period)
 
     @mark.parametrize(
         "new_retention_period", [
             -1,
-            MIN_RETENTION_PERIOD - 1,
-            # random.randrange(MIN_RETENTION_PERIOD, MAX_RETENTION_PERIOD + 1),
             24828899,
             MAX_RETENTION_PERIOD + 1,
         ])
@@ -167,39 +161,26 @@ class TestRetentionPeriod:
             - We can determine the range of accepted values on the running system in stead of parameterizing
                 on hardcoded values
         """
-        name = 'event_time_to_live'
+        section = 'database'
+        field = 'event_time_to_live'
 
         LOG.tc_step('Check if the modification attempt will fail based on the input value')
         # if new_retention_period < self.MIN_RETENTION_PERIOD or new_retention_period > self.MAX_RETENTION_PERIOD:
-        if False:   # all values are expected to be accepted
-            expect_fail = True
-        else:
-            expect_fail = False
         LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
-        code, output = system_helper.set_retention_period_k8s(
-            new_retention_period, fail_ok=expect_fail, name=name, check_first=False)
-
-        if expect_fail:
-            assert code != 0, 'Expecting failed to change retention period, but the request went through'
+        ceilometer_helper.set_retention_period(new_retention_period, name=field, check_first=False)
 
         LOG.tc_step('Wait for {} seconds'.format(SysInvTimeout.RETENTION_PERIOD_SAVED))
         time.sleep(SysInvTimeout.RETENTION_PERIOD_SAVED)
 
-        LOG.tc_step('Verify new value:{} was set for {}'.format(new_retention_period, name))
-        cmd = 'cat ' + self.PM_SETTING_FILE
+        LOG.tc_step('Verify new value:{} was set for {}'.format(new_retention_period, field))
 
-        changed = system_helper.verify_config_changed('panko', cmd, fail_ok=expect_fail, **{name: new_retention_period})
-        if expect_fail:
-            assert not changed, \
-                'Change request should be rejected, but actually not. old value:{0}, new value:{1} '.format(
-                    TestRetentionPeriod.retention_period, new_retention_period)
-            LOG.info('OK, the value for {0} did not change correctly, old value {1} remains'.format(
-                name, TestRetentionPeriod.retention_periodd))
-        else:
-            assert changed, 'Retention period was successfully changed to {0}, old value {1}'.format(
-                new_retention_period, TestRetentionPeriod.retention_period)
-            LOG.info('OK, the value for {0} was successfully changed to {1}, old value {2}'.format(
-                name, new_retention_period, TestRetentionPeriod.retention_period))
+        post_settings = kube_helper.get_openstack_configs(conf_file=self.PM_SETTING_FILE, label_app='panko',
+                                                          label_component='api', configs={section: field},
+                                                          fail_ok=False)
+
+        for panko_api_pod, event_ttl in post_settings.items():
+            event_ttl = int(event_ttl.get(section, field).strip())
+            assert new_retention_period == event_ttl, "panko event_time_to_live is not the same as set"
 
 
 @mark.p3
@@ -253,9 +234,7 @@ class TestDnsSettings:
 
         def restore_dns_settings():
             LOG.info('Restore the DNS-servers to the original:{}'.format(self.dns_servers))
-            system_helper.set_dns_servers(fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
-                                          nameservers=self.dns_servers)
-            # nameservers=','.join(self.dns_servers))
+            system_helper.set_dns_servers(nameservers=self.dns_servers)
 
         request.addfinalizer(restore_dns_settings)
 
@@ -326,20 +305,15 @@ class TestDnsSettings:
 
         LOG.tc_step('\nAttempt to change the DNS servers to: {}'.format(ip_addr_list))
         code, msg = system_helper.set_dns_servers(fail_ok=expect_fail,
-                                                  auth_info=Tenant.get('admin'),
                                                   nameservers=ip_addr_list,
-                                                  with_action_option=with_action_option,
-                                                  con_ssh=None)
+                                                  with_action_option=with_action_option)
 
         if code == -1 and ip_addr_list == old_dns_servers:
             LOG.info('New DNS servers are the same as current DNS servers, PASS the test.\n%s, %s, %s, %s',
-                    'attempting change to:',
-                    ip_addr_list,
-                    'current:',
-                    old_dns_servers) 
+                     'attempting change to:', ip_addr_list, 'current:', old_dns_servers)
         elif expect_fail:
-            assert code != 0, 'Request to change DNS servers should be rejected but not: new Servers: "{}", msg: "{}"'.format(
-                ip_addr_list, msg)
+            assert code != 0, 'Request to change DNS servers should be rejected but not: new Servers: "{}", msg: "{}"'.\
+                format(ip_addr_list, msg)
 
             LOG.info('OK, attempt was rejected as expected to change DNS to: "{}"\n'.format(ip_addr_list))
 

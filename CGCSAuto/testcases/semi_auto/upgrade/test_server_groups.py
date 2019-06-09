@@ -1,5 +1,6 @@
 from pytest import skip, fixture
 
+import keywords.host_helper
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
 from keywords import nova_helper, vm_helper
@@ -8,7 +9,7 @@ from keywords import nova_helper, vm_helper
 @fixture(scope='module')
 def setups(no_simplex):
     vm_helper.ensure_vms_quotas(vms_num=10, cores_num=20, vols_num=10)
-    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
     if len(hosts) < 2:
         skip("Less than two hosts with in same storage aggregate")
 
@@ -47,7 +48,7 @@ def test_launch_server_group_vms(setups):
             vm_name = '{}_{}'.format(policy, source)
             vm_id = vm_helper.boot_vm(name=vm_name, flavor=flavor_id, hint={'group': srv_grp_id}, source=source)[1]
 
-            server_group_output = nova_helper.get_vm_values(vm_id, 'wrs-sg:server_group')[0]
+            server_group_output = vm_helper.get_vm_values(vm_id, 'wrs-sg:server_group')[0]
             assert srv_grp_id in server_group_output, \
                 'Server group info does not appear in nova show for vm {}'.format(vm_id)
 
@@ -69,7 +70,7 @@ def test_launch_server_group_vms(setups):
 def check_vm_hosts(vms, policy='affinity', best_effort=False):
     vm_hosts = []
     for vm in vms:
-        vm_host = nova_helper.get_vm_host(vm_id=vm)
+        vm_host = vm_helper.get_vm_host(vm_id=vm)
         vm_hosts.append(vm_host)
 
     vm_hosts = list(set(vm_hosts))
@@ -106,7 +107,7 @@ def _check_affinity_vms():
 
 
 def _check_anti_affinity_vms():
-    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
     best_effort = True if len(hosts) < 3 else False
     anti_affinity_vms = nova_helper.get_server_group_info(group_name='grp_anti_affinity', headers='Members')[0]
 
@@ -121,6 +122,6 @@ def _check_anti_affinity_vms():
         vm_helper.cold_migrate_vm(vm_id=vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
-        vm_hosts.append(nova_helper.get_vm_host(vm_id))
+        vm_hosts.append(vm_helper.get_vm_host(vm_id))
 
     return vm_hosts, anti_affinity_vms

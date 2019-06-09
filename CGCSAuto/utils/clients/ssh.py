@@ -78,7 +78,7 @@ class SSHClient:
         self.password = password
         self.initial_prompt = initial_prompt
         self.prompt = initial_prompt
-        self._session = session
+        self.session = session
         self.cmd_sent = ''
         self.cmd_output = ''
         self.force_password = force_password
@@ -100,15 +100,13 @@ class SSHClient:
 
         log_dir = ProjVar.get_var('LOG_DIR')
         if log_dir:
-            curr_thread = threading.current_thread()
-            if not isinstance(curr_thread, threading._MainThread):
-                log_dir += '/threads/'
-            os.makedirs(log_dir, exist_ok=True)
-
-            if isinstance(curr_thread, threading._MainThread):
+            current_thread = threading.current_thread()
+            if current_thread is threading.main_thread():
                 logpath = log_dir + '/ssh_' + lab_name + ".log"
             else:
-                logpath = log_dir + curr_thread.name + '_ssh_' + lab_name + ".log"
+                log_dir += '/threads/'
+                logpath = log_dir + current_thread.name + '_ssh_' + lab_name + ".log"
+            os.makedirs(log_dir, exist_ok=True)
         else:
             logpath = None
 
@@ -118,7 +116,7 @@ class SSHClient:
                 use_current=True, timeout=None):
 
         # Do nothing if current session is connected and force_close is False:
-        if self._is_alive() and use_current and self._is_connected():
+        if self._is_alive() and use_current and self.is_connected():
             LOG.debug("Already connected to {}. Do nothing.".format(self.host))
             # LOG.debug("ID of the session: {}".format(id(self)))
             return
@@ -136,19 +134,19 @@ class SSHClient:
             # LOG into remote host
             # print(str(self.searchwindowsize))
             try:
-                self._session = pxssh.pxssh(encoding='utf-8', searchwindowsize=self.searchwindowsize)
+                self.session = pxssh.pxssh(encoding='utf-8', searchwindowsize=self.searchwindowsize)
 
                 # set to ignore ssh host fingerprinting
-                self._session.SSH_OPTS = _SSH_OPTS
-                self._session.force_password = self.force_password
-                self._session.maxread = 100000
+                self.session.SSH_OPTS = _SSH_OPTS
+                self.session.force_password = self.force_password
+                self.session.maxread = 100000
                 self.logpath = self._get_logpath()
 
                 if self.logpath:
-                    self._session.logfile = open(self.logpath, 'a+')
+                    self.session.logfile = open(self.logpath, 'a+')
 
                 # Login
-                self._session.login(self.host, self.user, self.password, login_timeout=timeout,
+                self.session.login(self.host, self.user, self.password, login_timeout=timeout,
                                     port=self.port, auto_prompt_reset=False, quiet=False)
 
                 # Set prompt for matching
@@ -157,12 +155,12 @@ class SSHClient:
                 # try to goto next line to ensure login really succeeded. pxssh login method has a bug where it
                 # almost won't report any login failures.
                 # Login successful if prompt matching is found
-                if self._is_connected(fail_ok=False):
+                if self.is_connected():
                     LOG.info("Login successful!")
-                    # LOG.debug(self._session)
+                    # LOG.debug(self.session)
                     # next 5 lines change ssh window size and flush its buffer
-                    self._session.setwinsize(150, 250)
-                    # self._session.maxread = 100000
+                    self.session.setwinsize(150, 250)
+                    # self.session.maxread = 100000
                     self.send()
 
                     end_time = time.time() + 20
@@ -187,7 +185,7 @@ class SSHClient:
             except (OSError, pexpect.TIMEOUT, pxssh.TIMEOUT, pexpect.EOF, pxssh.ExceptionPxssh) as e:
                 # fail login if retry=False
                 # LOG.debug("Reset session.after upon ssh error")
-                # self._session.after = ''
+                # self.session.after = ''
                 if not retry:
                     raise
 
@@ -202,8 +200,8 @@ class SSHClient:
 
                 if 'password refused' in e.__str__():
                     if self.searchwindowsize is None:
-                        before_str = self._parse_output(self._session.before)
-                        after_str = self._parse_output(self._session.after)
+                        before_str = self._parse_output(self.session.before)
+                        after_str = self._parse_output(self.session.after)
                         output = before_str + after_str
                         if 'your password' in output:
                             LOG.warning("Login failed possibly due to password expire warning. "
@@ -214,9 +212,6 @@ class SSHClient:
                     else:
                         self.searchwindowsize = None
                         raise
-            except:
-                LOG.error("Login failed due to unknown exception!")
-                raise
 
             self.close()
             LOG.debug("Retry in {} seconds".format(retry_interval))
@@ -227,22 +222,33 @@ class SSHClient:
                                              format(self.host, self.user, self.password))
 
     def _is_alive(self):
-        return self._session is not None and self._session.isalive()
+        return self.session is not None and self.session.isalive()
 
-    def _is_connected(self, fail_ok=True):
-        if not self._session:
+    def is_connected(self):
+        if not self.session:
             return False
 
         # Connection is good if send and expect commands can be executed
         try:
             self.send()
-        except OSError:    # TODO: add unit test
+        except OSError:
             return False
-        return self.expect(timeout=3, fail_ok=fail_ok) == 0
+        return self.expect(timeout=3, fail_ok=True) == 0
 
-    @staticmethod
-    def _is_timed_out(start_time, timeout=TIMEOUT_EXPECT):
-        return (time.time() - timeout) > start_time
+    def wait_for_disconnect(self, timeout=120, check_interval=5, fail_ok=False):
+        """ Wait for ssh connection disconnect """
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            if not self.is_connected():
+                LOG.info("ssh session to {} disconnected".format(self.host))
+                return True
+            time.sleep(check_interval)
+
+        msg = "Did not disconnect to {} within {}s".format(self.host, timeout)
+        LOG.warning(msg)
+        if not fail_ok:
+            raise exceptions.SSHException(msg)
+        return False
 
     def send(self, cmd='', reconnect=False, reconnect_timeout=300, flush=False):
         """
@@ -267,16 +273,16 @@ class SSHClient:
         # else:
         #     LOG.info("Sending: \'{}\'".format(cmd))
         try:
-            rtn = self._session.sendline(cmd)
+            rtn = self.session.sendline(cmd)
         # TODO: use specific exception to catch unexpected disconnection with remote host such as swact
-        except Exception:
+        except Exception as e:
             if not reconnect:
                 raise
             else:
-                LOG.exception("Failed to send line.")
+                LOG.exception("Failed to send line. {}".format(e.__str__()))
                 self.close()
                 self.connect(retry_timeout=reconnect_timeout)
-                rtn = self._session.sendline(cmd)
+                rtn = self.session.sendline(cmd)
 
         # LOG.debug("Command sent successfully")
         self.cmd_sent = cmd
@@ -326,14 +332,8 @@ class SSHClient:
         if blob_list is None:
             blob_list = self.prompt
 
-        if not isinstance(blob_list, list):
+        if not isinstance(blob_list, (list, tuple)):
             blob_list = [blob_list]
-
-        exit_cmd = (self.cmd_sent == EXIT_CODE_CMD)
-        # if not exit_cmd:
-        #     LOG.debug("Expecting: \'{}\'...".format('\', \''.join(str(blob) for blob in blob_list)))
-        # else:
-            # LOG.debug("Expecting exit code...")
 
         kwargs = {}
         if searchwindowsize is not None:
@@ -342,10 +342,10 @@ class SSHClient:
             kwargs['searchwindowsize'] = 100
 
         try:
-            index = self._session.expect(blob_list, timeout=timeout, **kwargs)
+            index = self.session.expect(blob_list, timeout=timeout, **kwargs)
         except pexpect.EOF:
-            # LOG.debug("Before: {}; After:{}".format(self._parse_output(self._session.before),
-            #                                         self._parse_output(self._session.after)))
+            # LOG.debug("Before: {}; After:{}".format(self._parse_output(self.session.before),
+            #                                         self._parse_output(self.session.after)))
             if fail_ok:
                 return -1
             else:
@@ -357,16 +357,16 @@ class SSHClient:
             else:
                 LOG.warning("No match found for {}. \nexpect timeout.".format(blob_list))
                 raise
-        except Exception:
+        except Exception as e:
             if fail_ok:
                 return -100
             else:
-                LOG.warning("Exception occurred when expecting {}".format(blob_list))
+                LOG.warning("Exception occurred when expecting {}. {}".format(blob_list, e.__str__()))
                 raise
 
         # Match found, reformat the outputs
-        before_str = self._parse_output(self._session.before)
-        after_str = self._parse_output(self._session.after)
+        before_str = self._parse_output(self.session.before)
+        after_str = self._parse_output(self.session.after)
         output = before_str + after_str
         if not self.cmd_sent == '':
             output_list = output.split('\r\n')
@@ -428,9 +428,11 @@ class SSHClient:
             cmd = ' {}'.format(cmd)
 
         self.send(cmd, reconnect, reconnect_timeout)
+        code_force = 0
         try:
             self.expect(blob_list=blob, timeout=expect_timeout, searchwindowsize=searchwindowsize)
         except pexpect.TIMEOUT as e:
+            code_force = 130
             self.send_control('c')
             self.flush(timeout=10)
             if fail_ok:
@@ -438,7 +440,9 @@ class SSHClient:
             else:
                 raise
 
-        code, output = self._process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
+        code, output = self._process_exec_result(rm_date, get_exit_code=get_exit_code)
+        if code_force != 0:
+            code = code_force
 
         self.__force_end(force_end)
 
@@ -447,7 +451,7 @@ class SSHClient:
 
         return code, output
 
-    def _process_exec_result(self, cmd, rm_date=True, get_exit_code=True):
+    def _process_exec_result(self, rm_date=True, get_exit_code=True):
         cmd_output_list = self.cmd_output.split('\n')[0:-1]  # exclude prompt
         # LOG.info("cmd output list: {}".format(cmd_output_list))
         # cmd_output_list[0] = ''                                       # exclude command, already done in expect
@@ -467,7 +471,7 @@ class SSHClient:
         return exit_code, cmd_output
 
     def process_cmd_result(self, cmd, rm_date=True, get_exit_code=True):
-        return self._process_exec_result(cmd=cmd, rm_date=rm_date, get_exit_code=get_exit_code)
+        return self._process_exec_result(rm_date=rm_date, get_exit_code=get_exit_code)
 
     @staticmethod
     def _parse_output(output):
@@ -518,14 +522,14 @@ class SSHClient:
             self.send(dest_password)
             self.expect(timeout=timeout, searchwindowsize=100, fail_ok=fail_ok)
 
-        code, output = self._process_exec_result(cmd, rm_date=True)
+        code, output = self._process_exec_result(rm_date=True)
         if code != 0 and not fail_ok:
             raise exceptions.SSHExecCommandFailed("Non-zero return code for rsync cmd: {}. Output: {}".
                                                   format(cmd, output))
 
         return code, output
 
-    def scp_files_to_local_host(self, source_file, dest_password, dest_user=None, dest_path=None, timeout=120):
+    def scp_on_source_to_localhost(self, source_file, dest_password, dest_user=None, dest_path=None, timeout=120):
 
         if not dest_path:
             dest_path = ProjVar.get_var('TEMP_DIR') + '/'
@@ -547,77 +551,6 @@ class SSHClient:
             index = self.expect()
         if not index == 0:
             raise exceptions.SSHException("Failed to scp files")
-
-    def scp_files(self, source_file, dest_file, source_server='', dest_server='', source_user='', source_password=None,
-                  dest_password=None, dest_user='', timeout=300, sudo=False, sudo_password=None, fail_ok=False):
-
-        if not source_server and not dest_server:
-            raise ValueError("At least one of the source_server and dest_server has to be specified.")
-
-        # Parsing source info
-        source_server_ = source_server + ':' if source_server else ''
-        source_user = source_user + '@' if source_user else ''
-        source = "{}{}{}".format(source_user, source_server_, source_file)
-
-        # Process destination info
-        # if not str(dest_file).endswith('/'):
-        #     dest_file += '/'
-        dest_server_ = dest_server + ':' if dest_server else ''
-        dest_user = dest_user + '@' if dest_user else ''
-        destination = "{}{}{}".format(dest_user, dest_server_, dest_file)
-        scp_cmd = ' '.join(['scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r', source,
-                            destination]).strip()
-        if sudo:
-            scp_cmd = 'sudo {}'.format(scp_cmd)
-
-        if sudo_password is None:
-            sudo_password = self.password
-
-        LOG.info("Copying file(s) from {} to {}: {}".format(source_server, dest_server, scp_cmd))
-        self.send(scp_cmd)
-        unmatchable_str = '\n11111111111\n'
-        source_pswd_prompt = '{}.* password:'.format(source_server) if source_server else unmatchable_str
-        dest_pswd_prompt = '{}.* password:'.format(dest_server) if dest_server else unmatchable_str
-        source_add_prompt = '{}.*\(yes/no\).*'.format(source_server) if source_server else unmatchable_str
-        dest_add_prompt = '{}.*\(yes/no\).*'.format(dest_server) if dest_server else unmatchable_str
-        sudo_pswd_prompt = 'Password:| password for '
-        search_window_size = 300
-        index = self.expect([self.prompt, dest_pswd_prompt, dest_add_prompt,
-                             source_pswd_prompt, source_add_prompt, sudo_pswd_prompt],
-                            timeout=timeout, searchwindowsize=search_window_size)
-        if index == 5:
-            # sudo password prompt
-            self.send(sudo_password)
-            index = self.expect([self.prompt, dest_pswd_prompt, dest_add_prompt, source_pswd_prompt, source_add_prompt],
-                                timeout=timeout, searchwindowsize=search_window_size)
-        if index == 4:
-            # source host add prompt
-            self.send('yes')
-            index = self.expect([self.prompt, dest_pswd_prompt, dest_add_prompt, source_pswd_prompt], timeout=timeout,
-                                searchwindowsize=search_window_size)
-        if index == 3:
-            # source password prompt
-            self.send(source_password)
-            index = self.expect([self.prompt, dest_pswd_prompt, dest_add_prompt], timeout=timeout,
-                                searchwindowsize=search_window_size)
-        if index == 2:
-            # dest host add prompt
-            self.send('yes')
-            index = self.expect([self.prompt, dest_pswd_prompt], timeout=timeout, searchwindowsize=search_window_size)
-        if index == 1:
-            # dest password prompt
-            self.send(dest_password)
-            index = self.expect([self.prompt], timeout=timeout, searchwindowsize=50)
-        if not index == 0:
-            raise exceptions.SSHException("Failed to scp files")
-
-        exit_code = self.get_exit_code()
-        if exit_code != 0:
-            msg = "SCP failed - {}".format(self.cmd_output)
-            if fail_ok:
-                LOG.warning(msg)
-            else:
-                raise exceptions.SSHException(msg)
 
     def scp_on_dest(self, source_user, source_ip, source_path, dest_path, source_pswd, timeout=3600, cleanup=True,
                     is_dir=False):
@@ -747,7 +680,7 @@ class SSHClient:
             prompts.remove(pw_prompt)
             self.expect(prompts, timeout=expect_timeout, searchwindowsize=searchwindowsize, fail_ok=fail_ok)
 
-        code, output = self._process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
+        code, output = self._process_exec_result(rm_date, get_exit_code=get_exit_code)
         if code != 0 and not fail_ok:
             raise exceptions.SSHExecCommandFailed("Non-zero return code for sudo cmd: {}. Output: {}".
                                                   format(cmd, output))
@@ -756,7 +689,7 @@ class SSHClient:
 
     def send_control(self, char='c'):
         LOG.debug("Sending ctrl+{}".format(char))
-        self._session.sendcontrol(char=char)
+        self.session.sendcontrol(char=char)
 
     def get_current_user(self, prompt=None):
         output = self.exec_cmd('whoami', blob=prompt, expect_timeout=10, get_exit_code=False)[1]
@@ -766,7 +699,7 @@ class SSHClient:
         return output
 
     def close(self):
-        self._session.close(True)
+        self.session.close(True)
         LOG.debug("connection closed. host: {}, user: {}. Object ID: {}".format(self.host, self.user, id(self)))
 
     def set_session_timeout(self, timeout=0):
@@ -935,7 +868,7 @@ class ContainerClient(SSHClient):
             password = ssh_client.password
 
         super(ContainerClient, self).__init__(host=host, user=user, password=password, initial_prompt=initial_prompt,
-                                              timeout=timeout, session=ssh_client._session)
+                                              timeout=timeout, session=ssh_client.session)
         self.parent = ssh_client
         self.docker_cmd = entry_cmd
         self.timeout = timeout
@@ -968,8 +901,75 @@ class ContainerClient(SSHClient):
         # Ensure exec_cmd works after above workaround
         self.exec_cmd(cmd='', expect_timeout=5)
 
+    def exec_cmd(self, cmd, expect_timeout=60, reconnect=False, reconnect_timeout=300, err_only=False, rm_date=True,
+                 fail_ok=True, get_exit_code=True, blob=None, force_end=False, searchwindowsize=None,
+                 prefix_space=False):
+        """
+
+        Args:
+            cmd:
+            expect_timeout:
+            reconnect:
+            reconnect_timeout:
+            err_only: if true, stdout will not be included in output
+            rm_date (bool): weather to remove date output from cmd output before returning
+            fail_ok (bool): whether to raise exception when non-zero exit-code is returned
+            get_exit_code
+            blob
+            force_end
+            searchwindowsize (int): max chars to look for match from the end of the output.
+                Usage: when expecting a prompt, set this to slightly larger than the number of chars of the prompt,
+                    to speed up the search, and to avoid matching in the middle of the output.
+            prefix_space
+
+        Returns (tuple): (exit code (int), command output (str))
+
+        """
+        if blob is None:
+            blob = [self.prompt, self.parent.prompt]
+        elif not isinstance(blob, (tuple, list)):
+            blob = [blob]
+
+        LOG.debug("Executing command...")
+        if err_only:
+            cmd += ' 1> /dev/null'          # discard stdout
+
+        if prefix_space:
+            cmd = ' {}'.format(cmd)
+
+        self.send(cmd, reconnect, reconnect_timeout)
+        code_force = 0
+        try:
+            index = self.expect(blob_list=blob, timeout=expect_timeout, searchwindowsize=searchwindowsize)
+        except pexpect.TIMEOUT as e:
+            code_force = 130
+            index = 0
+            self.send_control('c')
+            self.flush(timeout=10)
+            if fail_ok:
+                LOG.warning(e.__str__())
+            else:
+                raise
+
+        if blob[index] == self.parent.prompt:
+            # Connection lost. Returned to parent session.
+            _, output = self._process_exec_result(get_exit_code=False)
+            code = 100
+        else:
+            code, output = self._process_exec_result(get_exit_code=get_exit_code)
+
+        if code_force != 0:
+            code = code_force
+
+        self.__force_end(force_end)
+
+        if code > 0 and not fail_ok:
+            raise exceptions.SSHExecCommandFailed("Non-zero return code for cmd: {}. Output: {}".format(cmd, output))
+
+        return code, output
+
     def close(self, force=False):
-        if force or self._is_connected():
+        if force or self.is_connected():
             self.send('exit')
             self.parent.expect()
             LOG.info("ssh session to {} is closed and returned to parent session {}".
@@ -997,13 +997,13 @@ class SSHFromSSH(SSHClient):
 
         """
         super(SSHFromSSH, self).__init__(host=host, user=user, password=password, force_password=force_password,
-                                         initial_prompt=initial_prompt, timeout=timeout, session=ssh_client._session)
+                                         initial_prompt=initial_prompt, timeout=timeout, session=ssh_client.session)
         self.parent = ssh_client
         self.ssh_cmd = '/usr/bin/ssh{} {}@{}'.format(_SSH_OPTS, self.user, self.host)
         self.timeout = timeout
-        # self._session = self.parent._session
+        # self.session = self.parent.session
         # self.logpath = self.parent.logpath
-        # self._session.logfile = self.parent._session.logfile
+        # self.session.logfile = self.parent.session.logfile
 
     def connect(self, retry=False, retry_interval=10, retry_timeout=300, prompt=None,
                 use_current=True, use_password=True, timeout=None):
@@ -1023,14 +1023,14 @@ class SSHFromSSH(SSHClient):
 
         """
         self.logpath = self.parent.logpath
-        self._session.logfile = self.parent._session.logfile
+        self.session.logfile = self.parent.session.logfile
 
         if timeout is None:
             timeout = self.timeout
         if prompt is None:
             prompt = self.initial_prompt
 
-        if use_current and self._is_connected():
+        if use_current and self.is_connected():
             LOG.info("Already connected to {} from {}. Do nothing.".format(self.host, self.parent.host))
             return
 
@@ -1068,7 +1068,7 @@ class SSHFromSSH(SSHClient):
                 LOG.info("Unable to ssh to {}".format(self.host))
                 if isinstance(e, pexpect.TIMEOUT):
                     # LOG.debug("Reset _session.after for {} session".format(self.host))
-                    # self._session.after = ''
+                    # self.session.after = ''
                     self.parent.send_control('c')
                     self.parent.flush(timeout=3)
                 # fail login if retry=False
@@ -1091,7 +1091,7 @@ class SSHFromSSH(SSHClient):
                                              format(self.host, self.user, self.password))
 
     def close(self, force=False):
-        if force or self._is_connected():
+        if force or self.is_connected():
             self.send('exit')
             self.parent.expect()
             LOG.info("ssh session to {} is closed and returned to parent session {}".
@@ -1100,19 +1100,19 @@ class SSHFromSSH(SSHClient):
             LOG.info("ssh session to {} is not open. Flushing the buffer for parent session.".format(self.host))
             self.parent.flush()
 
-    def _is_connected(self, fail_ok=True):
+    def is_connected(self):
         # Connection is good if send and expect commands can be executed
         try:
             self.send()
-        except OSError:    # TODO: add unit test
+        except OSError:
             return False
 
         index = self.expect(blob_list=[self.prompt, self.parent.get_prompt(), pexpect.TIMEOUT], timeout=3,
-                            fail_ok=fail_ok)
+                            fail_ok=True)
         if 2 == index:
             self.send_control('c')
             index = self.expect(blob_list=[self.prompt, self.parent.get_prompt()], timeout=3,
-                                fail_ok=fail_ok)
+                                fail_ok=True)
         return 0 == index
 
 
@@ -1220,7 +1220,7 @@ class NATBoxClient:
 
         """
         curr_thread = threading.current_thread()
-        idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
+        idx = 0 if curr_thread is threading.main_thread() else int(curr_thread.name.split('-')[-1])
         if not natbox_ip:
             natbox_ip = ProjVar.get_var('NATBOX').get('ip')
             num_natbox = len(cls.__natbox_ssh_map)
@@ -1236,12 +1236,19 @@ class NATBoxClient:
         return None
 
     @classmethod
-    def set_natbox_client(cls, natbox_ip=NatBoxes.NAT_BOX_HW['ip']):
+    def set_natbox_client(cls, natbox_ip=None):
+        if not natbox_ip:
+            natbox_dict = ProjVar.get_var('NATBOX')
+            if not natbox_dict:
+                natbox_dict = NatBoxes.NAT_BOX_HW
+                ProjVar.set_var(NATBOX=natbox_dict)
+            natbox_ip = natbox_dict['ip']
+
         for natbox in cls.__natbox_list:
             ip = natbox.get('ip')
             if ip == natbox_ip.strip():
                 curr_thread = threading.current_thread()
-                idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
+                idx = 0 if curr_thread is threading.main_thread() else int(curr_thread.name.split('-')[-1])
                 user = natbox.get('user')
                 if ip == 'localhost':
                     # use localhost as natbox
@@ -1319,7 +1326,7 @@ class ControllerClient:
             name = 'RegionOne'
 
         curr_thread = threading.current_thread()
-        idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
+        idx = 0 if curr_thread is threading.main_thread() else int(curr_thread.name.split('-')[-1])
         for lab_ in cls.__lab_ssh_map:
             if lab_ == name:
                 controller_ssh = cls.__lab_ssh_map[lab_][idx]
@@ -1354,7 +1361,7 @@ class ControllerClient:
         idx = 0
         if current_thread_only:
             curr_thread = threading.current_thread()
-            idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
+            idx = 0 if curr_thread is threading.main_thread() else int(curr_thread.name.split('-')[-1])
         for value in cls.__lab_ssh_map.values():
             if value:
                 if current_thread_only:
@@ -1401,7 +1408,7 @@ class ControllerClient:
             cls.__lab_ssh_map[name] = []
 
         curr_thread = threading.current_thread()
-        idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
+        idx = 0 if curr_thread is threading.main_thread() else int(curr_thread.name.split('-')[-1])
         # set ssh for new lab
         if len(cls.__lab_ssh_map[name]) == idx:
             cls.__lab_ssh_map[name].append(ssh_client)

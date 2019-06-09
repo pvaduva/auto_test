@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 
 
 @fixture(scope='module', autouse=True)
-def skip_for_ovs():
+def check_avs_pattern():
     if not system_helper.is_avs():
         skip('avp vif required by dpdk/vhost vm is unsupported by OVS')
 
@@ -58,12 +58,13 @@ def launch_vm(vm_type, num_vcpu, host=None):
 
     vol = cinder_helper.create_volume(source_id=img_id, cleanup='function')[1]
     host_info = {'avail_zone': 'nova', 'vm_host': host} if host else {}
-    vm_id = vm_helper.boot_vm(name='dpdk-vm', nics=[nic1, nic2, nic3], flavor=flavor_id, user_data=_get_dpdk_user_data(),
+    vm_id = vm_helper.boot_vm(name='dpdk-vm', nics=[nic1, nic2, nic3], flavor=flavor_id,
+                              user_data=_get_dpdk_user_data(),
                               source='volume', source_id=vol, cleanup='function', **host_info)[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
 
     if host:
-        vm_host = nova_helper.get_vm_host(vm_id)
+        vm_host = vm_helper.get_vm_host(vm_id)
         assert vm_host == host, "VM is not launched on {} as specified".format(host)
 
     return vm_id

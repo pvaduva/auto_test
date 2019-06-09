@@ -1,5 +1,6 @@
 import re
 import copy
+import ast
 
 from utils import exceptions
 from utils.tis_log import LOG
@@ -162,9 +163,9 @@ def __table_columns(first_table_row):
     return positions
 
 
-###################################################################
-#  Above are contents from tempest_lib. Below are extended by us. #
-###################################################################
+########################################
+#  Above are contents from tempest_lib #
+########################################
 
 TWO_COLUMN_TABLE_HEADERS = [['Field', 'Value'], ['Property', 'Value']]
 
@@ -241,7 +242,7 @@ def get_all_rows(table_):
     return table_['values'] if table_ else None
 
 
-def get_column_index(table_, header):
+def __get_column_index(table_, header):
     """
     Get the index of a column that has the given header. E.g., return 0 if 'id' column is the first column in a table
     This is normally used for a multi-columns table. i.e., not the two-column(Field/Value) table.
@@ -302,7 +303,7 @@ def __get_value(table_, field, row_index=None):
     else:  # table is a multi-column table
         if row_index is None:
             raise ValueError("row_index needs to be supplied!")
-        col_index = get_column_index(table_, field)
+        col_index = __get_column_index(table_, field)
         return_value = table_['values'][row_index][col_index]
         LOG.debug("return value for {} field is: {}".format(field, return_value))
         return return_value
@@ -312,7 +313,7 @@ def __is_table_two_column(table_):
     return True if table_['headers'] in TWO_COLUMN_TABLE_HEADERS else False
 
 
-def get_column(table_, header, merge_lines=False):
+def get_column(table_, header, merge_lines=False, parser=None, evaluate=False):
     """
     Get a whole column with customized header as a list. The header itself is excluded.
 
@@ -324,6 +325,8 @@ def get_column(table_, header, merge_lines=False):
                 'values': [['name', 'internal-subnet0'], ['id', '36864844783']]}
         header (str): header of a column
         merge_lines (bool): whether to merge lines if multi-line entry found
+        parser (func|None)
+        evaluate (bool): used only if parser is not used
 
     Returns (list): target column. Each item is a string.
 
@@ -331,12 +334,18 @@ def get_column(table_, header, merge_lines=False):
     if not table_['headers']:
         return []
     rows = get_all_rows(table_)
-    index = get_column_index(table_, header)
+    index = __get_column_index(table_, header)
     column = []
     for row in rows:
         value = row[index]
         if merge_lines and isinstance(value, list):
             value = ''.join(value)
+
+        if parser:
+            value = __parse_value(value, parser=parser)
+        elif evaluate:
+            value = __evaluate_value(value)
+
         column.append(value)
 
     return column
@@ -404,7 +413,8 @@ def _get_values(table_, header1, value1, header2, strict=False, regex=False):
     return value2
 
 
-def get_values(table_, target_header, strict=True, regex=False, merge_lines=False, exclude=False, **kwargs):
+def get_values(table_, target_header, strict=True, regex=False, merge_lines=False, exclude=False, evaluate=False,
+               parsers=None, **kwargs):
     """
     Return a list of cell(s) that matches the given criteria. Criteria were given via kwargs.
     Args:
@@ -427,6 +437,8 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
                 each line being a string item in this list
                 Examples: 'subnets' in neutron net-list
         exclude (bool): whether to exclude the values filtered out
+        evaluate (bool)
+        parsers (dict): {<parser_func>: <applicable_field>}
 
         **kwargs: header/value pair(s) as search criteria. Used to filter out the target row(s).
             When multiple header/value pairs are given, they will be in 'AND' relation.
@@ -453,9 +465,17 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
         if v is not None:
             new_kwargs[k] = v
 
+    parser = None
+    if parsers:
+        for func, valid_fields in parsers.items():
+            if isinstance(valid_fields, str):
+                valid_fields = (valid_fields, )
+            if target_header.lower().strip() in [field_.lower().strip() for field_ in valid_fields]:
+                parser = func
+                break
+
     if not new_kwargs:
-        LOG.debug("kwargs unspecified, returning the whole target column as list.")
-        return get_column(table_, target_header, merge_lines=merge_lines)
+        return get_column(table_, target_header, merge_lines=merge_lines, parser=parser, evaluate=evaluate)
 
     row_indexes = []
     for header, values in new_kwargs.items():
@@ -493,9 +513,14 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
     for i in target_row_indexes:
         target_value = target_column[i]
 
-        # handle multi-line value
-        if merge_lines and isinstance(target_value, list):
+        # handle extra parsing of the value
+        if isinstance(target_value, list) and merge_lines:
             target_value = ''.join(target_value)
+
+        if parser:
+            target_value = __parse_value(target_value, parser=parser)
+        elif evaluate:
+            target_value = __evaluate_value(target_value)
 
         target_values.append(target_value)
 
@@ -503,7 +528,41 @@ def get_values(table_, target_header, strict=True, regex=False, merge_lines=Fals
     return target_values
 
 
-def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines=False):
+def __evaluate_value(value):
+    convert = False
+    if isinstance(value, str):
+        value = [value]
+        convert = True
+    eval_vals = []
+    for val_ in value:
+        try:
+            val_ = ast.literal_eval(val_.replace('true', 'True').replace('false', 'False').replace('none', 'None'))
+        except (ValueError, SyntaxError):
+            pass
+
+        eval_vals.append(val_)
+
+    if convert:
+        eval_vals = eval_vals[0]
+    return eval_vals
+
+
+def __parse_value(value, parser):
+    convert = False
+    if isinstance(value, str):
+        value = [value]
+        convert = True
+
+    parsed_vals = []
+    for val_ in value:
+        parsed_vals.append(parser(val_))
+
+    if convert:
+        return parsed_vals[0]
+    return parsed_vals
+
+
+def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines=False, parsers=None, evaluate=False):
     """
     Get value of specified field from a two column table.
 
@@ -523,12 +582,15 @@ def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines
                         each line being a string item in this list
                 Examples: 'subnets' field in neutron net-show
 
+        parsers (dict): {<parser_func>: <applicable_field>}
+        evaluate (bool|None)
+
     Returns (str): Value of specified filed. Return '' if field not found in table.
 
     """
     rows = get_all_rows(table_)
+    target_field = field.strip().lower()
     for row in rows:
-        target_field = field.strip().lower()
         actual_field = row[0].strip().lower()
         if regex:
             if strict:
@@ -547,13 +609,27 @@ def get_value_two_col_table(table_, field, strict=True, regex=False, merge_lines
             if target_field in actual_field:
                 val = row[1]
                 break
+
     else:
         LOG.warning("Field {} is not found in table.".format(field))
         val = ''
+        actual_field = None
 
     # handle multi-line value
     if merge_lines and isinstance(val, list):
         val = ''.join(val)
+
+    parsed = False
+    if parsers and actual_field:
+        for func, valid_fields in parsers.items():
+            if isinstance(valid_fields, str):
+                valid_fields = (valid_fields, )
+            if actual_field in [field_.strip().lower() for field_ in valid_fields]:
+                val = __parse_value(val, parser=func)
+                parsed = True
+                break
+    if evaluate and not parsed:
+        val = __evaluate_value(val)
 
     return val
 
@@ -873,7 +949,7 @@ def remove_columns(table_, headers):
 
     for key in headers:
         try:
-            column_id = get_column_index(new_table_, key)
+            column_id = __get_column_index(new_table_, key)
             new_table_['headers'].pop(column_id)
             for row in new_table_['values']:
                 row.pop(column_id)
@@ -906,7 +982,7 @@ def convert_value_to_dict(value):
     """
     if isinstance(value, str):
         if '{' in value:
-            return eval(value)
+            return ast.literal_eval(value)
         value = value.split(sep=', ')
 
     parsed_dict = {}
@@ -1003,3 +1079,66 @@ def tables_kube(output_lines, merge_lines=False):
         tables_.append(table_kube(output_lines_, merge_lines=merge_lines))
 
     return tables_
+
+
+def get_multi_values(table_, fields, merge_lines=False, rtn_dict=False, evaluate=False, dict_fields=None,
+                     convert_single_field=True, zip_values=False, strict=True, regex=False, parsers=None, **kwargs):
+    if kwargs:
+        table_ = filter_table(table_, strict=strict, regex=regex, **kwargs)
+
+    func = get_values
+    return __get_multi_values(table_, fields=fields, func=func, merge_lines=merge_lines, rtn_dict=rtn_dict,
+                              convert_single_field=convert_single_field, zip_values=zip_values, evaluate=evaluate,
+                              dict_fields=dict_fields, parsers=parsers)
+
+
+def get_multi_values_two_col_table(table_, fields, merge_lines=False, rtn_dict=False, strict=True, regex=False,
+                                   convert_single_field=False, zip_values=False, evaluate=False, dict_fields=None,
+                                   parsers=None):
+    func = get_value_two_col_table
+    return __get_multi_values(table_, fields=fields, func=func, merge_lines=merge_lines, rtn_dict=rtn_dict,
+                              strict=strict, regex=regex, convert_single_field=convert_single_field,
+                              zip_values=zip_values, evaluate=evaluate, dict_fields=dict_fields, parsers=parsers)
+
+
+def __get_multi_values(table_, fields, func, evaluate=False, dict_fields=None, convert_single_field=False,
+                       zip_values=False, rtn_dict=False, parsers=None, **kwargs):
+    """
+
+    Args:
+        table_:
+        fields:
+        func:
+        evaluate:
+        dict_fields:
+        convert_single_field:
+        rtn_dict:
+        parsers (dict|None): {<parsing_func1>: <valid_fields>, ...}
+        **kwargs:
+
+    Returns:
+
+    """
+    convert = False
+    if isinstance(fields, str):
+        fields = (fields,)
+        convert = convert_single_field
+
+    values = []
+    if not parsers:
+        parsers = {}
+    if dict_fields:
+        parsers[convert_value_to_dict] = dict_fields
+
+    for header in fields:
+        value = func(table_, header, evaluate=evaluate, parsers=parsers, **kwargs)
+        values.append(value)
+
+    if rtn_dict:
+        values = {fields[i]: values[i] for i in range(len(fields))}
+    elif convert:
+        values = values[0]
+    elif zip_values:
+        values = list(zip(*values))
+
+    return values

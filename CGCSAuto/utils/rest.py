@@ -3,7 +3,7 @@ import json
 import os
 
 from consts.proj_vars import ProjVar
-from consts.auth import CliAuth
+from consts.auth import CliAuth, Tenant
 from keywords import keystone_helper, security_helper
 
 from utils.tis_log import LOG
@@ -32,17 +32,18 @@ class Rest:
             serviceName - 
 
         """
+        auth_info = Tenant.get('admin_platform') if platform else Tenant.get('admin')
         self.token = ""
         self.token_payload = ""
         self.region = ProjVar.get_var('REGION')
-        self.baseURL = keystone_helper.get_endpoints(rtn_val='URL',
+        self.baseURL = keystone_helper.get_endpoints(field='URL',
                                                      service_name=serviceName,
                                                      interface="public",
-                                                     region=self.region, platform=platform)[0]
-        self.ksURL = keystone_helper.get_endpoints(rtn_val='URL',
+                                                     region=self.region, auth_info=auth_info)[0]
+        self.ksURL = keystone_helper.get_endpoints(field='URL',
                                                    service_name='keystone',
                                                    interface="public",
-                                                   region=self.region, platform=platform)[0]
+                                                   region=self.region, auth_info=auth_info)[0]
         self.cert_path = None
         self.verify = True
         self.is_https = CliAuth.get_var('HTTPS')

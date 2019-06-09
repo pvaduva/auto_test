@@ -60,12 +60,12 @@ functions or porting into keywords.
 import random
 import time
 
-from pytest import skip, mark, fixture
+from pytest import skip, mark, fixture, param
 
 from consts.cgcs import HostAvailState
 from consts.proj_vars import InstallVars
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import host_helper, system_helper, install_helper, vm_helper, storage_helper, partition_helper
+from keywords import host_helper, system_helper, install_helper, vm_helper, storage_helper
 from setups import _rsync_files_to_con1
 from utils import cli, table_parser
 from utils.tis_log import LOG
@@ -87,7 +87,7 @@ def delete_profiles_teardown(request):
 
         LOG.info("Deleting created profiles")
         for profile in PROFILES_TO_DELETE:
-            system_helper.delete_storage_profile(profile)
+            storage_helper.delete_storage_profile(profile)
     request.addfinalizer(teardown)
 
 
@@ -105,7 +105,7 @@ def get_hw_compatible_hosts(hosts):
     hardware = {}
     hardware_hash = {}
     for host in hosts:
-        rc, out = cli.system("host-disk-list {} --nowrap".format(host), rtn_code=True)
+        rc, out = cli.system("host-disk-list {} --nowrap".format(host))
         table_ = table_parser.table(out)
         device_nodes = table_parser.get_column(table_, "device_node")
         device_type = table_parser.get_column(table_, "device_type")
@@ -141,7 +141,7 @@ def wait_for_disks(host, timeout=DISK_DETECTION_TIMEOUT, wait_time=10):
     # and we can't apply profiles if the disks aren't present.
     end_time = time.time() + timeout
     while time.time() < end_time:
-        out = partition_helper.get_disks(host)
+        out = storage_helper.get_host_disks(host)
         if out:
             LOG.info("Found disks {} on host {}".format(out, host))
             return True
@@ -168,9 +168,9 @@ def delete_lab_setup_files(con_ssh, host, files):
 
 
 @mark.parametrize(('personality', 'from_backing', 'to_backing'), [
-    mark.p1(('compute', 'image', 'remote')),
-    mark.p1(('compute', 'remote', 'image')),
-    mark.p1(('storage', None, None)),
+    param('compute', 'image', 'remote', marks=mark.p3),
+    param('compute', 'remote', 'image', marks=mark.p3),
+    param('storage', None, None, marks=mark.p3),
 ])
 @mark.usefixtures('delete_profiles_teardown')
 def _test_storage_profile(personality, from_backing, to_backing):
@@ -203,10 +203,10 @@ def _test_storage_profile(personality, from_backing, to_backing):
     PROFILES_TO_DELETE = []
 
     # Skip if test is not applicable to hardware under test
-    if personality == 'controller' and not system_helper.is_small_footprint():
+    if personality == 'controller' and not system_helper.is_aio_system():
         skip("Test does not apply to controller hosts without subtype compute")
 
-    hosts = system_helper.get_hostnames(personality=personality)
+    hosts = system_helper.get_hosts(personality=personality)
     if not hosts:
         skip("No hosts of type {} available".format(personality))
 
@@ -271,12 +271,10 @@ def _test_storage_profile(personality, from_backing, to_backing):
         LOG.info("To host is: {}".format(to_host))
 
         LOG.tc_step("Check from host backing and convert to {} if necessary".format(from_backing))
-        orig_from_host_backing = host_helper.get_host_instance_backing(from_host)
-        new_from_backing = host_helper.set_host_storage_backing(from_host, from_backing)
-        host_helper.wait_for_host_values(from_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
+        host_helper.set_host_storage_backing(from_host, from_backing)
+        system_helper.wait_for_host_values(from_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
 
         LOG.tc_step("Check to host backing and convert to {} if necessary".format(to_backing))
-        orig_to_host_backing = host_helper.get_host_instance_backing(to_host)
         new_to_backing = host_helper.set_host_storage_backing(to_host, to_backing)
     elif personality == "controller":
         # For now, we don't want to host reinstall controller-0 since it will default to
@@ -288,11 +286,9 @@ def _test_storage_profile(personality, from_backing, to_backing):
         LOG.info("To host is: {}".format(to_host))
 
         LOG.tc_step("Check from host backing and convert to {} if necessary".format(from_backing))
-        orig_from_host_backing = host_helper.get_host_instance_backing(from_host)
-        new_from_backing = host_helper.set_host_storage_backing(from_host, from_backing)
+        host_helper.set_host_storage_backing(from_host, from_backing)
 
         LOG.tc_step("Check to host backing and convert to {} if necessary".format(to_backing))
-        orig_to_host_backing = host_helper.get_host_instance_backing(to_host)
         new_to_backing = host_helper.set_host_storage_backing(to_host, to_backing)
     else:
         # Backing doesn't apply to storage nodes so just pick from compatible hardware
@@ -302,7 +298,7 @@ def _test_storage_profile(personality, from_backing, to_backing):
 
     LOG.tc_step("Create storage and interface profiles on the from host {}".format(from_host))
     prof_name = 'storprof_{}_{}'.format(from_host, time.strftime('%Y%m%d_%H%M%S', time.localtime()))
-    prof_uuid = system_helper.create_storage_profile(from_host, profile_name=prof_name)
+    storage_helper.create_storage_profile(from_host, profile_name=prof_name)
     PROFILES_TO_DELETE.append(prof_name)
 
     # Deleting VMs in case the remaining host(s) cannot handle all VMs
@@ -310,13 +306,13 @@ def _test_storage_profile(personality, from_backing, to_backing):
     LOG.tc_step("Delete all VMs and lock the host before applying the storage profile")
     vm_helper.delete_vms()
     HostsToRecover.add(to_host, scope='function')
-    host_helper.wait_for_host_values(from_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
-    host_helper.wait_for_host_values(to_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
+    system_helper.wait_for_host_values(from_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
+    system_helper.wait_for_host_values(to_host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False)
 
     # Negative test #1 - attempt to apply profile on unlocked host (should be rejected)
     LOG.tc_step('Apply the storage-profile {} onto unlocked host:{}'.format(prof_name, to_host))
     cmd = 'host-apply-storprofile {} {}'.format(to_host, prof_name)
-    rc, msg = cli.system(cmd, rtn_code=True, fail_ok=True)
+    rc, msg = cli.system(cmd, fail_ok=True)
     assert rc != 0, msg
     host_helper.lock_host(to_host, swact=True)
 
@@ -330,7 +326,7 @@ def _test_storage_profile(personality, from_backing, to_backing):
         # nova-local (should be rejected)
         LOG.tc_step('Apply the storage-profile {} onto host with existing nova-local:{}'.format(prof_name, to_host))
         cmd = 'host-apply-storprofile {} {}'.format(to_host, prof_name)
-        rc, msg = cli.system(cmd, rtn_code=True, fail_ok=True)
+        rc, msg = cli.system(cmd, fail_ok=True)
         assert rc != 0, msg
 
         # If we were simply switching backing (without applying a storage
@@ -338,16 +334,16 @@ def _test_storage_profile(personality, from_backing, to_backing):
         LOG.tc_step("Delete nova-local lvg on to host {}".format(to_host))
         cli.system("host-lvg-delete {} nova-local".format(to_host))
 
-        in_use = partition_helper.get_partitions([to_host], "In-Use")
+        in_use = storage_helper.get_host_partitions(to_host, "In-Use")
 
-        if len(in_use[to_host]) != 0:
+        if in_use:
 
             # Negative test #3 - attempt to apply profile onto host with existing
             # in-use partitions (should be rejected)
             LOG.tc_step('Apply the storage-profile {} onto host with existing \
                          in-use partitions:{}'.format(prof_name, to_host))
             cmd = 'host-apply-storprofile {} {}'.format(to_host, prof_name)
-            rc, msg = cli.system(cmd, rtn_code=True, fail_ok=True)
+            rc, msg = cli.system(cmd, fail_ok=True)
             assert rc != 0, msg
 
             LOG.tc_step("In-use partitions found.  Must delete the host and freshly install before proceeding.")
@@ -359,20 +355,20 @@ def _test_storage_profile(personality, from_backing, to_backing):
 
             LOG.tc_step("Delete the host {}".format(to_host))
             cli.system("host-bulk-export")
-            cli.system("host-delete {}".format(to_host), rtn_code=True)
+            cli.system("host-delete {}".format(to_host))
             assert len(system_helper.get_controllers()) > 1, "Host deletion failed"
 
             cli.system("host-bulk-add hosts.xml")
-            host_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
+            system_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
 
             wait_for_disks(to_host)
 
-        ready = partition_helper.get_partitions([to_host], "Ready")
-        if len(ready[to_host]) != 0:
+        ready = storage_helper.get_host_partitions(to_host, "Ready")
+        if ready:
             LOG.tc_step("Ready partitions have been found.  Must delete them before profile application")
             LOG.info("Host {} has Ready partitions {}".format(to_host, ready))
-            for uuid in reversed(ready[to_host]):
-                rc, out = partition_helper.delete_partition(to_host, uuid)
+            for uuid in reversed(ready):
+                storage_helper.delete_host_partition(to_host, uuid)
             # Don't bother restoring in this case since the system should be
             # functional after profile is applied.
 
@@ -392,9 +388,9 @@ def _test_storage_profile(personality, from_backing, to_backing):
 
         LOG.tc_step("Delete the host {}".format(to_host))
         cli.system("host-bulk-export")
-        cli.system("host-delete {}".format(to_host), rtn_code=True)
+        cli.system("host-delete {}".format(to_host))
         cli.system("host-bulk-add hosts.xml")
-        host_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
+        system_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
 
         wait_for_disks(to_host)
 
@@ -424,11 +420,11 @@ def _test_storage_profile(personality, from_backing, to_backing):
 
         LOG.tc_step("Delete the host {}".format(to_host))
         cli.system("host-bulk-export")
-        cli.system("host-delete {}".format(to_host), rtn_code=True)
+        cli.system("host-delete {}".format(to_host))
         assert len(system_helper.get_controllers()) > 1, "Host deletion failed"
 
         cli.system("host-bulk-add hosts.xml")
-        host_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
+        system_helper.wait_for_host_values(to_host, timeout=6000, availability=HostAvailState.ONLINE)
 
         wait_for_disks(to_host)
 

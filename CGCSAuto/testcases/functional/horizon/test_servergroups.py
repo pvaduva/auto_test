@@ -75,7 +75,7 @@ def test_horizon_create_delete_server_group(server_groups_pg,
     LOG.tc_step('Launch instance with new created server group')
     mgmt_net_name = '-'.join([Tenant.get_primary()['tenant'], 'mgmt', 'net'])
     flavor_name = nova_helper.get_basic_flavor(rtn_id=False)
-    guest_img = GuestImages.DEFAULT_GUEST
+    guest_img = GuestImages.DEFAULT['guest']
     instances_pg = instancespage.InstancesPage(server_groups_pg.driver, port=server_groups_pg.port)
     instances_pg.go_to_target_page()
     instances_pg.create_instance(instance_name,

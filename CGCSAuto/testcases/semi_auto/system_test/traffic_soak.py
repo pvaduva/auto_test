@@ -21,7 +21,7 @@ def traffic_with_preset_configs(ixncfg, ixia_session=None):
 
         ixia_session.load_config(ixncfg)
 
-        subnet_table = table_parser.table(cli.openstack('subnet list', auth_info=Tenant.get('admin')))
+        subnet_table = table_parser.table(cli.openstack('subnet list', auth_info=Tenant.get('admin'))[1])
         cidrs = list(map(ipaddress.ip_network, table_parser.get_column(subnet_table, 'Subnet')))
         for vport in ixia_session.getList(ixia_session.getRoot(), 'vport'):
             for interface in ixia_session.getList(vport, 'interface'):
@@ -32,8 +32,8 @@ def traffic_with_preset_configs(ixncfg, ixia_session=None):
                     for cidr in cidrs:
                         if gw in cidr:
                             net_id = table_parser.get_values(subnet_table, 'Network', cidr=cidr)[0]
-                            table = table_parser.table(cli.openstack('network show', net_id,
-                                                                     auth_info=Tenant.get('admin')))
+                            table = table_parser.table(
+                                cli.openstack('network show', net_id, auth_info=Tenant.get('admin'))[1])
                             seg_id = table_parser.get_value_two_col_table(table, "provider:segmentation_id")
                             ixia_session.configure(vlan_interface, vlanEnable=True, vlanId=str(seg_id))
                             LOG.info("vport {} interface {} gw {} vlan updated to {}".format(vport, interface, gw,
@@ -53,11 +53,9 @@ def test_launch_vms_for_traffic():
         con_ssh.exec_cmd(cmd1)
         con_ssh.exec_cmd(script_name, fail_ok=False)
     # may be better to delete all tenant stacks if any
-    stack_params = '-f {} {}'.format(stack1, stack1_name)
-    heat_helper.create_stack(stack_name=stack1_name, params_string=stack_params, auth_info=Tenant.TENANT1, timeout=1000,
+    heat_helper.create_stack(stack_name=stack1_name, template=stack1, auth_info=Tenant.TENANT1, timeout=1000,
                              cleanup=None)
-    stack_params = '-f {} {}'.format(stack2, stack2_name)
-    heat_helper.create_stack(stack_name=stack2_name, params_string=stack_params, auth_info=Tenant.TENANT2, timeout=1000,
+    heat_helper.create_stack(stack_name=stack2_name, template=stack2, auth_info=Tenant.TENANT2, timeout=1000,
                              cleanup=None)
     LOG.info("Checking all VMs are in active state")
     vms = system_test_helper.get_all_vms()

@@ -12,10 +12,11 @@ This module dispatches the various states and actions that a BMC
 system can take a node, and verifies that it is correct.
 """
 import re
+import ast
 
 from consts.auth import Tenant
 from consts.filepaths import WRSROOT_HOME, BMCPath
-from keywords import system_helper, host_helper
+from keywords import system_helper
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -65,8 +66,7 @@ def _suppress_unsuppress_sensor(sensor_name, host, set_suppress='False', sensor_
     # If not already suppressed, then suppress the sensor or sensor group
     if sensor_suppression_value != set_suppress:
         # The sensor is not suppressed/unsuppressed, so execute the action
-        res, out = cli.system(sysinv_action, '{} {} suppress={}'.format(host, sensor_uuid, set_suppress),
-                              fail_ok=True, rtn_code=True)
+        res, out = cli.system(sysinv_action, '{} {} suppress={}'.format(host, sensor_uuid, set_suppress), fail_ok=True)
 
     print('Result: {}'.format(res))
     return res == 0
@@ -93,7 +93,7 @@ def set_sensor_audit_interval(sensor_name, host, audit_value=10, sensor_group=Fa
 
     # Set the audit interval
     res, out = cli.system(sysinv_action, '{} {} {}={}'.format(host, sensor_uuid, audit_action, audit_value),
-                          fail_ok=True, rtn_code=True)
+                          fail_ok=True)
 
     return res == 0
 
@@ -108,7 +108,7 @@ def get_sensor_audit_interval(sensorgroup_name, host):
 
     # Set the audit interval
     res, out = cli.system('{}'.format(sysinv_action), '{} {}'.
-                          format(host, sensor_uuid), fail_ok=True, rtn_code=True)
+                          format(host, sensor_uuid), fail_ok=True)
 
     table = table_parser.table(out)
     audit_interval = table_parser.get_value_two_col_table(table, 'audit_interval_group')
@@ -124,7 +124,7 @@ def set_sensorgroup_action(sensorgroup_name, host, event_level='actions_critical
 
 def modify_sensorgroup(host, sensor_group, value='name', action_critical=None, action_major=None, action_minor=None,
                        suppress=None, audit_interval=None, datatype=None,
-                       fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
+                       fail_ok=False, auth_info=Tenant.get('admin_platform'), con_ssh=None):
     args_dict = {
         'actions_critical_group': action_critical,
         'actions_major_group': action_major,
@@ -151,8 +151,7 @@ def modify_sensorgroup(host, sensor_group, value='name', action_critical=None, a
 
     args = ' '.join([host, sensor_group_uuid, args.strip()])
 
-    code, out = cli.system('host-sensorgroup-modify', args, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok,
-                           rtn_code=True)
+    code, out = cli.system('host-sensorgroup-modify', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code == 1:
         return code, out
 
@@ -199,8 +198,7 @@ def set_sensor_action(sensor_name, host, event_level='actions_critical', action=
     if not args:
         return True
 
-    res, out = cli.system(sysinv_action, '{} {} {}'.format(host, sensor_uuid, args.strip()),
-                          fail_ok=True, rtn_code=True)
+    res, out = cli.system(sysinv_action, '{} {} {}'.format(host, sensor_uuid, args.strip()), fail_ok=True)
 
     post_sensor_action = get_sensors_action(sensor_uuid, host, event_level, sensor_group)
 
@@ -242,7 +240,7 @@ def get_sensors_table(host=None, sensor_group=False):
     else:
         sysinv_action = 'host-sensor-list'
 
-    res, out = cli.system('{}'.format(sysinv_action), '{} --nowrap'.format(host), fail_ok=True, rtn_code=True)
+    res, out = cli.system('{}'.format(sysinv_action), '{} --nowrap'.format(host), fail_ok=True)
     table_ = table_parser.table(out)
 
     return table_
@@ -307,7 +305,7 @@ def get_first_sensor_from_sensorgroup(sensor_groupname, host):
         the sensor name
     """
     sensorgroup_table = get_sensors_table(host, sensor_group=True)
-    sensors = eval(table_parser.get_values(sensorgroup_table, 'sensors', name=sensor_groupname)[0])
+    sensors = ast.literal_eval(table_parser.get_values(sensorgroup_table, 'sensors', name=sensor_groupname)[0])
     return sensors[0]
 
 
@@ -327,7 +325,7 @@ def get_sensor_showtable(sensor_uuid, host, sensor_group=False):
     else:
         sysinv_action = 'host-sensor-show'
 
-    res, out = cli.system('{}'.format(sysinv_action), '{} {}'.format(host, sensor_uuid), fail_ok=True, rtn_code=True)
+    res, out = cli.system('{}'.format(sysinv_action), '{} {}'.format(host, sensor_uuid), fail_ok=True)
     table_ = table_parser.table(out)
 
     return table_
@@ -364,8 +362,8 @@ def check_host_state(host, expected_host_state):
 
     con_ssh = ControllerClient.get_active_controller()
 
-    return host_helper.wait_for_hosts_states(host, timeout=90, check_interval=10,
-                                             con_ssh=con_ssh, availability=['{}'.format(expected_host_state)])
+    return system_helper.wait_for_hosts_states(host, timeout=90, check_interval=10,
+                                               con_ssh=con_ssh, availability=['{}'.format(expected_host_state)])
 
 
 def trigger_event(host, sensor_name, sensor_value):
@@ -412,7 +410,7 @@ def trigger_event(host, sensor_name, sensor_value):
     output = con_ssh.exec_sudo_cmd(cmd='grep "{}" {}'.format(sensor_name, sensor_data_file), fail_ok=False)[1]
 
     escaped_name = re.escape(sensor_name)
-    assert re.search('{} .* \| {}'.format(escaped_name, sensor_value), output), "sed unsuccessful"
+    assert re.search(r'{} .* \| {}'.format(escaped_name, sensor_value), output), "sed unsuccessful"
     LOG.info("Sensor data updated successfully")
 
 
@@ -438,7 +436,7 @@ def clear_events(host):
 
 def backup_sensor_data_files(hosts=None, con_ssh=None):
     if hosts is None:
-        hosts = system_helper.get_hostnames()
+        hosts = system_helper.get_hosts()
     elif isinstance(hosts, str):
         hosts = [hosts]
 

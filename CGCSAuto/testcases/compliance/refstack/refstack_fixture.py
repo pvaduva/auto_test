@@ -76,7 +76,7 @@ def refstack_setup(refstack_pre_check, request):
         network_helper.add_router_interface(router=public_router_id, subnet=internal_subnet,
                                             auth_info=Tenant.get('admin'))
 
-    keystone_pub = keystone_helper.get_endpoints(rtn_val='URL', interface='public', service_name='keystone')[0]
+    keystone_pub = keystone_helper.get_endpoints(field='URL', interface='public', service_name='keystone')[0]
     keystone_pub_url = keystone_pub.split('/v')[0] + '/'
     keystone_pub_url = keystone_pub_url.replace(':', '\:').replace('/', '\/')
 

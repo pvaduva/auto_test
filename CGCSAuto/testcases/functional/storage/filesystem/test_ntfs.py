@@ -32,7 +32,7 @@ def locate_usb(host_type="controller", min_size=13):
     """
 
     LOG.tc_step("Check all hosts of type {} for USB devices".format(host_type))
-    hosts = system_helper.get_hostnames(personality=host_type)
+    hosts = system_helper.get_hosts(personality=host_type)
     for host in hosts:
         with host_helper.ssh_to_host(host) as host_ssh:
             cmd = "ls --color=none -ltrd /dev/disk/by-id/usb*"
@@ -232,7 +232,7 @@ def test_ntfs(host_type="controller"):
         mount_usb(host_ssh, usb_device, partition="2", mount_type=mount_type, mount_point=mount_point)
 
     LOG.tc_step("Copy the windows guest image to the mount point")
-    src_img = glance_helper._scp_guest_image(img_os=guest_os, dest_dir=mount_point, con_ssh=con_ssh)
+    src_img = glance_helper.scp_guest_image(img_os=guest_os, dest_dir=mount_point, con_ssh=con_ssh)
 
     LOG.tc_step("Create flavor for windows guest image")
     flv_id = nova_helper.create_flavor(name=guest_os, vcpus=4, ram=8192, storage_backing="local_image",

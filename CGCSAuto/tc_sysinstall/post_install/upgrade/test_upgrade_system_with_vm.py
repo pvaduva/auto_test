@@ -1,12 +1,11 @@
 from pytest import fixture
+
 from utils.tis_log import LOG
-from keywords import system_helper, install_helper, storage_helper
-
-from testfixtures.resource_mgmt import ResourceCleanup
-from keywords import vm_helper, nova_helper, host_helper, cinder_helper
-
 from consts.proj_vars import ProjVar
 from consts.auth import Tenant
+from testfixtures.resource_mgmt import ResourceCleanup
+from keywords import vm_helper, nova_helper, host_helper, cinder_helper, install_helper, \
+    storage_helper, upgrade_helper
 
 
 @fixture(scope='function')
@@ -37,6 +36,9 @@ def vms_with_upgrade():
         -  Not complete ....Delete created vms, volumes, flavors
 
     """
+    ProjVar.set_var(SOURCE_OPENRC=True)
+    Tenant.set_primary('tenant2')
+
     LOG.fixture_step("Create a flavor without ephemeral or swap disks")
     flavor_1 = nova_helper.create_flavor('flv_rootdisk')[1]
     ResourceCleanup.add('flavor', flavor_1)
@@ -47,26 +49,22 @@ def vms_with_upgrade():
 
     LOG.fixture_step("Boot vm1 from volume with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm1_name = "vol_root"
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.TENANT2)
-    vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, auth_info=Tenant.TENANT2, cleanup='function')[1]
+    vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, cleanup='function')[1]
 
     LOG.fixture_step("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
     vm2_name = "vol_ephemswap"
-    vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, auth_info=Tenant.TENANT2, cleanup='function')[1]
-
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
+    vm2 = vm_helper.boot_vm(vm2_name, flavor=flavor_2, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm1)
     vm_helper.wait_for_vm_pingable_from_natbox(vm2)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.TENANT2)
 
     LOG.fixture_step("Boot vm3 from image with flavor flv_rootdisk and wait for it pingable from NatBox")
     vm3_name = "image_root"
-    vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, auth_info=Tenant.TENANT2, cleanup='function')[1]
+    vm3 = vm_helper.boot_vm(vm3_name, flavor=flavor_1, cleanup='function')[1]
 
     LOG.fixture_step("Boot vm4 from image with flavor flv_rootdisk, attach a volume to it and wait for it "
-                "pingable from NatBox")
+                     "pingable from NatBox")
     vm4_name = 'image_root_attachvol'
-    vm4 = vm_helper.boot_vm(vm4_name, flavor_1, auth_info=Tenant.TENANT2, cleanup='function')[1]
+    vm4 = vm_helper.boot_vm(vm4_name, flavor_1, cleanup='function')[1]
 
     vol = cinder_helper.create_volume(bootable=False)[1]
     ResourceCleanup.add('volume', vol)
@@ -74,9 +72,7 @@ def vms_with_upgrade():
 
     LOG.fixture_step("Boot vm5 from image with flavor flv_localdisk and wait for it pingable from NatBox")
     vm5_name = 'image_ephemswap'
-    vm5 = vm_helper.boot_vm(vm5_name, flavor_2, source='image', auth_info=Tenant.TENANT2, cleanup='function')[1]
-
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
+    vm5 = vm_helper.boot_vm(vm5_name, flavor_2, source='image', cleanup='function')[1]
 
     vm_helper.wait_for_vm_pingable_from_natbox(vm4)
     vm_helper.wait_for_vm_pingable_from_natbox(vm5)
@@ -86,16 +82,15 @@ def vms_with_upgrade():
 
 
 def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_query_upgrade):
-
     LOG.info("Boot VM before upgrade ")
-    vms=vms_with_upgrade
+    vms = vms_with_upgrade
     vm_helper.ping_vms_from_natbox(vms)
     lab = upgrade_setup['lab']
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']
 
     controller0 = lab['controller-0']
-    host_helper.ensure_host_provisioned(controller0.name)
+    upgrade_helper.ensure_host_provisioned(controller0.name)
     force = False
     LOG.tc_step("Checking system health for upgrade .....")
     if check_system_health_query_upgrade[0] == 0:
@@ -107,12 +102,12 @@ def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_que
         assert False, "System health query upgrade failed: {}".format(check_system_health_query_upgrade[1])
 
     LOG.tc_step("Starting upgrade from release {} to target release {}".format(current_version, upgrade_version))
-    system_helper.system_upgrade_start(force=force)
+    upgrade_helper.system_upgrade_start(force=force)
     LOG.info("upgrade started successfully......")
 
     # upgrade standby controller
     LOG.tc_step("Upgrading controller-1")
-    host_helper.upgrade_host("controller-1", lock=True)
+    upgrade_helper.upgrade_host("controller-1", lock=True)
     LOG.info("Host controller-1 is upgraded successfully......")
 
     vm_helper.ping_vms_from_natbox(vms)
@@ -127,14 +122,11 @@ def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_que
     assert rc == 0, "Failed to swact: {}".format(output)
     LOG.info("Swacted and  controller-1 has become active......")
 
-    active_controller = system_helper.get_active_controller_name()
-
     # upgrade  controller-0
     LOG.tc_step("Upgrading  controller-0......")
 
-
     LOG.info("Ensure controller-0 is provisioned before upgrade.....")
-    host_helper.ensure_host_provisioned(controller0.name)
+    upgrade_helper.ensure_host_provisioned(controller0.name)
     LOG.info("Host {} is provisioned for upgrade.....".format(controller0.name))
 
     # open vlm console for controller-0 for boot through mgmt interface
@@ -142,7 +134,7 @@ def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_que
     install_helper.open_vlm_console_thread("controller-0")
 
     LOG.info("Starting {} upgrade.....".format(controller0.name))
-    host_helper.upgrade_host(controller0.name, lock=True)
+    upgrade_helper.upgrade_host(controller0.name, lock=True)
     LOG.info("controller-0 is upgraded successfully.....")
 
     # unlock upgraded controller-0
@@ -159,7 +151,7 @@ def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_que
             # wait for replication  to be healthy
             storage_helper.wait_for_ceph_health_ok()
 
-        host_helper.upgrade_host(host, lock=True)
+        upgrade_helper.upgrade_host(host, lock=True)
         LOG.info("{} is upgraded successfully.....".format(host))
         LOG.tc_step("Unlocking {} after upgrade......".format(host))
         host_helper.unlock_host(host, available_only=True)
@@ -169,7 +161,7 @@ def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_que
 
     # Activate the upgrade
     LOG.tc_step("Activating upgrade....")
-    system_helper.activate_upgrade()
+    upgrade_helper.activate_upgrade()
     LOG.info("Upgrade activate complete.....")
 
     # Make controller-0 the active controller
@@ -181,12 +173,12 @@ def test_system_upgrade(vms_with_upgrade, upgrade_setup, check_system_health_que
 
     # Complete upgrade
     LOG.tc_step("Completing upgrade from  {} to {}".format(current_version, upgrade_version))
-    system_helper.complete_upgrade()
+    upgrade_helper.complete_upgrade()
     LOG.info("Upgrade is complete......")
 
     LOG.info("Lab: {} upgraded successfully".format(lab['name']))
 
     # Delete the previous load
     LOG.tc_step("Deleting  {} load... ".format(current_version))
-    system_helper.delete_imported_load()
+    upgrade_helper.delete_imported_load()
     LOG.tc_step("Delete  previous load version {}".format(current_version))

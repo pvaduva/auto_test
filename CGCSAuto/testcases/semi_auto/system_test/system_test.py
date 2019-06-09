@@ -43,10 +43,10 @@ def pre_check(request):
         for stack in stacks:
             heat_helper.get_stack_resources(stack=stack, auth_info=Tenant.get('admin'))
 
-        stack_id = heat_helper.get_stacks(name=HeatTemplate.SYSTEM_TEST_HEAT_NAME)
-
-        # if stack_id:
-        #     code, msg = heat_helper.delete_stack(stack_name=HeatTemplate.SYSTEM_TEST_HEAT_NAME)
+        # stack_id = heat_helper.get_stacks(name=HeatTemplate.SYSTEM_TEST_HEAT_NAME)
+        #
+        # # if stack_id:
+        # #     code, msg = heat_helper.delete_stack(stack_name=HeatTemplate.SYSTEM_TEST_HEAT_NAME)
 
         nova_helper.get_migration_list_table()
     request.addfinalizer(list_status)
@@ -73,7 +73,7 @@ def check_vm_hosts(vms, policy='affinity', best_effort=False):
     LOG.tc_step("Check hosts for {} vms with best_effort={}".format(policy, best_effort))
     vm_hosts = []
     for vm in vms:
-        vm_host = nova_helper.get_vm_host(vm_id=vm)
+        vm_host = vm_helper.get_vm_host(vm_id=vm)
         LOG.info("Vm {} is hosted on: {}".format(vm, vm_host))
         vm_hosts.append(vm_host)
 
@@ -110,7 +110,7 @@ def test_heat_stack_update():
 
     heat_status = [HeatStackStatus.CREATE_COMPLETE, HeatStackStatus.UPDATE_COMPLETE]
     # get the current state of the heat stack
-    current_status = heat_helper.get_stack_status(stack_name=HeatTemplate.SYSTEM_TEST_HEAT_NAME)[0]
+    current_status = heat_helper.get_stack_status(stack=HeatTemplate.SYSTEM_TEST_HEAT_NAME)[0]
 
     if current_status not in heat_status:
         skip("Heat stack Status is not in create_complete or update_complete")
@@ -147,7 +147,7 @@ def _test_migrate_anti_affinity_vms_in_parallel():
         policies, metadata, members = srv_grps_info[group]
         if members and 'anti-affinity' in policies and metadata['wrs-sg:best_effort'] == 'false':
             if len(members) >= 10:
-                vms= members[range(0,9)]
+                vms = members[range(0, 9)]
             break
     else:
         skip("There are no VMs in anti-affinity server group")
@@ -169,6 +169,7 @@ def _test_parallel_migration():
     This is to test the parallel migration of the servers
     :return:
     """
+
 
 @mark.p1
 @mark.parametrize('number_of_hosts_to_lock', [
@@ -199,10 +200,6 @@ def _test_sys_evacuate_from_hosts(number_of_hosts_to_evac):
     system_test_helper.sys_evacuate_from_hosts(number_of_hosts_to_evac=number_of_hosts_to_evac)
 
 
-def _test_sys_storage_reboot(number_of_hosts_to_evac):
-    """
+def _test_sys_storage_reboot():
 
-    :param number_of_hosts_to_evac:
-    :return:
-    """
     system_test_helper.sys_reboot_storage()

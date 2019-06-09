@@ -4,7 +4,7 @@ import time
 import shutil
 import functools
 
-from pytest import skip, fixture, mark
+from pytest import skip, fixture, mark, param
 
 from consts import build_server
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
@@ -36,36 +36,35 @@ fmt_password = r'{password}'
 
 expected_install = (
     ('Password: ', fmt_password),
-    ('Enter password for the CA-Signed certificate file \[Enter <CR> for no password\]', fmt_password),
-    ('Enter \[sudo\] password for wrsroot', fmt_password),
+    (r'Enter password for the CA-Signed certificate file \[Enter <CR> for no password\]', fmt_password),
+    (r'Enter \[sudo\] password for wrsroot', fmt_password),
     ('Installing certificate file ', ''),
     ('WARNING, Installing an invalid or expired certificate', ''),
-    ('OK to Proceed\? \(yes/NO\)', 'yes'),
+    (r'OK to Proceed\? \(yes/NO\)', 'yes'),
     ('In {mode} mode...', ''),
     ('WARNING, For security reasons, the original certificate', ''),
-    ('OK to Proceed\? \(yes/NO\)', 'yes'),
+    (r'OK to Proceed\? \(yes/NO\)', 'yes'),
     ('Configuring TPM on all enabled controller hosts...', ''),
     ('Auditing TPM configuration state...', ''),
-    ('^done$', ''),
+    (r'^done$', ''),
 )
 
 file_changes = {
     'haproxy': {
-        '/etc/haproxy/haproxy.cfg':
-            (
-            'tpm-engine\s+/usr/lib64/openssl/engines/libtpm2.so',
-            'tpm-object\s+/etc/ssl/private/object.tpm',
-            )
+        r'/etc/haproxy/haproxy.cfg': (
+            r'tpm-engine\s+/usr/lib64/openssl/engines/libtpm2.so',
+            r'tpm-object\s+/etc/ssl/private/object.tpm',
+        )
     },
 
     'lighttpd': {
-        '/etc/lighttpd/lighttpd.conf':
-         (
-            'server.tpm-object\s+=\s+"/etc/ssl/private/object.tpm"',
-            'server.tpm-engine\s+=\s+"/usr/lib64/openssl/engines/libtpm[1-9]+.so"'
-         ),
+        r'/etc/lighttpd/lighttpd.conf': (
+            r'server.tpm-object\s+=\s+"/etc/ssl/private/object.tpm"',
+            r'server.tpm-engine\s+=\s+"/usr/lib64/openssl/engines/libtpm[1-9]+.so"'
+        ),
     },
 }
+
 
 @fixture(scope='session', autouse=True)
 def check_lab_status(request):
@@ -73,7 +72,7 @@ def check_lab_status(request):
     if not current_lab or not current_lab.get('tpm_installed', False):
         skip('Non-TPM lab, skip the test.')
 
-    if not keystone_helper.is_https_lab():
+    if not keystone_helper.is_https_enabled():
         skip('Non-HTTPs lab, skip the test.')
 
     ssh_client = ControllerClient.get_active_controller()
@@ -101,15 +100,15 @@ def backup_configuration_files():
     for service, file_info in file_changes.items():
         for conf_file in file_info:
             ssh_client.exec_sudo_cmd('cp -f ' + conf_file + ' ' + backup_dir)
-    source_ip = system_helper.get_oam_ips()['oam_floating_ip']
+    source_ip = system_helper.get_oam_values()['oam_floating_ip']
     # if os.path.exists(local_conf_backup_dir):
     #     os.rmdir(local_conf_backup_dir)
     common.scp_to_local(backup_dir, source_ip=source_ip, dest_path=local_conf_backup_dir, is_dir=True)
 
     if os.path.exists(local_conf_backup_dir):
-         shutil.rmtree(local_conf_backup_dir)
+        shutil.rmtree(local_conf_backup_dir)
 
-    source_ip = system_helper.get_oam_ips()['oam_floating_ip']
+    source_ip = system_helper.get_oam_values()['oam_floating_ip']
     common.scp_to_local(backup_dir, source_ip=source_ip, dest_path=local_conf_backup_dir, is_dir=True)
 
 
@@ -124,7 +123,7 @@ def fetch_cert_file(ssh_client, search_path=None):
         return code, msg
 
     from_server = build_server.DEFAULT_BUILD_SERVER['ip']
-    prompt = '\[{}@.* \~\]\$'.format(SvcCgcsAuto.USER)
+    prompt = r'\[{}@.* \~\]\$'.format(SvcCgcsAuto.USER)
     ssh_to_server = SSHFromSSH(ssh_client, from_server, SvcCgcsAuto.USER, SvcCgcsAuto.PASSWORD, initial_prompt=prompt)
     ssh_to_server.connect(retry=5)
 
@@ -274,7 +273,7 @@ def get_cert_id(output):
 
 
 def timeout_it(max_wait=900, wait_per_loop=10, passing_codes=(0,),
-               failing_codes=(-999,), fail_on_empty=True, **kw):
+               failing_codes=(-999,), fail_on_empty=True):
 
     def wrapped(func):
 
@@ -315,7 +314,7 @@ def timeout_it(max_wait=900, wait_per_loop=10, passing_codes=(0,),
 def get_cert_info(cert_id, con_ssh=None):
     LOG.info('check the status of the current certificate')
     cmd = 'certificate-show ' + cert_id
-    output = cli.system(cmd, fail_ok=False, ssh_client=con_ssh)
+    output = cli.system(cmd, ssh_client=con_ssh, fail_ok=False)[1]
     if output:
         table = table_parser.table(output)
         if table:
@@ -345,7 +344,7 @@ def get_cert_info(cert_id, con_ssh=None):
 def get_current_cert(con_ssh=None):
     LOG.info('query certificates information of the system')
     cmd = 'certificate-list'
-    output = cli.system(cmd, fail_ok=False, ssh_client=con_ssh)
+    output = cli.system(cmd, ssh_client=con_ssh, fail_ok=False)[1]
     if output:
         table = table_parser.table(output)
         if table:
@@ -504,9 +503,9 @@ def verify_configuration_changes(expected=True, connection=None):
     return True
 
 
-@mark.parametrize(('swact_first'), [
-    mark.p1(False),
-    mark.p1(True)
+@mark.parametrize('swact_first', [
+    param(False, marks=mark.p1),
+    param(True, marks=mark.p1)
 ])
 def test_enable_tpm(swact_first):
     con_ssh = ControllerClient.get_active_controller()
@@ -558,7 +557,7 @@ def test_enable_tpm(swact_first):
 def copy_config_from_local(connection, local_dir, dest_dir):
     LOG.info('copy configs from local to active controller')
     connection.exec_sudo_cmd('rm -rf ' + dest_dir)
-    dest_ip = system_helper.get_oam_ips()['oam_floating_ip']
+    dest_ip = system_helper.get_oam_values()['oam_floating_ip']
     common.scp_from_local(local_dir, dest_ip, dest_path=dest_dir, is_dir=True)
     rc, output = connection.exec_sudo_cmd('stat ' + dest_dir)
     if rc != 0:
@@ -567,9 +566,9 @@ def copy_config_from_local(connection, local_dir, dest_dir):
     return rc
 
 
-@mark.parametrize(('swact_first'), [
-    mark.p1(False),
-    mark.p1(True)
+@mark.parametrize('swact_first', [
+    param(False, marks=mark.p1),
+    param(True, marks=mark.p1)
 ])
 def test_disable_tpm(swact_first):
     ssh_client = ControllerClient.get_active_controller()

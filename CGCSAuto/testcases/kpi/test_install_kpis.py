@@ -156,7 +156,7 @@ def test_node_install_kpi(collect_kpi):
         skip("KPI only test. Skip due to kpi collection is not enabled")
 
     lab_name = ProjVar.get_var("LAB_NAME")
-    hosts = system_helper.get_hostnames()
+    hosts = system_helper.get_hosts()
     print("System has hosts: {}".format(hosts))
 
     log_path = NodeInstall.LOG_PATH
@@ -204,7 +204,7 @@ def test_idle_kpi(collect_kpi):
     LOG.tc_step("Delete vms and volumes on system if any")
     vm_helper.delete_vms()
 
-    is_aio = system_helper.is_small_footprint()
+    is_aio = system_helper.is_aio_system()
     active_con = system_helper.get_active_controller_name()
     con_ssh = ControllerClient.get_active_controller()
     cpu_arg = ''

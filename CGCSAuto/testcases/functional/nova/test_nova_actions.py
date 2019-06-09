@@ -1,7 +1,7 @@
-from pytest import mark, skip
+from pytest import mark, skip, param
 
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, VMStatus, GuestImages
+from consts.cgcs import FlavorSpec, VMStatus
 from consts.reasons import SkipStorageSpace
 
 from keywords import vm_helper, nova_helper, glance_helper, cinder_helper, check_helper, host_helper
@@ -14,11 +14,11 @@ def id_gen(val):
 
 
 @mark.parametrize(('guest_os', 'cpu_pol', 'actions'), [
-    mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')(('tis-centos-guest', 'dedicated', ['pause', 'unpause'])),
-    mark.sanity(('ubuntu_14', 'shared', ['stop', 'start'])),
-    mark.sanity(('ubuntu_14', 'dedicated', ['auto_recover'])),
-    # mark.priorities('sanity', 'cpe_sanity')(('cgcs-guest', 'dedicated', ['suspend', 'resume'])),
-    mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')(('tis-centos-guest', 'dedicated', ['suspend', 'resume'])),
+    param('tis-centos-guest', 'dedicated', ['pause', 'unpause'], marks=mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')),
+    param('ubuntu_14', 'shared', ['stop', 'start'], marks=mark.sanity),
+    param('ubuntu_14', 'dedicated', ['auto_recover'], marks=mark.sanity),
+    # param('cgcs-guest', 'dedicated', ['suspend', 'resume'], marks=mark.priorities('sanity', 'cpe_sanity')),
+    param('tis-centos-guest', 'dedicated', ['suspend', 'resume'], marks=mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')),
 ], ids=id_gen)
 def test_nova_actions(guest_os, cpu_pol, actions):
     """
@@ -137,7 +137,7 @@ class TestVariousGuests:
             assert 0 == code, "Issue occurred when creating volume"
             source_id = vol_id
 
-        prev_cpus = host_helper.get_vcpus_for_computes(rtn_val='used_now')
+        prev_cpus = host_helper.get_vcpus_for_computes(field='used_now')
 
         LOG.tc_step("Boot a {} vm with above flavor from {}".format(guest_os, boot_source))
         vm_id = vm_helper.boot_vm('nova_actions-{}-{}'.format(guest_os, boot_source), flavor=flavor_id,
@@ -145,7 +145,7 @@ class TestVariousGuests:
 
         LOG.tc_step("Wait for VM pingable from NATBOX")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        vm_host_origin = nova_helper.get_vm_host(vm_id)
+        vm_host_origin = vm_helper.get_vm_host(vm_id)
         check_helper.check_topology_of_vm(vm_id, vcpus=2, prev_total_cpus=prev_cpus[vm_host_origin],
                                           vm_host=vm_host_origin, cpu_pol=cpu_pol, guest=guest_os)
 
@@ -163,6 +163,6 @@ class TestVariousGuests:
             if action in ['unpause', 'resume', 'start', 'auto_recover']:
                 vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-                vm_host = nova_helper.get_vm_host(vm_id)
+                vm_host = vm_helper.get_vm_host(vm_id)
                 check_helper.check_topology_of_vm(vm_id, vcpus=2, prev_total_cpus=prev_cpus[vm_host],
                                                   vm_host=vm_host, cpu_pol=cpu_pol, guest=guest_os)

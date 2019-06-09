@@ -5,7 +5,7 @@ import json
 
 from pytest import skip
 
-from consts.auth import Tenant, SvcCgcsAuto
+from consts.auth import Tenant
 from consts.cgcs import GuestImages, ImageMetadata
 from consts.proj_vars import ProjVar
 from consts.filepaths import WRSROOT_HOME
@@ -17,14 +17,14 @@ from utils.clients.ssh import ControllerClient, get_cli_client
 from utils.tis_log import LOG
 
 
-def get_images(long=False, images=None, rtn_val='id', auth_info=Tenant.get('admin'), con_ssh=None, strict=True,
+def get_images(long=False, images=None, field='id', auth_info=Tenant.get('admin'), con_ssh=None, strict=True,
                exclude=False, **kwargs):
     """
     Get a list of image id(s) that matches the criteria
     Args:
         long (bool)
         images (str|list): ids of images to filter from
-        rtn_val(str): id or name
+        field(str|list|tuple): id or name
         auth_info (dict):
         con_ssh (SSHClient):
         strict (bool): match full string or substring for the value(s) given in kwargs.
@@ -37,11 +37,11 @@ def get_images(long=False, images=None, rtn_val='id', auth_info=Tenant.get('admi
 
     """
     args = '--long' if long else ''
-    table_ = table_parser.table(cli.openstack('image list', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('image list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
     if images:
         table_ = table_parser.filter_table(table_, ID=images)
 
-    return table_parser.get_values(table_, rtn_val, strict=strict, exclude=exclude, **kwargs)
+    return table_parser.get_multi_values(table_, field, strict=strict, exclude=exclude, **kwargs)
 
 
 def get_image_id_from_name(name=None, strict=False, fail_ok=True, con_ssh=None, auth_info=None):
@@ -59,7 +59,7 @@ def get_image_id_from_name(name=None, strict=False, fail_ok=True, con_ssh=None, 
 
     """
     if name is None:
-        name = GuestImages.DEFAULT_GUEST
+        name = GuestImages.DEFAULT['guest']
 
     matching_images = get_images(name=name, auth_info=auth_info, con_ssh=con_ssh, strict=strict)
     if not matching_images:
@@ -147,7 +147,7 @@ def get_image_file_info(img_file_path=None, guest_os=None, ssh_client=None):
             if not img_file_info:
                 raise ValueError("Invalid guest_os provided. Choose from: {}".format(GuestImages.IMAGE_FILES.keys()))
             # Assume ssh_client is test server client and image path is test server path
-            img_file_path = "{}/{}".format(GuestImages.IMAGE_DIR_REMOTE, img_file_info[0])
+            img_file_path = "{}/{}".format(GuestImages.DEFAULT['image_dir_file_server'], img_file_info[0])
 
     def _get_img_dict(ssh_):
         img_info = ssh_.exec_cmd("qemu-img info --output json {}".format(img_file_path), fail_ok=False)[1]
@@ -172,7 +172,7 @@ def get_image_size(img_file_path=None, guest_os=None, virtual_size=False, ssh_cl
         virtual_size:
         ssh_client:
 
-    Returns (float): image size in GB
+    Returns (float): image size in GiB
     """
     key = "virtual-size" if virtual_size else "actual-size"
     img_size = get_image_file_info(img_file_path=img_file_path, guest_os=guest_os, ssh_client=ssh_client)[key]
@@ -234,7 +234,7 @@ def ensure_image_storage_sufficient(guest_os, con_ssh=None):
         is_sufficient, image_file_size, avail_size = \
             is_image_storage_sufficient(guest_os=guest_os, con_ssh=con_ssh, image_host_ssh=img_ssh)
         if not is_sufficient:
-            images_to_del = get_images(exclude=True, Name=GuestImages.DEFAULT_GUEST, con_ssh=con_ssh)
+            images_to_del = get_images(exclude=True, Name=GuestImages.DEFAULT['guest'], con_ssh=con_ssh)
             if images_to_del:
                 LOG.info("Delete non-default images due to insufficient image storage media to create required image")
                 delete_images(images_to_del, check_first=False, con_ssh=con_ssh)
@@ -249,7 +249,7 @@ def ensure_image_storage_sufficient(guest_os, con_ssh=None):
         return True, image_file_size
 
 
-def create_image(name=None, image_id=None, source_image_file=None, volume=None, visibility='public',force=None,
+def create_image(name=None, image_id=None, source_image_file=None, volume=None, visibility='public', force=None,
                  store=None, disk_format=None, container_format=None, min_disk=None, min_ram=None, tags=None,
                  protected=None, project=None, project_domain=None, timeout=ImageTimeout.CREATE, con_ssh=None,
                  auth_info=Tenant.get('admin'), fail_ok=False, ensure_sufficient_space=True, sys_con_for_dc=True,
@@ -292,11 +292,11 @@ def create_image(name=None, image_id=None, source_image_file=None, volume=None, 
 
     # Use source image url if url is provided. Else use local img file.
 
-    default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2]
+    default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT['guest']][2]
 
     file_path = source_image_file
     if not file_path and not volume:
-        img_dir = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
+        img_dir = GuestImages.DEFAULT['image_dir']
         file_path = "{}/{}".format(img_dir, default_guest_img)
 
     if file_path:
@@ -372,8 +372,8 @@ def create_image(name=None, image_id=None, source_image_file=None, volume=None, 
 
     try:
         LOG.info("Creating image {} with args: {}".format(name, args_))
-        code, output = cli.openstack('image create', args_, ssh_client=con_ssh, fail_ok=fail_ok,
-                                     auth_info=create_auth, timeout=timeout, rtn_code=True)
+        code, output = cli.openstack('image create', args_, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=create_auth,
+                                     timeout=timeout)
     except:
         # This is added to help debugging image create failure in case of insufficient space
         con_ssh.exec_cmd('df -h', fail_ok=True, get_exit_code=False)
@@ -407,7 +407,7 @@ def create_image(name=None, image_id=None, source_image_file=None, volume=None, 
 
 def wait_for_image_sync_on_subcloud(image_id, timeout=1000, delete=False):
     if ProjVar.get_var('IS_DC'):
-        if dc_helper.get_subclouds(rtn_val='management', name=ProjVar.get_var('PRIMARY_SUBCLOUD'))[0] == 'managed':
+        if dc_helper.get_subclouds(field='management', name=ProjVar.get_var('PRIMARY_SUBCLOUD'))[0] == 'managed':
             auth_info = Tenant.get_primary()
             if delete:
                 _wait_for_images_deleted(images=image_id, auth_info=auth_info, fail_ok=False, timeout=timeout)
@@ -436,7 +436,7 @@ def wait_for_image_status(image_id, status='active', timeout=ImageTimeout.STATUS
     actual_status = None
     end_time = time.time() + timeout
     while time.time() < end_time:
-        actual_status = get_image_show_values(image_id, fields='status', auth_info=auth_info, con_ssh=con_ssh)[0]
+        actual_status = get_image_values(image_id, fields='status', auth_info=auth_info, con_ssh=con_ssh)[0]
         if status.lower() == actual_status.lower():
             LOG.info("Image {} has reached status: {}".format(image_id, status))
             return True
@@ -504,7 +504,7 @@ def image_exists(image, image_val='ID', con_ssh=None, auth_info=Tenant.get('admi
     Returns (bool):
 
     """
-    images = get_images(auth_info=auth_info, con_ssh=con_ssh, rtn_val=image_val)
+    images = get_images(auth_info=auth_info, con_ssh=con_ssh, field=image_val)
     return image in images
 
 
@@ -557,7 +557,7 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
         auth_info = Tenant.get(tenant_dictname=auth_info['tenant'], dc_region='SystemController')
 
     exit_code, cmd_output = cli.openstack('image delete', args_, ssh_client=con_ssh, fail_ok=fail_ok,
-                                          rtn_code=True, auth_info=auth_info, timeout=timeout)
+                                          auth_info=auth_info, timeout=timeout)
     if exit_code > 1:
         return 1, cmd_output
 
@@ -577,7 +577,7 @@ def delete_images(images, timeout=ImageTimeout.DELETE, check_first=True, fail_ok
             LOG.info("Attempt to delete glance image cache on subclouds.")
             # glance image cache on subcloud expires only after 24 hours of glance image-delete. So it will fill up the
             # /opt/cgcs file system quickly in automated tests. Workaround added to manually delete the glance cache.
-            subclouds = dc_helper.get_subclouds(rtn_val='name', avail='online', mgmt='managed')
+            subclouds = dc_helper.get_subclouds(field='name', avail='online', mgmt='managed')
             for subcloud in subclouds:
                 subcoud_ssh = ControllerClient.get_active_controller(name=subcloud, fail_ok=True)
                 if subcoud_ssh:
@@ -607,7 +607,7 @@ def get_image_properties(image, property_keys, rtn_dict=False, auth_info=Tenant.
         property_keys = [property_keys]
 
     property_keys = [k.strip().lower().replace(':', '_').replace('-', '_') for k in property_keys]
-    properties = get_image_show_values(image, fields='properties', auth_info=auth_info, con_ssh=con_ssh)[0]
+    properties = get_image_values(image, fields='properties', auth_info=auth_info, con_ssh=con_ssh)[0]
 
     if rtn_dict:
         return {k: properties[k] for k in property_keys}
@@ -615,7 +615,7 @@ def get_image_properties(image, property_keys, rtn_dict=False, auth_info=Tenant.
         return [properties[k] for k in property_keys]
 
 
-def get_image_show_values(image, fields, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
+def get_image_values(image, fields, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
     """
     Get glance image values from openstack image show
     Args:
@@ -630,33 +630,23 @@ def get_image_show_values(image, fields, auth_info=Tenant.get('admin'), con_ssh=
     """
     if isinstance(fields, str):
         fields = (fields, )
-    code, output = cli.openstack('image show', image, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True)
+    code, output = cli.openstack('image show', image, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return [None]*len(fields)
 
     table_ = table_parser.table(output)
-    values = []
-    for field in fields:
-        field = field.lower().strip()
-        value = table_parser.get_value_two_col_table(table_, field, merge_lines=True)
-        if field == 'properties':
-            value = table_parser.convert_value_to_dict(value)
-        elif field in ('min_disk', 'min_ram', 'protected', 'size', 'virtual_size'):
-            try:
-                value = eval(value)
-            except NameError:
-                pass
-        values.append(value)
+    values = table_parser.get_multi_values_two_col_table(table_, fields, merge_lines=True, evaluate=True,
+                                                         dict_fields='properties')
     return values
 
 
-def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=None):
+def scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=None):
     """
 
     Args:
         img_os (str): guest image os type. valid values: ubuntu, centos_7, centos_6
         dest_dir (str): where to save the downloaded image. Default is '~/images'
+        timeout (int)
         con_ssh (SSHClient):
 
     Returns (str): full file name of downloaded image. e.g., '~/images/ubuntu_14.qcow2'
@@ -668,7 +658,7 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=No
         raise ValueError("Invalid image OS type provided. Valid values: {}".format(valid_img_os_types))
 
     if not dest_dir:
-        dest_dir = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
+        dest_dir = GuestImages.DEFAULT['image_dir']
 
     LOG.info("Downloading guest image from test server...")
     dest_name = GuestImages.IMAGE_FILES[img_os][2]
@@ -678,14 +668,14 @@ def _scp_guest_image(img_os='ubuntu_14', dest_dir=None, timeout=3600, con_ssh=No
 
     if ts_source_name:
         # img saved on test server. scp from test server
-        source_path = '{}/images/{}'.format(SvcCgcsAuto.SANDBOX, ts_source_name)
+        source_path = '{}/{}'.format(GuestImages.DEFAULT['image_dir_file_server'], ts_source_name)
         dest_path = common.scp_from_test_server_to_user_file_dir(source_path=source_path, dest_dir=dest_dir,
                                                                  dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
     else:
         # scp from tis system if needed
         dest_path = '{}/{}'.format(dest_dir, dest_name)
         if ProjVar.get_var('REMOTE_CLI') and not con_ssh.file_exists(dest_path):
-            tis_source_path = '{}/{}'.format(GuestImages.IMAGE_DIR, dest_name)
+            tis_source_path = '{}/{}'.format(GuestImages.DEFAULT['image_dir'], dest_name)
             common.scp_from_active_controller_to_localhost(source_path=tis_source_path, dest_path=dest_path,
                                                            timeout=timeout)
 
@@ -732,35 +722,33 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None, use
             if not is_sufficient:
                 skip("Insufficient image storage space in /opt/cgcs/ to create {} image".format(guest_os))
 
-        disk_format = 'qcow2'
-        if guest_os == '{}-qcow2'.format(GuestImages.DEFAULT_GUEST):
+        if guest_os == '{}-qcow2'.format(GuestImages.DEFAULT['guest']):
             # convert default img to qcow2 format if needed
-            qcow2_img_path = '{}/{}'.format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_FILES[guest_os][2])
+            qcow2_img_path = '{}/{}'.format(GuestImages.DEFAULT['image_dir'], GuestImages.IMAGE_FILES[guest_os][2])
             con_ssh = ControllerClient.get_active_controller()
             if not con_ssh.file_exists(qcow2_img_path):
-                raw_img_path = '{}/{}'.format(GuestImages.IMAGE_DIR,
-                                              GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2])
+                raw_img_path = '{}/{}'.format(GuestImages.DEFAULT['image_dir'],
+                                              GuestImages.IMAGE_FILES[GuestImages.DEFAULT['guest']][2])
                 con_ssh.exec_cmd('qemu-img convert -f raw -O qcow2 {} {}'.format(raw_img_path, qcow2_img_path),
                                  fail_ok=False, expect_timeout=600)
-        elif re.search('cgcs-guest|vxworks|tis-centos', guest_os):
-            disk_format = 'raw'
 
         # copy non-default img from test server
-        dest_dir = ProjVar.get_var('USER_FILE_DIR')
+        dest_dir = GuestImages.DEFAULT['image_dir']
 
-        if check_disk and os.path.abspath(dest_dir) == os.path.normpath(WRSROOT_HOME):
+        if check_disk and os.path.normpath(WRSROOT_HOME) in os.path.abspath(dest_dir):
             # Assume image file should not be present on system since large image file should get removed
             if not con_ssh:
                 con_ssh = ControllerClient.get_active_controller()
-                avail_wrsroot_home = get_avail_image_space(con_ssh=con_ssh, path=WRSROOT_HOME)
-                if avail_wrsroot_home < img_file_size:
-                    skip("Insufficient space in {} for {} image to be copied to".format(WRSROOT_HOME, guest_os))
+            avail_wrsroot_home = get_avail_image_space(con_ssh=con_ssh, path=WRSROOT_HOME)
+            if avail_wrsroot_home < img_file_size:
+                skip("Insufficient space in {} for {} image to be copied to".format(WRSROOT_HOME, guest_os))
 
-        image_path = _scp_guest_image(img_os=guest_os, dest_dir='{}/images'.format(dest_dir))
+        image_path = scp_guest_image(img_os=guest_os, dest_dir=dest_dir)
 
         try:
+            disk_format, container_format = GuestImages.IMAGE_FILES[guest_os][3:5]
             img_id = create_image(name=guest_os, source_image_file=image_path, disk_format=disk_format,
-                                  container_format='bare', fail_ok=False, cleanup=cleanup)[1]
+                                  container_format=container_format, fail_ok=False, cleanup=cleanup)[1]
         finally:
             if rm_image and not re.search('cgcs-guest|tis-centos|ubuntu_14', guest_os):
                 con_ssh = ControllerClient.get_active_controller()
@@ -798,7 +786,7 @@ def set_unset_image_vif_multiq(image, set_=True, fail_ok=False, con_ssh=None, au
     else:
         cmd += ' hw_vif_multiqueue_enabled'
 
-    res, out = cli.openstack(cmd, rtn_code=True, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    res, out = cli.openstack(cmd, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     return res, out
 
@@ -835,7 +823,7 @@ def unset_image(image, properties=None, tags=None, con_ssh=None, auth_info=Tenan
         raise ValueError("Nothing to unset. Please specify property or tag to unset")
 
     args = ' '.join(args) + ' {}'.format(image)
-    code, out = cli.openstack('image unset', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_code=True)
+    code, out = cli.openstack('image unset', args, ssh_client=con_ssh, fail_ok=True, auth_info=auth_info)
     if code > 0:
         return 1, out
 
@@ -960,7 +948,7 @@ def set_image(image, new_name=None, properties=None, min_disk=None, min_ram=None
         raise ValueError("Nothing to set")
 
     args += ' {}'.format(image)
-    code, out = cli.openstack('image set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_code=True)
+    code, out = cli.openstack('image set', args, ssh_client=con_ssh, fail_ok=True, auth_info=auth_info)
     if code > 0:
         return 1, out
 
@@ -986,7 +974,7 @@ def check_image_settings(image, check_dict, unset=False, con_ssh=None, auth_info
     """
     LOG.info("Checking image setting is as specified: {}".format(check_dict))
 
-    post_tab = table_parser.table(cli.openstack('image show', image, ssh_client=con_ssh, auth_info=auth_info),
+    post_tab = table_parser.table(cli.openstack('image show', image, ssh_client=con_ssh, auth_info=auth_info)[1],
                                   combine_multiline_entry=True)
 
     for field, expt_val in check_dict.items():
@@ -1003,7 +991,7 @@ def check_image_settings(image, check_dict, unset=False, con_ssh=None, auth_info
                     actual = actual_dict[key]
                     try:
                         actual = eval(actual)
-                    except NameError:
+                    except (NameError, SyntaxError):
                         pass
                     assert str(val) == str(actual), "Property {} is not as set. Expected: {}, actual: {}".\
                         format(key, val, actual_dict[key])

@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pytest import mark, fixture, skip
 
+import keywords.host_helper
 from consts.cgcs import VMMetaData
 from keywords import vm_helper, nova_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
@@ -23,7 +24,7 @@ TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 
 
 def get_vm_priority_metadata(vm_id):
-    properties = nova_helper.get_vm_values(vm_id, fields='properties')[0]
+    properties = vm_helper.get_vm_values(vm_id, fields='properties')[0]
     evac_priority = properties.get(VMMetaData.EVACUATION_PRIORITY, None)
     return evac_priority
 
@@ -68,7 +69,7 @@ class TestPrioritizedVMEvacuation:
     def setup_quota_and_hosts(self, request, add_admin_role_class, add_cgcsauto_zone):
         vm_helper.ensure_vms_quotas(vms_num=10, cores_num=50, vols_num=20)
 
-        storage_backing, target_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, target_hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
         if len(target_hosts) < 2:
             skip("Less than two up hosts have same storage backing")
 

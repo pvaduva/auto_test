@@ -1,8 +1,8 @@
-from pytest import fixture, skip
+from pytest import fixture
 
 from consts.auth import Tenant
-from consts.cgcs import SysType, PodStatus
-from keywords import system_helper, vm_helper, nova_helper, storage_helper, host_helper, common, check_helper, \
+from consts.cgcs import AppStatus
+from keywords import system_helper, vm_helper, storage_helper, host_helper, common, check_helper, \
     kube_helper, container_helper
 from utils.tis_log import LOG
 
@@ -35,19 +35,23 @@ def check_alarms_module(request):
 
 def __verify_alarms(request, scope):
     before_alarms = __get_alarms(scope=scope)
-    prev_bad_pods = kube_helper.get_pods(status=(PodStatus.COMPLETED, PodStatus.RUNNING), exclude=True)
+    prev_bad_pods = kube_helper.get_unhealthy_pods(all_namespaces=True)
+    prev_applied_apps = container_helper.get_apps(field='application', status=AppStatus.APPLIED)
 
     def verify_():
-        LOG.fixture_step("({}) Verify system alarms and pods status after test {} ended...".format(scope, scope))
-        res, new_alarms = check_helper.check_alarms(before_alarms=before_alarms, fail_ok=True)
+        LOG.fixture_step("({}) Verify system alarms, applications and pods status after test {} ended...".
+                         format(scope, scope))
+        alarm_res, new_alarms = check_helper.check_alarms(before_alarms=before_alarms, fail_ok=True)
+        post_apps_status = container_helper.get_apps(field=('application', 'status'), application=prev_applied_apps)
+        kube_helper.wait_for_pods_healthy(timeout=120, all_namespaces=True,
+                                          name=prev_bad_pods, exclude=True, strict=True)
 
-        container_helper.get_apps_values()
-        post_bad_pods = kube_helper.get_pods(status=(PodStatus.COMPLETED, PodStatus.RUNNING), exclude=True)
-        new_bad_pods = [k for k in post_bad_pods if k not in prev_bad_pods]
-        if new_bad_pods:
-            kube_helper.wait_for_pods_ready(pods_to_exclude=prev_bad_pods, timeout=120)
-
-        assert res, "New alarm(s) appeared within test {}: {}".format(scope, new_alarms)
+        # check no new bad application
+        LOG.info("Check applications status...")
+        new_bad_apps = [item for item in post_apps_status if item[1] != AppStatus.APPLIED]
+        assert not new_bad_apps, "Applications no longer applied after test {}: {}".format(scope, new_bad_apps)
+        # check no new alarms
+        assert alarm_res, "New alarm(s) appeared within test {}: {}".format(scope, new_alarms)
 
     request.addfinalizer(verify_)
 
@@ -60,7 +64,7 @@ def check_i40e_hosts(request):
     start_time = common.get_date_in_format(date_format="%Y-%m-%dT%T")
 
     def check_kern_log():
-        cmd = """cat /var/log/kern.log | grep -i --color=never "(i40e): transmit queue" | awk '$0 > "{}"'""".\
+        cmd = """cat /var/log/kern.log | grep -i --color=never "(i40e): transmit queue" | awk '$0 > "{}"'""". \
             format(start_time)
         i40e_errs = []
         host_helper.wait_for_hosts_ready(hosts=hosts)
@@ -107,7 +111,7 @@ def pre_alarms_function():
 
 
 def __get_alarms(scope):
-    LOG.fixture_step("({}) Gathering system alarms info before test {} begins.".format(scope, scope))
+    LOG.fixture_step("({}) Gathering system health info before test {} begins.".format(scope, scope))
     alarms = system_helper.get_alarms()
     return alarms
 
@@ -134,13 +138,13 @@ def check_vms(request):
         request: caller of this fixture. i.e., test func.
     """
     LOG.fixture_step("Gathering system VMs info before test begins.")
-    before_vms_status = nova_helper.get_vms_info(fields=['status'], long=False, all_vms=True,
-                                                 auth_info=Tenant.get('admin'))
+    before_vms_status = vm_helper.get_vms_info(fields=['status'], long=False, all_projects=True,
+                                               auth_info=Tenant.get('admin'))
 
     def verify_vms():
         LOG.fixture_step("Verifying system VMs after test ended...")
-        after_vms_status = nova_helper.get_vms_info(fields=['status'], long=False, all_vms=True,
-                                                    auth_info=Tenant.get('admin'))
+        after_vms_status = vm_helper.get_vms_info(fields=['status'], long=False, all_projects=True,
+                                                  auth_info=Tenant.get('admin'))
 
         # compare status between the status of each VMs before/after the test
         common_vms = set(before_vms_status) & set(after_vms_status)
@@ -157,6 +161,7 @@ def check_vms(request):
 
         assert not failure_msgs, '\n'.join(failure_msgs)
         LOG.info("VMs status verified.")
+
     request.addfinalizer(verify_vms)
     return
 
@@ -186,6 +191,7 @@ def ping_vms_from_nat(request):
         assert before_ping_result == after_ping_result
 
         LOG.info("Ping from NAT Box to VMs verified.")
+
     request.addfinalizer(verify_nat_ping)
     return
 
@@ -200,4 +206,3 @@ def ceph_precheck():
     LOG.info('Verify the health of the CEPH cluster')
     rtn, msg = storage_helper.is_ceph_healthy()
     LOG.info('{}'.format(msg))
-

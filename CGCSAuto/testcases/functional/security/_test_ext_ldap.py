@@ -40,13 +40,13 @@ def test_ext_ldap():
     service = 'identity'
     LOG.info("Add Ext LDAP service params")
     system_helper.create_service_parameter(service=service, section='ldap', name='url', value=ExtLdap.LDAP_SERVER)
-    uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section='ldap', name='url')[0]
+    uuid = system_helper.get_service_parameter_values(field='uuid', service=service, section='ldap', name='url')[0]
     dict_ = {'uuid': uuid, 'action': 'delete', 'val': None}
     service_param_restore_dic.append(dict_)
 
     suffix = "\"" + ExtLdap.LDAP_DC + "\""
     system_helper.create_service_parameter(service=service, section='ldap', name='suffix', value=suffix)
-    uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section='ldap',
+    uuid = system_helper.get_service_parameter_values(field='uuid', service=service, section='ldap',
                                                       name='suffix')[0]
     dict_ = {'uuid': uuid, 'action': 'delete', 'val': None}
     service_param_restore_dic.append(dict_)
@@ -58,7 +58,7 @@ def test_ext_ldap():
     service_param_restore_dic.append(dict_)
     user = "\"" + ExtLdap.LDAP_USER + "\""
     system_helper.create_service_parameter(service=service, section='ldap', name='user', value=user, verify=False)
-    uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service, section='ldap',
+    uuid = system_helper.get_service_parameter_values(field='uuid', service=service, section='ldap',
                                                       name='user')[0]
     dict_ = {'uuid': uuid, 'action': 'delete', 'val': None}
     service_param_restore_dic.append(dict_)
@@ -67,6 +67,6 @@ def test_ext_ldap():
     assert code == 0, "Expected service params apply to pass"
 
     LOG.info("Verify ext ldap connectivity via openstack user list")
-    user_id = keystone_helper.get_user_ids(user_name='ldap1')
+    users = keystone_helper.get_users(name='ldap1')
 
-    assert user_id is not None, "Expected ldap1 user user to be there"
+    assert users, "Expected ldap1 user user to be there"

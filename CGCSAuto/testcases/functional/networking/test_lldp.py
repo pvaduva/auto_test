@@ -17,13 +17,13 @@ def test_lldp_neighbor_remote_port():
     remote_port_missing = False
 
     LOG.tc_step("Parsing host-list for hostnames")
-    hosts_tab = table_parser.table(cli.system('host-list'))
+    hosts_tab = table_parser.table(cli.system('host-list')[1])
     all_hosts = table_parser.get_column(hosts_tab, 'hostname')
 
     for host_name in all_hosts:
 
         LOG.tc_step("Parsing host-lldp-neighbor-list for remote_ports on the " + host_name + " host")
-        host = table_parser.table(cli.system('host-lldp-neighbor-list', '--nowrap {}'.format(host_name)))
+        host = table_parser.table(cli.system('host-lldp-neighbor-list', '--nowrap {}'.format(host_name))[1])
         host_remote_ports = table_parser.get_column(host, 'remote_port')
 
         for remote_port in host_remote_ports:

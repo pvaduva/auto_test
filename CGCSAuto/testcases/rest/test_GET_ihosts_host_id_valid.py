@@ -1,8 +1,9 @@
+import re
 import pytest
+
 from utils.tis_log import LOG
 from utils.rest import Rest
-from keywords import system_helper, host_helper
-import re
+from keywords import system_helper
 
 
 @pytest.fixture(scope='module')
@@ -46,9 +47,9 @@ def test_GET_various_host_id_valid(sysinv_rest, path):
     r = sysinv_rest
     path = re.sub("-", "{}", path)
     LOG.info(path)
-    LOG.info(system_helper.get_hostnames())
-    for host in system_helper.get_hostnames():
-        uuid = host_helper.get_hostshow_value(host, 'uuid')
+    LOG.info(system_helper.get_hosts())
+    for host in system_helper.get_hosts():
+        uuid = system_helper.get_host_values(host, 'uuid')[0]
         res = path.format(uuid)
         message = "Using requests GET {} with proper authentication"
         LOG.tc_step(message.format(res))

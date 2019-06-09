@@ -1,5 +1,5 @@
 import re
-from collections import defaultdict
+import collections
 
 from pytest import fixture, mark, skip
 
@@ -15,8 +15,8 @@ vtpm_file_name = 'tpm2-00.permall'
 vtpm_device = '/dev/tpm0'
 
 g_reusable = 0
-g_flavors = defaultdict(str)
-g_vms = defaultdict(dict)
+g_flavors = collections.defaultdict(str)
+g_vms = collections.defaultdict(dict)
 
 
 def reset_vms():
@@ -77,11 +77,11 @@ def verify_vtpm_on_host(vm_id, vm_type='vtpm', host=None):
 def check_host_file_for_vm(vm_id, expecting=True, host=None, fail_ok=True):
     LOG.info('Verify the file for vTPM exists on the hosting node for VM:' + vm_id)
     if host is None:
-        host = nova_helper.get_vm_host(vm_id)
+        host = vm_helper.get_vm_host(vm_id)
 
     active_controller_name = system_helper.get_active_controller_name()
 
-    instance_name = nova_helper.get_vm_instance_name(vm_id)
+    instance_name = vm_helper.get_vm_instance_name(vm_id)
     vtpm_file = vtpm_base_dir.format(vm_id=vm_id, instance_name=instance_name) + '/' + vtpm_file_name
 
     if host != active_controller_name:
@@ -194,28 +194,24 @@ def run_cmd(ssh_con, cmd, cmd_prefix='tss2_', fail_ok=False, output_handle=True,
             cli += ' -' + str(key)
             if value is not True:
                 cli += ' ' + str(value)
-    try:
-        rc, output = ssh_con.exec_cmd(cli)
-        if rc == 0:
-            LOG.info('OK, successfully ran:' + cli)
-            if output_handle:
-                handle = output.split()[1]
-                LOG.info('-handle: {}'.format(handle))
-                return rc, handle
 
-            else:
-                return rc, output
+    rc, output = ssh_con.exec_cmd(cli)
+    if rc == 0:
+        LOG.info('OK, successfully ran:' + cli)
+        if output_handle:
+            handle = output.split()[1]
+            LOG.info('-handle: {}'.format(handle))
+            return rc, handle
+
         else:
-            LOG.info('Failed to run:' + cli + ', but ignore the error as instructed')
-
-            if not fail_ok:
-                assert False, 'Failed to run:' + cli
-
             return rc, output
+    else:
+        LOG.info('Failed to run:' + cli + ', but ignore the error as instructed')
 
-    except:
-        LOG.error('Failed to run cmd:' + cli)
-        raise
+        if not fail_ok:
+            assert False, 'Failed to run:' + cli
+
+        return rc, output
 
 
 def create_primary_key(ssh_con, hierarchy='o', pwdp='', pwdpi='', pwdk='', iu='', opu=''):
@@ -541,13 +537,7 @@ def create_vm_values_for_type(vm_type, flavor=None):
     LOG.info('Creating VM for vTPM using flavor:' + g_flavors[vm_type])
 
     flavor = flavor if flavor is not None else g_flavors[vm_type]
-    code, vm_id, msg, new_vol = vm_helper.boot_vm(name='vm-{}'.format(vm_type), flavor=flavor, fail_ok=True)
-    if code != 0:
-        if vm_id:
-            ResourceCleanup.add('vm', vm_id)
-        if new_vol:
-            ResourceCleanup.add('volume', new_vol)
-        assert code == 0, msg
+    code, vm_id, msg = vm_helper.boot_vm(name='vm-{}'.format(vm_type), flavor=flavor, cleanup='function')
 
     vm_values = {'id': vm_id}
     g_vms[vm_type] = vm_values
@@ -640,14 +630,14 @@ def rescue_vm(vm_type, vm_id):
 
 
 def reboot_hosting_node(vm_type, vm_id, force_reboot=False):
-    host = nova_helper.get_vm_host(vm_id)
+    host = vm_helper.get_vm_host(vm_id)
 
     host_helper.reboot_hosts(host, force_reboot=force_reboot)
     rescue_vm(vm_type, vm_id)
 
 
 def lock_unlock_hosting_node(vm_type, vm_id, force_lock=False):
-    host = nova_helper.get_vm_host(vm_id)
+    host = vm_helper.get_vm_host(vm_id)
     host_helper.lock_host(host, force=force_lock)
     host_helper.unlock_host(host)
 
@@ -715,7 +705,7 @@ def get_vm_id(vm_type, reuse=True):
         vm_id = g_vms[vm_type]['id']
         LOG.info('VM exists for type:{}, vm_id:{}'.format(vm_type, vm_id))
 
-        if reuse and nova_helper.get_vm_status(vm_id=vm_id) == VMStatus.ACTIVE:
+        if reuse and vm_helper.get_vm_status(vm_id=vm_id) == VMStatus.ACTIVE:
             return vm_id
 
     LOG.info('not reusing...')
@@ -736,7 +726,8 @@ def reuse_existing_vms(vm_operation, extra_specs):
     if not g_reusable:
         return False
 
-    if 'reboot_host' == vm_operation or 'evacuate' in vm_operation or 'non_autorc' in extra_specs or 'non_vtpm' in extra_specs:
+    if 'reboot_host' == vm_operation or 'evacuate' in vm_operation or 'non_autorc' in extra_specs or \
+            'non_vtpm' in extra_specs:
         return False
 
     return True
@@ -818,7 +809,7 @@ def _test_vtpm(vm_operation, extra_specs):
         if vm_operation == 'create':
             with vm_helper.ssh_to_vm_from_natbox(vm_id) as ssh_to_vm:
                 LOG.info('Create all types of contents: volatile, non_volatile and persistent')
-                # create_values(ssh_to_vm, vm_type)
+                create_values(ssh_to_vm, vm_type)
 
         values = g_vms[vm_type]['values']
         LOG.info('Running test on VM:{}, type:{}, values:{}'.format(vm_id, vm_type, values))

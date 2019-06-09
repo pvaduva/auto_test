@@ -15,7 +15,7 @@ SNMP_TRAPDEST = ('cgcsauto_dc_snmp_trapdest', SvcCgcsAuto.SERVER)
 def snmp_precheck(request):
 
     LOG.info("Gather SNMP config and subcloud management info")
-    central_auth = Tenant.get('admin', dc_region='RegionOne')
+    central_auth = Tenant.get('admin_platform', dc_region='RegionOne')
     central_comms = system_helper.get_snmp_comms(auth_info=central_auth)
     central_trapdests = system_helper.get_snmp_trapdests(auth_info=central_auth)
 
@@ -30,7 +30,7 @@ def snmp_precheck(request):
     managed_subclouds = [subcloud for subcloud in managed_subclouds if subcloud in ssh_map]
 
     LOG.fixture_step("Ensure SNMP community strings are synced on {}".format(primary_subcloud))
-    subcloud_auth = Tenant.get('admin', dc_region=primary_subcloud)
+    subcloud_auth = Tenant.get('admin_platform', dc_region=primary_subcloud)
     subcloud_comms = system_helper.get_snmp_comms(auth_info=subcloud_auth)
 
     if sorted(subcloud_comms) != sorted(central_comms):
@@ -86,8 +86,8 @@ def test_dc_snmp(snmp_precheck):
 
     """
     primary_subcloud, managed_subclouds, central_comms, central_trapdests = snmp_precheck
-    central_auth = Tenant.get('admin', dc_region='RegionOne')
-    sub_auth = Tenant.get('admin', dc_region=primary_subcloud)
+    central_auth = Tenant.get('admin_platform', dc_region='RegionOne')
+    sub_auth = Tenant.get('admin_platform', dc_region=primary_subcloud)
 
     LOG.tc_step("Unmanage {}".format(primary_subcloud))
     dc_helper.unmanage_subcloud(subcloud=primary_subcloud, check_first=False)

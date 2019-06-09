@@ -69,7 +69,7 @@ def test_horizon_network_subnet_create_tenant(project_networks_pg):
 @fixture()
 def get_pnet():
     pnet_name = 'group0-data0'
-    pnet_type = system_helper.get_data_networks(rtn_val='network_type', name=pnet_name)
+    pnet_type = system_helper.get_data_networks(field='network_type', name=pnet_name)
     if not pnet_type:
         skip('{} does not exist. skip test.'.format(pnet_name))
 

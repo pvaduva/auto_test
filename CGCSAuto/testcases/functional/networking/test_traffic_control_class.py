@@ -1,9 +1,10 @@
 import copy
+
 from pytest import skip
 
+from consts.cgcs import HostAvailState, TrafficControl
 from keywords import system_helper, host_helper
 from utils.tis_log import LOG
-from consts.cgcs import HostAvailState, TrafficControl
 
 
 def test_traffic_control_classes():
@@ -23,26 +24,26 @@ def test_traffic_control_classes():
 
     for controller in controllers:
         LOG.info("Collect traffic control info for {}".format(controller))
-        mgmt = system_helper.get_host_interfaces(host=controller, net_type='mgmt',
-                                                 rtn_val=('name', 'type', 'vlan id', 'ports', 'uses i/f'))[0]
+        mgmt = host_helper.get_host_interfaces(host=controller, net_type='mgmt',
+                                               field=('name', 'type', 'vlan id', 'ports', 'uses i/f'))[0]
         mgmt_if_name, mgmt_type, mgmt_vlan, mgmt_ports, mgmt_uses_ifs = mgmt
         if mgmt_type == 'virtual':
             skip("mgmt is virtual")
 
-        mgmt_dev, mgmt_ports = system_helper.get_host_ports_for_net_type(host=controller, net_type='mgmt',
-                                                                         ports_only=False)[0]
-        infra = system_helper.get_host_interfaces(host=controller, net_type='infra',
-                                                  rtn_val=('name', 'type', 'vlan id', 'ports', 'uses i/f'))
+        mgmt_dev, mgmt_ports = host_helper.get_host_ports_for_net_type(host=controller, net_type='mgmt',
+                                                                       ports_only=False)[0]
+        infra = host_helper.get_host_interfaces(host=controller, net_type='infra',
+                                                field=('name', 'type', 'vlan id', 'ports', 'uses i/f'))
         if not infra:
             mgmt_expt = TrafficControl.MGMT_NO_INFRA
             if_info = {'mgmt': (mgmt_dev, mgmt_ports, mgmt_expt)}
         else:
-            pxe_if = system_helper.get_host_interfaces(host=controller, net_type='pxeboot', rtn_val='name')
+            pxe_if = host_helper.get_host_interfaces(host=controller, net_type='pxeboot', field='name')
             pxe_if_name = pxe_if[0] if pxe_if else None
 
             infra_if_name, infra_type, infra_vlan, infra_ports, infra_uses_ifs = infra[0]
-            infra_dev, infra_ports = system_helper.get_host_ports_for_net_type(host=controller, net_type='infra',
-                                                                               ports_only=False)[0]
+            infra_dev, infra_ports = host_helper.get_host_ports_for_net_type(host=controller, net_type='infra',
+                                                                             ports_only=False)[0]
             if infra_type == 'vlan':
                 if infra_uses_ifs[0] == mgmt_if_name:
                     LOG.info("Infra is consolidated over mgmt")
@@ -81,23 +82,23 @@ def test_traffic_control_classes():
 
                 if_root, if_root_ceil = if_actual['root']
                 expt_ceil_ratio = if_expt['root'][1]
-                underlying_speed = int(if_root_ceil/expt_ceil_ratio)
+                underlying_speed = int(if_root_ceil / expt_ceil_ratio)
 
                 assert min(if_speeds) <= underlying_speed <= max(if_speeds), \
                     "{} {} root ceil rate unexpected with {} configured. " \
-                    "root ceil: {}M, underlying link capacity in Mbit: {}".\
+                    "root ceil: {}M, underlying link capacity in Mbit: {}". \
                     format(controller, if_net, config, if_root_ceil, if_speeds)
-                assert len(if_expt) == len(if_actual), "{} traffic classes expected: {}; actual: {}. Config: {}".\
+                assert len(if_expt) == len(if_actual), "{} traffic classes expected: {}; actual: {}. Config: {}". \
                     format(if_net, list(if_expt.keys()), list(if_actual.keys()), config)
 
                 for traffic_class in if_expt:
-                    expt_rate, expt_ceil = [int(underlying_speed*ratio) for ratio in if_expt[traffic_class]]
+                    expt_rate, expt_ceil = [int(underlying_speed * ratio) for ratio in if_expt[traffic_class]]
                     actual_rate, actual_ceil = if_actual[traffic_class]
                     LOG.info("{} {} {} class actual rate: {}, ceil: {}".format(controller, if_net, traffic_class,
                                                                                actual_rate, actual_ceil))
                     assert expt_rate == actual_rate, \
-                        "{} traffic control class {} expected rate: {}M; actual: {}M. Config: {}".\
+                        "{} traffic control class {} expected rate: {}M; actual: {}M. Config: {}". \
                         format(config, if_net, traffic_class, expt_rate, actual_rate)
                     assert expt_ceil == actual_ceil, \
-                        "{} traffic control class {} expected ceiling rate: {}M; actual: {}M. Config: {}".\
+                        "{} traffic control class {} expected ceiling rate: {}M; actual: {}M. Config: {}". \
                         format(if_net, traffic_class, expt_ceil, actual_ceil, config)

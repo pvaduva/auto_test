@@ -1,13 +1,13 @@
 import time
 
-from utils.tis_log import LOG
-from keywords import install_helper,upgrade_helper, system_helper, common
-from consts.proj_vars import RestoreVars
+from consts.auth import SvcCgcsAuto
 from consts.cgcs import Prompt, BackupRestore
-from utils.clients.ssh import ControllerClient
 from consts.filepaths import TiSPath, WRSROOT_HOME
-from consts.auth import SvcCgcsAuto, HostLinuxCreds
-from tc_bnr.restore.test_restore import restore_setup, pre_restore_checkup, restore_volumes      # Don't remove
+from consts.proj_vars import RestoreVars
+from tc_bnr.restore.test_restore import restore_volumes  # Don't remove
+from utils.clients.ssh import ControllerClient
+from utils.tis_log import LOG
+from keywords import install_helper, upgrade_helper, common
 
 
 def test_upgrade_restore(restore_setup):
@@ -90,7 +90,7 @@ def test_upgrade_restore(restore_setup):
         images_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, images_backup_file)
 
     LOG.tc_step("Images restore from backup file {} ...".format(images_backup_file))
-    new_prompt = '{}.*~.*\$ '.format(lab['name'].split('_')[0]) + '|controller\-0.*~.*\$ '
+    new_prompt = r'{}.*~.*\$ |controller\-0.*~.*\$ '.format(lab['name'].split('_')[0])
     LOG.info('set prompt to:{}'.format(new_prompt))
     con_ssh.set_prompt(new_prompt)
 
@@ -108,10 +108,10 @@ def test_upgrade_restore(restore_setup):
         con_ssh.exec_sudo_cmd(cmd_rm_known_host)
 
         # transfer all backup files to /opt/backups from test server
-        con_ssh.scp_files(backup_src_path + "/*", TiSPath.BACKUPS + '/', source_server=SvcCgcsAuto.SERVER,
-                          source_user=SvcCgcsAuto.USER, source_password=SvcCgcsAuto.PASSWORD,
-                          dest_password=HostLinuxCreds.get_password(),  sudo=True,
-                          sudo_password=HostLinuxCreds.get_password())
+        with con_ssh.login_as_root():
+            con_ssh.scp_on_dest(source_user=SvcCgcsAuto.USER, source_ip=SvcCgcsAuto.SERVER,
+                                source_pswd=SvcCgcsAuto.PASSWORD, source_path=backup_src_path + "/*",
+                                dest_path=TiSPath.BACKUPS + '/', timeout=1200)
 
     else:
         # copy all backupfiles from USB to /opt/backups
@@ -145,4 +145,4 @@ def test_upgrade_restore(restore_setup):
 
     # Delete the previous load
     LOG.tc_step("Deleting  imported load... ")
-    system_helper.delete_imported_load()
+    upgrade_helper.delete_imported_load()

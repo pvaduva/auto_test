@@ -1,6 +1,5 @@
 from pytest import fixture, mark, skip, raises
 
-import keywords.system_helper
 from utils import exceptions
 from utils.tis_log import LOG
 from keywords import host_helper, system_helper
@@ -10,10 +9,10 @@ _skip = False
 
 def test_is_active_con():
     active_con, standby_con = system_helper.get_active_standby_controllers()
-    assert host_helper.is_active_controller(active_con)
+    assert system_helper.is_active_controller(active_con)
 
     if standby_con:
-        assert not host_helper.is_active_controller(standby_con)
+        assert not system_helper.is_active_controller(standby_con)
 
 
 @mark.skipif(_skip, reason='test skip if')
@@ -30,8 +29,8 @@ def test_is_active_con():
 def test_swact_host(hostname, timeout, fail_ok):
     LOG.tc_step("wait for previous swact complete")
     host_helper._wait_for_openstack_cli_enable()
-    host_helper.wait_for_host_values('controller-0', timeout=60, fail_ok=False, task='')
-    host_helper.wait_for_host_values('controller-1', timeout=60, fail_ok=False, task='')
+    system_helper.wait_for_host_values('controller-0', timeout=60, fail_ok=False, task='')
+    system_helper.wait_for_host_values('controller-1', timeout=60, fail_ok=False, task='')
 
     LOG.tc_step("swact host")
 
@@ -62,7 +61,7 @@ def test_swact_host(hostname, timeout, fail_ok):
     # ('compute-0', True)
 ])
 def test_lock_host(hostname, force):
-    if not keywords.system_helper.host_exists(hostname):
+    if not system_helper.host_exists(hostname):
         skip("{} does not exist".format(hostname))
 
     expts = [-1, 0]
@@ -81,7 +80,7 @@ def test_lock_host(hostname, force):
     'controller-1',
 ])
 def test_unlock_host(hostname):
-    if not keywords.system_helper.host_exists(hostname):
+    if not system_helper.host_exists(hostname):
         skip("{} does not exist".format(hostname))
 
     host_helper.unlock_host(hostname)
@@ -97,7 +96,7 @@ def test_unlock_host(hostname):
 ])
 def test_reboot_hosts(hostnames):
     LOG.tc_step("Processing hostnames provided...")
-    system_hosts = system_helper.get_hostnames()
+    system_hosts = system_helper.get_hosts()
 
     is_str = False
     if isinstance(hostnames, str):
@@ -138,7 +137,7 @@ def test_get_active_con():
 def test_unlock_hosts():
     active = system_helper.get_active_controller_name()
     standby = 'controller-1' if active == 'controller-0' else 'controller-0'
-    host_helper.wait_for_hosts_states([standby, 'compute-1'], availability='available')
+    system_helper.wait_for_hosts_states([standby, 'compute-1'], availability='available')
     LOG.tc_step("Lock hosts.")
     host_helper.lock_host(standby)
     host_helper.lock_host('compute-1')
@@ -154,4 +153,4 @@ def test_host_cpus():
 
 
 def test_get_hosts():
-    system_helper.get_hostnames_per_personality()
+    system_helper.get_hosts_per_personality()

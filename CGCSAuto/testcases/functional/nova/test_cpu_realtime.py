@@ -1,13 +1,13 @@
 import re
 from pytest import mark, fixture, skip
 
+import keywords.host_helper
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, ImageMetadata
-from consts.cli_errs import CpuRtErr        # Do not remove this import. Used in eval()
-from keywords import nova_helper, vm_helper, host_helper, common, glance_helper, cinder_helper, system_helper, \
-    check_helper
-from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
+from consts.cli_errs import CpuRtErr  # Do not remove this import. Used in eval()
+from keywords import nova_helper, vm_helper, host_helper, common, glance_helper, cinder_helper, check_helper
+from testfixtures.fixture_resources import ResourceCleanup
 
 
 # TODO: Remove flavor spec valication tests for now due to feature unavailable upstream.
@@ -76,14 +76,14 @@ def create_rt_flavor(vcpus, cpu_pol, cpu_rt, rt_mask, shared_vcpu, fail_ok=False
 def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=None,
                                            offline_cpus=None, check_virsh_vcpusched=True):
     LOG.tc_step("Check realtime and ordinary cpu info via virsh and ps")
-    inst_name, vm_host = nova_helper.get_vm_values(vm_id, fields=[":instance_name", ":host"], strict=False)
+    inst_name, vm_host = vm_helper.get_vm_values(vm_id, fields=[":instance_name", ":host"], strict=False)
 
     with host_helper.ssh_to_host(hostname=vm_host) as host_ssh:
 
         LOG.info("------ Check vcpusched, emulatorpin, and vcpupin in virsh dumpxml")
         vcpupins, emulatorpins, vcpuscheds = host_helper.get_values_virsh_xmldump(
-                instance_name=inst_name, host_ssh=host_ssh, target_type='dict',
-                tag_paths=('cputune/vcpupin', 'cputune/emulatorpin', 'cputune/vcpusched'))
+            instance_name=inst_name, host_ssh=host_ssh, target_type='dict',
+            tag_paths=('cputune/vcpupin', 'cputune/emulatorpin', 'cputune/vcpusched'))
 
         # Each vcpu should have its own vcpupin entry in virsh dumpxml
         assert vcpus == len(vcpupins), "vcpupin entries count in virsh dumpxml is not the same as vm vcpus count"
@@ -168,7 +168,7 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
             if offline_cpus:
                 if isinstance(offline_cpus, int):
                     offline_cpus = [offline_cpus]
-                cpu = int(re.findall('(\d+)/KVM', ps_rt_comm)[0])
+                cpu = int(re.findall(r'(\d+)/KVM', ps_rt_comm)[0])
                 if cpu in offline_cpus:
                     expt_pol = 'TS'
                     expt_prio = '-'
@@ -188,7 +188,6 @@ def check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_
 
 
 def parse_rt_and_ord_cpus(vcpus, cpu_rt, cpu_rt_mask):
-
     total_cpus = list(range(vcpus))
     if cpu_rt != 'yes':
         ord_cpus = total_cpus
@@ -206,7 +205,7 @@ def parse_rt_and_ord_cpus(vcpus, cpu_rt, cpu_rt_mask):
                 else:
                     start = int(ords[0])
                     stop = int(ords[1])
-                for i in range(start, stop+1):
+                for i in range(start, stop + 1):
                     ord_cpus.append(i)
 
         rt_cpus = list(set(total_cpus) - set(ord_cpus))
@@ -217,25 +216,25 @@ def parse_rt_and_ord_cpus(vcpus, cpu_rt, cpu_rt_mask):
 @fixture(scope='module')
 def check_hosts():
     LOG.info("Get system storage backing, shared cpu, and HT configs.")
-    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
     hosts_with_shared_cpu = []
     ht_hosts = []
     for host in hosts:
         shared_cores_for_host = host_helper.get_host_cpu_cores_for_function(hostname=host, func='shared')
         if shared_cores_for_host[0] or shared_cores_for_host.get(1):
             hosts_with_shared_cpu.append(host)
-        if system_helper.is_hyperthreading_enabled(host):
+        if host_helper.is_host_hyperthreaded(host):
             ht_hosts.append(host)
     return storage_backing, hosts_with_shared_cpu, ht_hosts
 
 
 @mark.parametrize(('vcpus', 'cpu_rt', 'rt_mask', 'rt_source', 'shared_vcpu', 'numa_nodes', 'cpu_thread'), [
-    (3, None, '^0', 'flavor', None, None, 'prefer'),   # min_vcpu deprecated
-    (4, 'yes', '^0', 'favor', None, None, 'require'),     # numa_nodes deprecated
+    (3, None, '^0', 'flavor', None, None, 'prefer'),  # min_vcpu deprecated
+    (4, 'yes', '^0', 'favor', None, None, 'require'),  # numa_nodes deprecated
     #   (6, 'yes', '^2-3', 'flavor', None, 1, 'isolate'),
-    (6, 'yes', '^2-3', 'flavor', None, None, 'isolate'),     # tmp. numa nodes deprecated
+    (6, 'yes', '^2-3', 'flavor', None, None, 'isolate'),  # tmp. numa nodes deprecated
     (2, 'yes', '^1', 'flavor', 1, None, None),
-    (3, 'yes', '^0-1', 'image', None, None, None),    # Deprecated - vcpu
+    (3, 'yes', '^0-1', 'image', None, None, None),  # Deprecated - vcpu
     # (4, 'no', '^0-2', 'image', 0, 2, None),     # numa_nodes deprecated
     (3, 'yes', '^1-2', 'image', None, None, 'isolate'),
     (4, 'no', '^0-2', 'flavor', 2, None, None),
@@ -305,7 +304,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
     expt_rt_cpus, expt_ord_cpus = parse_rt_and_ord_cpus(vcpus=vcpus, cpu_rt=cpu_rt, cpu_rt_mask=rt_mask)
 
     check_rt_and_ord_cpus_via_virsh_and_ps(vm_id, vcpus, expt_rt_cpus, expt_ord_cpus, shared_vcpu=shared_vcpu)
-    vm_host = nova_helper.get_vm_host(vm_id)
+    vm_host = vm_helper.get_vm_host(vm_id)
     if shared_vcpu:
         assert vm_host in hosts_with_shared_cpu
 
@@ -332,7 +331,7 @@ def test_cpu_realtime_vm_actions(vcpus, cpu_rt, rt_mask, rt_source, shared_vcpu,
             vm_helper.perform_action_on_vm(vm_id, action=action, **kwargs)
 
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        vm_host_post_action = nova_helper.get_vm_host(vm_id)
+        vm_host_post_action = vm_helper.get_vm_host(vm_id)
         if shared_vcpu:
             assert vm_host_post_action in hosts_with_shared_cpu
 

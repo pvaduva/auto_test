@@ -7,7 +7,7 @@ from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
-from consts.cgcs import AppStatus, Prompt, EventLogID
+from consts.cgcs import AppStatus, Prompt, EventLogID, Container
 from consts.filepaths import TiSPath
 from keywords import system_helper, host_helper
 
@@ -29,7 +29,7 @@ def exec_helm_upload_cmd(tarball, repo=None, timeout=120, con_ssh=None, fail_ok=
         prompts.remove(pw_prompt)
         con_ssh.expect(prompts, timeout=timeout, searchwindowsize=100, fail_ok=fail_ok)
 
-    code, output = con_ssh._process_exec_result(cmd, rm_date=True, get_exit_code=True)
+    code, output = con_ssh._process_exec_result(rm_date=True, get_exit_code=True)
     if code != 0 and not fail_ok:
         raise exceptions.SSHExecCommandFailed("Non-zero return code for cmd: {}. Output: {}".
                                               format(cmd, output))
@@ -73,7 +73,7 @@ def upload_helm_charts(tar_file, repo=None, delete_first=False, con_ssh=None, ti
     file_path = os.path.join(helm_dir, repo, os.path.basename(tar_file))
     current_host = con_ssh.get_hostname()
     controllers = [current_host]
-    if not system_helper.is_simplex(con_ssh=con_ssh):
+    if not system_helper.is_aio_simplex(con_ssh=con_ssh):
         con_name = 'controller-1' if controllers[0] == 'controller-0' else 'controller-0'
         controllers.append(con_name)
 
@@ -96,7 +96,7 @@ def upload_helm_charts(tar_file, repo=None, delete_first=False, con_ssh=None, ti
 
 
 def upload_app(tar_file, app_name=None, app_version=None, check_first=True, fail_ok=False, uploaded_timeout=300,
-               con_ssh=None, auth_info=Tenant.get('admin')):
+               con_ssh=None, auth_info=Tenant.get('admin_platform')):
     """
     Upload an application via 'system application-upload'
     Args:
@@ -112,7 +112,7 @@ def upload_app(tar_file, app_name=None, app_version=None, check_first=True, fail
     Returns:
 
     """
-    if check_first and get_apps_values(apps=app_name, con_ssh=con_ssh, auth_info=auth_info)[0]:
+    if check_first and get_apps(application=app_name, con_ssh=con_ssh, auth_info=auth_info):
         msg = '{} already exists. Do nothing.'.format(app_name)
         LOG.info(msg)
         return -1, msg
@@ -123,8 +123,7 @@ def upload_app(tar_file, app_name=None, app_version=None, check_first=True, fail
     if app_version:
         args += '-v {} '.format(app_version)
     args = '{}{}'.format(args, tar_file)
-    code, output = cli.system('application-upload', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_code=True)
+    code, output = cli.system('application-upload', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     if code > 0:
         return 1, output
@@ -139,56 +138,39 @@ def upload_app(tar_file, app_name=None, app_version=None, check_first=True, fail
     return 0, msg
 
 
-def get_apps_values(apps='all', rtn_vals=('status',), con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False,
-                    use_telnet=False, con_telnet=None):
+def get_apps(field='status', application=None, con_ssh=None, auth_info=Tenant.get('admin_platform'),
+             rtn_dict=False, use_telnet=False, con_telnet=None, **kwargs):
     """
     Get applications values for give apps and fields via system application-list
     Args:
-        apps (str|list|tuple):
-        rtn_vals (str|list|tuple):
+        application (str|list|tuple):
+        field (str|list|tuple):
         con_ssh:
         auth_info:
         rtn_dict:
         use_telnet
         con_telnet
+        **kwargs: extra filters other than application
 
     Returns (list|dict):
         list of list, or
         dict with app name(str) as key and values(list) for given fields for each app as value
 
     """
-    if isinstance(rtn_vals, str):
-        rtn_vals = [rtn_vals]
-    if isinstance(apps, str):
-        apps = [apps]
-
     table_ = table_parser.table(cli.system('application-list', ssh_client=con_ssh, auth_info=auth_info,
-                                           use_telnet=use_telnet, con_telnet=con_telnet))
-    if not table_['values']:
-        return {app: None for app in apps} if rtn_dict else [None]*len(apps)
+                                           use_telnet=use_telnet, con_telnet=con_telnet)[1])
+    if application:
+        kwargs['application'] = application
 
-    if apps == ['all']:
-        apps = table_parser.get_column(table_, 'application')
-
-    table_ = table_parser.row_dict_table(table_, key_header='application', lower_case=True)
-    apps_vals = []
-    for app in apps:
-        vals_dict = table_.get(app.lower(), None)
-        vals = [vals_dict[header.lower()] for header in rtn_vals] if vals_dict else None
-        apps_vals.append(vals)
-
-    if rtn_dict:
-        apps_vals = {apps[i]: apps_vals[i] for i in range(len(apps))}
-
-    return apps_vals
+    return table_parser.get_multi_values(table_, fields=field, rtn_dict=rtn_dict, zip_values=True, **kwargs)
 
 
-def get_app_show_values(app_name, fields, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_app_values(app_name, fields, con_ssh=None, auth_info=Tenant.get('admin_platform')):
     """
     Get values from system application-show
     Args:
         app_name:
-        fields:
+        fields (str|list|tuple):
         con_ssh:
         auth_info:
 
@@ -198,14 +180,14 @@ def get_app_show_values(app_name, fields, con_ssh=None, auth_info=Tenant.get('ad
     if isinstance(fields, str):
         fields = [fields]
 
-    table_ = table_parser.table(cli.system('application-show', app_name, ssh_client=con_ssh, auth_info=auth_info),
+    table_ = table_parser.table(cli.system('application-show', app_name, ssh_client=con_ssh, auth_info=auth_info)[1],
                                 combine_multiline_entry=True)
-    values = [table_parser.get_value_two_col_table(table_, field=field) for field in fields]
+    values = table_parser.get_multi_values_two_col_table(table_, fields=fields)
     return values
 
 
 def wait_for_apps_status(apps, status, timeout=300, check_interval=5, fail_ok=False, con_ssh=None,
-                         auth_info=Tenant.get('admin')):
+                         auth_info=Tenant.get('admin_platform')):
     """
     Wait for applications to reach expected status via system application-list
     Args:
@@ -217,9 +199,10 @@ def wait_for_apps_status(apps, status, timeout=300, check_interval=5, fail_ok=Fa
         con_ssh:
         auth_info:
 
-    Returns:
+    Returns (tuple):
 
     """
+    status = '' if not status else status
     if isinstance(apps, str):
         apps = [apps]
     apps_to_check = list(apps)
@@ -228,17 +211,16 @@ def wait_for_apps_status(apps, status, timeout=300, check_interval=5, fail_ok=Fa
 
     LOG.info("Wait for {} application(s) to reach status: {}".format(apps, status))
     while time.time() < end_time:
-        apps_status = get_apps_values(apps=apps_to_check, rtn_vals='status', con_ssh=con_ssh, auth_info=auth_info)
+        apps_status = get_apps(application=apps_to_check, field=('application', 'status'), con_ssh=con_ssh,
+                               auth_info=auth_info)
+        apps_status = {item[0]: item[1] for item in apps_status if item}
+
         checked = []
-        for i in range(len(apps_to_check)):
-            app = apps_to_check[i]
-            current_app_status = apps_status[i]
-            if current_app_status:
-                current_app_status = current_app_status[0]
+        for app in apps_to_check:
+            current_app_status = apps_status.get(app, '')
             if current_app_status == status:
                 checked.append(app)
-            elif (status and current_app_status.endswith('ed')) or \
-                    (not status and current_app_status == AppStatus.DELETE_FAILED):
+            elif current_app_status.endswith('ed'):
                 check_failed.append(app)
                 checked.append(app)
 
@@ -266,7 +248,7 @@ def wait_for_apps_status(apps, status, timeout=300, check_interval=5, fail_ok=Fa
 
 
 def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=300, check_interval=10,
-              wait_for_alarm_gone=True, con_ssh=None, auth_info=Tenant.get('admin')):
+              wait_for_alarm_gone=True, con_ssh=None, auth_info=Tenant.get('admin_platform')):
     """
     Apply/Re-apply application via system application-apply. Check for status reaches 'applied'.
     Args:
@@ -287,15 +269,14 @@ def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=300, c
 
     """
     if check_first:
-        app_vals = get_apps_values(apps=app_name, con_ssh=con_ssh, auth_info=auth_info)[0]
-        if app_vals and app_vals[0] == AppStatus.APPLIED:
+        app_status = get_apps(application=app_name, field='status', con_ssh=con_ssh, auth_info=auth_info)
+        if app_status and app_status[0] == AppStatus.APPLIED:
             msg = '{} is already applied. Do nothing.'.format(app_name)
             LOG.info(msg)
             return -1, msg
 
     LOG.info("Apply application: {}".format(app_name))
-    code, output = cli.system('application-apply', app_name, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_code=True)
+    code, output = cli.system('application-apply', app_name, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -317,7 +298,7 @@ def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=300, c
 
 
 def delete_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, con_ssh=None,
-               auth_info=Tenant.get('admin')):
+               auth_info=Tenant.get('admin_platform')):
     """
     Delete an application via system application-delete. Verify application no longer listed.
     Args:
@@ -337,14 +318,13 @@ def delete_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, c
     """
 
     if check_first:
-        app_vals = get_apps_values(apps=app_name, con_ssh=con_ssh, auth_info=auth_info)[0]
+        app_vals = get_apps(application=app_name, field='status', con_ssh=con_ssh, auth_info=auth_info)
         if not app_vals:
             msg = '{} does not exist. Do nothing.'.format(app_name)
             LOG.info(msg)
             return -1, msg
 
-    code, output = cli.system('application-delete', app_name, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_code=True)
+    code, output = cli.system('application-delete', app_name, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -359,7 +339,7 @@ def delete_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, c
 
 
 def remove_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, con_ssh=None,
-               auth_info=Tenant.get('admin')):
+               auth_info=Tenant.get('admin_platform')):
     """
     Remove applied application via system application-remove. Verify it is in 'uploaded' status.
     Args:
@@ -379,14 +359,13 @@ def remove_app(app_name, check_first=True, fail_ok=False, applied_timeout=300, c
     """
 
     if check_first:
-        app_vals = get_apps_values(apps=app_name, con_ssh=con_ssh, auth_info=auth_info)[0]
+        app_vals = get_apps(application=app_name, field='status', con_ssh=con_ssh, auth_info=auth_info)
         if not app_vals or app_vals[0] in (AppStatus.UPLOADED, AppStatus.UPLOAD_FAILED):
             msg = '{} is not applied. Do nothing.'.format(app_name)
             LOG.info(msg)
             return -1, msg
 
-    code, output = cli.system('application-remove', app_name, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_code=True)
+    code, output = cli.system('application-remove', app_name, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -445,7 +424,7 @@ def pull_docker_image(name, tag=None, digest=None, con_ssh=None, timeout=300, fa
     if code != 0:
         return 1, out
 
-    image_id = get_docker_image_values(repo=name, tag=tag, rtn_vals='IMAGE ID', con_ssh=con_ssh, fail_ok=False)[0]
+    image_id = get_docker_images(repo=name, tag=tag, field='IMAGE ID', con_ssh=con_ssh, fail_ok=False)[0]
     LOG.info('docker image {} successfully pulled. ID: {}'.format(args, image_id))
 
     return 0, image_id
@@ -469,10 +448,9 @@ def login_to_docker(registry=None, user=None, password=None, con_ssh=None, fail_
     if not user:
         user = 'admin'
     if not password:
-        password = Tenant.get('admin').get('password')
-
+        password = Tenant.get('admin_platform').get('password')
     if not registry:
-        registry = get_docker_reg_addr(con_ssh=con_ssh)
+        registry = Container.LOCAL_DOCKER_REG
 
     args = '-u {} -p {} {}'.format(user, password, registry)
     LOG.info("Login to docker registry {}".format(registry))
@@ -548,7 +526,10 @@ def tag_docker_image(source_image, target_name, source_tag=None, target_tag=None
     if code != 0:
         return 1, out
 
-    get_docker_image_values(repo=target_name, tag=target_tag, con_ssh=con_ssh, fail_ok=False)
+    if not get_docker_images(repo=target_name, tag=target_tag, con_ssh=con_ssh, fail_ok=False):
+        raise exceptions.ContainerError("Docker image {} is not listed after tagging {}".format(
+            target_name, source_image))
+
     LOG.info('docker image {} successfully tagged as {}.'.format(source_args, target_args))
     return 0, target_args
 
@@ -580,22 +561,24 @@ def remove_docker_images(images, force=False, con_ssh=None, timeout=300, fail_ok
     return code, out
 
 
-def get_docker_image_values(repo, tag=None, rtn_vals=('IMAGE ID',), con_ssh=None, fail_ok=False):
+def get_docker_images(repo=None, tag=None, field='IMAGE ID', con_ssh=None, fail_ok=False):
     """
     get values for given docker image via 'docker image ls <repo>'
     Args:
         repo (str):
         tag (str|None):
-        rtn_vals:
+        field (str|tuple|list):
         con_ssh:
         fail_ok
 
-    Returns (list):
+    Returns (list|None): return None if no docker images returned at all due to cmd failure
 
     """
-    args = repo
-    if tag:
-        args += ':{}'.format(tag)
+    args = None
+    if repo:
+        args = repo
+        if tag:
+            args += ':{}'.format(tag)
     code, output = exec_docker_cmd(sub_cmd='image ls', args=args, fail_ok=fail_ok, con_ssh=con_ssh)
     if code != 0:
         return None
@@ -607,21 +590,18 @@ def get_docker_image_values(repo, tag=None, rtn_vals=('IMAGE ID',), con_ssh=None
         else:
             raise exceptions.ContainerError("docker image {} does not exist".format(args))
 
-    if isinstance(rtn_vals, str):
-        rtn_vals = (rtn_vals, )
-
-    values = []
-    for header in rtn_vals:
-        values.append(table_parser.get_column(table_, header)[0])
+    values = table_parser.get_multi_values(table_, fields=field, zip_values=True)
 
     return values
 
 
-def get_helm_overrides(header='overrides namespaces', charts=None, auth_info=Tenant.get('admin'), con_ssh=None):
+def get_helm_overrides(field='overrides namespaces', app_name='stx-openstack', charts=None,
+                       auth_info=Tenant.get('admin_platform'), con_ssh=None):
     """
     Get helm overrides values via system helm-override-list
     Args:
-        header (str):
+        field (str):
+        app_name
         charts (None|str|list|tuple):
         auth_info:
         con_ssh:
@@ -629,25 +609,25 @@ def get_helm_overrides(header='overrides namespaces', charts=None, auth_info=Ten
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.system('helm-override-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.system('helm-override-list', app_name, ssh_client=con_ssh, auth_info=auth_info)[1])
 
     if charts:
         table_ = table_parser.filter_table(table_, **{'chart name': charts})
 
-    vals = table_parser.get_column(table_, header)
-    if header == 'overrides namespaces':
-        vals = [eval(val) for val in vals]
+    vals = table_parser.get_multi_values(table_, fields=field, evaluate=True)
 
     return vals
 
 
-def get_helm_override_info(chart, namespace, fields=('combined_overrides', ), auth_info=Tenant.get('admin'),
-                           con_ssh=None):
+def get_helm_override_values(chart, namespace, app_name='stx-openstack', fields=('combined_overrides',),
+                             auth_info=Tenant.get('admin_platform'),
+                             con_ssh=None):
     """
     Get helm-override values for given chart via system helm-override-show
     Args:
         chart (str):
         namespace (str):
+        app_name (str)
         fields (str|tuple|list):
         auth_info:
         con_ssh:
@@ -655,8 +635,8 @@ def get_helm_override_info(chart, namespace, fields=('combined_overrides', ), au
     Returns (list): list of parsed yaml formatted output. e.g., list of dict, list of list, list of str
 
     """
-    args = '{} {}'.format(chart, namespace)
-    table_ = table_parser.table(cli.system('helm-override-show', args, ssh_client=con_ssh, auth_info=auth_info),
+    args = '{} {} {}'.format(app_name, chart, namespace)
+    table_ = table_parser.table(cli.system('helm-override-show', args, ssh_client=con_ssh, auth_info=auth_info)[1],
                                 rstrip_value=True)
 
     if isinstance(fields, str):
@@ -677,13 +657,15 @@ def __convert_kv(k, v):
     return __convert_kv(new_key, {new_val: v})
 
 
-def update_helm_override(chart, namespace, yaml_file=None, kv_pairs=None, reset_vals=False, reuse_vals=False,
-                         auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
+def update_helm_override(chart, namespace, app_name='stx-openstack', yaml_file=None, kv_pairs=None,
+                         reset_vals=False, reuse_vals=False, auth_info=Tenant.get('admin_platform'),
+                         con_ssh=None, fail_ok=False):
     """
     Update helm_override values for given chart
     Args:
         chart:
         namespace:
+        app_name
         yaml_file:
         kv_pairs:
         reset_vals:
@@ -697,7 +679,7 @@ def update_helm_override(chart, namespace, yaml_file=None, kv_pairs=None, reset_
         (1, <std_err>)  #  system helm-override-update cmd rejected
 
     """
-    args = '{} {}'.format(chart, namespace)
+    args = '{} {} {}'.format(app_name, chart, namespace)
     if reset_vals:
         args = '--reset-values {}'.format(args)
     if reuse_vals:
@@ -708,8 +690,7 @@ def update_helm_override(chart, namespace, yaml_file=None, kv_pairs=None, reset_
         cmd_overrides = ','.join(['{}={}'.format(k, v) for k, v in kv_pairs.items()])
         args = '--set {} {}'.format(cmd_overrides, args)
 
-    code, output = cli.system('helm-override-update', args, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True,
-                              fail_ok=fail_ok)
+    code, output = cli.system('helm-override-update', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code != 0:
         return 1, output
 
@@ -723,8 +704,8 @@ def update_helm_override(chart, namespace, yaml_file=None, kv_pairs=None, reset_
     return 0, overrides
 
 
-def is_stx_openstack_deployed(applied_only=False, con_ssh=None, auth_info=Tenant.get('admin'), force_check=False,
-                              use_telnet=False, con_telnet=None):
+def is_stx_openstack_deployed(applied_only=False, con_ssh=None, auth_info=Tenant.get('admin_platform'),
+                              force_check=False, use_telnet=False, con_telnet=None):
     """
     Whether stx-openstack application  is deployed.
     Args:
@@ -742,8 +723,10 @@ def is_stx_openstack_deployed(applied_only=False, con_ssh=None, auth_info=Tenant
     if not applied_only and not force_check and openstack_deployed is not None:
         return openstack_deployed
 
-    openstack_status = get_apps_values(apps='stx-openstack', con_ssh=con_ssh, auth_info=auth_info,
-                                       use_telnet=use_telnet, con_telnet=con_telnet)[0]
+    openstack_status = get_apps(application='stx-openstack', field='status', con_ssh=con_ssh, auth_info=auth_info,
+                                use_telnet=use_telnet, con_telnet=con_telnet)
+
+    LOG.info("{}".format(openstack_status))
 
     res = False
     if openstack_status and 'appl' in openstack_status[0].lower():

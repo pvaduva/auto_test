@@ -35,7 +35,7 @@ def test_reconnect_after_swact():
     ssh_client.connect(timeout=3, retry=True, prompt=ssh.CONTROLLER_PROMPT)
     ssh_client.send("date")
     ssh_client.expect()
-    assert ssh_client._is_connected()
+    assert ssh_client.is_connected()
     LOG.tc_func_end()
 
 
@@ -94,8 +94,8 @@ def test_ssh_from_ssh():
     assert exit_code == 127
     assert 'command not found' in output
     compute_ssh.close()
-    assert not compute_ssh._is_connected()
-    assert ssh_client._is_connected()
+    assert not compute_ssh.is_connected()
+    assert ssh_client.is_connected()
     LOG.tc_func_end()
 
 

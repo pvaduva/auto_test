@@ -5,13 +5,13 @@ import re
 import threading
 import time
 
-from pytest import mark, fixture, skip
+from pytest import mark, fixture, skip, param
 
 from consts.cgcs import MULTI_REGION_MAP
 from consts.auth import HostLinuxCreds
 from consts.proj_vars import ProjVar
 from consts.timeout import HostTimeout
-from keywords import mtc_helper, system_helper, host_helper
+from keywords import pm_helper, system_helper, host_helper
 from utils import cli, table_parser
 from utils.clients.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
@@ -31,7 +31,7 @@ DEF_PROCESS_PID_FILE_PATH = r'/var/run/{}.pid'
 
 INTERVAL_BETWEEN_SWACT = 300 + 10
 
-IS_SIMPLEX = system_helper.is_simplex()
+IS_SIMPLEX = system_helper.is_aio_simplex()
 
 SKIP_PROCESS_LIST = ['postgres', 'open-ldap', 'lighttpd', 'ceph-rest-api', 'horizon', 'patch-alarm-manager', 'ntpd']
 
@@ -450,7 +450,7 @@ class MonitoredProcess:
             pid = -1
             process_info = None
             for _ in range(3):
-                process_info = tuple(mtc_helper.get_process_from_sm(self.name, con_ssh=self.con_ssh))
+                process_info = tuple(pm_helper.get_process_from_sm(self.name, con_ssh=self.con_ssh))
                 pid = process_info[0]
                 if pid != -1 and len(process_info) != 5:
                     break
@@ -473,7 +473,7 @@ class MonitoredProcess:
 
         elif self.process_type == 'pmon':
             self.process = self.name
-            settings = mtc_helper.get_pmon_process_info(self.name, self.host, self.conf_file, con_ssh=self.con_ssh)
+            settings = pm_helper.get_pmon_process_info(self.name, self.host, self.conf_file, con_ssh=self.con_ssh)
             if not settings:
                 LOG.warn('Cannot read conf file for process:{} on host:{}, conf-file {} does not exist?'.format(
                     self.name, self.host, self.con_ssh))
@@ -638,8 +638,8 @@ class MonitoredProcess:
         return {}
 
     def matched_pmon_event(self, process, event, host, process_type, severity, impact='', headers=None):
-        event_log_id = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id']
-        reason_pattern, entity_id_pattern = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type][severity][0:2]
+        event_log_id = pm_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id']
+        reason_pattern, entity_id_pattern = pm_helper.KILL_PROC_EVENT_FORMAT[process_type][severity][0:2]
 
         matched_event = {}
         event_log_id_index = list(headers).index('Event Log ID')
@@ -690,11 +690,11 @@ class MonitoredProcess:
     def wait_for_pmon_process_events(self, service, host, target_status, expecting=True, severity='major',
                                      last_events=None, process_type='pmon', timeout=60, interval=3, con_ssh=None):
 
-        if process_type not in mtc_helper.KILL_PROC_EVENT_FORMAT:
+        if process_type not in pm_helper.KILL_PROC_EVENT_FORMAT:
             LOG.error('unknown type of process:{}'.format(process_type))
 
-        event_log_id = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id']
-        reason_pattern, entity_id_pattern = mtc_helper.KILL_PROC_EVENT_FORMAT[process_type][severity][0:2]
+        event_log_id = pm_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id']
+        reason_pattern, entity_id_pattern = pm_helper.KILL_PROC_EVENT_FORMAT[process_type][severity][0:2]
 
         start_time = None
         if last_events and last_events.get('values', None):
@@ -764,10 +764,13 @@ class MonitoredProcess:
 
     def kill_pmon_process_and_verify_impact(self, name, impact, process_type, host, severity='major', pid_file='',
                                             retries=2, interval=1, debounce=20, wait_recover=True, con_ssh=None):
+        if not con_ssh:
+            con_ssh = ControllerClient.get_active_controller()
+
         LOG.debug('Kill process and verify system behavior for PMON process:{}, impact={}, process_type={}'.format(
             name, impact, process_type))
         last_events = system_helper.get_events_table(
-            event_log_id=mtc_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id'],
+            event_log_id=pm_helper.KILL_PROC_EVENT_FORMAT[process_type]['event_id'],
             limit=2, con_ssh=con_ssh)
         if not pid_file:
             LOG.error('No pid-file provided')
@@ -867,7 +870,7 @@ class MonitoredProcess:
             sleep_time = (retries + 1) * wait_after_each_kill
             if IS_SIMPLEX and expected['operational'] == 'Disabled':
                 LOG.info("Simplex system - check ssh disconnected")
-                reached = host_helper.wait_for_ssh_disconnect(fail_ok=True, timeout=sleep_time + 300)
+                reached = con_ssh.wait_for_disconnect(fail_ok=True, timeout=sleep_time + 300)
 
                 if reached:
                     host_helper.recover_simplex(fail_ok=True)
@@ -879,8 +882,8 @@ class MonitoredProcess:
 
                 LOG.info("After process:{} been killed {} times, wait for {} to reach: {}".format(name, retries,
                                                                                                   host, expected))
-                reached = host_helper.wait_for_host_values(host, timeout=wait_time_for_host_status, con_ssh=con_ssh,
-                                                           fail_ok=True, **expected)
+                reached = system_helper.wait_for_host_values(host, timeout=wait_time_for_host_status, con_ssh=con_ssh,
+                                                                      fail_ok=True, **expected)
 
             if not reached:
                 LOG.warn('Host:{} failed to get into status:{} after process:{} been killed {} times'.format(
@@ -911,7 +914,7 @@ class MonitoredProcess:
                         wait_time += 60
 
                     expected = {'operational': 'enabled', 'availability': 'available'}
-                    reached = host_helper.wait_for_host_values(
+                    reached = system_helper.wait_for_host_values(
                         host, timeout=wait_time, con_ssh=con_ssh, fail_ok=True, **expected)
                     if not reached:
                         LOG.error('host {} did not recoverd to enabled-available status from status:{} '
@@ -986,7 +989,7 @@ class MonitoredProcess:
                                                             interval=interval, debounce=debounce, con_ssh=con_ssh)
 
         else:
-            pid, host = mtc_helper.kill_sm_process_and_verify_impact(
+            pid, host = pm_helper.kill_sm_process_and_verify_impact(
                 name, cmd=cmd, pid_file=self.pid_file, impact=impact, host=host,
                 process_type=process_type, retries=retries, interval=interval/3,
                 on_active_controller=on_active_controller)
@@ -1008,99 +1011,63 @@ class MonitoredProcess:
 
 
 @mark.parametrize('process_name', [
-    mark.p1('sm'),
+    param('sm', marks=mark.p1),
     # TODO CGTS-6451
-   # mark.p1('rmond'),
-    mark.p0('dockerd'),
-    mark.p0('kubelet'),
-    mark.p1('fsmond'),
-    mark.priorities('p1', 'sx_nightly')('hbsClient'),
-    mark.p1('mtcClient'),
-    mark.p1('mtcalarmd'),
-    mark.p1('sm-api'),
-    mark.p1('sm-watchdog'),
-    mark.p1('sysinv-agent'),
-    mark.p1('sw-patch-controller-daemon'),
-    mark.p1('sw-patch-agent'),
-    mark.p1('acpid'),
-    mark.p1('ceilometer-polling'),
-    mark.p1('mtclogd'),
-    mark.p1('ntpd'),
-    mark.p1('sm-eru'),
-    mark.p1('sshd'),
-    mark.p1('syslog-ng'),
-    mark.p1('io-monitor-manager'),
-    mark.p1('logmgmt'),
-    mark.p1('guestServer'),
-    mark.p1('host_agent'),
-   # mark.p1('libvirtd'),
-    mark.p1('neutron-avr-agent'),
-    mark.p1('neutron-avs-agent'),
-    mark.p1('neutron-dhcp-agent'),
-    mark.p1('neutron-metadata-agent'),
-    mark.p1('neutron-sriov-nic-agent'),
-   # mark.p1('nova-compute'),
-    mark.p1('vswitch'),
+    # param('rmond'),
+    param('dockerd', marks=mark.nightly),
+    param('kubelet', marks=mark.nightly),
+    param('fsmond', marks=mark.p1),
+    param('hbsClient', marks=mark.priorities('p1', 'sx_nightly')),
+    param('mtcClient', marks=mark.p1),
+    param('mtcalarmd', marks=mark.p1),
+    param('sm-api', marks=mark.p1),
+    param('sm-watchdog', marks=mark.p1),
+    param('sysinv-agent', marks=mark.p1),
+    param('sw-patch-controller-daemon', marks=mark.p1),
+    param('sw-patch-agent', marks=mark.p1),
+    param('acpid', marks=mark.p1),
+    param('ceilometer-polling', marks=mark.p1),
+    param('mtclogd', marks=mark.p1),
+    param('ntpd', marks=mark.p1),
+    param('sm-eru', marks=mark.p1),
+    param('sshd', marks=mark.p1),
+    param('syslog-ng', marks=mark.p1),
+    param('io-monitor-manager', marks=mark.p1),
+    param('logmgmt', marks=mark.p1),
+    param('guestServer', marks=mark.p1),
+    param('host_agent', marks=mark.p1),
+    # param('libvirtd', marks=mark.p1),
+    param('neutron-avr-agent', marks=mark.p1),
+    param('neutron-avs-agent', marks=mark.p1),
+    param('neutron-dhcp-agent', marks=mark.p1),
+    param('neutron-metadata-agent', marks=mark.p1),
+    param('neutron-sriov-nic-agent', marks=mark.p1),
+    param('vswitch', marks=mark.p1),
 
-    # mark.p1(('postgres')),    # Bin recommend not to test this. Whole system down when kill this.
-    # mark.p1(('rabbitmq-server')), # rabbit in SM don't test as per CGTS-6336
-    mark.p1('rabbit'),
-    mark.p1('sysinv-inv'),    # sysinv-inv in SM
-    mark.p1('sysinv-conductor'),
-    mark.p1('mtc-agent'),
-    # mark.p1('hbs-agent'),     # obsoleted
-    mark.p1('hw-mon'),
-    mark.p1('dnsmasq'),
-    mark.p1('fm-mgr'),
-    mark.p1('keystone'),
-    #mark.p1('glance-registry'),
-    # major
-   # mark.p1('glance-api'),
-  #  mark.p1('neutron-server'),
-  # mark.p1('nova-api'),
-  # mark.p1('nova-scheduler'),
-  # mark.p1('nova-conductor'),
-  # mark.p1(('nova-cert')),       # Removed in pike
- #   mark.p1('nova-console-auth'),
-  # minor
-  #  mark.p1('nova-novnc'),
-  # major
-  #  mark.p1('cinder-api'),
-  #  mark.p1('cinder-scheduler'),
-  #  mark.p1('cinder-volume'),   # retries = 32
-    # mark.p1('ceilometer-collector'),
-    # mark.p1('ceilometer-api'),
-  #  mark.p1('ceilometer-agent-notification'),
-  #  mark.p1('gnocchi-metricd'),
-  #  mark.p1('gnocchi-api'),
-   # mark.p1('ceilometer-api'),
-   # mark.priorities('p1', 'sx_nightly')('heat-api'),
-   # mark.p1('heat-api-cfn'),
-   # mark.p1('heat-api-cloudwatch'),
-   # mark.p1('heat-engine'),
-    mark.p1('snmp'),
+    # param(('postgres')),    # Bin recommend not to test this. Whole system down when kill this.
+    # param(('rabbitmq-server')), # rabbit in SM don't test as per CGTS-6336
+    param('rabbit', marks=mark.p1),
+    param('sysinv-inv', marks=mark.p1),    # sysinv-inv in SM
+    param('sysinv-conductor', marks=mark.p1),
+    param('mtc-agent', marks=mark.p1),
+    # param('hbs-agent', marks=mark.p1),     # obsoleted
+    param('hw-mon', marks=mark.p1),
+    param('dnsmasq', marks=mark.p1),
+    param('fm-mgr', marks=mark.p1),
+    param('keystone', marks=mark.p1),
+    param('snmp', marks=mark.p1),
 
     # TODO CGTS-6426
-    # mark.p1(('open-ldap')),, active/active
-    # mark.p1(('lighttpd')),, active/active
-    # mark.p1('horizon'),, active/active
-    # mark.p1(('ceph-rest-api')),
-    mark.p1('ceph-manager'),
+    # param(('open-ldap', marks=mark.p1)),, active/active
+    # param(('lighttpd', marks=mark.p1)),, active/active
+    # param('horizon', marks=mark.p1),, active/active
+    # param(('ceph-rest-api', marks=mark.p1)),
+    param('ceph-manager', marks=mark.p1),
+    # param(('patch-alarm-manager', marks=mark.p1)),     ???
 
-    # mark.p1(('gunicorn')), changed to horizon
-    # mark.p1(('patch-alarm-manager')),     ???
-
- #   mark.p1('vim-api'),
- #   mark.p1('vim'),
     # minor
- #   mark.p1('vim-webserver'),
-    mark.p1('guest-agent'),
- #  mark.p1('nova-api-proxy'),
-    mark.p1('haproxy'),
- #   mark.p1('aodh-api'),
- #   mark.p1('aodh-evaluator'),
- #   mark.p1('aodh-listener'),
- #   mark.p1('aodh-notifier'),
+    param('guest-agent', marks=mark.p3),
+    param('haproxy', marks=mark.p3),
 ])
 def test_process_monitoring(process_name, con_ssh=None):
     """
@@ -1156,7 +1123,7 @@ def test_process_monitoring(process_name, con_ssh=None):
     else:
         code = proc.kill_process_and_verify_impact(con_ssh=con_ssh)
 
-        hosts = table_parser.table(cli.system('host-list', ssh_client=con_ssh))
+        hosts = table_parser.table(cli.system('host-list', ssh_client=con_ssh)[1])
         LOG.debug('hosts:\n{}'.format(hosts))
 
         assert 0 == code, \
@@ -1187,7 +1154,7 @@ def _monitor_process(process, total_time, interval=5):
     stop_time = time.time() + total_time
 
     while time.time() < stop_time:
-        cur_pid, proc_name = mtc_helper.get_process_info(
+        cur_pid, proc_name = pm_helper.get_process_info(
             name, cmd=cmd, host=host, process_type=process_type, pid_file=pid_file, con_ssh=con_ssh)[0:2]
 
         _final_processes_status[name].update({'used_pids': used_pids})
@@ -1202,7 +1169,7 @@ def _monitor_process(process, total_time, interval=5):
         else:
             LOG.info('OK, PID not changed:{} for process:{}'.format(pid, name))
 
-        running, msg = mtc_helper.is_process_running(cur_pid, host, con_ssh=con_ssh)
+        running, msg = pm_helper.is_process_running(cur_pid, host, con_ssh=con_ssh)
 
         if not running:
             died_pids.append(cur_pid)

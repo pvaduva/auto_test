@@ -31,7 +31,7 @@ def _test_system_alarm_on_host_lock():
              "a table consist of correct items")
 
     # Get and save the list of existing alarms present in the system
-    res, out = cli.fm('alarm-list', rtn_code=True)
+    res, out = cli.fm('alarm-list')
     alarm_list = table_parser.table(out)
 
     if len(alarm_list['values']) == 0:
@@ -67,7 +67,7 @@ def _test_system_alarm_on_host_lock():
     # Get the compute
         LOG.info("Lock compute and wait 30 seconds")
     host = 'compute-1'
-    if system_helper.is_two_node_cpe():
+    if system_helper.is_aio_duplex():
         host = system_helper.get_standby_controller_name()
 
     HostsToRecover.add(host, scope='function')
@@ -76,7 +76,7 @@ def _test_system_alarm_on_host_lock():
 
     # Verify the new alarm is present in the historical alarm and active alarm lists
     LOG.info("Verify alarm-list command returns list of active alarms")
-    res, out = cli.fm('alarm-list', rtn_code=True)
+    res, out = cli.fm('alarm-list')
     new_active_alarm_table = table_parser.table(out)
 
     if len(alarm_list['values']) == 0:
@@ -127,7 +127,7 @@ def _test_system_alarm_on_host_lock():
 
     #Verify the alarm disappears from the active alarm table
     LOG.info("Verify alarm-list command returns list of active alarms")
-    res, out = cli.fm('alarm-list', rtn_code=True)
+    res, out = cli.fm('alarm-list')
     new_active_alarm_table = table_parser.table(out)
 
     active_alarms = []

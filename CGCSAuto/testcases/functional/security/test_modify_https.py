@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 
 @fixture(scope='module')
 def https_config(request):
-    is_https = keystone_helper.is_https_lab()
+    is_https = keystone_helper.is_https_enabled()
 
     def _revert():
         if not is_https:

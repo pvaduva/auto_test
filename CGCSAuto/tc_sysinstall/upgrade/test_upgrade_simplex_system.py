@@ -3,7 +3,7 @@ import time
 from utils.tis_log import LOG
 from keywords import system_helper, install_helper, common, upgrade_helper, cinder_helper
 from consts.auth import Tenant
-from consts.proj_vars import ProjVar, BackupVars
+from consts.proj_vars import BackupVars
 from consts.auth import SvcCgcsAuto
 from consts.build_server import Server
 from consts.cgcs import BACKUP_FILE_DATE_STR, PREFIX_BACKUP_FILE
@@ -39,7 +39,7 @@ def test_system_upgrade_simplex(upgrade_setup, check_system_health_query_upgrade
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']
 
-    if not system_helper.is_simplex():
+    if not system_helper.is_aio_simplex():
         assert False, "This lab is not simplex to start upgrade"
     force = False
     controller0 = lab['controller-0']
@@ -47,7 +47,7 @@ def test_system_upgrade_simplex(upgrade_setup, check_system_health_query_upgrade
     backup_dest_path = BackupVars.get_backup_var('BACKUP_DEST_PATH')
     backup_dest_full_path = '{}/{}/'.format(backup_dest_path, lab['short_name'])
     date = time.strftime(BACKUP_FILE_DATE_STR)
-    build_id = ProjVar.get_var('BUILD_ID')
+    build_id = system_helper.get_build_info()['BUILD_ID']
     lab_system_name = lab['name']
     backup_file_name = "{}{}_{}_{}".format(PREFIX_BACKUP_FILE, date, build_id, lab_system_name)
     print('Backup_File_Name', backup_file_name)
@@ -81,7 +81,7 @@ def test_system_upgrade_simplex(upgrade_setup, check_system_health_query_upgrade
         LOG.info("System health indicate minor alarms; using --force option to start upgrade......")
         force = True
 
-    vol_ids = cinder_helper.get_volumes(auth_info=Tenant.ADMIN)
+    vol_ids = cinder_helper.get_volumes(auth_info=Tenant.get('admin'))
     if len(vol_ids) > 0:
         LOG.info("Exporting cinder volumes: {}".format(vol_ids))
         exported = install_helper.export_cinder_volumes(backup_dest='local', backup_dest_path=backup_dest_full_path,

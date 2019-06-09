@@ -13,7 +13,7 @@ from consts.cgcs import Networks, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RA
 from consts.filepaths import UserData, WRSROOT_HOME
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
-from keywords import common, keystone_helper, host_helper, system_helper, nova_helper
+from keywords import common, keystone_helper, host_helper, system_helper, vm_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import NATBoxClient, get_cli_client, ControllerClient
@@ -53,7 +53,7 @@ def get_ip_address_str(ip=None):
         return None
 
 
-def create_network(name=None, shared=None, tenant_name=None, network_type=None, segmentation_id=None, qos=None,
+def create_network(name=None, shared=None, project=None, network_type=None, segmentation_id=None, qos=None,
                    physical_network=None, vlan_transparent=None, port_security=None, avail_zone=None, external=None,
                    default=None, tags=None, fail_ok=False, auth_info=None, con_ssh=None, cleanup=None):
 
@@ -63,7 +63,7 @@ def create_network(name=None, shared=None, tenant_name=None, network_type=None, 
     Args:
         name (str): name of the network
         shared (bool)
-        tenant_name: such as tenant1, tenant2.
+        project: such as tenant1, tenant2.
         network_type (str): The physical mechanism by which the virtual network is implemented
         segmentation_id (None|str): w VLAN ID for VLAN networks
         qos
@@ -87,8 +87,8 @@ def create_network(name=None, shared=None, tenant_name=None, network_type=None, 
         name = common.get_unique_name(name_str='net')
 
     args = name
-    if tenant_name is not None:
-        tenant_id = keystone_helper.get_tenant_ids(tenant_name, con_ssh=con_ssh)[0]
+    if project is not None:
+        tenant_id = keystone_helper.get_projects(field='ID', name=project, con_ssh=con_ssh)[0]
         args += ' --project ' + tenant_id
 
     if shared is not None:
@@ -125,8 +125,7 @@ def create_network(name=None, shared=None, tenant_name=None, network_type=None, 
         args += ' --wrs-tm:qos ' + qos
 
     LOG.info("Creating network: Args: {}".format(args))
-    code, output = cli.openstack('network create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True)
+    code, output = cli.openstack('network create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     table_ = table_parser.table(output)
     net_id = table_parser.get_value_two_col_table(table_, 'id')
     if cleanup and net_id:
@@ -212,8 +211,7 @@ def create_subnet(network, name=None, subnet_range=None, gateway=None, dhcp=None
     args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True, vals_sep=','), name)
 
     LOG.info("Creating subnet for network: {}. Args: {}".format(network, args))
-    code, output = cli.openstack('subnet create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True)
+    code, output = cli.openstack('subnet create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     table_ = table_parser.table(output)
     subnet_id = table_parser.get_value_two_col_table(table_, 'id')
     if cleanup and subnet_id:
@@ -243,14 +241,13 @@ def delete_subnets(subnets, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok
 
     args = ' '.join(subnets)
     LOG.info("Deleting subnet {}".format(subnets))
-    code, output = cli.openstack('subnet delete', args, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True,
-                                 fail_ok=True)
+    code, output = cli.openstack('subnet delete', args, ssh_client=con_ssh, fail_ok=True, auth_info=auth_info)
 
     if code > 0:
         return 1, output
 
-    rtn_val = 'ID' if re.match(UUID, subnets[0]) else 'Name'
-    undeleted_subnets = list(set(subnets) & set(get_subnets(auth_info=auth_info, con_ssh=con_ssh, rtn_val=rtn_val)))
+    field = 'ID' if re.match(UUID, subnets[0]) else 'Name'
+    undeleted_subnets = list(set(subnets) & set(get_subnets(auth_info=auth_info, con_ssh=con_ssh, field=field)))
     if undeleted_subnets:
         msg = "Subnet(s) still listed in openstack subnet list after deletion: {}".format(undeleted_subnets)
         if fail_ok:
@@ -335,8 +332,8 @@ def __update_subnet(subnet, unset=False, allocation_pools=None, dns_servers=None
 
     args = '{} {}'.format(common.parse_args(args_dict=arg_dict, repeat_arg=True, vals_sep=','), subnet)
 
-    code, output = cli.openstack('subnet {}'.format(cmd), args, ssh_client=con_ssh, auth_info=auth_info,
-                                 rtn_code=True, fail_ok=fail_ok)
+    code, output = cli.openstack('subnet {}'.format(cmd), args, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
 
     if code > 0:
         return 1, output
@@ -345,7 +342,7 @@ def __update_subnet(subnet, unset=False, allocation_pools=None, dns_servers=None
     return 0, subnet
 
 
-def get_subnets(rtn_val='ID', long=False, network=None, subnet_range=None, gateway_ip=None, full_name=None,
+def get_subnets(field='ID', long=False, network=None, subnet_range=None, gateway_ip=None, full_name=None,
                 ip_version=None, dhcp=None, project=None, project_domain=None, service_types=None,
                 tags=None, any_tags=None, not_tags=None, not_any_tags=None,
                 name=None, strict=True, regex=False, auth_info=None, con_ssh=None):
@@ -353,7 +350,7 @@ def get_subnets(rtn_val='ID', long=False, network=None, subnet_range=None, gatew
     Get subnets ids based on given criteria.
 
     Args:
-        rtn_val (str)
+        field (str): header of subnet list table
         long (bool)
         network (str|None):
         subnet_range (str|None):
@@ -371,7 +368,6 @@ def get_subnets(rtn_val='ID', long=False, network=None, subnet_range=None, gatew
         name (str): name of the subnet
         strict (bool): whether to perform strict search on given name and cidr
         regex (bool): whether to use regext to search
-        rtn_val (str|tuple): header of subnet list table
         auth_info (dict):
         con_ssh (SSHClient):
 
@@ -398,21 +394,11 @@ def get_subnets(rtn_val='ID', long=False, network=None, subnet_range=None, gatew
     service_type_args = common.parse_args({'--server-type': service_types}, repeat_arg=True)
     args = ' '.join((args, service_type_args))
 
-    table_ = table_parser.table(cli.openstack('subnet list', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('subnet list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
     if name is not None:
         table_ = table_parser.filter_table(table_, strict=strict, regex=regex, name=name)
 
-    values = []
-    convert = False
-    if isinstance(rtn_val, str):
-        convert = True
-        rtn_val = [rtn_val]
-    for header in rtn_val:
-        values.append(table_parser.get_column(table_, header))
-    if convert:
-        values = values[0]
-
-    return values
+    return table_parser.get_multi_values(table_, field)
 
 
 def get_subnet_values(subnet, fields, con_ssh=None, auth_info=Tenant.get('admin')):
@@ -427,14 +413,8 @@ def get_subnet_values(subnet, fields, con_ssh=None, auth_info=Tenant.get('admin'
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.openstack('subnet show', subnet, ssh_client=con_ssh, auth_info=auth_info))
-    if isinstance(fields, str):
-        fields = (fields, )
-
-    values = []
-    for field in fields:
-        values.append(table_parser.get_value_two_col_table(table_, field))
-    return values
+    table_ = table_parser.table(cli.openstack('subnet show', subnet, ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.get_multi_values_two_col_table(table_, fields)
 
 
 def get_network_values(network, fields, strict=True, rtn_dict=False, con_ssh=None, auth_info=Tenant.get('admin')):
@@ -454,7 +434,7 @@ def get_network_values(network, fields, strict=True, rtn_dict=False, con_ssh=Non
     if isinstance(fields, str):
         fields = [fields]
 
-    table_ = table_parser.table(cli.openstack('network show', network, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('network show', network, ssh_client=con_ssh, auth_info=auth_info)[1])
     vals = []
     for field in fields:
         val = table_parser.get_value_two_col_table(table_, field, strict=strict, merge_lines=True)
@@ -465,7 +445,6 @@ def get_network_values(network, fields, strict=True, rtn_dict=False, con_ssh=Non
 
     if rtn_dict:
         return {fields[i]: vals[i] for i in range(len(fields))}
-
     return vals
 
 
@@ -542,8 +521,8 @@ def set_network(net_id, name=None, enable=None, share=None, enable_port_security
         raise ValueError("Nothing to update. Please specify at least one None value")
 
     LOG.info("Updating network {} with: {}".format(net_id, args_str))
-    code, out = cli.openstack('network set', '{} {}'.format(args_str, net_id), ssh_client=con_ssh, rtn_code=True,
-                              fail_ok=fail_ok, auth_info=auth_info)
+    code, out = cli.openstack('network set', '{} {}'.format(args_str, net_id), ssh_client=con_ssh, fail_ok=fail_ok,
+                              auth_info=auth_info)
     if code > 0:
         return 1, out
 
@@ -596,8 +575,8 @@ def create_security_group(name, project=None, description=None, project_domain=N
     }
     args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True), name)
 
-    code, output = cli.openstack("security group create", args, fail_ok=fail_ok, auth_info=auth_info,
-                                 ssh_client=con_ssh, rtn_code=True)
+    code, output = cli.openstack("security group create", args, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -629,7 +608,7 @@ def delete_security_group(group_id, fail_ok=False, auth_info=Tenant.get('admin')
 def create_security_group_rule(group=None, remote_ip=None, remote_group=None, description=None, dst_port=None,
                                icmp_type=None, icmp_code=None, protocol=None, ingress=None, egress=None,
                                ethertype=None, project=None, project_domain=None, fail_ok=False, auth_info=None,
-                               con_ssh=None, rtn_val='id', cleanup=None):
+                               con_ssh=None, field='id', cleanup=None):
     """
     Create security group rule for given security group
     Args:
@@ -649,7 +628,7 @@ def create_security_group_rule(group=None, remote_ip=None, remote_group=None, de
         fail_ok:
         auth_info:
         con_ssh:
-        rtn_val (str)
+        field (str)
         cleanup
 
     Returns:
@@ -679,17 +658,17 @@ def create_security_group_rule(group=None, remote_ip=None, remote_group=None, de
     args = ' '.join((common.parse_args(args_dict), group))
 
     LOG.info("Creating security group rule for group {} with args: {}".format(group, args))
-    code, output = cli.openstack('security group rule create', args, ssh_client=con_ssh, auth_info=auth_info,
-                                 fail_ok=fail_ok, rtn_code=True)
+    code, output = cli.openstack('security group rule create', args, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return 1, output
 
     table_ = table_parser.table(output)
-    value = table_parser.get_value_two_col_table(table_, rtn_val)
+    value = table_parser.get_value_two_col_table(table_, field)
     if cleanup:
         ResourceCleanup.add('security_group_rule', table_parser.get_value_two_col_table(table_, 'id'))
 
-    LOG.info("Security group rule created successfully for group {} with {}={}".format(group, rtn_val, value))
+    LOG.info("Security group rule created successfully for group {} with {}={}".format(group, field, value))
     return 0, value
 
 
@@ -714,8 +693,8 @@ def delete_security_group_rules(sec_rules, check_first=True, fail_ok=False, con_
         existing_sec_rules = get_security_group_rules(long=False, auth_info=auth_info, con_ssh=con_ssh)
         sec_rules = list(set(sec_rules) & set(existing_sec_rules))
 
-    code, output = cli.openstack('security group rule delete', ' '.join(sec_rules), ssh_client=con_ssh,
-                                 auth_info=auth_info, fail_ok=fail_ok, rtn_code=True)
+    code, output = cli.openstack('security group rule delete', ' '.join(sec_rules), ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -732,12 +711,12 @@ def delete_security_group_rules(sec_rules, check_first=True, fail_ok=False, con_
     return 0, msg
 
 
-def get_security_group_rules(rtn_val='ID', long=True, protocol=None, ingress=None, egress=None, auth_info=None,
+def get_security_group_rules(field='ID', long=True, protocol=None, ingress=None, egress=None, auth_info=None,
                              con_ssh=None, **filters):
     """
     Get security group rules
     Args:
-        rtn_val (str|list|tuple)
+        field (str|list|tuple)
         long (bool)
         protocol:
         ingress:
@@ -756,25 +735,9 @@ def get_security_group_rules(rtn_val='ID', long=True, protocol=None, ingress=Non
         'long': long,
     }
     args = common.parse_args(args_dict)
-    output = cli.openstack('security group rule list', args, ssh_client=con_ssh, auth_info=auth_info)
+    output = cli.openstack('security group rule list', args, ssh_client=con_ssh, auth_info=auth_info)[1]
     table_ = table_parser.table(output)
-    if filters:
-        table_ = table_parser.filter_table(table_, **filters)
-
-    convert = False
-    if isinstance(rtn_val, str):
-        convert = True
-        rtn_val = (rtn_val, )
-
-    values = []
-    for field in rtn_val:
-        values_for_field = table_parser.get_column(table_, field)
-        values_for_field = [None if value == 'None' else value for value in values_for_field]
-        values.append(values_for_field)
-
-    if convert:
-        values = values[0]
-    return values
+    return table_parser.get_multi_values(table_, field, **filters)
 
 
 def add_icmp_and_tcp_rules(security_group, auth_info=None, con_ssh=None, cleanup=None):
@@ -812,7 +775,7 @@ def get_net_name_from_id(net_id, con_ssh=None, auth_info=None):
     Returns (str): name of a network
 
     """
-    return get_networks(auth_info=auth_info, con_ssh=con_ssh, net_id=net_id, rtn_val='Name')[0]
+    return get_networks(auth_info=auth_info, con_ssh=con_ssh, net_id=net_id, field='Name')[0]
 
 
 def get_net_id_from_name(net_name, con_ssh=None, auth_info=None):
@@ -827,7 +790,7 @@ def get_net_id_from_name(net_name, con_ssh=None, auth_info=None):
     Returns (str): id of a network
 
     """
-    return get_networks(auth_info=auth_info, con_ssh=con_ssh, full_name=net_name, rtn_val='ID')[0]
+    return get_networks(auth_info=auth_info, con_ssh=con_ssh, full_name=net_name, field='ID')[0]
 
 
 def create_floating_ip(external_net=None, subnet=None, port=None, fixed_ip_addr=None, floating_ip_addr=None,
@@ -877,8 +840,7 @@ def create_floating_ip(external_net=None, subnet=None, port=None, fixed_ip_addr=
     }
 
     args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True), external_net)
-    code, output = cli.openstack('floating ip create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True)
+    code, output = cli.openstack('floating ip create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     table_ = table_parser.table(output)
     actual_fip_addr = table_parser.get_value_two_col_table(table_, "floating_ip_address")
@@ -920,13 +882,12 @@ def delete_floating_ips(floating_ips, auth_info=Tenant.get('admin'), con_ssh=Non
         floating_ips = (floating_ips,)
 
     args = ' '.join(floating_ips)
-    code, output = cli.openstack('floating ip delete', args, ssh_client=con_ssh, auth_info=auth_info,
-                                 fail_ok=fail_ok, rtn_code=True)
+    code, output = cli.openstack('floating ip delete', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     if code > 0:
         return 1, output
 
-    post_deletion_fips = get_floating_ips(rtn_val='ID', con_ssh=con_ssh, auth_info=Tenant.get('admin'))
+    post_deletion_fips = get_floating_ips(field='ID', con_ssh=con_ssh, auth_info=Tenant.get('admin'))
     undeleted_fips = list(set(floating_ips) & set(post_deletion_fips))
 
     if undeleted_fips:
@@ -941,7 +902,7 @@ def delete_floating_ips(floating_ips, auth_info=Tenant.get('admin'), con_ssh=Non
     return 0, succ_msg
 
 
-def get_floating_ips(rtn_val='Floating IP Address', long=False, network=None, port=None, router=None,
+def get_floating_ips(field='Floating IP Address', long=False, network=None, port=None, router=None,
                      floating_ip=None, fixed_ip=None, status=None, project=None, project_domain=None,
                      tags=None, any_tags=None, not_tags=None, not_any_tags=None, floating_ips=None,
                      auth_info=Tenant.get('admin'), con_ssh=None):
@@ -949,7 +910,7 @@ def get_floating_ips(rtn_val='Floating IP Address', long=False, network=None, po
     Get floating ips values with given parameters.
 
     Args:
-        rtn_val (str|tuple|list): header of floating ip list table, such as 'Floating IP Address' or 'Fixed IP Address'
+        field (str|tuple|list): header of floating ip list table, such as 'Floating IP Address' or 'Fixed IP Address'
         long (bool)
         network (str|None)
         router (str|None)
@@ -987,22 +948,11 @@ def get_floating_ips(rtn_val='Floating IP Address', long=False, network=None, po
         '--not-any-tags': not_any_tags
     }
     args = common.parse_args(args_dict, repeat_arg=False, vals_sep=',')
-    table_ = table_parser.table(cli.openstack('floating ip list', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('floating ip list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
     if floating_ips:
         table_ = table_parser.filter_table(table_, **{'Floating IP Address': floating_ips})
 
-    values = []
-    convert = False
-    if isinstance(rtn_val, str):
-        rtn_val = (rtn_val, )
-
-    for header in rtn_val:
-        values.append(table_parser.get_column(table_, header))
-
-    if convert:
-        values = values[0]
-
-    return values
+    return table_parser.get_multi_values(table_, field)
 
 
 def get_floating_ip_values(fip, fields='fixed_ip_address', auth_info=Tenant.get('admin'), con_ssh=None):
@@ -1010,24 +960,16 @@ def get_floating_ip_values(fip, fields='fixed_ip_address', auth_info=Tenant.get(
     Get floating ip info for given field.
     Args:
         fip (str): ip or id of a floating ip
-        fields (str): field in "neutron floatingip-show" table.
+        fields (str|list|tuple): field(s) in floating ip show table.
         auth_info (dict):
         con_ssh (SSHClient):
 
     Returns (list): values of given fields for specified floating ip
 
     """
-    table_ = table_parser.table(cli.openstack('floating ip show', fip, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('floating ip show', fip, ssh_client=con_ssh, auth_info=auth_info)[1])
 
-    if isinstance(fields, str):
-        fields = (fields, )
-
-    values = []
-    for field in fields:
-        val = table_parser.get_value_two_col_table(table_, field)
-        val = None if val in ['None', '', 'none'] else val
-        values.append(val)
-    return values
+    return table_parser.get_multi_values_two_col_table(table_, fields=fields, evaluate=True)
 
 
 def unset_floating_ip(floating_ip, port=None, qos_policy=None, tags=None, all_tag=None, auth_info=Tenant.get('admin'),
@@ -1063,8 +1005,7 @@ def unset_floating_ip(floating_ip, port=None, qos_policy=None, tags=None, all_ta
         raise ValueError("Nothing is specified to unset")
 
     args = '{} {}'.format(args, floating_ip)
-    code, output = cli.openstack('floating ip unset', args, ssh_client=con_ssh, auth_info=auth_info,
-                                 fail_ok=fail_ok, rtn_code=True)
+    code, output = cli.openstack('floating ip unset', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     if code == 1:
         return 1, output
@@ -1150,8 +1091,7 @@ def set_floating_ip(floating_ip, port=None, fixed_ip_addr=None, qos_policy=None,
 
     args = '{} {}'.format(args, floating_ip)
 
-    code, output = cli.openstack('floating ip set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True)
+    code, output = cli.openstack('floating ip set', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -1175,12 +1115,12 @@ def _wait_for_ip_in_nova_list(vm_id, ip_addr, timeout=300, fail_ok=False, con_ss
         raise exceptions.TimeoutException(msg)
 
 
-def get_providernet_ranges(rtn_val='name', range_name=None, providernet_name=None, providernet_type=None, strict=False,
+def get_providernet_ranges(field='name', range_name=None, providernet_name=None, providernet_type=None, strict=False,
                            auth_info=Tenant.get('admin'), con_ssh=None):
     """
 
     Args:
-        rtn_val (str): 'name' or 'id'
+        field (str): 'name' or 'id'
         range_name (str):
         providernet_name (str):
         providernet_type (str):
@@ -1192,7 +1132,7 @@ def get_providernet_ranges(rtn_val='name', range_name=None, providernet_name=Non
 
     """
 
-    table_ = table_parser.table(cli.neutron('providernet-range-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.neutron('providernet-range-list', ssh_client=con_ssh, auth_info=auth_info)[1])
 
     kwargs = {}
     if providernet_name is not None:
@@ -1204,16 +1144,16 @@ def get_providernet_ranges(rtn_val='name', range_name=None, providernet_name=Non
     if providernet_type is not None:
         kwargs['type'] = providernet_type
 
-    return table_parser.get_values(table_, rtn_val, strict=strict, **kwargs)
+    return table_parser.get_values(table_, field, strict=strict, **kwargs)
 
 
-def get_security_groups(rtn_val='id', project=None, project_domain=None, tags=None, any_tags=None,
+def get_security_groups(field='id', project=None, project_domain=None, tags=None, any_tags=None,
                         not_tags=None, not_any_tags=None, name=None, strict=False, con_ssh=None, auth_info=None):
     """
         Get the neutron security group list based on name if given for given user.
 
         Args:
-            rtn_val (str|list|tuple)
+            field (str|list|tuple)
             project
             project_domain
             tags (list|tuple|str|None)
@@ -1237,22 +1177,11 @@ def get_security_groups(rtn_val='id', project=None, project_domain=None, tags=No
         'not-any-tags': not_any_tags,
     }
     args = common.parse_args(args_dict, vals_sep=',')
-    table_ = table_parser.table(cli.openstack('security group list', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('security group list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
     if name:
         table_ = table_parser.filter_table(table_, strict=strict, name=name)
 
-    convert = False
-    if isinstance(rtn_val, str):
-        rtn_val = (rtn_val, )
-        convert = True
-
-    values = []
-    for field in rtn_val:
-        values.append(table_parser.get_column(table_, field))
-
-    if convert:
-        values = values[0]
-    return values
+    return table_parser.get_multi_values(table_, field)
 
 
 def get_internal_net_id(net_name=None, strict=False, con_ssh=None, auth_info=None):
@@ -1320,7 +1249,7 @@ def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
     return net_ids[0]
 
 
-def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, rtn_val='id'):
+def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, field='id'):
     """
     Get a list of tenant network ids that match the given net_names for a specific tenant.
 
@@ -1328,7 +1257,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, rtn_val='id
         net_names (str or list): list of tenant network name(s) to get id(s) for
         con_ssh (SSHClient):
         auth_info (dict): If None, primary tenant will be used
-        rtn_val (str): id or name
+        field (str): id or name
 
     Returns (list): list of tenant nets. such as (<id for tenant2-net1>, <id for tenant2-net8>)
 
@@ -1337,7 +1266,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, rtn_val='id
         tenant_name = common.get_tenant_name(auth_info=auth_info)
         net_names = tenant_name + '-net'
 
-    return get_networks(rtn_val=rtn_val, con_ssh=con_ssh, auth_info=auth_info, strict=False, name=net_names)
+    return get_networks(field=field, con_ssh=con_ssh, auth_info=auth_info, strict=False, name=net_names)
 
 
 def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None, auth_info=None):
@@ -1366,7 +1295,7 @@ def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None,
             if 'internal' not in net_name:
                 net_names[i] = 'internal.*{}'.format(net_name)
 
-    return get_networks(rtn_val='ID', con_ssh=con_ssh, auth_info=auth_info, strict=strict, regex=regex, name=net_names)
+    return get_networks(field='ID', con_ssh=con_ssh, auth_info=auth_info, strict=strict, regex=regex, name=net_names)
 
 
 def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
@@ -1385,8 +1314,11 @@ def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), 
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=Networks.data_net_name_pattern(), ip_pattern=Networks.DATA_IP, vms=vms,
-                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
+    net_name_pattern, net_ip_pattern = Networks.get_nenutron_net_patterns('data')
+    return _get_net_ips_for_vms(netname_pattern=net_name_pattern,
+                                ip_pattern=net_ip_pattern, vms=vms,
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict,
+                                exclude_nets=exclude_nets)
 
 
 def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
@@ -1405,13 +1337,19 @@ def get_internal_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=Networks.INTERNAL_NET_NAME, ip_pattern=Networks.INTERNAL_IP, vms=vms,
-                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
+    net_name_pattern, net_ip_pattern = Networks.get_nenutron_net_patterns('internal')
+    return _get_net_ips_for_vms(netname_pattern=net_name_pattern,
+                                ip_pattern=net_ip_pattern, vms=vms,
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict,
+                                exclude_nets=exclude_nets)
 
 
 def get_external_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
-    return _get_net_ips_for_vms(netname_pattern=Networks.mgmt_net_name_pattern(), ip_pattern=Networks.EXT_IP, vms=vms,
-                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
+    net_name_pattern, net_ip_pattern = Networks.get_nenutron_net_patterns('external')
+    return _get_net_ips_for_vms(netname_pattern=net_name_pattern,
+                                ip_pattern=net_ip_pattern, vms=vms,
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict,
+                                exclude_nets=exclude_nets)
 
 
 def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
@@ -1430,8 +1368,11 @@ def get_mgmt_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), 
         a list of all VM management IPs   # rtn_dict=False
         dictionary with vm IDs as the keys, and mgmt ips as values    # rtn_dict=True
     """
-    return _get_net_ips_for_vms(netname_pattern=Networks.mgmt_net_name_pattern(), ip_pattern=Networks.MGMT_IP, vms=vms,
-                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict, exclude_nets=exclude_nets)
+    net_name_pattern, net_ip_pattern = Networks.get_nenutron_net_patterns('mgmt')
+    return _get_net_ips_for_vms(netname_pattern=net_name_pattern,
+                                ip_pattern=net_ip_pattern, vms=vms,
+                                con_ssh=con_ssh, auth_info=auth_info, rtn_dict=rtn_dict,
+                                exclude_nets=exclude_nets)
 
 
 def _get_net_ips_for_vms(netname_pattern=None, ip_pattern=None, vms=None, con_ssh=None, auth_info=Tenant.get('admin'),
@@ -1441,7 +1382,7 @@ def _get_net_ips_for_vms(netname_pattern=None, ip_pattern=None, vms=None, con_ss
         raise ValueError("Invalid value for vms: {}".format(vms))
 
     args = '--a' if auth_info and auth_info.get('user') == 'admin' else ''
-    table_ = table_parser.table(cli.openstack('server list', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('server list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
     if vms:
         table_ = table_parser.filter_table(table_, ID=vms)
 
@@ -1500,25 +1441,12 @@ def _get_net_ips_for_vms(netname_pattern=None, ip_pattern=None, vms=None, con_ss
         return all_ips
 
 
-def get_net_type_from_name(net_name):
-    if re.search(Networks.INTERNAL_NET_NAME, net_name):
-        net_type = 'internal'
-    elif re.search(Networks.data_net_name_pattern(), net_name):
-        net_type = 'data'
-    elif re.search(Networks.mgmt_net_name_pattern(), net_name):
-        net_type = 'mgmt'
-    else:
-        raise ValueError("Unknown net_type for net_name - {}".format(net_name))
-
-    return net_type
-
-
-def get_routers(rtn_val='ID', name=None, distributed=None, ha=None, gateway_ip=None, strict=True, regex=False,
+def get_routers(field='ID', name=None, distributed=None, ha=None, gateway_ip=None, strict=True, regex=False,
                 auth_info=None, con_ssh=None):
     """
     Get router id(s) based on given criteria.
     Args:
-        rtn_val (str|tuple|list): header(s) of the router list table
+        field (str|tuple|list): header(s) of the router list table
         name (str): router name
         distributed (bool): filter out dvr or non-dvr router
         ha (bool): filter out HA router
@@ -1539,7 +1467,7 @@ def get_routers(rtn_val='ID', name=None, distributed=None, ha=None, gateway_ip=N
     params = {k: str(v) for k, v in param_dict.items() if v is not None}
     args = '--long' if 'External_gateway_info' in params else ''
 
-    table_ = table_parser.table(cli.openstack('router list', args, ssh_client=con_ssh, auth_info=auth_info),
+    table_ = table_parser.table(cli.openstack('router list', args, ssh_client=con_ssh, auth_info=auth_info)[1],
                                 combine_multiline_entry=True)
     if name is not None:
         table_ = table_parser.filter_table(table_, strict=strict, regex=regex, name=name)
@@ -1547,12 +1475,12 @@ def get_routers(rtn_val='ID', name=None, distributed=None, ha=None, gateway_ip=N
         table_ = table_parser.filter_table(table_, **params)
 
     convert = False
-    if isinstance(rtn_val, str):
-        rtn_val = [rtn_val]
+    if isinstance(field, str):
+        field = [field]
         convert = True
 
     values_all_fields = []
-    for header in rtn_val:
+    for header in field:
         values = table_parser.get_values(table_, header)
         if header.lower() == 'external gateway info':
             values = [eval(value.replace('true', 'True').replace('false', 'False')) for value in values]
@@ -1604,7 +1532,7 @@ def get_router_values(router_id=None, fields='status', strict=True, auth_info=Te
     if router_id is None:
         router_id = get_tenant_router(con_ssh=con_ssh)
 
-    table_ = table_parser.table(cli.openstack('router show', router_id, ssh_client=con_ssh, auth_info=auth_info),
+    table_ = table_parser.table(cli.openstack('router show', router_id, ssh_client=con_ssh, auth_info=auth_info)[1],
                                 combine_multiline_entry=True)
 
     if isinstance(fields, str):
@@ -1667,8 +1595,7 @@ def create_router(name=None, project=None, distributed=None, ha=None, disable=No
     args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True), name)
 
     LOG.info("Creating router with args: {}".format(args))
-    code, output = cli.openstack('router create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True)
+    code, output = cli.openstack('router create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     table_ = table_parser.table(output)
     router_id = table_parser.get_value_two_col_table(table_, 'id')
@@ -1684,28 +1611,31 @@ def create_router(name=None, project=None, distributed=None, ha=None, disable=No
     return 0, name if rtn_name else router_id
 
 
-def get_router_subnets(router, rtn_val='subnet_id', mgmt_only=False, auth_info=Tenant.get('admin'), con_ssh=None):
+def get_router_subnets(router, field='subnet_id', router_interface_only=True, auth_info=Tenant.get('admin'),
+                       con_ssh=None):
     """
     Get router subnets' ids or ips via openstack port list
     Args:
         router (str): router name or id
-        rtn_val (str): 'subnet_id' or 'ip_address'
-        mgmt_only
+        field (str): 'subnet_id' or 'ip_address'
+        router_interface_only
         auth_info:
         con_ssh:
 
     Returns (list):
 
     """
-    fixed_ips = get_ports(rtn_val='Fixed IP Addresses', router=router, auth_info=auth_info, con_ssh=con_ssh)
+    fixed_ips, device_owners = get_ports(field=('Fixed IP Addresses', 'Device Owner'), router=router, long=True,
+                                         auth_info=auth_info, con_ssh=con_ssh)
 
     subnets = []
-    for fixed_ip_info in fixed_ips:
+    for i in range(len(device_owners)):
+        device_owner = device_owners[i]
         # Assume router can have only 1 fixed ip on same port
-        fixed_ip_info = fixed_ip_info[0]
-        if mgmt_only and not re.match(Networks.MGMT_IP, str(fixed_ip_info.get('ip_address', ''))):
+        fixed_ip_info = fixed_ips[i][0]
+        if router_interface_only and 'router_interface' not in device_owner:
             continue
-        subnets.append(fixed_ip_info.get(rtn_val, None))
+        subnets.append(fixed_ip_info.get(field, None))
 
     return subnets
 
@@ -1722,7 +1652,7 @@ def get_next_subnet_cidr(net_id, ip_pattern=Networks.IPV4_IP, con_ssh=None, auth
     Returns:
 
     """
-    existing_subnets = get_subnets(rtn_val='Subnet', network=net_id, con_ssh=con_ssh, auth_info=auth_info)
+    existing_subnets = get_subnets(field='Subnet', network=net_id, con_ssh=con_ssh, auth_info=auth_info)
     existing_subnets_str = ','.join(existing_subnets)
     # TODO: add ipv6 support
     mask = re.findall(ip_pattern + r'/(\d{1,3})', existing_subnets_str)[0]
@@ -1760,13 +1690,12 @@ def delete_router(router, remove_ports=True, auth_info=Tenant.get('admin'), con_
             remove_router_interface(router, port=port, auth_info=auth_info, con_ssh=con_ssh)
 
     LOG.info("Deleting router {}...".format(router))
-    code, output = cli.openstack('router delete', router, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True)
+    code, output = cli.openstack('router delete', router, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
     rtn_val = 'ID' if re.match(UUID, router) else 'Name'
-    post_routers = get_routers(auth_info=auth_info, con_ssh=con_ssh, rtn_val=rtn_val)
+    post_routers = get_routers(auth_info=auth_info, con_ssh=con_ssh, field=rtn_val)
     if router in post_routers:
         msg = "Router {} is still showing in neutron router-list".format(router)
         if fail_ok:
@@ -1846,7 +1775,7 @@ def __add_remove_router_interface(router=None, subnet=None, port=None, action='a
 
     args = '{} {}'.format(router, interface)
     LOG.info("Removing router interface: {}".format(args))
-    code, output = cli.openstack(cmd, args, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True, fail_ok=fail_ok)
+    code, output = cli.openstack(cmd, args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     if code == 1:
         return 1, output
@@ -1921,8 +1850,7 @@ def set_router(router=None, enable=None, external_gateway=None, enable_snat=None
 
     LOG.info("Setting router {} with args: {}".format(router, args))
     args = '{} {}'.format(args, router)
-    code, out = cli.openstack('router set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_code=True)
+    code, out = cli.openstack('router set', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, out
 
@@ -1967,8 +1895,7 @@ def unset_router(router_id=None, external_gateway=None, routes=None, qos_policy=
 
     LOG.info("Unsetting router {} with args: {}".format(router_id, args))
     args = '{} {}'.format(args, router_id)
-    code, output = cli.openstack('router unset', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True)
+    code, output = cli.openstack('router unset', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -2098,7 +2025,7 @@ def get_router_host(router=None, auth_info=Tenant.get('admin'), con_ssh=None):
     if not router:
         router = get_tenant_router(con_ssh=con_ssh, auth_info=auth_info)
 
-    return get_network_agents(router=router, rtn_val='Host', con_ssh=con_ssh, auth_info=auth_info)[0]
+    return get_network_agents(router=router, field='Host', con_ssh=con_ssh, auth_info=auth_info)[0]
 
 
 def set_router_mode(router_id=None, distributed=None, ha=None, enable_on_failure=True, fail_ok=False,
@@ -2160,7 +2087,7 @@ def set_router_mode(router_id=None, distributed=None, ha=None, enable_on_failure
     return 0, succ_msg
 
 
-def get_networks_on_providernet(providernet, segment=None, external=None, rtn_val='id',
+def get_networks_on_providernet(providernet, segment=None, external=None, field='id',
                                 con_ssh=None, auth_info=Tenant.get('admin'), name=None, net_id=None,
                                 strict=True, regex=False, exclude=False):
     """
@@ -2169,7 +2096,7 @@ def get_networks_on_providernet(providernet, segment=None, external=None, rtn_va
         providernet(str):
         segment (int|None)
         external (bool|None)
-        rtn_val(str): 'id' or 'name'
+        field(str): 'id' or 'name'
         con_ssh (SSHClient):
         auth_info (dict):
         name
@@ -2178,13 +2105,12 @@ def get_networks_on_providernet(providernet, segment=None, external=None, rtn_va
         regex (bool)
         exclude (bool): whether to return networks that are NOT on given providernet
 
-    Returns:
-        statue (0 or 1) and the list of network ID
+    Returns (list): list of networks
     """
     if not providernet:
         raise ValueError("No providernet_id provided.")
 
-    return get_networks(rtn_val=rtn_val, provider_physical_network=providernet, provider_setment=segment,
+    return get_networks(field=field, provider_physical_network=providernet, provider_setment=segment,
                         external=external, name=name, net_id=net_id, strict=strict, regex=regex, exclude=exclude,
                         con_ssh=con_ssh, auth_info=auth_info)
 
@@ -2234,7 +2160,8 @@ def _get_interfaces_via_vshell(ssh_client, net_type='internal'):
     """
     LOG.info("Getting {} interface-uuid via vshell address-list".format(net_type))
     table_ = table_parser.table(ssh_client.exec_cmd('vshell address-list', fail_ok=False)[1])
-    interfaces = table_parser.get_values(table_, 'interface-uuid', regex=True, address=Networks.IP_PATTERN[net_type])
+    interfaces = table_parser.get_values(table_, 'interface-uuid', regex=True,
+                                         address=Networks.get_nenutron_net_patterns(net_type=net_type)[1])
 
     return interfaces
 
@@ -2255,7 +2182,7 @@ def ping_server(server, ssh_client, num_pings=5, timeout=60,
         vshell (bool): whether to ping via 'vshell ping' cmd
         interface (str): interface uuid. vm's internal interface-uuid will be used when unset
         retry (int):
-        net_type (str): 'data', 'mgmt', or 'internal', only used for vshell=True and interface=None
+        net_type (str): 'mgmt', 'data', 'internal', or 'external', only used for vshell=True and interface=None
 
     Returns (tuple): (<packet_loss_rate (0-100)> (int), <transmitted_packet_count>(int))
 
@@ -2280,7 +2207,7 @@ def ping_server(server, ssh_client, num_pings=5, timeout=60,
             else:
                 if "ERROR" in output:
                     # usually due to incorrectly selected interface (no route to destination)
-                    raise ValueError("vshell ping rejected, output={}".format(output))
+                    raise exceptions.NeutronError("vshell ping rejected, output={}".format(output))
                 packet_loss_rate = re.findall(VSHELL_PING_LOSS_RATE, output)[-1]
 
         packet_loss_rate = int(packet_loss_rate)
@@ -2338,7 +2265,7 @@ def get_pci_vm_network(pci_type='pci-sriov', net_name=None, strict=False, con_ss
 
     host = list(hosts_and_pnets.keys())[0]
     pnet_name = hosts_and_pnets[host][0]
-    nets = list(set(get_networks_on_providernet(pnet_name, rtn_val='name')))
+    nets = list(set(get_networks_on_providernet(pnet_name, field='name')))
 
     nets_list_all_types = []
     for pci_type_ in pci_type:
@@ -2349,7 +2276,7 @@ def get_pci_vm_network(pci_type='pci-sriov', net_name=None, strict=False, con_ss
             first_segs = get_first_segments_of_pnet_ranges(pnet_name, con_ssh=con_ssh)
             first_segs = [seg for seg in first_segs if seg > 20]
             for seg in first_segs:
-                untagged_net = get_net_on_segment(pnet_name, seg_id=seg, rtn_val='name', con_ssh=con_ssh)
+                untagged_net = get_net_on_segment(pnet_name, seg_id=seg, field='name', con_ssh=con_ssh)
                 if untagged_net in nets:
                     LOG.info("{} is on first segment of {} range with untagged frames. Remove for sriov.".
                              format(untagged_net, pnet_name))
@@ -2373,8 +2300,8 @@ def get_pci_vm_network(pci_type='pci-sriov', net_name=None, strict=False, con_ss
         if final_nets:
             if 'pci-passthrough' in pci_type:
 
-                port = system_helper.get_host_interfaces(host, rtn_val='ports', net_type=pci_type)[0]
-                host_nic = system_helper.get_host_ports_values(host, header='device type', **{'name': port})[0]
+                port = host_helper.get_host_interfaces(host, field='ports', net_type=pci_type)[0]
+                host_nic = host_helper.get_host_ports(host, field='device type', **{'name': port})[0]
                 if re.match(MELLANOX4, host_nic):
                     cx_for_pcipt = True
 
@@ -2387,12 +2314,12 @@ def get_pci_vm_network(pci_type='pci-sriov', net_name=None, strict=False, con_ss
     return final_nets
 
 
-def get_network_segment_ranges(rtn_val=('Minimum ID', 'Maximum ID'), long=False, shared=None, physical_network=None,
+def get_network_segment_ranges(field=('Minimum ID', 'Maximum ID'), long=False, shared=None, physical_network=None,
                                network_type=None, project_id=None, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get network segment ranges info
     Args:
-        rtn_val (str|tuple|list):
+        field (str|tuple|list):
         long (bool|None): cli parameter --long
         shared (bool|None): return value filter
         physical_network (str|None): return value filter
@@ -2405,8 +2332,9 @@ def get_network_segment_ranges(rtn_val=('Minimum ID', 'Maximum ID'), long=False,
 
     """
 
-    table_ = table_parser.table(cli.openstack('network segment range list', '--long' if long else '',
-                                              ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(
+        cli.openstack('network segment range list', '--long' if long else '', ssh_client=con_ssh,
+                      auth_info=auth_info)[1])
     kwargs = {
         'Shared': shared,
         'Physical Network': physical_network,
@@ -2414,24 +2342,9 @@ def get_network_segment_ranges(rtn_val=('Minimum ID', 'Maximum ID'), long=False,
         'Project ID': project_id,
     }
     kwargs = {k: v for k, v in kwargs.items() if v is not None}
-    if kwargs:
-        table_ = table_parser.filter_table(table_, **kwargs)
 
-    convert = False
-    if isinstance(rtn_val, str):
-        rtn_val = (rtn_val, )
-        convert = True
-
-    vals = []
-    for header in rtn_val:
-        val = table_parser.get_values(table_, target_header=header)
-        if header.lower() in ('default', 'shared', 'minimum id', 'maximum id', 'used', 'available'):
-            val = [eval(item) for item in val]
-        vals.append(val)
-
-    if convert:
-        vals = vals[0]
-    else:
+    vals = table_parser.get_multi_values(table_, field, evaluate=True, **kwargs)
+    if not isinstance(field, str):
         vals = zip(*vals)
 
     return vals
@@ -2448,26 +2361,26 @@ def get_first_segments_of_pnet_ranges(providernet, con_ssh=None, auth_info=Tenan
     Returns (list of int): list of min segment for each range of the physical network
 
     """
-    min_segments = get_network_segment_ranges(rtn_val='Minimum ID', physical_network=providernet, auth_info=auth_info,
+    min_segments = get_network_segment_ranges(field='Minimum ID', physical_network=providernet, auth_info=auth_info,
                                               con_ssh=con_ssh)
 
     return min_segments
 
 
-def get_net_on_segment(providernet, seg_id, rtn_val='name', con_ssh=None, auth_info=Tenant.get('admin')):
+def get_net_on_segment(providernet, seg_id, field='name', con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get network name on given prvidernet with specified segment id
     Args:
         providernet (str): pnet name or id
         seg_id (int|list|tuple): segment id(s)
-        rtn_val (str): 'name' or 'id'
+        field (str): 'name' or 'id'
         con_ssh (SSHClient):
         auth_info (dict):
 
     Returns (str|None): network id/name or None if no network on given seg id
 
     """
-    nets = get_networks_on_providernet(providernet=providernet, rtn_val=rtn_val, con_ssh=con_ssh, segment=seg_id,
+    nets = get_networks_on_providernet(providernet=providernet, field=field, con_ssh=con_ssh, segment=seg_id,
                                        auth_info=auth_info)
 
     net = nets[0] if nets else None
@@ -2476,9 +2389,11 @@ def get_net_on_segment(providernet, seg_id, rtn_val='name', con_ssh=None, auth_i
 
 def _get_preferred_nets(nets, net_name=None, strict=False):
     specified_nets = []
-    internal_nets = []
-    tenant_nets = []
-    mgmt_nets = []
+    nets_dict = {
+        'internal': [],
+        'mgmt': [],
+        'data': []
+    }
 
     for net in nets:
         if net_name:
@@ -2488,17 +2403,17 @@ def _get_preferred_nets(nets, net_name=None, strict=False):
             else:
                 if re.search(net_name, net):
                     specified_nets.append(net)
-        # If net_name unspecified:
-        elif re.search(Networks.INTERNAL_NET_NAME, net):
-            internal_nets.append(net)
-        elif re.search(Networks.data_net_name_pattern(), net):
-            tenant_nets.append(net)
-        elif re.search(Networks.mgmt_net_name_pattern(), net):
-            mgmt_nets.append(net)
         else:
-            LOG.warning("Unknown network: {}. Ignore.".format(net))
+            # If net_name unspecified:
+            for net_type, nets_found in nets_dict.items():
+                net_name_pattern = Networks.get_nenutron_net_patterns(net_type)[0]
+                if net_name_pattern and re.search(net_name_pattern, net):
+                    nets_found.append(net)
+                    break
+            else:
+                LOG.warning("Unknown network: {}. Ignore.".format(net))
 
-    for nets_ in (specified_nets, internal_nets, tenant_nets, mgmt_nets):
+    for nets_ in (specified_nets, nets_dict['internal'], nets_dict['data'], nets_dict['mgmt']):
         if nets_:
             nets_counts = Counter(nets_)
             nets_ = sorted(nets_counts.keys(), key=nets_counts.get, reverse=True)
@@ -2548,7 +2463,7 @@ def create_port(net_id, name, project=None, fixed_ips=None, device_id=None, devi
     LOG.info("Creating port on network {}".format(net_id))
     if not net_id:
         raise ValueError("network id is required")
-    tenant_id = keystone_helper.get_tenant_ids(tenant_name=project, con_ssh=con_ssh)[0] if project else None
+    tenant_id = keystone_helper.get_projects(field='ID', name=project, con_ssh=con_ssh)[0] if project else None
 
     args_dict = {
         '--no-security-groups': no_security_groups,
@@ -2576,8 +2491,7 @@ def create_port(net_id, name, project=None, fixed_ips=None, device_id=None, devi
     args = common.parse_args(args_dict=args_dict, repeat_arg=True, vals_sep=',')
     args = '--network={} {} {}'.format(net_id, args, name)
 
-    code, output = cli.openstack('port create', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_code=True,
-                                 auth_info=auth_info)
+    code, output = cli.openstack('port create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     port_tab = table_parser.table(output)
     port_net_id = table_parser.get_value_two_col_table(port_tab, 'network_id')
@@ -2620,12 +2534,11 @@ def delete_port(port_id, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=N
         LOG.warning(msg)
         return -1, msg
 
-    code, output = cli.openstack('port delete', port_id, ssh_client=con_ssh, fail_ok=fail_ok, rtn_code=True,
-                                 auth_info=auth_info)
+    code, output = cli.openstack('port delete', port_id, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
-    existing_ports = get_ports(rtn_val='id', auth_info=auth_info, con_ssh=con_ssh)
+    existing_ports = get_ports(field='id', auth_info=auth_info, con_ssh=con_ssh)
     if port_id in existing_ports:
         err_msg = "Port {} still exists after deleting".format(port_id)
         if fail_ok:
@@ -2669,7 +2582,7 @@ def set_port(port_id, name=None, fixed_ips=None, no_fixed_ip=None, device_id=Non
         '--binding-profile vif_model': wrs_vif,
     }
     args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True, vals_sep=','), port_id)
-    code, out = cli.openstack('port set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_code=True)
+    code, out = cli.openstack('port set', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code != 0:
         return code, out
 
@@ -2691,12 +2604,12 @@ def __convert_ip_subnet(line):
     return {'ip_address': ip_addr, 'subnet_id': subnet}
 
 
-def get_ports(rtn_val='id', network=None, router=None, server=None, project=None, fixed_ips=None, long=False, mac=None,
+def get_ports(field='id', network=None, router=None, server=None, project=None, fixed_ips=None, long=False, mac=None,
               port_id=None, port_name=None, auth_info=Tenant.get('admin'), con_ssh=None, strict=False):
     """
     Get a list of ports with given arguments
     Args:
-        rtn_val (str|list|tuple): openstack port list table header(s). 'ID', 'NAME', 'MAC Address', 'Fixed IP Addresses'
+        field (str|list|tuple): openstack port list table header(s). 'ID', 'NAME', 'MAC Address', 'Fixed IP Addresses'
         network (str|None)
         router (str|None)
         server (str|None)
@@ -2723,7 +2636,7 @@ def get_ports(rtn_val='id', network=None, router=None, server=None, project=None
         '--long': long,
     }
     args_str = common.parse_args(args_dict=optional_args, repeat_arg=True, vals_sep=',')
-    table_ = table_parser.table(cli.openstack('port list', args_str, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('port list', args_str, ssh_client=con_ssh, auth_info=auth_info)[1])
 
     filters = {}
     if port_id:
@@ -2732,12 +2645,12 @@ def get_ports(rtn_val='id', network=None, router=None, server=None, project=None
         filters['name'] = port_name
 
     convert = False
-    if isinstance(rtn_val, str):
+    if isinstance(field, str):
         convert = True
-        rtn_val = (rtn_val, )
+        field = (field,)
 
     res = []
-    for header in rtn_val:
+    for header in field:
         ports_info = table_parser.get_values(table_, header, strict=strict, merge_lines=False, **filters)
         if header.lower() == 'fixed ip addresses':
             values = []
@@ -2771,7 +2684,7 @@ def get_port_values(port, fields=('binding_vnic_type', 'mac_address'), con_ssh=N
     if isinstance(fields, str):
         fields = (fields,)
 
-    table_ = table_parser.table(cli.openstack('port show', port, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('port show', port, ssh_client=con_ssh, auth_info=auth_info)[1])
     values = []
     for field in fields:
         value = table_parser.get_value_two_col_table(table_, field)
@@ -2807,7 +2720,7 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
             {'qat-dh895xcc-vf': {'compute-0': {'Device ID':'0443','Class Id':'0b4000', ...} 'compute-1': {...}}}
 
     """
-    table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info)[1])
     table_ = table_parser.filter_table(table_, **{'class_id': class_id})
     LOG.info('output of nova device-list for {}: {}'.format(class_id, table_))
 
@@ -2816,7 +2729,7 @@ def get_pci_devices_info(class_id, con_ssh=None, auth_info=None):
 
     nova_pci_devices = {}
     for alias in devices:
-        table_ = table_parser.table(cli.nova('device-show {}'.format(alias)))
+        table_ = table_parser.table(cli.nova('device-show {}'.format(alias))[0])
         # LOG.debug('output from nova device-show for device-id:{}\n{}'.format(alias, table_))
 
         table_dict = table_parser.row_dict_table(table_, key_header='Host', unique_key=True, lower_case=False)
@@ -2841,7 +2754,7 @@ def get_pci_device_configured_vfs_value(device_id, con_ssh=None, auth_info=None)
         str :
 
     """
-    _table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    _table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info)[1])
     LOG.info('output of nova device-list:{}'.format(_table))
     _table = table_parser.filter_table(_table, **{'Device Id': device_id})
     return table_parser.get_column(_table, 'pci_vfs_configured')[0]
@@ -2860,7 +2773,7 @@ def get_pci_device_used_vfs_value(device_id, con_ssh=None, auth_info=None):
         str :
 
     """
-    _table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    _table = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info)[1])
     LOG.info('output of nova device-list:{}'.format(_table))
     _table = table_parser.filter_table(_table, **{'Device Id': device_id})
     LOG.info('output of nova device-list:{}'.format(_table))
@@ -2886,7 +2799,8 @@ def get_pci_device_vfs_counts_for_host(host, device_id=None, fields=('pci_vfs_co
     if device_id is None:
         device_id = get_pci_device_list_values(field='Device Id', con_ssh=con_ssh, auth_info=auth_info)[0]
 
-    table_ = table_parser.table(cli.nova('device-show {}'.format(device_id), ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(
+        cli.nova('device-show {}'.format(device_id), ssh_client=con_ssh, auth_info=auth_info)[1])
     LOG.debug('output from nova device-show for device-id:{}\n{}'.format(device_id, table_))
 
     table_ = table_parser.filter_table(table_, host=host)
@@ -2901,7 +2815,7 @@ def get_pci_device_vfs_counts_for_host(host, device_id=None, fields=('pci_vfs_co
 
 
 def get_pci_device_list_values(field='pci_vfs_used', con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
-    table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info)[1])
 
     values = table_parser.get_values(table_, field, **kwargs)
     if field in ['pci_pfs_configured', 'pci_pfs_used', 'pci_vfs_configured', 'pci_vfs_used']:
@@ -2911,7 +2825,7 @@ def get_pci_device_list_values(field='pci_vfs_used', con_ssh=None, auth_info=Ten
 
 
 def get_pci_device_list_info(con_ssh=None, header_key='pci alias', auth_info=Tenant.get('admin'), **kwargs):
-    table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.nova('device-list', ssh_client=con_ssh, auth_info=auth_info)[1])
     if kwargs:
         table_ = table_parser.filter_table(table_, **kwargs)
 
@@ -2933,12 +2847,12 @@ def get_tenant_routers_for_vms(vms, con_ssh=None, auth_info=Tenant.get('admin'))
     if isinstance(vms, str):
         vms = [vms]
 
-    router_ids, router_projects = get_routers(auth_info=auth_info, con_ssh=con_ssh, rtn_val=('ID', 'Project'))
+    router_ids, router_projects = get_routers(auth_info=auth_info, con_ssh=con_ssh, field=('ID', 'Project'))
     vms_routers = []
     for i in range(len(router_ids)):
         router_project = router_projects[i]
-        vms_with_router = nova_helper.get_vms(vms=vms, project=router_project, all_projects=False, auth_info=auth_info,
-                                              con_ssh=con_ssh)
+        vms_with_router = vm_helper.get_vms(vms=vms, project=router_project, all_projects=False,
+                                            auth_info=auth_info, con_ssh=con_ssh)
         if vms_with_router:
             vms_routers.append(router_ids[i])
             vms = list(set(vms) - set(vms_with_router))
@@ -2964,7 +2878,7 @@ def collect_networking_info(time_stamp, routers=None, vms=None, sep_file=None, c
 
     ips_to_ping = []
     for router_ in routers:
-        router_ips = get_router_subnets(router=router_, rtn_val='ip_address', mgmt_only=True, con_ssh=con_ssh)
+        router_ips = get_router_subnets(router=router_, field='ip_address', con_ssh=con_ssh)
         ips_to_ping += router_ips
 
     res_bool, res_dict = ping_ips_from_natbox(ips_to_ping, num_pings=3, timeout=15)
@@ -2978,7 +2892,7 @@ def collect_networking_info(time_stamp, routers=None, vms=None, sep_file=None, c
 
     hosts = host_helper.get_up_hypervisors(con_ssh=con_ssh)
     for router in routers:
-        router_host = get_network_agents(rtn_val='Host', router=router, con_ssh=con_ssh)[0]
+        router_host = get_network_agents(field='Host', router=router, con_ssh=con_ssh)[0]
         if router_host and router_host not in hosts:
             hosts.append(router_host)
         LOG.info("Router {} is hosted on {}".format(router, router_host))
@@ -2992,12 +2906,12 @@ def collect_networking_info(time_stamp, routers=None, vms=None, sep_file=None, c
                                          con_ssh=con_ssh)
 
 
-def get_network_agents(rtn_val='Host', agent_host=None, router=None, network=None, agent_type=None, long=False,
+def get_network_agents(field='Host', agent_host=None, router=None, network=None, agent_type=None, long=False,
                        con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
     """
     Get network agents values from openstack network agent list
     Args:
-        rtn_val (str|list|tuple):
+        field (str|list|tuple):
         agent_host:
         router:
         network:
@@ -3018,23 +2932,8 @@ def get_network_agents(rtn_val='Host', agent_host=None, router=None, network=Non
         '--long': long,
     }
     args = common.parse_args(args_dict)
-    table_ = table_parser.table(cli.openstack('network agent list', args, ssh_client=con_ssh, auth_info=auth_info))
-
-    if kwargs:
-        table_ = table_parser.filter_table(table_, **kwargs)
-
-    convert = False
-    if isinstance(rtn_val, str):
-        rtn_val = (rtn_val, )
-        convert = True
-
-    values = []
-    for field in rtn_val:
-        values.append(table_parser.get_column(table_, field))
-
-    if convert:
-        values = values[0]
-    return values
+    table_ = table_parser.table(cli.openstack('network agent list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.get_multi_values(table_, field, **kwargs)
 
 
 def ping_ips_from_natbox(ips, natbox_ssh=None, num_pings=5, timeout=30):
@@ -3124,7 +3023,7 @@ def get_pci_device_numa_nodes(hosts):
     """
     hosts_numa = {}
     for host in hosts:
-        numa_nodes = host_helper.get_host_device_list_values(host, field='numa_node')
+        numa_nodes = host_helper.get_host_devices(host, field='numa_node')
         hosts_numa[host] = numa_nodes
 
     LOG.info("Hosts numa_nodes map for PCI devices: {}".format(hosts_numa))
@@ -3144,21 +3043,21 @@ def get_pci_procs(hosts, net_type='pci-sriov'):
     """
     hosts_procs = {}
     for host in hosts:
-        ports_list = system_helper.get_host_interfaces(host, rtn_val='ports', net_type=net_type)
+        ports_list = host_helper.get_host_interfaces(host, field='ports', net_type=net_type)
 
         ports = []
         for port in ports_list:
             ports += port
         ports = list(set(ports))
 
-        procs = system_helper.get_host_ports_values(host, header='processor', **{'name': ports})
+        procs = host_helper.get_host_ports(host, field='processor', **{'name': ports})
         hosts_procs[host] = list(set(procs))
 
     LOG.info("Hosts procs map for {} devices: {}".format(net_type, hosts_procs))
     return hosts_procs
 
 
-def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+def wait_for_agents_healthy(hosts=None, timeout=120, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Wait for neutron agents to be alive
     Args:
@@ -3174,34 +3073,37 @@ def wait_for_agents_alive(hosts=None, timeout=120, fail_ok=False, con_ssh=None, 
 
     """
     if hosts is None:
-        hosts = host_helper.get_hypervisors(con_ssh=con_ssh)
+        hosts = host_helper.get_hypervisors(con_ssh=con_ssh, auth_info=auth_info)
     elif isinstance(hosts, str):
         hosts = [hosts]
 
-    alive_vals = agents = agent_hosts = ''
+    unhealthy_agents = None
     LOG.info("Wait for neutron agents to be alive for {}".format(hosts))
     end_time = time.time() + timeout
     while time.time() < end_time:
-        alive_vals, agents, agent_hosts = get_network_agents(rtn_val=('Alive', 'Binary', 'Host'), host=hosts)
-        if all(alive_val == ':-)' for alive_val in alive_vals):
-            succ_msg = "All agents for {} are alive".format(hosts)
+        alive_vals, states, agents, agent_hosts = get_network_agents(field=('Alive', 'State', 'Binary', 'Host'),
+                                                                     host=hosts, con_ssh=con_ssh, auth_info=auth_info)
+
+        unhealthy_agents = [i for i in list(zip(agents, agent_hosts, states, alive_vals)) if
+                            (i[-1] != ':-)' or i[-2] != 'UP')]
+        if not unhealthy_agents:
+            succ_msg = "All agents for {} are alive and up".format(hosts)
             LOG.info(succ_msg)
             return True, succ_msg
 
-    LOG.warning("Some neutron agents are not alive")
-    non_alive_agents = [i for i in list(zip(agents, agent_hosts, alive_vals)) if i[-1] != ':-)']
-    msg = "Some agents are not alive: {}".format(non_alive_agents)
+    msg = "Some network agents are not healthy: {}".format(unhealthy_agents)
+    LOG.warning(msg)
     if fail_ok:
         return False, msg
     raise exceptions.NeutronError(msg)
 
 
-def get_trunks(rtn_val='id', trunk_id=None, trunk_name=None, parent_port=None, strict=False,
+def get_trunks(field='id', trunk_id=None, trunk_name=None, parent_port=None, strict=False,
                auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get a list of trunks with given arguments
     Args:
-        rtn_val (str): any valid header of neutron trunk list table. 'id', 'name', 'mac_address', or 'fixed_ips'
+        field (str): any valid header of neutron trunk list table. 'id', 'name', 'mac_address', or 'fixed_ips'
         trunk_id (str): id of the trunk
         trunk_name (str): name of the trunk
         parent_port (str): parent port of the trunk
@@ -3212,7 +3114,7 @@ def get_trunks(rtn_val='id', trunk_id=None, trunk_name=None, parent_port=None, s
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.openstack('network trunk list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('network trunk list', ssh_client=con_ssh, auth_info=auth_info)[1])
 
     kwargs = {
         'id': trunk_id,
@@ -3221,7 +3123,7 @@ def get_trunks(rtn_val='id', trunk_id=None, trunk_name=None, parent_port=None, s
     }
     kwargs = {k: v for k, v in kwargs.items() if v}
 
-    trunks = table_parser.get_values(table_, rtn_val, strict=strict, regex=True, merge_lines=True, **kwargs)
+    trunks = table_parser.get_values(table_, field, strict=strict, regex=True, merge_lines=True, **kwargs)
     return trunks
 
 
@@ -3266,8 +3168,7 @@ def create_trunk(parent_port, name=None, sub_ports=None, description=None, proje
 
     LOG.info("Creating trunk {} with args: {}".format(name, args))
     args = '{} {}'.format(args, name)
-    code, output = cli.openstack('network trunk create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True)
+    code, output = cli.openstack('network trunk create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     table_ = table_parser.table(output)
     trunk_id = table_parser.get_value_two_col_table(table_, 'id')
@@ -3307,7 +3208,7 @@ def delete_trunks(trunks, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=
         trunks = [trunks]
 
     rtn_val = 'id' if re.match(UUID, trunks[0]) else 'name'
-    existing_trunks = get_trunks(rtn_val=rtn_val, auth_info=auth_info, con_ssh=con_ssh)
+    existing_trunks = get_trunks(field=rtn_val, auth_info=auth_info, con_ssh=con_ssh)
     trunks = list(set(trunks) & set(existing_trunks))
     if not trunks:
         msg = "Given trunks not found on system. Do nothing."
@@ -3316,13 +3217,13 @@ def delete_trunks(trunks, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=
 
     trunks = ' '.join(trunks)
     LOG.info("Deleting trunk: {}".format(trunks))
-    code, output = cli.openstack('network trunk delete', trunks, ssh_client=con_ssh, fail_ok=fail_ok, rtn_code=True,
-                                 auth_info=auth_info, )
+    code, output = cli.openstack('network trunk delete', trunks, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
 
     if code > 0:
         return 1, output
 
-    existing_trunks = get_trunks(rtn_val='id', auth_info=auth_info, con_ssh=con_ssh)
+    existing_trunks = get_trunks(field='id', auth_info=auth_info, con_ssh=con_ssh)
     undeleted_trunks = list(set(trunks) & set(existing_trunks))
     if undeleted_trunks:
         err_msg = "Trunk {} still exists after deleting".format(undeleted_trunks)
@@ -3367,8 +3268,7 @@ def set_trunk(trunk, sub_ports=None, name=None, enable=None, description=None, f
 
     LOG.info("Setting trunk {} with args: {}".format(trunk, args))
     args = '{} {}'.format(args, trunk)
-    code, output = cli.openstack('network trunk set', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True)
+    code, output = cli.openstack('network trunk set', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     if code > 0:
         return 1, output
@@ -3396,8 +3296,7 @@ def unset_trunk(trunk, sub_ports, fail_ok=False, con_ssh=None,
     args = '{} {}'.format(common.parse_args(args, repeat_arg=True), trunk)
 
     LOG.info("Unsetting trunk: {}".format(args))
-    code, output = cli.openstack('network trunk unset', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True)
+    code, output = cli.openstack('network trunk unset', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -3406,7 +3305,7 @@ def unset_trunk(trunk, sub_ports, fail_ok=False, con_ssh=None,
     return 0, msg
 
 
-def get_networks(rtn_val='ID', long=False, full_name=None, external=None, enabled=None, project=None,
+def get_networks(field='ID', long=False, full_name=None, external=None, enabled=None, project=None,
                  project_domain=None, shared=None, status=None, providernet_type=None, provider_physical_network=None,
                  provider_setment=None, agent=None, tags=None, any_tags=None, not_tags=None, not_any_tags=None,
                  name=None, subnets=None, net_id=None, strict=False, regex=False, exclude=False, auth_info=None,
@@ -3415,7 +3314,7 @@ def get_networks(rtn_val='ID', long=False, full_name=None, external=None, enable
     Get networks based on given criteria.
 
     Args:
-        rtn_val (str|tuple|list)
+        field (str|tuple|list)
         long (bool|None):
         full_name (str|None):
         external (bool|None):
@@ -3466,7 +3365,7 @@ def get_networks(rtn_val='ID', long=False, full_name=None, external=None, enable
         '--not-any-tags': not_any_tags,
     }
     args = common.parse_args(args_dict, repeat_arg=False, vals_sep=',')
-    table_ = table_parser.table(cli.openstack('network list', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('network list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
 
     filters = {'name': name, 'subnets': subnets, 'id': net_id}
     filters = {k: v for k, v in filters.items() if str(v)}
@@ -3474,12 +3373,12 @@ def get_networks(rtn_val='ID', long=False, full_name=None, external=None, enable
         table_ = table_parser.filter_table(table_, strict=strict, regex=regex, exclude=exclude, **filters)
 
     convert = False
-    if isinstance(rtn_val, str):
-        rtn_val = (rtn_val, )
+    if isinstance(field, str):
+        field = (field,)
         convert = True
 
     res = []
-    for header in rtn_val:
+    for header in field:
         vals = table_parser.get_column(table_, header)
         if header.lower() == 'subnets':
             vals = [val.split(sep=', ') for val in vals]
@@ -3503,8 +3402,7 @@ def delete_network(network_id, auth_info=Tenant.get('admin'), con_ssh=None, fail
 
      """
     LOG.info("Deleting network {}".format(network_id))
-    code, output = cli.openstack('network delete', network_id, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True,
-                                 fail_ok=True)
+    code, output = cli.openstack('network delete', network_id, ssh_client=con_ssh, fail_ok=True, auth_info=auth_info)
 
     if code > 0:
         return 1, output
@@ -3554,8 +3452,8 @@ def create_sfc_port_pair(ingress_port, egress_port, name=None, description=None,
 
     arg = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True, vals_sep=','), name)
     LOG.info("Creating port pair {}".format(name))
-    code, output = cli.openstack(cmd='sfc port pair create', positional_args=arg, fail_ok=fail_ok,
-                                 ssh_client=con_ssh, auth_info=auth_info, rtn_code=True)
+    code, output = cli.openstack(cmd='sfc port pair create', positional_args=arg, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     table_ = table_parser.table(output)
     pair_id = table_parser.get_value_two_col_table(table_, field='ID')
     if pair_id and cleanup:
@@ -3585,13 +3483,13 @@ def delete_sfc_port_pairs(port_pairs=None, value='ID', check_first=True, fail_ok
 
     """
     if not port_pairs:
-        port_pairs = get_sfc_port_pairs(rtn_val=value, auth_info=auth_info, con_ssh=con_ssh)
+        port_pairs = get_sfc_port_pairs(field=value, auth_info=auth_info, con_ssh=con_ssh)
     else:
         if isinstance(port_pairs, str):
             port_pairs = [port_pairs]
 
         if check_first:
-            existing_pairs = get_sfc_port_pairs(rtn_val=value, auth_info=auth_info, con_ssh=con_ssh)
+            existing_pairs = get_sfc_port_pairs(field=value, auth_info=auth_info, con_ssh=con_ssh)
             port_pairs = list(set(port_pairs) & set(existing_pairs))
 
     if not port_pairs:
@@ -3602,8 +3500,8 @@ def delete_sfc_port_pairs(port_pairs=None, value='ID', check_first=True, fail_ok
     errors = []
     LOG.info("Deleting port pair(s): {}".format(port_pairs))
     for port_pair in port_pairs:
-        code, output = cli.openstack(cmd='sfc port pair delete', positional_args=port_pair, fail_ok=fail_ok,
-                                     ssh_client=con_ssh, auth_info=auth_info, rtn_code=True)
+        code, output = cli.openstack(cmd='sfc port pair delete', positional_args=port_pair, ssh_client=con_ssh,
+                                     fail_ok=fail_ok, auth_info=auth_info)
 
         if code > 0:
             errors.append(output)
@@ -3611,7 +3509,7 @@ def delete_sfc_port_pairs(port_pairs=None, value='ID', check_first=True, fail_ok
     if errors:
         return 1, '\n'.join(errors)
 
-    post_del_pairs = get_sfc_port_pairs(rtn_val=value, auth_info=auth_info, con_ssh=con_ssh)
+    post_del_pairs = get_sfc_port_pairs(field=value, auth_info=auth_info, con_ssh=con_ssh)
     failed_pairs = list(set(port_pairs) & set(post_del_pairs))
     if failed_pairs:
         msg = "Some port-pair(s) still exist after deletion: {}".format(failed_pairs)
@@ -3625,11 +3523,11 @@ def delete_sfc_port_pairs(port_pairs=None, value='ID', check_first=True, fail_ok
     return 0, msg
 
 
-def get_sfc_port_pairs(rtn_val='ID', con_ssh=None, auth_info=None, **filters):
+def get_sfc_port_pairs(field='ID', con_ssh=None, auth_info=None, **filters):
     """
     Get port pairs
     Args:
-        rtn_val (str|tuple|list): header of the table. ID or Name
+        field (str|tuple|list): header of the table. ID or Name
         con_ssh:
         auth_info:
         **filters:
@@ -3638,22 +3536,9 @@ def get_sfc_port_pairs(rtn_val='ID', con_ssh=None, auth_info=None, **filters):
 
     """
     arg = '--print-empty'
-    table_ = table_parser.table(cli.openstack('sfc port pair list', positional_args=arg, ssh_client=con_ssh,
-                                              auth_info=auth_info))
-    if filters:
-        table_ = table_parser.filter_table(table_, **filters)
-
-    convert = False
-    if isinstance(rtn_val, str):
-        convert = True
-        rtn_val = (rtn_val, )
-
-    values = []
-    for field in rtn_val:
-        values.append(table_parser.get_column(table_, field))
-    if convert:
-        values = values[0]
-    return values
+    table_ = table_parser.table(
+        cli.openstack('sfc port pair list', positional_args=arg, ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.get_multi_values(table_, field, **filters)
 
 
 def create_sfc_port_pair_group(port_pairs=None, port_pair_val='ID', name=None, description=None, group_param=None,
@@ -3688,8 +3573,8 @@ def create_sfc_port_pair_group(port_pairs=None, port_pair_val='ID', name=None, d
     arg = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True, vals_sep=','), name)
 
     LOG.info("Creating port pair group {}".format(name))
-    code, output = cli.openstack('sfc port pair group create', arg, ssh_client=con_ssh, auth_info=auth_info,
-                                 fail_ok=fail_ok, rtn_code=True)
+    code, output = cli.openstack('sfc port pair group create', arg, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
 
     table_ = table_parser.table(output)
     group_id = table_parser.get_value_two_col_table(table_, 'ID')
@@ -3759,8 +3644,8 @@ def set_sfc_port_pair_group(group, port_pairs=None, name=None, description=None,
         verify['Description'] = description
 
     arg = '{} {}'.format(arg, group)
-    code, output = cli.openstack('sfc port pair group set', positional_args=arg, fail_ok=fail_ok, auth_info=auth_info,
-                                 ssh_client=con_ssh, rtn_code=True)
+    code, output = cli.openstack('sfc port pair group set', positional_args=arg, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -3814,8 +3699,8 @@ def unset_sfc_port_pair_group(group, port_pairs='all', fail_ok=False, con_ssh=No
 
     arg = '{} {}'.format(arg, group)
 
-    code, output = cli.openstack('sfc port pair group unset', positional_args=arg, fail_ok=fail_ok, rtn_code=True,
-                                 ssh_client=con_ssh, auth_info=auth_info)
+    code, output = cli.openstack('sfc port pair group unset', positional_args=arg, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
 
     if code > 0:
         return 1, output
@@ -3850,8 +3735,8 @@ def delete_sfc_port_pair_group(group, check_first=True, fail_ok=False, auth_info
 
     """
     if check_first:
-        group_id = get_sfc_port_pair_group_value(group=group, field='ID', auth_info=auth_info, con_ssh=con_ssh,
-                                                 fail_ok=True)
+        group_id = get_sfc_port_pair_group_values(group=group, field='ID', auth_info=auth_info, con_ssh=con_ssh,
+                                                  fail_ok=True)
         if group_id is None:
             msg = 'Port pair group {} does not exist. Skip deleting.'.format(group)
             LOG.info(msg)
@@ -3859,13 +3744,13 @@ def delete_sfc_port_pair_group(group, check_first=True, fail_ok=False, auth_info
 
     LOG.info("Deleting port pair group {}".format(group))
     code, output = cli.openstack('sfc port pair group delete', group, ssh_client=con_ssh, fail_ok=fail_ok,
-                                 auth_info=auth_info, rtn_code=True)
+                                 auth_info=auth_info)
 
     if code > 0:
         return 1, output
 
-    group_id = get_sfc_port_pair_group_value(group=group, field='ID', auth_info=auth_info, con_ssh=con_ssh,
-                                             fail_ok=True)
+    group_id = get_sfc_port_pair_group_values(group=group, field='ID', auth_info=auth_info, con_ssh=con_ssh,
+                                              fail_ok=True)
     assert group_id is None, "Port pair group {} still exists after deletion".format(group)
 
     msg = 'Port pair group {} successfully deleted'.format(group)
@@ -3873,108 +3758,81 @@ def delete_sfc_port_pair_group(group, check_first=True, fail_ok=False, auth_info
     return 0, msg
 
 
-def get_sfc_port_pair_groups(rtn_val='ID', auth_info=None, con_ssh=None):
+def get_sfc_port_pair_groups(field='ID', auth_info=None, con_ssh=None):
     """
     Get port pair groups
     Args:
-        rtn_val (str|tuple|list): field(s) for port pair groups table
+        field (str|tuple|list): field(s) for port pair groups table
         auth_info:
         con_ssh:
 
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.openstack('sfc port pair group list --print-empty', auth_info=auth_info,
-                                              ssh_client=con_ssh))
-    convert = False
-    values = []
-    if isinstance(rtn_val, str):
-        rtn_val = (rtn_val, )
-        convert = True
+    table_ = table_parser.table(
+        cli.openstack('sfc port pair group list --print-empty', ssh_client=con_ssh, auth_info=auth_info)[1])
 
-    for field in rtn_val:
-        values.append(table_parser.get_column(table_, field))
-    if convert:
-        values = values[0]
-    return values
+    return table_parser.get_multi_values(table_, field)
 
 
-def get_sfc_port_pair_group_value(group, field='Port Pair', fail_ok=False, auth_info=None, con_ssh=None):
+def get_sfc_port_pair_group_values(group, field='Port Pair', fail_ok=False, auth_info=None, con_ssh=None):
     """
     Get port pair group value from 'openstack sfc port pair group show'
     Args:
         group (str):
-        field (str):
+        field (str|list|tuple):
         fail_ok (bool):
         auth_info:
         con_ssh:
 
-    Returns (None|str|dict|list):
+    Returns (list|None):
         None    # if group does not exist. Only when fail_ok=True
         str|dict|list   # value of given field.
 
     """
-    code, output = cli.openstack('sfc port pair group show', group, auth_info=auth_info, ssh_client=con_ssh,
-                                 fail_ok=fail_ok)
+    code, output = cli.openstack('sfc port pair group show', group, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return None
 
     table_ = table_parser.table(output)
-    value = table_parser.get_value_two_col_table(table_, field=field, merge_lines=True)
-    if 'port pair' in field.lower():
-        value = eval(value)
+    values = table_parser.get_multi_values_two_col_table(table_, field, evaluate=True)
 
-    return value
+    return values
 
 
-def get_sfc_flow_classifiers(rtn_val='ID', auth_info=None, con_ssh=None):
+def get_sfc_flow_classifiers(field='ID', auth_info=None, con_ssh=None):
     """
     Get flow classifiers
     Args:
-        rtn_val (str|tuple|list): ID or Name
+        field (str|tuple|list): ID or Name
         auth_info:
         con_ssh:
 
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.openstack('sfc flow classifier list --print-empty', auth_info=auth_info,
-                                              ssh_client=con_ssh))
+    table_ = table_parser.table(
+        cli.openstack('sfc flow classifier list --print-empty', ssh_client=con_ssh, auth_info=auth_info)[1])
 
-    convert = False
-    values = []
-    if isinstance(rtn_val, str):
-        rtn_val = (rtn_val, )
-        convert = True
-
-    for field in rtn_val:
-        values.append(table_parser.get_column(table_, field))
-    if convert:
-        values = values[0]
-    return values
+    return table_parser.get_multi_values(table_, field)
 
 
-def get_sfc_port_chains(rtn_val='ID', auth_info=None, con_ssh=None):
+def get_sfc_port_chains(field='ID', auth_info=None, con_ssh=None):
     """
     Get flow classifiers
     Args:
-        rtn_val (str): ID or Name
+        field (str): ID or Name
         auth_info:
         con_ssh:
 
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.openstack('sfc port chain list --print-empty', auth_info=auth_info,
-                                              ssh_client=con_ssh))
+    table_ = table_parser.table(
+        cli.openstack('sfc port chain list --print-empty', ssh_client=con_ssh, auth_info=auth_info)[1])
 
-    convert = False
-    values = []
-    for field in rtn_val:
-        values.append(table_parser.get_column(table_, field))
-    if convert:
-        values = values[0]
-    return values
+    return table_parser.get_multi_values(table_, field)
 
 
 def create_sfc_port_chain(port_pair_groups, name=None, flow_classifiers=None, description=None, chain_param=None,
@@ -4011,8 +3869,7 @@ def create_sfc_port_chain(port_pair_groups, name=None, flow_classifiers=None, de
 
     arg = '{} {}'.format(arg, name)
     LOG.info("Creating port chain {}".format(name))
-    code, output = cli.openstack('sfc port chain create', arg, fail_ok=fail_ok, auth_info=auth_info, rtn_code=True,
-                                 ssh_client=con_ssh)
+    code, output = cli.openstack('sfc port chain create', arg, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     if code > 0:
         return 1, output
@@ -4054,8 +3911,8 @@ def set_sfc_port_chain(port_chain, port_pair_groups=None, flow_classifiers=None,
     }
 
     arg = '{} {}'.format(common.parse_args(arg_dict, repeat_arg=True), port_chain)
-    code, output = cli.openstack('sfc port chain set', positional_args=arg, fail_ok=fail_ok, auth_info=auth_info,
-                                 ssh_client=con_ssh, rtn_code=True)
+    code, output = cli.openstack('sfc port chain set', positional_args=arg, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -4095,8 +3952,7 @@ def unset_sfc_port_chain(port_chain, flow_classifiers=None, port_pair_groups=Non
         raise ValueError("Nothing specified to unset.")
 
     arg = '{} {}'.format(arg, port_chain)
-    code, output = cli.openstack('sfc port chain unset', arg, fail_ok=fail_ok, rtn_code=True,
-                                 ssh_client=con_ssh, auth_info=auth_info)
+    code, output = cli.openstack('sfc port chain unset', arg, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     if code > 0:
         return 1, output
@@ -4132,7 +3988,7 @@ def delete_sfc_port_chain(port_chain, check_first=True, fail_ok=False, auth_info
 
     LOG.info("Deleting port chain {}".format(port_chain))
     code, output = cli.openstack('sfc port chain delete', port_chain, ssh_client=con_ssh, fail_ok=fail_ok,
-                                 auth_info=auth_info, rtn_code=True)
+                                 auth_info=auth_info)
 
     if code > 0:
         return 1, output
@@ -4159,26 +4015,13 @@ def get_sfc_port_chain_values(port_chain, fields='Flow Classifiers', fail_ok=Fal
     Returns (None|list): None    # if chain does not exist. Only when fail_ok=True
 
     """
-    code, output = cli.openstack('sfc port chain show', port_chain, auth_info=auth_info, ssh_client=con_ssh,
-                                 fail_ok=fail_ok)
+    code, output = cli.openstack('sfc port chain show', port_chain, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return None
 
     table_ = table_parser.table(output)
-    convert = False
-    values = []
-    if isinstance(fields, str):
-        fields = [fields]
-
-    for field in fields:
-        value = table_parser.get_value_two_col_table(table_, field, merge_lines=True)
-        if re.search('groups|classifiers', field.lower()):
-            value = eval(value)
-        values.append(value)
-
-    if convert:
-        values = values[0]
-    return values
+    return table_parser.get_multi_values_two_col_table(table_, fields, evaluate=True, merge_lines=True)
 
 
 def get_sfc_flow_classifier_values(flow_classifier, fields='Protocol', fail_ok=False, auth_info=None, con_ssh=None):
@@ -4194,21 +4037,13 @@ def get_sfc_flow_classifier_values(flow_classifier, fields='Protocol', fail_ok=F
         Returns (None|list): return None if flow classifier does not exist. Only when fail_ok=True
 
         """
-    code, output = cli.openstack('sfc flow classifier show', flow_classifier, auth_info=auth_info, ssh_client=con_ssh,
-                                 fail_ok=fail_ok)
+    code, output = cli.openstack('sfc flow classifier show', flow_classifier, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return None
 
     table_ = table_parser.table(output)
-    if isinstance(fields, str):
-        fields = [fields]
-    convert = False
-    values = []
-    for field in fields:
-        values.append(table_parser.get_value_two_col_table(table_, field, merge_lines=True))
-    if convert:
-        values = values[0]
-    return values
+    return table_parser.get_multi_values_two_col_table(table_, fields, merge_lines=True)
 
 
 def create_flow_classifier(name=None, description=None, protocol=None, ether_type=None, source_port=None,
@@ -4260,8 +4095,8 @@ def create_flow_classifier(name=None, description=None, protocol=None, ether_typ
     arg += ' {}'.format(name)
 
     LOG.info("Creating flow classifier {}".format(name))
-    code, output = cli.openstack('sfc flow classifier create', arg, auth_info=auth_info, fail_ok=fail_ok,
-                                 rtn_code=True, ssh_client=con_ssh)
+    code, output = cli.openstack('sfc flow classifier create', arg, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
 
     if code > 0:
         return 1, output
@@ -4300,8 +4135,8 @@ def delete_flow_classifier(flow_classifier, check_first=True, fail_ok=False, aut
             LOG.info(msg)
             return -1, msg
 
-    code, output = cli.openstack('sfc flow classifier delete', flow_classifier, auth_info=auth_info, fail_ok=fail_ok,
-                                 ssh_client=con_ssh, rtn_code=True)
+    code, output = cli.openstack('sfc flow classifier delete', flow_classifier, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -4352,7 +4187,7 @@ def _is_v4_only(ip_list):
     return rtn_val
 
 
-def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mode='dynamic', con_ssh=None):
+def get_internal_net_ids_on_vxlan(vxlan_provider_net_id, ip_version=4, mode='dynamic', con_ssh=None):
     """
     Get the networks ids that matches the vxlan underlay ip version
     Args:
@@ -4365,11 +4200,11 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
 
     """
     rtn_networks = []
-    networks = get_networks_on_providernet(providernet=vxlan_provider_net_id, rtn_val='id', con_ssh=con_ssh)
+    networks = get_networks_on_providernet(providernet=vxlan_provider_net_id, field='id', con_ssh=con_ssh)
     if not networks:
         return rtn_networks
     provider_attributes = get_networks_on_providernet(providernet=vxlan_provider_net_id, con_ssh=con_ssh,
-                                                      rtn_val='providernet_attributes')
+                                                      field='providernet_attributes')
     if not provider_attributes:
         return rtn_networks
 
@@ -4385,8 +4220,8 @@ def get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id, ip_version=4, mod
     vxlan_mode = dic_attr_1['mode']
 
     if mode == 'static' and vxlan_mode == mode:
-        data_if_name = system_helper.get_host_interfaces('compute-0', net_type='data', con_ssh=con_ssh)
-        address = system_helper.get_host_addr_list(host='compute-0', ifname=data_if_name, con_ssh=con_ssh)
+        data_if_name = host_helper.get_host_interfaces('compute-0', net_type='data', con_ssh=con_ssh)
+        address = host_helper.get_host_addresses(host='compute-0', ifname=data_if_name, con_ssh=con_ssh)
         if ip_version == 4 and _is_v4_only(address):
             rtn_networks.append(networks[index])
         elif ip_version == 6 and not _is_v4_only(address):
@@ -4618,7 +4453,7 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
     if description is None:
         description = '"portforwarding"'
 
-    tenant_id = keystone_helper.get_tenant_ids(tenant, con_ssh=con_ssh)[0]
+    tenant_id = keystone_helper.get_projects(field='ID', name=tenant, con_ssh=con_ssh)[0]
 
     mgmt_ips_for_vms = get_mgmt_ips_for_vms()
 
@@ -4648,8 +4483,7 @@ def create_port_forwarding_rule(router_id, inside_addr=None, inside_port=None, o
 
     LOG.info("Creating port forwarding with args: {}".format(args))
     # send portforwarding-create cli
-    code, output = cli.neutron('portforwarding-create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                               rtn_code=True)
+    code, output = cli.neutron('portforwarding-create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     # process result
     if code == 1:
@@ -4762,8 +4596,7 @@ def update_portforwarding_rule(portforwarding_id, inside_addr=None, inside_port=
     LOG.info("Updating router {}: {}".format(portforwarding_id, args))
 
     args = '{} {}'.format(portforwarding_id, args.strip())
-    return cli.neutron('portforwarding-update', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                       rtn_code=True, force_neutron=True)
+    return cli.neutron('portforwarding-update', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
 
 def delete_portforwarding_rules(pf_ids, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
@@ -4807,8 +4640,8 @@ def delete_portforwarding_rule(portforwarding_id, auth_info=Tenant.get('admin'),
     """
 
     LOG.info("Deleting port-forwarding {}...".format(portforwarding_id))
-    code, output = cli.neutron('portforwarding-delete', portforwarding_id, ssh_client=con_ssh, auth_info=auth_info,
-                               fail_ok=fail_ok, rtn_code=True)
+    code, output = cli.neutron('portforwarding-delete', portforwarding_id, ssh_client=con_ssh, fail_ok=fail_ok,
+                               auth_info=auth_info)
     if code != 0:
         msg = "CLI rejected. Fail to delete Port-forwarding {}; {}".format(portforwarding_id, output)
         LOG.warn(msg)
@@ -4860,7 +4693,7 @@ def get_portforwarding_rules(router_id=None, inside_addr=None, inside_port=None,
         if val is not None:
             final_params[key] = str(val)
 
-    table_ = table_parser.table(cli.neutron('portforwarding-list', ssh_client=con_ssh, auth_info=auth_info),
+    table_ = table_parser.table(cli.neutron('portforwarding-list', ssh_client=con_ssh, auth_info=auth_info)[1],
                                 combine_multiline_entry=True)
     if not table_parser.get_all_rows(table_):
         return []
@@ -4887,8 +4720,9 @@ def get_portforwarding_rule_info(portforwarding_id, field='inside_addr', strict=
 
     """
 
-    table_ = table_parser.table(cli.neutron('portforwarding-show', portforwarding_id, ssh_client=con_ssh,
-                                            auth_info=auth_info), combine_multiline_entry=True)
+    table_ = table_parser.table(
+        cli.neutron('portforwarding-show', portforwarding_id, ssh_client=con_ssh, auth_info=auth_info)[1],
+        combine_multiline_entry=True)
     return table_parser.get_value_two_col_table(table_, field, strict)
 
 
@@ -4921,8 +4755,8 @@ def create_pci_alias_for_devices(dev_type, hosts=None, devices=None, alias_names
             class_id = DevClassID.GPU
         else:
             class_id = DevClassID.USB
-        devices = host_helper.get_host_device_list_values(host=hosts[0], field='address', list_all=True, regex=True,
-                                                          **{'class id': class_id})
+        devices = host_helper.get_host_devices(host=hosts[0], field='address', list_all=True, regex=True,
+                                               **{'class id': class_id})
     elif isinstance(devices, str):
         devices = [devices]
 
@@ -4974,8 +4808,7 @@ def _check_pci_alias_created(devices, con_ssh=None, timeout=60):
     end_time = time.time() + timeout
     out = None
     while time.time() < end_time:
-        code, out = cli.nova('device-list', ssh_client=con_ssh, auth_info=Tenant.get('admin'), fail_ok=True,
-                             rtn_code=True)
+        code, out = cli.nova('device-list', ssh_client=con_ssh, fail_ok=True, auth_info=Tenant.get('admin'))
         if code == 0:
             break
         time.sleep(10)
@@ -4991,11 +4824,11 @@ def _check_pci_alias_created(devices, con_ssh=None, timeout=60):
         assert param_.get('device id') == created_alias['device id']
 
 
-def get_qos_policies(rtn_val='id', name=None, qos_ids=None, con_ssh=None, auth_info=None):
+def get_qos_policies(field='id', name=None, qos_ids=None, con_ssh=None, auth_info=None):
     """
     Get qos policies
     Args:
-        rtn_val
+        field (str|list|tuple)
         name
         qos_ids(str|list|None): QoS id to filter name.
         con_ssh(SSHClient):  If None, active controller ssh will be used.
@@ -5004,10 +4837,10 @@ def get_qos_policies(rtn_val='id', name=None, qos_ids=None, con_ssh=None, auth_i
     Returns(list): List of neutron qos names filtered by qos_id.
 
     """
-    table_ = table_parser.table(cli.neutron('qos-list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.neutron('qos-list', ssh_client=con_ssh, auth_info=auth_info)[1])
     filters = {'id': qos_ids, 'name': name}
 
-    return table_parser.get_values(table_, rtn_val, **filters)
+    return table_parser.get_multi_values(table_, field, **filters)
 
 
 def create_qos(name=None, tenant_name=None, description=None, scheduler=None, dscp=None, ratelimit=None, fail_ok=False,
@@ -5029,10 +4862,10 @@ def create_qos(name=None, tenant_name=None, description=None, scheduler=None, ds
                     (0, qos_id) qos successfully created.
                     (1, output) qos not created successfully
     """
-    tenant_id = keystone_helper.get_tenant_ids(tenant_name=tenant_name, con_ssh=con_ssh)[0]
+    tenant_id = keystone_helper.get_projects(field='ID', name=tenant_name, con_ssh=con_ssh)[0]
     check_dict = {}
     args = ''
-    current_qos = get_qos_policies(rtn_val='name', con_ssh=con_ssh, auth_info=auth_info)
+    current_qos = get_qos_policies(field='name', con_ssh=con_ssh, auth_info=auth_info)
     if name is None:
         if tenant_name is None:
             tenant_name = common.get_tenant_name(Tenant.get_primary())
@@ -5062,8 +4895,7 @@ def create_qos(name=None, tenant_name=None, description=None, scheduler=None, ds
                 check_dict[key] = value
 
     LOG.info("Creating QoS with args: {}".format(args))
-    exit_code, output = cli.neutron('qos-create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
-                                    rtn_code=True)
+    exit_code, output = cli.neutron('qos-create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if exit_code == 1:
         return 1, output
 
@@ -5099,8 +4931,7 @@ def delete_qos(qos_id, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=Fals
     """
 
     LOG.info("deleting QoS: {}".format(qos_id))
-    code, output = cli.neutron('qos-delete', qos_id, auth_info=auth_info, ssh_client=con_ssh, fail_ok=fail_ok,
-                               rtn_code=True)
+    code, output = cli.neutron('qos-delete', qos_id, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code == 1:
         return 1, output
 
@@ -5137,8 +4968,8 @@ def update_net_qos(net_id, qos_id=None, fail_ok=False, auth_info=Tenant.get('adm
 
     # code, msg = update_network(net_id=net_id, fail_ok=fail_ok, auth_info=auth_info, con_ssh=con_ssh, **kwargs)
 
-    code, msg = cli.neutron('net-update', '{} {}'.format(arg_str, net_id), fail_ok=fail_ok, ssh_client=con_ssh,
-                            auth_info=auth_info, rtn_code=True)
+    code, msg = cli.neutron('net-update', '{} {}'.format(arg_str, net_id), ssh_client=con_ssh, fail_ok=fail_ok,
+                            auth_info=auth_info)
     if code > 0:
         return code, msg
 

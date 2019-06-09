@@ -1,6 +1,6 @@
 import time
 
-from pytest import fixture, skip
+from pytest import fixture
 
 from consts.cgcs import FlavorSpec, Prompt
 from keywords import network_helper, vm_helper, nova_helper, glance_helper, system_helper
@@ -96,7 +96,7 @@ def _vms():
 def test_port_forwarding_rule_create_for_vm(_vms, delete_pfs):
 
     for vm_id, i in zip(_vms, range(len(_vms))):
-        vm_name = nova_helper.get_vm_name_from_id(vm_id)
+        vm_name = vm_helper.get_vm_name_from_id(vm_id)
         public_port = str(9090 + i)
         LOG.info("Creating  port forwarding rule for VM: {}: outside_port={}.".format(vm_name, public_port))
         rc, pf_id, msg = network_helper.create_port_forwarding_rule_for_vm(vm_id,
@@ -134,7 +134,7 @@ def test_dnat_ubuntu_vm_tcp(_vms, router_info, delete_pfs, delete_scp_files_from
 
     LOG.tc_step("Testing SCP to and from VMs ...")
     for vm_id_, v in vm_tcp_pfs.items():
-        vm_name = nova_helper.get_vm_name_from_id(vm_id_)
+        vm_name = vm_helper.get_vm_name_from_id(vm_id_)
         ssh_public_port = vm_ssh_pfs[vm_id_]['public_port']
         scp_to_vm_from_nat_box(nat_ssh, vm_id_, "ubuntu", ext_gateway_ip, ssh_public_port)
         LOG.info("SCP to/from VM {} is successful .... ".format(vm_name))
@@ -362,7 +362,7 @@ def create_portforwarding_rules_for_vms(vm_mgmt_ips, router_id, protocol, for_ss
 
     vm_pfs = {}
     for key, i in zip(vm_mgmt_ips, range(0, 10)):
-        vm_name = nova_helper.get_vm_name_from_id(key)
+        vm_name = vm_helper.get_vm_name_from_id(key)
         public_port = str(base_port + i)
         LOG.info("Creating port forwarding rule for VM: {}: protocol={}, inside_address={}, inside_port={},"
                  "outside_port={}.".format(vm_name, protocol,  vm_mgmt_ips[key][0], inside_port, public_port))

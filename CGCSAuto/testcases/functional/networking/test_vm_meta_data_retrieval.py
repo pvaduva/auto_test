@@ -44,7 +44,7 @@ def _router_info(request):
     ext_gateway_subnet = ext_gateway_info.get('subnet_id', None)
     LOG.info("Router {} external subnet id {}".format(router_name, ext_gateway_subnet))
 
-    router_subnets = network_helper.get_router_subnets(router=router_id, mgmt_only=True)
+    router_subnets = network_helper.get_router_subnets(router=router_id)
     LOG.info("Router {} mgmt ports subnet ids {}".format(router_name, router_subnets))
 
     def recover():
@@ -61,7 +61,7 @@ def _router_info(request):
             _set_external_gatewayway_info(post_router_id, ext_gateway_subnet, gateway_ip, is_dvr)
 
         LOG.fixture_step("Ensure all interfaces added to router {}".format(post_router_id))
-        teardown_subnets = network_helper.get_router_subnets(router=post_router_id, mgmt_only=True)
+        teardown_subnets = network_helper.get_router_subnets(router=post_router_id)
         subnets_to_add = list(set(router_subnets) - set(teardown_subnets))
         if subnets_to_add:
             LOG.fixture_step("Add subnets to router {}: {}".format(post_router_id, subnets_to_add))
@@ -127,8 +127,7 @@ def test_vm_meta_data_access_after_delete_add_interfaces_router(_router_info):
 def _access_metadata_server_from_vm(vm_id):
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
-        ip_route = vm_ssh.exec_sudo_cmd('ip route')
-        LOG.info('ip route info {}'.format(ip_route))
+        vm_ssh.exec_cmd('ip route')
         command = 'wget http://{}/openstack/latest/meta_data.json'.format(METADATA_SERVER)
         vm_ssh.exec_cmd(command, fail_ok=False)
         metadata = vm_ssh.exec_cmd('more meta_data.json', fail_ok=False)[1]

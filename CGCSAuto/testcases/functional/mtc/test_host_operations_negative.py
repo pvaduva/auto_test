@@ -1,4 +1,5 @@
 from pytest import fixture, mark
+
 from utils import table_parser, cli
 from keywords import host_helper, system_helper
 from utils.tis_log import LOG
@@ -16,7 +17,7 @@ def test_add_host_simplex_negative(simplex_only):
 
     """
     LOG.tc_step("Check adding second controller is rejected on simplex system")
-    code, out = cli.system('host-add', '-n controller-1', fail_ok=True, rtn_code=True)
+    code, out = cli.system('host-add', '-n controller-1', fail_ok=True)
 
     assert 1 == code, "Unexpected exitcode for 'system host-add controller-1': {}".format(code)
     assert 'Adding a host on a simplex system is not allowed' in out, "Unexpected error message: {}".format(out)
@@ -32,11 +33,11 @@ def test_delete_host_if_unlock_negative():
         - Verify that the command was rejected
 
     """
-    hosts = system_helper.get_hostnames(administrative='unlocked')
+    hosts = system_helper.get_hosts(administrative='unlocked')
     host = hosts[len(hosts) - 1]
-    uuid = system_helper.get_host_interfaces(host, rtn_val='uuid', if_type='ethernet')[0]
+    uuid = host_helper.get_host_interfaces(host, field='uuid', if_type='ethernet')[0]
     LOG.tc_step("Attempting to delete interface {} from host {}".format(uuid, host))
-    code, out = cli.system('host-if-delete', '{} {}'.format(host, uuid), fail_ok=True, rtn_code=True)
+    code, out = cli.system('host-if-delete', '{} {}'.format(host, uuid), fail_ok=True)
     LOG.tc_step("Verify that the cli was rejected")
     assert 1 == code, "FAIL: Request to delete if was not rejected. Code: {}".format(code)
 
@@ -46,7 +47,7 @@ def lock_(request):
     hosts = host_helper.get_hypervisors()
     host = hosts[0]
     if hosts[0] == system_helper.get_active_controller_name():
-        if not system_helper.is_simplex():
+        if not system_helper.is_aio_simplex():
             host = hosts[1]
     host_helper.lock_host(host)
 
@@ -68,7 +69,7 @@ def test_modify_non_existing_cpu_negative(lock_):
 
     """
     host = lock_
-    table_ = system_helper.get_host_cpu_list_table(host)
+    table_ = host_helper.get_host_cpu_list_table(host)
     cores = set(table_parser.get_column(table_, 'phy_core'))
     fake_proc_num = 2
     while fake_proc_num in cores:
@@ -79,7 +80,7 @@ def test_modify_non_existing_cpu_negative(lock_):
     code, out = host_helper.modify_host_cpu(host, 'vSwitch', fail_ok=True, **map_)
     assert 0 != code, "FAIL: Modifying a non existing processor was not rejected"
 
-    hosts = system_helper.get_hostnames()
+    hosts = system_helper.get_hosts()
     name = hosts[len(hosts) - 1] + "a"
     while True:
         if name not in hosts:
@@ -101,7 +102,7 @@ def test_modify_cpu_unlock_negative():
         - Verify that the command is rejected
 
     """
-    hosts = system_helper.get_hostnames(administrative='unlocked')
+    hosts = system_helper.get_hosts(administrative='unlocked')
     for host in hosts:
         LOG.tc_step("Host {} is unlocked. Attempt to change its p0 function to vSwitch".format(host))
         code, out = host_helper.modify_host_cpu(host, 'vswitch', fail_ok=True, p0=0)
@@ -119,15 +120,15 @@ def test_change_personality_unlock_negative():
         - Verify that each attempt is rejected
 
     """
-    hosts = system_helper.get_hostnames()
+    hosts = system_helper.get_hosts()
     for host in hosts:
-        personality = host_helper.get_hostshow_value(host, 'personality')
+        personality = system_helper.get_host_values(host, 'personality')[0]
         if personality == 'controller':
             change_to = 'worker'
         else:
             change_to = 'controller'
         LOG.tc_step("Attempting to change {}'s personality to {}".format(host, personality))
-        code, out = cli.system('host-update', '{} personality={}'.format(host, change_to), fail_ok=True, rtn_code=True)
+        code, out = cli.system('host-update', '{} personality={}'.format(host, change_to), fail_ok=True)
         LOG.tc_step("Verifying that the cli was rejected")
 
         assert 1 == code, "FAIL: The request to modify {}'s personality was not rejected".format(host)
@@ -142,10 +143,10 @@ def test_change_name_unlock_negative():
         - Verify that each attempt is rejected
 
     """
-    hosts = system_helper.get_hostnames(administrative='unlocked')
+    hosts = system_helper.get_hosts(administrative='unlocked')
     for host in hosts:
         LOG.tc_step("Attempting to change host {} name to {}1".format(host, host))
-        code, out = cli.system('host-update', '{} hostname={}'.format(host, host + "1"), fail_ok=True, rtn_code=True)
+        code, out = cli.system('host-update', '{} hostname={}'.format(host, host + "1"), fail_ok=True)
         LOG.tc_step("Verifying that the cli was rejected")
 
         assert 1 == code, "FAIL: The request to modify {}'s name was not rejected".format(host)
@@ -160,10 +161,10 @@ def test_reset_host_unlock_negative():
         - Verify that each attempt was rejected
 
     """
-    hosts = system_helper.get_hostnames(administrative='unlocked')
+    hosts = system_helper.get_hosts(administrative='unlocked')
     for host in hosts:
         LOG.tc_step("{} is unlocked. Attempting to reset it".format(host))
-        code, out = cli.system('host-reset', '{} '.format(host), fail_ok=True, rtn_code=True)
+        code, out = cli.system('host-reset', '{} '.format(host), fail_ok=True)
         LOG.tc_step("Verifying that the cli was rejected")
 
         assert 1 == code, "FAIL: The request to reset {} was not rejected".format(host)
@@ -182,10 +183,10 @@ def test_unlock_unlocked_host_negative():
         - Verify that each attempt is rejected
 
     """
-    hosts = system_helper.get_hostnames(administrative='unlocked')
+    hosts = system_helper.get_hosts(administrative='unlocked')
     for host in hosts:
         LOG.tc_step("{} is already unlocked. Attempting to unlock it".format(host))
-        code, out = cli.system('host-unlock', host, fail_ok=True, rtn_code=True)
+        code, out = cli.system('host-unlock', host, fail_ok=True)
         LOG.tc_step("Verifying that the cli was rejected")
         assert 1 == code, "FAIL: The request to reset {} was not rejected".format(host)
 
@@ -226,21 +227,21 @@ def test_delete_unlocked_node_negative():
 
     """
 
-    hosts = system_helper.get_hostnames(administrative='unlocked')
+    hosts = system_helper.get_hosts(administrative='unlocked')
 
     deleted_nodes = []
 
     for node in hosts:
         LOG.tc_step("attempting to delete {}".format(node))
-        LOG.info("{} state: {}".format(node, host_helper.get_hostshow_value(node, field='administrative')))
-        res, out = cli.system('host-delete', node, fail_ok=True, rtn_code=True)
+        LOG.info("{} state: {}".format(node, system_helper.get_host_values(node, fields='administrative')[0]))
+        res, out = cli.system('host-delete', node, fail_ok=True)
 
         LOG.tc_step("Delete request - result: {}\tout: {}".format(res, out))
 
         assert 1 == res, "FAIL: The delete request for {} was not rejected".format(node)
 
         LOG.tc_step("Confirming that the node was not deleted")
-        res, out = cli.system('host-show', node, fail_ok=True, rtn_code=True)
+        res, out = cli.system('host-show', node, fail_ok=True)
 
         if 'host not found' in out or res != 0:
             # the node was deleted even though it said it wasn't
@@ -261,12 +262,12 @@ def test_delete_nonexisting_host_negative():
         - Verify that the command is rejected
 
     """
-    nodes = system_helper.get_hostnames()
+    nodes = system_helper.get_hosts()
     name = nodes[len(nodes) - 1] + "a"
     while True:
         if name not in nodes:
             break
         name += "a"
     LOG.tc_step("Attempt to delete {}".format(name))
-    code, out = cli.system('host-delete', name, fail_ok=True, rtn_code=True)
+    code, out = cli.system('host-delete', name, fail_ok=True)
     assert 1 == code, "FAIL: Attempting to delete non-existent {} was not rejected".format(name)

@@ -12,9 +12,6 @@ from keywords import ceilometer_helper
 
 
 # Obsolete: TODO update
-@mark.sanity
-@mark.cpe_sanity
-@mark.sx_nightly
 def _test_ceilometer_vswitch_port_samples():
     """
     Test Steps:

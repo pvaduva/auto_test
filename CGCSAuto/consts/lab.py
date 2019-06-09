@@ -495,10 +495,11 @@ class Labs:
         'controller_nodes': [23318, 23319],
         'compute_nodes': [23320, 23321, 23322],
         'ixia_ports': [{'port': (7, 11), 'range': (3602, 3651)}, {'port': (7, 12), 'range': (3702, 3751)}],
-        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0500',
-                              'compute-0': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01',
-                              'compute-1': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01',
-                              'compute-2': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01'},
+        'boot_device_dict': {
+            'controller-0': '0300', 'controller-1': '0500',
+            'compute-0': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01',
+            'compute-1': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01',
+            'compute-2': 'UEFI IPv4: Intel Network 00 at Riser 01 Slot 01'},
     }
 
     WCP_82_83 = {
@@ -508,7 +509,7 @@ class Labs:
         'controller-0 ip': '128.224.151.96',
         'controller-1 ip': '128.224.151.97',
         'controller_nodes': [23320, 23321],
-        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0400'},
+        'boot_device_dict': {'controller-0': '0300', 'controller-1': '0400'},
     }
 
     WCP_84 = {
@@ -517,7 +518,7 @@ class Labs:
         'floating ip': '128.224.151.4',
         'controller-0 ip': '128.224.151.4',
         'controller_nodes': [23322],
-        'boot_device_dict' : {'controller-0': '0300'},
+        'boot_device_dict': {'controller-0': '0300'},
     }
 
     WCP_85_89 = {
@@ -538,7 +539,7 @@ class Labs:
         'controller-0 ip': '128.224.150.244',
         'controller-1 ip': '128.224.150.202',
         'controller_nodes': [23323, 23324],
-        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0500'},
+        'boot_device_dict': {'controller-0': '0300', 'controller-1': '0500'},
     }
 
     WCP_87_88 = {
@@ -548,7 +549,7 @@ class Labs:
         'controller-0 ip': '128.224.151.86',
         'controller-1 ip': '128.224.151.229',
         'controller_nodes': [23325, 23326],
-        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '0500'},
+        'boot_device_dict': {'controller-0': '0300', 'controller-1': '0500'},
     }
 
     WCP_89 = {
@@ -557,7 +558,7 @@ class Labs:
         'floating ip': '128.224.151.2',
         'controller-0 ip': '128.224.151.2',
         'controller_nodes': [23327],
-        'boot_device_dict' : {'controller-0': '0300'}
+        'boot_device_dict': {'controller-0': '0300'}
     }
 
     WCP_90_91 = {
@@ -571,7 +572,7 @@ class Labs:
         'system_mode': 'duplex',
         'tpm_installed': True,
         'ixia_ports': [{'port': (7, 15), 'range': (301, 350)}, {'port': (7, 16), 'range': (401, 450)}],
-        'boot_device_dict' : {'controller-0': '0300', 'controller-1': '8100'},
+        'boot_device_dict': {'controller-0': '0300', 'controller-1': '8100'},
     }
 
     WCP_92_98 = {
@@ -954,8 +955,11 @@ class NatBoxes:
     }
 
     @staticmethod
-    def add_natbox(ip, user='svc-cgcsauto', password=')OKM0okm'):
+    def add_natbox(ip, user=None, password=None):
         # this only supports svc-cgcsauto user from cgts group for now
+        user = user if user else 'svc-cgcsauto'
+        password = password if password else ')OKM0okm'
+
         nat_dict = {'ip': ip,
                     'name': ip,
                     'user': user,
@@ -963,4 +967,3 @@ class NatBoxes:
                     }
         setattr(NatBoxes, 'NAT_NEW', nat_dict)
         return nat_dict
-

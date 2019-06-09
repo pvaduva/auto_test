@@ -1,6 +1,6 @@
 import copy
 
-from pytest import fixture, mark, skip
+from pytest import fixture, mark, skip, param
 
 from utils.tis_log import LOG
 
@@ -95,12 +95,12 @@ class TestMutiPortsBasic:
         return base_vm, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id
 
     @mark.parametrize('vifs', [
-        mark.p2(('avp_x2',)),
-        mark.p2(('e1000_x2',)),
-        mark.p2(('avp_x8', 'virtio_x7')),
-        mark.priorities('nightly', 'sx_nightly')(('virtio_x4',))
+        param(('avp_x2', ), marks=mark.p2),
+        param(('e1000_x2', ), marks=mark.p2),
+        param(('avp_x8', 'virtio_x7'), marks=mark.p2),
+        param(('virtio_x4', ), marks=mark.priorities('nightly', 'sx_nightly'))
     ], ids=id_params)
-    def test_multiports_on_same_network_vm_actions(self, vifs, skip_for_ovs, base_setup):
+    def test_multiports_on_same_network_vm_actions(self, vifs, check_avs_pattern, base_setup):
         """
         Test vm actions on vm with multiple ports with given vif models on the same tenant network
 
@@ -143,7 +143,7 @@ class TestMutiPortsBasic:
             else:
                 LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
                 for action in vm_actions:
-                    if 'migrate' in action and system_helper.is_simplex():
+                    if 'migrate' in action and system_helper.is_aio_simplex():
                         continue
 
                     kwargs = {}
@@ -167,7 +167,7 @@ class TestMutiPortsBasic:
     @mark.parametrize('vifs', [
         ('avp', 'e1000'),
     ], ids=id_params)
-    def test_multiports_on_same_network_evacuate_vm(self, vifs, skip_for_ovs, base_setup):
+    def test_multiports_on_same_network_evacuate_vm(self, vifs, check_avs_pattern, base_setup):
         """
         Test evacuate vm with multiple ports on same network
 
@@ -199,7 +199,7 @@ class TestMutiPortsBasic:
         vm_under_test, nics = _boot_multiports_vm(flavor=flavor, mgmt_net_id=mgmt_net_id, vifs=vifs,
                                                   net_id=tenant_net_id, net_type='data', base_vm=base_vm)
 
-        host = nova_helper.get_vm_host(vm_under_test)
+        host = vm_helper.get_vm_host(vm_under_test)
 
         LOG.tc_step("Reboot vm host {}".format(host))
         vm_helper.evacuate_vms(host=host, vms_to_check=vm_under_test, ping_vms=True)
@@ -277,17 +277,17 @@ class TestMutiPortsPCI:
         return base_vm_pci, flavor_id, base_nics, avail_sriov_net, avail_pcipt_net, pcipt_seg_ids, extra_pcipt_net
 
     @mark.parametrize('vifs', [
-        # mark.p2(('virtio', 'avp', 'pci-passthrough')),
+        # param('virtio', 'avp', 'pci-passthrough')),
         # mark.p2(['virtio_x7', 'pci-sriov_x7']),       This test requires compute configured with 8+ sriov vif
         # mark.p2(['virtio_x6', 'avp_x6', 'pci-passthrough']),
-        # mark.p2(('virtio_x5', 'avp_x5', 'pci-sriov_x2')),
-        mark.p3(('virtio', 'pci-sriov', 'pci-passthrough')),
-        mark.nightly(('pci-passthrough',)),   # Covered by test_pcipt_sriov.py
-        mark.nightly(('pci-sriov',)),  # Covered by test_pcipt_sriov.py
-        mark.domain_sanity(('virtio_x2', 'avp_x2', 'e1000_x2', 'pci-passthrough', 'pci-sriov_x2')),
-        # mark.p3(('avp', 'pci-passthrough', 'pci-sriov_x2')),
+        # param('virtio_x5', 'avp_x5', 'pci-sriov_x2')),
+        param(('virtio', 'pci-sriov', 'pci-passthrough'), marks=mark.p3),
+        param(('pci-passthrough',), marks=mark.nightly),   # Covered by test_pcipt_sriov.py
+        param(('pci-sriov', ), marks=mark.nightly),  # Covered by test_pcipt_sriov.py
+        param(('virtio_x2', 'avp_x2', 'e1000_x2', 'pci-passthrough', 'pci-sriov_x2'), marks=mark.domain_sanity),
+        # param('avp', 'pci-passthrough', 'pci-sriov_x2')),
     ], ids=id_params)
-    def test_multiports_on_same_network_pci_vm_actions(self, skip_for_ovs, base_setup_pci, vifs):
+    def test_multiports_on_same_network_pci_vm_actions(self, check_avs_pattern, base_setup_pci, vifs):
         """
         Test vm actions on vm with multiple ports with given vif models on the same tenant network
 
@@ -386,10 +386,10 @@ class TestMutiPortsPCI:
     @mark.parametrize('vifs', [
         ('pci-sriov',),
         ('pci-passthrough',),
-        mark.domain_sanity(('avp', 'virtio', 'pci-passthrough', 'pci-sriov')),
+        param(('avp', 'virtio', 'pci-passthrough', 'pci-sriov'), marks=mark.domain_sanity),
         # (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
     ], ids=id_params)
-    def test_multiports_on_same_network_pci_evacuate_vm(self, skip_for_ovs, base_setup_pci, vifs):
+    def test_multiports_on_same_network_pci_evacuate_vm(self, check_avs_pattern, base_setup_pci, vifs):
         """
         Test evacuate vm with multiple ports on same network
 
@@ -453,7 +453,7 @@ class TestMutiPortsPCI:
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal networks")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
 
-        host = nova_helper.get_vm_host(vm_under_test)
+        host = vm_helper.get_vm_host(vm_under_test)
 
         LOG.tc_step("Reboot vm host {}".format(host))
         vm_helper.evacuate_vms(host=host, vms_to_check=vm_under_test, ping_vms=True)

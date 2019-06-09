@@ -14,7 +14,7 @@ from keywords import system_helper, install_helper, patching_helper, orchestrati
 
 @pytest.fixture(scope='session')
 def patch_orchestration_setup():
-    ProjVar.set_var(SOURCE_CREDENTIAL=True)
+    ProjVar.set_var(SOURCE_OPENRC=True)
     patching_helper.check_system_health()
 
     lab = InstallVars.get_install_var('LAB')

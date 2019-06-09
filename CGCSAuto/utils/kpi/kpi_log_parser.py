@@ -7,7 +7,7 @@ from consts.auth import HostLinuxCreds, Tenant
 from consts.cgcs import TIMESTAMP_PATTERN
 from consts.kpi_vars import KPI_DATE_FORMAT
 from consts.proj_vars import ProjVar
-from keywords import host_helper, common
+from keywords import host_helper, common, system_helper
 from utils import lab_info
 from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient
 
@@ -75,24 +75,17 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
             if not con_ssh:
                 if not ProjVar.get_var('LAB'):
                     ProjVar.set_var(lab=lab)
-                    ProjVar.set_var(source_admin=Tenant.get('admin'))
+                    ProjVar.set_var(source_openrc=True)
                 con_ssh = SSHClient(lab.get('floating ip'), HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
                                     CONTROLLER_PROMPT)
                 con_ssh.connect()
 
-        if not build_id:
-            build_id = ProjVar.get_var('BUILD_ID')
-            if not build_id:
-                build_id = lab_info.get_build_id(labname=lab['name'], con_ssh=con_ssh)
-        kpi_dict.update({'build_id': build_id})
+        if not build_id or not sw_version:
+            build_info = system_helper.get_build_info(con_ssh=con_ssh)
+            build_id = build_id if build_id else build_info['BUILD_ID']
+            sw_version = sw_version if sw_version else build_info['SW_VERSION']
 
-        if not sw_version:
-            sw_version = ProjVar.get_var('SW_VERSION')
-            if not sw_version:
-                sw_version = lab_info._get_build_info(con_ssh, 'SW_VERSION')[0]
-            if isinstance(sw_version, list):
-                sw_version = ', '.join(sw_version)
-        kpi_dict.update({'sw_version': sw_version})
+        kpi_dict.update({'build_id': build_id, 'sw_version': sw_version})
 
         if not patch:
             patch = ProjVar.get_var('PATCH')

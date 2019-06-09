@@ -1,6 +1,9 @@
 import re
 import time
 from pytest import fixture
+
+import keywords.host_helper
+import keywords.system_helper
 from utils.tis_log import LOG
 
 from consts.cgcs import FlavorSpec, GuestImages, DevClassID
@@ -18,9 +21,9 @@ def setup_alias(request):
     def revert_alias_setup():
 
         service = 'nova'
-        gpu_uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service,
+        gpu_uuid = system_helper.get_service_parameter_values(field='uuid', service=service,
                                                               section='pci_alias', name='gpu')[0]
-        user_uuid = system_helper.get_service_parameter_values(rtn_value='uuid', service=service,
+        user_uuid = system_helper.get_service_parameter_values(field='uuid', service=service,
                                                                section='pci_alias', name='user')[0]
         LOG.fixture_step("Delete service parameter uuid {} ".format(gpu_uuid))
         system_helper.delete_service_parameter(uuid=gpu_uuid)
@@ -112,8 +115,8 @@ def test_gpu_passthrough(setup_alias):
 
 def _get_nova_alias(class_id, dev_type, regex=False):
     hosts = host_helper.get_up_hypervisors()
-    devices = host_helper.get_host_device_list_values(host=hosts[0], field='address', list_all=True, regex=regex,
-                                                      **{'class id': class_id})
+    devices = keywords.host_helper.get_host_devices(host=hosts[0], field='address', list_all=True, regex=regex,
+                                                    **{'class id': class_id})
     dev_len = min(len(devices), 2)
     devices = devices[:dev_len]
 

@@ -1,11 +1,11 @@
 import os
 import time
-from pytest import fixture, mark, skip
+from pytest import fixture, mark, skip, param
 
 from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
-from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper, cinder_helper, glance_helper,\
+from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper, cinder_helper, glance_helper, \
     host_helper, common, system_helper, vm_helper
 
 from consts.heat import Heat, HeatUpdate
@@ -50,14 +50,14 @@ def verify_heat_resource(to_verify=None, template_name=None, stack_name=None, au
         resource_found = network_helper.get_ports(port_name=port_name)
 
     elif to_verify is 'neutron_provider_net_range':
-        resource_found = network_helper.get_network_segment_ranges(rtn_val='name', physical_network='sample_physnet_X')
+        resource_found = network_helper.get_network_segment_ranges(field='name', physical_network='sample_physnet_X')
 
     elif to_verify is 'nova_server_group':
         resource_found = nova_helper.get_server_groups(name=stack_name)
 
     elif to_verify is 'vm':
         vm_name = getattr(Heat, template_name)['vm_name']
-        resource_found = nova_helper.get_vms(vms=vm_name, strict=False)
+        resource_found = vm_helper.get_vms(vms=vm_name, strict=False)
 
     elif to_verify is 'nova_flavor':
         resource_found = nova_helper.get_flavors(name='sample-flavor')
@@ -147,8 +147,7 @@ def update_stack(stack_name, template_name=None, ssh_client=None, fail_ok=False,
     cmd_list.append(" -x %s" % stack_name)
     params_str = ''.join(cmd_list)
     LOG.info("Executing command: heat %s stack-update", params_str)
-    exitcode, output = cli.heat('stack-update', params_str, ssh_client=ssh_client, fail_ok=fail_ok,
-                                auth_info=auth_info, rtn_code=True)
+    exitcode, output = cli.heat('stack-update', params_str, ssh_client=ssh_client, fail_ok=fail_ok, auth_info=auth_info)
 
     if exitcode == 1:
         LOG.warning("Update heat stack request rejected.")
@@ -202,23 +201,15 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
     if heat_user is 'admin':
         auth_info = Tenant.get('admin')
 
-    table_ = table_parser.table(cli.heat('stack-list', auth_info=auth_info))
+    table_ = table_parser.table(cli.heat('stack-list', auth_info=auth_info)[1])
     names = table_parser.get_values(table_, 'stack_name')
     stack_name = common.get_unique_name(t_name, existing_names=names)
-
     template_path = os.path.join(ProjVar.get_var('USER_FILE_DIR'), HEAT_PATH, template_name)
-    cmd_list = ['-f %s ' % template_path]
-
-    if params is not None:
-        for param in params:
-            param_result = heat_helper.get_heat_params(param_name=param)
-            cmd_list.append("-P %s=%s " % (param, param_result))
-
-    cmd_list.append(" %s" % stack_name)
-    params_string = ''.join(cmd_list)
+    if params:
+        params = {param_: heat_helper.get_heat_params(param_name=param_) for param_ in params}
 
     LOG.tc_step("Creating Heat Stack using template %s", template_name)
-    heat_helper.create_stack(stack_name=stack_name, params_string=params_string, cleanup='function',
+    heat_helper.create_stack(stack_name=stack_name, template=template_path, parameters=params, cleanup='function',
                              auth_info=auth_info, con_ssh=con_ssh)
 
     for item in to_verify:
@@ -234,7 +225,7 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
         host_helper.swact_host()
 
     LOG.tc_step("Delete heat stack {} ".format(stack_name))
-    heat_helper.delete_stack(stack_name=stack_name, auth_info=auth_info, fail_ok=False)
+    heat_helper.delete_stack(stack=stack_name, auth_info=auth_info, fail_ok=False)
 
     LOG.info("Stack {} deleted successfully.".format(stack_name))
 
@@ -248,7 +239,6 @@ def verify_basic_template(template_name=None, con_ssh=None, auth_info=None, dele
 
 @fixture(scope='module', autouse=True)
 def revert_quota(request):
-
     original_quotas = vm_helper.get_quota_details_info('network', detail=False)
     tenants_quotas = {}
 
@@ -262,6 +252,7 @@ def revert_quota(request):
         for tenant_id_, quotas in tenants_quotas.items():
             network_quota_, subnet_quota_ = quotas
             vm_helper.set_quotas(tenant=tenant_id, networks=network_quota_, subnets=subnet_quota_)
+
     request.addfinalizer(revert)
 
     return tenants_quotas
@@ -269,29 +260,29 @@ def revert_quota(request):
 
 @mark.usefixtures('check_alarms')
 @mark.parametrize('template_name', [
-    # mark.sanity('WR_Neutron_ProviderNetRange.yaml'),  # Need update due to datanetwork change
-    mark.priorities('nightly', 'sx_nightly')('OS_Cinder_Volume.yaml'),
-    # mark.priorities('nightly', 'sx_nightly')('OS_Glance_Image.yaml'), # Stack update needed
+    # param('WR_Neutron_ProviderNetRange.yaml', marks=mark.priorities('p2')),  # Need update due to datanetwork change
+    param('OS_Cinder_Volume.yaml', marks=mark.priorities('p2')),
+    # param('OS_Glance_Image.yaml'), # Stack update needed
     # https://bugs.launchpad.net/bugs/1819483
-    mark.priorities('nightly', 'sx_nightly')('OS_Ceilometer_Alarm.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Port.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Net.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Subnet.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Nova_Flavor.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_FloatingIP.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_Router.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_RouterGateway.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_RouterInterface.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Neutron_SecurityGroup.yaml'),
-    # mark.priorities('nightly', 'sx_nightly')('OS_Nova_ServerGroup.yaml'),     # Stack update needed
-    mark.priorities('nightly', 'sx_nightly')('OS_Nova_KeyPair.yaml'),
-    # mark.priorities('nightly', 'sx_nightly')('WR_Neutron_QoSPolicy.yaml'),    # CGTS-10095
-    mark.priorities('nightly', 'sx_nightly')('OS_Heat_Stack.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Cinder_VolumeAttachment.yaml'),
-    mark.priorities('sx_sanity', 'sanity', 'cpe_sanity')('OS_Nova_Server.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Heat_AccessPolicy.yaml'),
-    mark.priorities('nightly', 'sx_nightly')('OS_Heat_AutoScalingGroup.yaml'),
-    ])
+    param('OS_Ceilometer_Alarm.yaml', marks=mark.priorities('p2')),
+    param('OS_Neutron_Port.yaml', marks=mark.priorities('p2')),
+    param('OS_Neutron_Net.yaml', marks=mark.priorities('p2')),
+    param('OS_Neutron_Subnet.yaml', marks=mark.priorities('p2')),
+    param('OS_Nova_Flavor.yaml', marks=mark.priorities('p2')),
+    param('OS_Neutron_FloatingIP.yaml', marks=mark.priorities('p2')),
+    param('OS_Neutron_Router.yaml', marks=mark.priorities('p2')),
+    param('OS_Neutron_RouterGateway.yaml', marks=mark.priorities('p2')),
+    param('OS_Neutron_RouterInterface.yaml', marks=mark.priorities('p2')),
+    param('OS_Neutron_SecurityGroup.yaml', marks=mark.priorities('p2')),
+    # param('OS_Nova_ServerGroup.yaml', marks=mark.priorities('p2')),     # Stack update needed
+    param('OS_Nova_KeyPair.yaml', marks=mark.priorities('p2')),
+    # param('WR_Neutron_QoSPolicy.yaml', marks=mark.priorities('p2')),    # CGTS-10095
+    param('OS_Heat_Stack.yaml', marks=mark.priorities('p2')),
+    param('OS_Cinder_VolumeAttachment.yaml', marks=mark.priorities('p2')),
+    param('OS_Nova_Server.yaml', marks=mark.priorities('p2')),
+    param('OS_Heat_AccessPolicy.yaml', marks=mark.priorities('p2')),
+    param('OS_Heat_AutoScalingGroup.yaml', marks=mark.priorities('p2')),
+])
 # can add test fixture to configure hosts to be certain storage backing
 def test_heat_template(template_name, revert_quota):
     """
@@ -322,7 +313,7 @@ def test_heat_template(template_name, revert_quota):
         tenants_quotas = revert_quota
         for tenant_id, quotas in tenants_quotas.items():
             network_quota, subnet_quota = quotas
-            vm_helper.set_quotas(tenant=tenant_id, networks=network_quota+10, subnets=subnet_quota+10)
+            vm_helper.set_quotas(tenant=tenant_id, networks=network_quota + 10, subnets=subnet_quota + 10)
 
     elif template_name == 'OS_Nova_Server.yaml':
         # create new image to do update later
@@ -335,7 +326,7 @@ def test_heat_template(template_name, revert_quota):
 
 @mark.usefixtures('check_alarms')
 @mark.parametrize('template_name', [
-    mark.nightly('OS_Cinder_Volume.yaml'),
+    param('OS_Cinder_Volume.yaml', marks=mark.nightly),
 ])
 # can add test fixture to configure hosts to be certain storage backing
 def test_delete_heat_after_swact(template_name):

@@ -158,7 +158,6 @@ def _delete_resources(resources, scope):
         ('security_group', network_helper.delete_security_group, {}, False),
         ('aggregate', __del_aggregate, {}, False),
         ('datanetwork', system_helper.delete_data_network, {}, False),
-        # ('providernet', network_helper.delete_providernet, {}, False),
     ]
 
     err_msgs = []

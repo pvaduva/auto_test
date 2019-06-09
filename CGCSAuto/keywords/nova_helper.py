@@ -1,12 +1,9 @@
-import re
-import math
-
 from utils import cli, exceptions
 from utils import table_parser
 from utils.tis_log import LOG
 from consts.proj_vars import ProjVar
 from consts.auth import Tenant
-from consts.cgcs import FlavorSpec, GuestImages, STORAGE_AGGREGATE
+from consts.cgcs import FlavorSpec, GuestImages
 from keywords import host_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 
@@ -14,7 +11,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 def create_flavor(name=None, flavor_id=None, vcpus=1, ram=1024, root_disk=None, ephemeral=None, swap=None,
                   is_public=None, rxtx_factor=None, project=None, project_domain=None, description=None, guest_os=None,
                   fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None, storage_backing=None,
-                  rtn_id=True, cleanup=None, add_extra_specs=True, **properties):
+                  rtn_id=True, cleanup=None, add_default_specs=True, properties=None):
     """
     Create a flavor with given criteria.
 
@@ -40,7 +37,8 @@ def create_flavor(name=None, flavor_id=None, vcpus=1, ram=1024, root_disk=None, 
             Valid values: 'local_image', 'remote'
         rtn_id (bool): return id or name
         cleanup (str|None): cleanup scope. function, class, module, or session
-        add_extra_specs (False): Whether to automatically add extra specs that are needed to launch vm
+        add_default_specs (False): Whether to automatically add extra specs that are needed to launch vm
+        properties (str|list|dict)
 
     Returns (tuple): (rtn_code (int), flavor_id/err_msg (str))
         (0, <flavor_id/name>): flavor created successfully
@@ -48,7 +46,7 @@ def create_flavor(name=None, flavor_id=None, vcpus=1, ram=1024, root_disk=None, 
 
     """
 
-    table_ = table_parser.table(cli.openstack('flavor list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('flavor list', ssh_client=con_ssh, auth_info=auth_info)[1])
     existing_names = table_parser.get_column(table_, 'Name')
 
     if name is None:
@@ -57,7 +55,7 @@ def create_flavor(name=None, flavor_id=None, vcpus=1, ram=1024, root_disk=None, 
 
     if root_disk is None:
         if not guest_os:
-            guest_os = GuestImages.DEFAULT_GUEST
+            guest_os = GuestImages.DEFAULT['guest']
         root_disk = GuestImages.IMAGE_FILES[guest_os][1]
 
     args_dict = {
@@ -80,8 +78,7 @@ def create_flavor(name=None, flavor_id=None, vcpus=1, ram=1024, root_disk=None, 
 
     LOG.info("Creating flavor {}...".format(flavor_name))
     LOG.info("openstack flavor create option: {}".format(args))
-    exit_code, output = cli.openstack('flavor create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
-                                      rtn_code=True)
+    exit_code, output = cli.openstack('flavor create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if exit_code > 1:
         return 1, output
 
@@ -92,58 +89,29 @@ def create_flavor(name=None, flavor_id=None, vcpus=1, ram=1024, root_disk=None, 
     if cleanup:
         ResourceCleanup.add('flavor', flavor_id, scope=cleanup)
 
-    if storage_backing and add_extra_specs:
-        sys_inst_backing = ProjVar.get_var('INSTANCE_BACKING')
-        if sys_inst_backing:
-            configured_backings = [backing for backing in sys_inst_backing if sys_inst_backing[backing]]
-        else:
-            sys_inst_backing = host_helper.get_hosts_per_storage_backing(up_only=False, auth_info=auth_info,
-                                                                         con_ssh=con_ssh)
-            ProjVar.set_var(INSTANCE_BACKING=sys_inst_backing)
-            configured_backings = [backing for backing in sys_inst_backing if sys_inst_backing[backing]]
-            if len(configured_backings) > 1:
-                aggregates = get_aggregates(con_ssh=con_ssh, auth_info=auth_info)
-                for inst_backing in configured_backings:
-                    expt_hosts = sorted(sys_inst_backing[inst_backing])
-                    aggregate_name = STORAGE_AGGREGATE[inst_backing]
-                    if aggregate_name not in aggregates:
-                        create_aggregate(name=aggregate_name, avail_zone='nova', check_first=False,
-                                         con_ssh=con_ssh, auth_info=auth_info)
-                        properties = {}
-                        hosts_in_aggregate = []
-                    else:
-                        properties, hosts_in_aggregate = get_aggregate_values(aggregate_name,
-                                                                              fields=('properties', 'hosts'),
-                                                                              con_ssh=con_ssh, auth_info=auth_info)
-
-                    property_key = FlavorSpec.STORAGE_BACKING.split(':')[-1].strip()
-                    if property_key not in properties:
-                        set_aggregate(aggregate_name, properties={property_key: inst_backing},
-                                      con_ssh=con_ssh, auth_info=auth_info)
-
-                    if expt_hosts != hosts_in_aggregate:
-                        hosts_to_remove = list(set(hosts_in_aggregate) - set(expt_hosts))
-                        hosts_to_add = list(set(expt_hosts) - set(hosts_in_aggregate))
-                        if hosts_to_add:
-                            add_hosts_to_aggregate(aggregate=aggregate_name, hosts=hosts_to_add, check_first=False,
-                                                   con_ssh=con_ssh, auth_info=auth_info)
-                        if hosts_to_remove:
-                            remove_hosts_from_aggregate(aggregate=aggregate_name, hosts=hosts_to_remove,
-                                                        check_first=False, con_ssh=con_ssh, auth_info=auth_info)
-
-        LOG.debug("configured backing:{} sys inst backing: {} storage backing: {}".
-                  format(configured_backings, sys_inst_backing, storage_backing))
-        if [storage_backing] == configured_backings:
-            storage_backing = None
-
-    if add_extra_specs:
-        # extra_specs = {FlavorSpec.MEM_PAGE_SIZE: 'any'}
+    if add_default_specs:
         extra_specs = {FlavorSpec.MEM_PAGE_SIZE: '2048'}
-        if storage_backing:
-            extra_specs[FlavorSpec.STORAGE_BACKING] = storage_backing
+        # extra_specs = {FlavorSpec.MEM_PAGE_SIZE: 'small'}
+        default_flavor_backing = ProjVar.get_var('DEFAULT_INSTANCE_BACKING')
+        sys_inst_backing = ProjVar.get_var('INSTANCE_BACKING')
+        if not default_flavor_backing:
+            sys_inst_backing = host_helper.get_hosts_per_storage_backing(up_only=False, auth_info=auth_info,
+                                                                         con_ssh=con_ssh, refresh=True)
+        configured_backings = [backing for backing in sys_inst_backing if sys_inst_backing.get(backing)]
+        LOG.debug("configured backing:{} sys inst backing: {}, required storage backing: {}".
+                  format(configured_backings, sys_inst_backing, storage_backing))
 
-        LOG.info("Setting flavor specs: {}".format(extra_specs))
-        set_flavor(flavor_id, con_ssh=con_ssh, auth_info=auth_info, **extra_specs)
+        if storage_backing and storage_backing not in configured_backings:
+            raise ValueError('Required local_storage {} is not configured on any nova hypervisor'.
+                             format(storage_backing))
+
+        if len(configured_backings) > 1:
+            extra_specs[FlavorSpec.STORAGE_BACKING] = storage_backing if storage_backing else \
+                ProjVar.get_var('DEFAULT_INSTANCE_BACKING')
+
+        if extra_specs:
+            LOG.info("Setting flavor specs: {}".format(extra_specs))
+            set_flavor(flavor_id, con_ssh=con_ssh, auth_info=auth_info, **extra_specs)
 
     flavor = flavor_id if rtn_id else flavor_name
     return 0, flavor, storage_backing
@@ -176,8 +144,7 @@ def set_aggregate(aggregate, properties=None, no_property=None, zone=None, name=
     }
 
     args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True), aggregate)
-    code, output = cli.openstack('aggregate set', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
-                                 rtn_code=True)
+    code, output = cli.openstack('aggregate set', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -206,8 +173,7 @@ def unset_aggregate(aggregate, properties, fail_ok=False, con_ssh=None, auth_inf
 
     args = ' '.join(['--property {}'.format(key) for key in properties])
     args = '{} {}'.format(args, aggregate)
-    code, output = cli.openstack('aggregate unset', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info,
-                                 rtn_code=True)
+    code, output = cli.openstack('aggregate unset', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -216,7 +182,7 @@ def unset_aggregate(aggregate, properties, fail_ok=False, con_ssh=None, auth_inf
     return 0, msg
 
 
-def get_aggregate_values(aggregate, fields, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_aggregate_values(aggregate, fields, con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
     """
     Get values of a nova aggregate for given fields
     Args:
@@ -224,85 +190,17 @@ def get_aggregate_values(aggregate, fields, con_ssh=None, auth_info=Tenant.get('
         fields (str|list|tuple):
         con_ssh:
         auth_info (dict):
+        fail_ok (bool)
 
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.openstack('aggregate show', aggregate, ssh_client=con_ssh, auth_info=auth_info))
+    code, out = cli.openstack('aggregate show', aggregate, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
+    if code > 0:
+        return []
 
-    if isinstance(fields, str):
-        fields = (fields, )
-
-    values = []
-    for field in fields:
-        val = table_parser.get_value_two_col_table(table_, field=field)
-        if field.lower() == 'hosts':
-            val = sorted(eval(val))
-        elif field.lower() == 'properties':
-            if val.strip():
-                properties = val.split(sep=', ')
-                val = {}
-                for item in properties:
-                    k, v = item.split('=')
-                    val[k] = v[1:-1]
-            else:
-                val = {}
-
-        values.append(val)
-
-    return values
-
-
-def get_storage_backing_with_max_hosts(prefer='local_image', rtn_down_hosts=False, con_ssh=None):
-    """
-    Get storage backing that has the most hypervisors
-    Args:
-        prefer (str): preferred storage_backing. If unset, local_image > remote
-        rtn_down_hosts (bool): whether to return down hosts if no up hosts available
-        con_ssh (SSHClient):
-
-    Returns (tuple): (<storage_backing>(str), <hosts>(list))
-        Examples:
-            Regular/Storage system: ('local_image',['compute-1', 'compute-3'])
-            AIO: ('local_image', ['controller-0', 'controller-1'])
-
-    """
-    up_hosts = host_helper.get_up_hypervisors(con_ssh=con_ssh)
-    hosts = list(up_hosts)
-    has_up_hosts = True
-    if not hosts:
-        has_up_hosts = False
-        hosts = host_helper.get_hypervisors()
-        LOG.warning("No up hypervisors. Check all hypervisors")
-    hosts_len = len(hosts)
-
-    valid_backings = ['local_image', 'remote']
-    valid_backings.remove(prefer)
-    valid_backings.insert(0, prefer)
-
-    hosts_by_backing = {}
-    max_num = 0
-    selected_backing = prefer
-    checked_len = 0
-    for backing in valid_backings:
-        hosts_with_backing = host_helper.get_hosts_in_storage_backing(backing, con_ssh=con_ssh, up_only=False)
-        hosts_by_backing[backing] = hosts_with_backing
-        checked_len += len(hosts_with_backing)
-        if len(hosts_with_backing) >= math.ceil(hosts_len / 2):
-            selected_backing = backing
-            break
-
-        if len(hosts_with_backing) > max_num:
-            max_num = len(hosts_with_backing)
-            selected_backing = backing
-            if max_num >= hosts_len - checked_len:
-                break
-
-    selected_hosts = hosts_by_backing[selected_backing]
-    if has_up_hosts or not rtn_down_hosts:
-        selected_hosts = list(set(selected_hosts) & set(hosts))
-    LOG.info("{} storage aggregate has most hypervisors".format(selected_backing))
-    return selected_backing, selected_hosts, up_hosts
+    table_ = table_parser.table(out)
+    return table_parser.get_multi_values_two_col_table(table_, fields, evaluate=True, dict_fields=('properties', ))
 
 
 def delete_flavors(flavors, check_first=True, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
@@ -334,8 +232,8 @@ def delete_flavors(flavors, check_first=True, fail_ok=False, con_ssh=None, auth_
             return -1, msg
 
     LOG.info("Flavor(s) to delete: {}".format(flavors))
-    code, output = cli.openstack('flavor delete', ' '.join(flavors), ssh_client=con_ssh, auth_info=auth_info,
-                                 rtn_code=True, fail_ok=fail_ok)
+    code, output = cli.openstack('flavor delete', ' '.join(flavors), ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -355,7 +253,7 @@ def delete_flavors(flavors, check_first=True, fail_ok=False, con_ssh=None, auth_
 
 
 def get_flavors(name=None, memory=None, disk=None, ephemeral=None, swap=None, vcpu=None, rxtx=None, is_public=None,
-                flv_id=None, long=False, con_ssh=None, auth_info=None, strict=True, rtn_val='id'):
+                flv_id=None, long=False, con_ssh=None, auth_info=None, strict=True, field='id'):
     """
     Get a flavor id with given criteria. If no criteria given, a random flavor will be returned.
 
@@ -373,14 +271,14 @@ def get_flavors(name=None, memory=None, disk=None, ephemeral=None, swap=None, vc
         con_ssh (SSHClient):
         auth_info (dict):
         strict (bool): whether or not to perform strict search on provided values
-        rtn_val (str)
+        field (str|list|tuple)
 
     Returns (list):
 
     """
 
     args = '--long' if long else ''
-    table_ = table_parser.table(cli.openstack('flavor list',  args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('flavor list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
 
     req_dict = {'Name': name,
                 'RAM': memory,
@@ -393,7 +291,7 @@ def get_flavors(name=None, memory=None, disk=None, ephemeral=None, swap=None, vc
                 'ID': flv_id,
                 }
     final_dict = {k: str(v) for k, v in req_dict.items() if v is not None}
-    return table_parser.get_values(table_, rtn_val, strict=strict, **final_dict)
+    return table_parser.get_multi_values(table_, field, strict=strict, **final_dict)
 
 
 def get_basic_flavor(auth_info=None, con_ssh=None, guest_os='', rtn_id=True):
@@ -409,13 +307,13 @@ def get_basic_flavor(auth_info=None, con_ssh=None, guest_os='', rtn_id=True):
 
     """
     if not guest_os:
-        guest_os = GuestImages.DEFAULT_GUEST
+        guest_os = GuestImages.DEFAULT['guest']
     size = GuestImages.IMAGE_FILES[guest_os][1]
 
     default_flavor_name = 'flavor-default-size{}'.format(size)
     rtn_val = 'id' if rtn_id else 'name'
     flavors = get_flavors(name=default_flavor_name, con_ssh=con_ssh, auth_info=auth_info, strict=False,
-                          rtn_val=rtn_val)
+                          field=rtn_val)
     flavor = flavors[0] if flavors else create_flavor(name=default_flavor_name, root_disk=size, con_ssh=con_ssh,
                                                       cleanup='session', rtn_id=rtn_id)[1]
 
@@ -456,8 +354,7 @@ def set_flavor(flavor, project=None, project_domain=None, description=None, no_p
 
     LOG.info("Setting flavor {} with args: {}".format(flavor, args))
     args = '{} {}'.format(args, flavor)
-    exit_code, output = cli.openstack('flavor set', args, ssh_client=con_ssh, auth_info=auth_info,
-                                      fail_ok=fail_ok, rtn_code=True)
+    exit_code, output = cli.openstack('flavor set', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if exit_code == 1:
         return 1, output
 
@@ -508,8 +405,7 @@ def unset_flavor(flavor, properties=None, project=None, project_domain=None, che
         return -1, msg
 
     LOG.info("Unsetting flavor {} with args: {}".format(flavor, args))
-    exit_code, output = cli.openstack('flavor unset', args, ssh_client=con_ssh, auth_info=auth_info,
-                                      fail_ok=fail_ok, rtn_code=True)
+    exit_code, output = cli.openstack('flavor unset', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if exit_code > 0:
         return 1, output
 
@@ -533,7 +429,7 @@ def get_flavor_properties(flavor, con_ssh=None, auth_info=Tenant.get('admin')):
 
 
 def create_server_group(name=None, policy='affinity', rule=None, fail_ok=False, auth_info=None, con_ssh=None,
-                        rtn_exist=False, rtn_val='id'):
+                        rtn_exist=False, field='id'):
     """
     Create a server group with given criteria
 
@@ -545,7 +441,7 @@ def create_server_group(name=None, policy='affinity', rule=None, fail_ok=False, 
         auth_info (dict):
         con_ssh (SSHClient):
         rtn_exist (bool): Whether to return existing server group that matches the given name
-        rtn_val (str): id or name
+        field (str): id or name
 
     Returns (tuple): (rtn_code (int), err_msg_or_srv_grp_id (str))
         - (0, <server_group_id>)    # server group created successfully
@@ -554,7 +450,7 @@ def create_server_group(name=None, policy='affinity', rule=None, fail_ok=False, 
     """
     # process server group metadata
     if name and rtn_exist:
-        existing_grp = get_server_groups(name=name, strict=False, con_ssh=con_ssh, auth_info=auth_info, rtn_val=rtn_val)
+        existing_grp = get_server_groups(name=name, strict=False, con_ssh=con_ssh, auth_info=auth_info, field=field)
         if existing_grp:
             LOG.debug("Returning existing server group {}".format(existing_grp[0]))
             return -1, existing_grp[0]
@@ -566,55 +462,54 @@ def create_server_group(name=None, policy='affinity', rule=None, fail_ok=False, 
     args = '{}{} {}'.format('--rule {} '.format(rule) if rule else '', name, policy.replace('_', '-'))
 
     LOG.info("Creating server group with args: {}...".format(args))
-    exit_code, output = cli.nova('server-group-create', args, ssh_client=con_ssh, fail_ok=fail_ok,
-                                 auth_info=auth_info, rtn_code=True)
+    exit_code, output = cli.nova('server-group-create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if exit_code > 0:
         return 1, output
 
     table_ = table_parser.table(output)
-    srv_grp_id = table_parser.get_values(table_, rtn_val)[0]
+    srv_grp_id = table_parser.get_values(table_, field)[0]
     LOG.info("Server group {} created successfully.".format(name))
     return 0, srv_grp_id
 
 
-def get_server_groups(name=None, project_id=None, policy=None, strict=True, regex=False, rtn_val='id', all_=True,
-                      auth_info=Tenant.get('admin'), con_ssh=None):
+def get_server_groups(field='ID', all_projects=True, long=False, strict=True, regex=False,
+                      auth_info=Tenant.get('admin'), con_ssh=None, **kwargs):
     """
     Get server groups ids based on the given criteria
 
     Args:
-        name (str): filter out server groups with given name
-        project_id (str): filter out server groups for given tenant id
-        policy (str):
         auth_info (dict):
         con_ssh (SSHClient):
         strict (bool): whether to do strict search for given name
         regex (bool): whether or not to use regex when for given name
-        all_(bool): whether to append '--a' to cli
-        rtn_val (str): id or name
+        all_projects(bool): whether to list for all projects
+        long
+        field (str|list|tuple):
+        **kwargs: filters
 
     Returns (list): list of server groups
 
     """
-    arg = '--a' if all_ else ''
-    table_ = table_parser.table(cli.openstack('server group list', arg, ssh_client=con_ssh, auth_info=auth_info))
+    args_dict = {
+        '--all-projects': all_projects,
+        '--long': long
+    }
+    args = common.parse_args(args_dict)
+    table_ = table_parser.table(cli.openstack('server group list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
 
-    if name or policy:
-        table_ = table_parser.filter_table(table_, strict=strict, regex=regex, Name=name, Policies=policy)
+    def _parse_list(value_str):
+        return [val.strip() for val in value_str.split(',')]
+    parsers = {_parse_list: ('Policies', 'Members')}
 
-    if project_id is not None:
-        table_ = table_parser.filter_table(table_, strict=True, **{"Project Id": project_id})
-
-    return table_parser.get_column(table_, rtn_val)
+    return table_parser.get_multi_values(table_, field, strict=strict, regex=regex, parsers=parsers, **kwargs)
 
 
-def get_server_groups_info(server_groups=None, headers=('Policies', 'Members'), auth_info=None, con_ssh=None,
+def get_server_groups_info(headers=('Policies', 'Members'), auth_info=None, con_ssh=None,
                            strict=False, **kwargs):
     """
     Get a server group(s) info as a list
 
     Args:
-        server_groups (str|list): id(s) of server group(s).
         headers (str|list|tuple): header string for info. such as 'Member', 'Metadata', 'Policies'
         auth_info (dict):
         con_ssh (SSHClient):
@@ -626,30 +521,15 @@ def get_server_groups_info(server_groups=None, headers=('Policies', 'Members'), 
                     <server_group2>: ['anti-affinity', []]}
 
     """
-    table_ = table_parser.table(cli.openstack('server group list', '--a --long', ssh_client=con_ssh,
-                                              auth_info=auth_info))
-
     if isinstance(headers, str):
         headers = [headers]
+    headers = ['ID'] + list(headers)
 
-    if not server_groups:
-        server_groups = table_parser.get_column(table_, 'Id')
-    elif isinstance(server_groups, str):
-        server_groups = [server_groups]
-
-    srv_groups_info = {}
-    for group in server_groups:
-        group_table = table_parser.filter_table(table_, Id=group)
-        vals = []
-        for header in headers:
-            val = table_parser.get_values(group_table, target_header=header, merge_lines=True, strict=strict,
-                                          **kwargs)[0]
-            if header.lower() in ('policies', 'members', 'rules'):
-                val = [v.strip() for v in val.split(',')]
-            vals.append(val)
-
-        srv_groups_info[group] = vals
-
+    values = get_server_groups(field=headers, all_projects=True, long=True, con_ssh=con_ssh, auth_info=auth_info,
+                               strict=strict, **kwargs)
+    group_ids = values.pop(0)
+    values = list(zip(*values))
+    srv_groups_info = {group_ids[i]: values[i] for i in range(len(group_ids))}
     return srv_groups_info
 
 
@@ -668,11 +548,11 @@ def get_server_group_info(group_id=None, group_name=None, headers=('Policies', '
     Returns (list):
 
     """
-    filters = {}
+    filters = {'ID': group_id}
     if group_name:
         filters['Name'] = group_name
 
-    group_info = get_server_groups_info(server_groups=group_id, headers=headers, auth_info=auth_info, strict=strict,
+    group_info = get_server_groups_info(headers=headers, auth_info=auth_info, strict=strict,
                                         con_ssh=con_ssh, **filters)
     assert len(group_info) == 1, "More than 1 server group filtered"
 
@@ -693,7 +573,7 @@ def server_group_exists(srv_grp_id, auth_info=Tenant.get('admin'), con_ssh=None)
     Returns (bool): True or False
 
     """
-    existing_server_groups = get_server_groups(all_=True, auth_info=auth_info, con_ssh=con_ssh)
+    existing_server_groups = get_server_groups(all_projects=True, auth_info=auth_info, con_ssh=con_ssh)
     return srv_grp_id in existing_server_groups
 
 
@@ -738,8 +618,8 @@ def delete_server_groups(srv_grp_ids=None, check_first=True, fail_ok=False, auth
             return -1, msg
 
     LOG.info("Deleting server group(s): {}".format(srv_grp_ids))
-    code, output = cli.openstack('server group delete', ' '.join(srv_grp_ids), ssh_client=con_ssh, timeout=60,
-                                 fail_ok=True, rtn_code=True, auth_info=auth_info)
+    code, output = cli.openstack('server group delete', ' '.join(srv_grp_ids), ssh_client=con_ssh, fail_ok=True,
+                                 auth_info=auth_info, timeout=60)
     if code == 1:
         return 1, output
 
@@ -757,383 +637,20 @@ def delete_server_groups(srv_grp_ids=None, check_first=True, fail_ok=False, auth
     return 0, "Server group(s) deleted successfully."
 
 
-def get_all_vms(rtn_val='ID', con_ssh=None, auth_info=Tenant.get('admin')):
-    """
-    Get VMs for all tenants in the systems
-
-    Args:
-        rtn_val:
-        con_ssh:
-        auth_info
-
-    Returns (list): list of all vms on the system
-
-    """
-    return get_vms(rtn_val=rtn_val, all_projects=True, long=False, con_ssh=con_ssh, auth_info=auth_info)
-
-
-def get_vm_storage_type(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
-    """
-    Get storage type from the flavor extra spec for given vm
-    Args:
-        vm_id (str):
-        con_ssh (SSHClient):
-        auth_info
-
-    Returns (str): storage extra spec value. Possible return values: 'local_image' or 'remote'
-
-    """
-    flavor, host = get_vm_values(vm_id, fields=('flavor', ':host'), strict=False, con_ssh=con_ssh, auth_info=auth_info)
-    extra_specs = get_flavor_properties(flavor, con_ssh=con_ssh)
-
-    # No idea how to find out vm backend if vm is in error state.
-    storage_backing = extra_specs.get(FlavorSpec.STORAGE_BACKING, None)
-    if host and not storage_backing:
-        storage_backing = host_helper.get_host_instance_backing(host=host, con_ssh=con_ssh)
-
-    return storage_backing
-
-
-def get_vms_info(fields, vms=None, con_ssh=None, long=True, all_vms=True, host=None, auth_info=Tenant.get('admin')):
-    """
-    Get vms values for given fields
-    Args:
-        fields (str|list|tuple):
-        vms:
-        con_ssh:
-        long:
-        all_vms:
-        host
-        auth_info:
-
-    Returns (dict): vm as key, values for given fields as value
-        Examples:
-            input: fields = [field1, field2]
-            output: {vm_1: [vm1_field1_value, vm1_field2_value], vm_2: [vm2_field1_value, vm2_field2_value]}
-
-    """
-    args_dict = {'--long': long,
-                 '--a': all_vms and auth_info and auth_info['user'] == 'admin',
-                 '--host': host}
-    args = common.parse_args(args_dict)
-    table_ = table_parser.table(cli.openstack('server list', args, ssh_client=con_ssh, auth_info=auth_info))
-    if vms:
-        table_ = table_parser.filter_table(table_, ID=vms)
-    table_ = table_parser.row_dict_table(table_, key_header='id')
-
-    if isinstance(fields, str):
-        fields = (fields, )
-
-    results = {}
-    for vm in vms:
-        vm_info = table_[vm]
-        vm_values = [vm_info.get(field.lower().replace('_', ' '), None) for field in fields]
-        results[vm] = vm_values
-
-    return results
-
-
-def get_vms(vms=None, rtn_val='ID', long=False, all_projects=True, host=None, project=None, project_domain=None,
-            strict=True, regex=False, con_ssh=None,
-            auth_info=None, **kwargs):
-    """
-    get a list of VM IDs or Names for given tenant in auth_info param.
-
-    Args:
-        vms (list): filter vms from this list if not None
-        rtn_val (str): 'ID' or 'Name'
-        con_ssh (SSHClient): controller SSHClient.
-        auth_info (dict): such as ones in auth.py: auth.ADMIN, auth.TENANT1
-        long (bool): whether to use --long in cmd
-        project (str)
-        project_domain (str)
-        all_projects (bool): whether to use --a in cmd
-        host (str): value for --host arg in cmd
-        strict (bool): applies to search for value(s) specified in kwargs
-        regex (bool): whether to use regular expression to search for the kwargs value(s)
-        **kwargs: header/value pair to filter out the vms
-
-    Returns (list): list of VMs for tenant(s).
-
-    """
-    args_dict = {'--long': long,
-                 '--a': all_projects if auth_info and auth_info['user'] == 'admin' else None,
-                 '--host': host,
-                 '--project': project,
-                 '--project-domain': project_domain}
-    args = common.parse_args(args_dict)
-    table_ = table_parser.table(cli.openstack('server list', args, ssh_client=con_ssh, auth_info=auth_info))
-    if vms:
-        table_ = table_parser.filter_table(table_, ID=vms)
-
-    return table_parser.get_values(table_, rtn_val, strict=strict, regex=regex, **kwargs)
-
-
-def get_vm_status(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
-    return get_vm_values(vm_id, 'status', strict=True, con_ssh=con_ssh, auth_info=auth_info)[0]
-
-
-def get_vm_id_from_name(vm_name, con_ssh=None, strict=True, regex=False, fail_ok=False, auth_info=Tenant.get('admin')):
-    if not auth_info:
-        auth_info = Tenant.get_primary()
-    vm_ids = get_vms(name=vm_name, strict=strict, regex=regex, con_ssh=con_ssh, auth_info=auth_info)
-    if not vm_ids:
-        err_msg = "No vm found with name: {}".format(vm_name)
-        LOG.info(err_msg)
-        if fail_ok:
-            return ''
-        raise exceptions.VMError(err_msg)
-
-    return vm_ids[0]
-
-
-def get_vm_name_from_id(vm_id, con_ssh=None, auth_info=None):
-    return get_vm_values(vm_id, fields='name', con_ssh=con_ssh, auth_info=auth_info)[0]
-
-
-def get_vm_volumes(vm_id, con_ssh=None, auth_info=None):
-    """
-    Get volume ids attached to given vm.
-
-    Args:
-        vm_id (str):
-        con_ssh (SSHClient):
-        auth_info (dict):
-
-    Returns (tuple): list of volume ids attached to specific vm
-
-    """
-    table_ = table_parser.table(cli.openstack('server show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
-    return _get_vm_volumes(table_)
-
-
-def get_vm_values(vm_id, fields, strict=True, con_ssh=None, auth_info=Tenant.get('admin')):
-    """
-    Get vm values via openstack server show
-    Args:
-        vm_id (str):
-        fields (str|list|tuple): fields in openstack server show table
-        strict (bool): whether to perform a strict search on given field name
-        con_ssh (SSHClient):
-        auth_info (dict|None):
-
-    Returns (list): values for given fields
-
-    """
-    if isinstance(fields, str):
-        fields = [fields]
-
-    table_ = table_parser.table(cli.openstack('server show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
-
-    values = []
-    for field in fields:
-        merge = False
-        if field in ('fault', ):
-            merge = True
-        value = table_parser.get_value_two_col_table(table_, field, strict, merge_lines=merge)
-        if field in ('properties', ):
-            value = table_parser.convert_value_to_dict(value)
-        elif field in ('security_groups', ):
-            if isinstance(value, str):
-                value = [value]
-            value = [re.findall("name='(.*)'", v)[0] for v in value]
-        values.append(value)
-    return values
-
-
-def get_vm_fault_message(vm_id, con_ssh=None, auth_info=None):
-    return get_vm_values(vm_id=vm_id, fields='fault', con_ssh=con_ssh, auth_info=auth_info)[0]
-
-
-def get_vm_flavor(vm_id, rtn_val='id', con_ssh=None, auth_info=None):
-    """
-    Get flavor id of given vm
-
-    Args:
-        vm_id (str):
-        rtn_val (str): id or name
-        con_ssh (SSHClient):
-        auth_info (dict):
-
-    Returns (str):
-
-    """
-    flavor = get_vm_values(vm_id, fields='flavor', strict=True, con_ssh=con_ssh,
-                           auth_info=auth_info)[0]
-    flavor_name, flavor_id = flavor.split('(')
-    if rtn_val == 'id':
-        flavor = flavor_id.strip().split(')')[0]
-    else:
-        flavor = flavor_name.strip()
-    return flavor
-
-
-def get_vm_host(vm_id, con_ssh=None, auth_info=Tenant.get('admin')):
-    """
-    Get host of given vm via openstack server show
-    Args:
-        vm_id:
-        con_ssh:
-        auth_info
-
-    Returns (str):
-
-    """
-    return get_vm_values(vm_id, ':host', strict=False, con_ssh=con_ssh, auth_info=auth_info)[0]
-
-
-def get_vms_hosts(vm_ids, con_ssh=None, auth_info=Tenant.get('admin')):
-    """
-    Get vms' hosts via openstack server list
-    Args:
-        vm_ids:
-        con_ssh:
-        auth_info
-
-    Returns:
-
-    """
-    vms_hosts = get_vms_info(vms=vm_ids, fields='host', auth_info=auth_info, con_ssh=con_ssh)
-    vms_hosts = [vms_hosts[vm][0] for vm in vm_ids]
-
-    return vms_hosts
-
-
-def get_vms_on_host(hostname, rtn_val='ID', con_ssh=None, auth_info=Tenant.get('admin')):
-    """
-    Get vms on given host
-    Args:
-        rtn_val: ID or Name
-        hostname (str):Name of a compute node
-        con_ssh:
-        auth_info
-
-    Returns (list): A list of VMs' ID under a hypervisor
-
-    """
-    vms = get_vms(host=hostname, all_projects=True, long=False, con_ssh=con_ssh, auth_info=auth_info, rtn_val=rtn_val)
-    return vms
-
-
-def get_vms_per_host(vms=None, con_ssh=None, auth_info=Tenant.get('admin')):
-    """
-    Get vms per host
-    Args:
-        vms
-        con_ssh (SSHClient):
-        auth_info (dict)
-
-    Returns (dict):return a dictionary where the host(hypervisor) is the key
-    and value are a list of VMs under the host
-
-    """
-    vms_hosts = get_vms_info(vms=vms, fields='host', auth_info=auth_info, con_ssh=con_ssh, long=True, all_vms=True)
-    vms_per_host = {}
-    for vm in vms_hosts:
-        host = vms_hosts[vm][0]
-        if host in vms_per_host:
-            vms_per_host[host].append(vm)
-        else:
-            vms_per_host[host] = [vm]
-
-    return vms_per_host
-
-
-def get_keypairs(name=None, con_ssh=None, auth_info=None):
+def get_keypairs(name=None, field='Name', con_ssh=None, auth_info=None):
     """
 
     Args:
         name (str): Name of the key pair to filter for a given user
+        field (str|list|tuple)
         con_ssh (SSHClient):
         auth_info (dict): Tenant to be used to execute the cli if none Primary tenant will be used
 
     Returns (list):return keypair names
 
     """
-    table_ = table_parser.table(cli.openstack('keypair list', ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_values(table_, 'Name', Name=name)
-
-
-def _get_boot_info(table_, vm_id, auth_info=None, con_ssh=None):
-    image = table_parser.get_value_two_col_table(table_, 'image')
-    if not image:
-        volumes = _get_vm_volumes(table_)
-        if len(volumes) == 0:
-            raise exceptions.VMError("Booted from volume, but no volume id found.")
-
-        from keywords import cinder_helper
-        if len(volumes) == 1:
-            vol_id = volumes[0]
-            vol_name, image_info = cinder_helper.get_volume_show_values(vol_id,
-                                                                        fields=('name', 'volume_image_metadata'))
-            LOG.info("VM booted from volume.")
-            return {'type': 'volume', 'id': vol_id, 'volume_name': vol_name, 'image_name': image_info['image_name']}
-        else:
-            LOG.info("VM booted from volume. Multiple volumes found, taking the first boot-able volume.")
-            for volume in volumes:
-                bootable, vol_name, image_info = cinder_helper.get_volume_show_values(
-                    volume, fields=('bootable', 'name', 'volume_image_metadata'))
-                if str(bootable).lower() == 'true':
-                    return {'type': 'volume', 'id': volume, 'volume_name': vol_name,
-                            'image_name': image_info['image_name']}
-
-            raise exceptions.VMError("VM {} has no bootable volume attached.".format(vm_id))
-
-    else:
-        name, img_uuid = image.strip().split(sep='(')
-        return {'type': 'image', 'id': img_uuid.split(sep=')')[0], 'image_name': name.strip()}
-
-
-def get_vm_boot_info(vm_id, auth_info=None, con_ssh=None):
-    """
-    Get vm boot source and id.
-
-    Args:
-        vm_id (str):
-        auth_info (dict|None):
-        con_ssh (SSHClient):
-
-    Returns (dict): VM boot info dict. Format: {'type': <boot_source>, 'id': <source_id>}.
-        <boot_source> is either 'volume' or 'image'
-
-    """
-    table_ = table_parser.table(cli.openstack('server show', vm_id, ssh_client=con_ssh, auth_info=auth_info))
-    return _get_boot_info(table_, vm_id=vm_id, auth_info=auth_info, con_ssh=con_ssh)
-
-
-def get_vm_image_name(vm_id, auth_info=None, con_ssh=None):
-    """
-
-    Args:
-        vm_id (str):
-        auth_info (dict):
-        con_ssh (SSHClient):
-
-    Returns (str): image name for the vm. If vm booted from volume, then image name in volume image metadata will be
-        returned.
-
-    """
-    boot_info = get_vm_boot_info(vm_id, auth_info=auth_info, con_ssh=con_ssh)
-
-    return boot_info['image_name']
-
-
-def _get_vm_volumes(table_):
-    """
-    Args:
-        table_ (dict):
-
-    Returns (list: A list of volume ids from the novashow_table.
-
-    """
-    volumes = table_parser.get_value_two_col_table(table_, 'volumes_attached', merge_lines=False)
-    if not volumes:
-        return []
-
-    if isinstance(volumes, str):
-        volumes = [volumes]
-
-    return [re.findall("id='(.*)'", volume)[0] for volume in volumes]
+    table_ = table_parser.table(cli.openstack('keypair list', ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.get_multi_values(table_, field, Name=name)
 
 
 def get_flavor_values(flavor, fields, strict=True, con_ssh=None, auth_info=Tenant.get('admin')):
@@ -1149,20 +666,9 @@ def get_flavor_values(flavor, fields, strict=True, con_ssh=None, auth_info=Tenan
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.openstack('flavor show', flavor, ssh_client=con_ssh, auth_info=auth_info))
-    values = []
-    for field in fields:
-        value = table_parser.get_value_two_col_table(table_, field, strict=strict, merge_lines=True)
-        if field == 'properties':
-            value = table_parser.convert_value_to_dict(value=value)
-        elif field not in ('name', 'id', 'rxtx_factor'):
-            try:
-                value = eval(value)
-            except NameError:
-                pass
-
-        values.append(value)
-    return values
+    table_ = table_parser.table(cli.openstack('flavor show', flavor, ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.get_multi_values_two_col_table(table_, fields, merge_lines=True, evaluate=True, strict=strict,
+                                                       dict_fields=('properties', ))
 
 
 def copy_flavor(origin_flavor, new_name=None, con_ssh=None):
@@ -1177,8 +683,8 @@ def copy_flavor(origin_flavor, new_name=None, con_ssh=None):
     Returns (str): flavor_id
 
     """
-    table_ = table_parser.table(cli.openstack('flavor show', origin_flavor, ssh_client=con_ssh,
-                                              auth_info=Tenant.get('admin')))
+    table_ = table_parser.table(
+        cli.openstack('flavor show', origin_flavor, ssh_client=con_ssh, auth_info=Tenant.get('admin'))[1])
 
     extra_specs = table_parser.get_value_two_col_table(table_, 'properties')
     extra_specs = table_parser.convert_value_to_dict(value=extra_specs)
@@ -1221,7 +727,8 @@ def get_provider_net_info(providernet_id, field='pci_pfs_configured', strict=Tru
     if not providernet_id:
         raise ValueError("Providernet id is not provided.")
 
-    table_ = table_parser.table(cli.nova('providernet-show', providernet_id, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(
+        cli.nova('providernet-show', providernet_id, ssh_client=con_ssh, auth_info=auth_info)[1])
     info_str = table_parser.get_value_two_col_table(table_, field, strict=strict)
     return int(info_str) if rtn_int else info_str
 
@@ -1243,7 +750,8 @@ def get_pci_interface_stats_for_providernet(providernet_id, fields=('pci_pfs_con
     if not providernet_id:
         raise ValueError("Providernet id is not provided.")
 
-    table_ = table_parser.table(cli.nova('providernet-show', providernet_id, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(
+        cli.nova('providernet-show', providernet_id, ssh_client=con_ssh, auth_info=auth_info)[1])
     rtn_vals = []
     for field in fields:
         pci_stat = int(table_parser.get_value_two_col_table(table_, field, strict=True))
@@ -1251,17 +759,13 @@ def get_pci_interface_stats_for_providernet(providernet_id, fields=('pci_pfs_con
     return tuple(rtn_vals)
 
 
-def get_vm_instance_name(vm_id, con_ssh=None):
-    return get_vm_values(vm_id, ":instance_name", strict=False, con_ssh=con_ssh)[0]
-
-
-def create_aggregate(rtn_val='name', name=None, avail_zone=None, properties=None, check_first=True, fail_ok=False,
+def create_aggregate(field='name', name=None, avail_zone=None, properties=None, check_first=True, fail_ok=False,
                      con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Add a aggregate with given name and availability zone.
 
     Args:
-        rtn_val (str): name or id
+        field (str): name or id
         name (str): name for aggregate to create
         avail_zone (str|None):
         properties (dict|None)
@@ -1277,7 +781,7 @@ def create_aggregate(rtn_val='name', name=None, avail_zone=None, properties=None
 
     """
     if not name:
-        existing_names = get_aggregates(rtn_val='name')
+        existing_names = get_aggregates(field='name')
         name = common.get_unique_name(name_str='cgcsauto', existing_names=existing_names)
 
     args_dict = {
@@ -1287,14 +791,13 @@ def create_aggregate(rtn_val='name', name=None, avail_zone=None, properties=None
     args = '{} {}'.format(common.parse_args(args_dict, repeat_arg=True), name)
 
     if check_first:
-        aggregates_ = get_aggregates(rtn_val=rtn_val, name=name, avail_zone=avail_zone)
+        aggregates_ = get_aggregates(field=field, name=name, avail_zone=avail_zone)
         if aggregates_:
             LOG.warning("Aggregate {} already exists. Do nothing.".format(name))
             return -1, aggregates_[0]
 
     LOG.info("Adding aggregate {}".format(name))
-    res, out = cli.openstack('aggregate create', args, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True,
-                             fail_ok=fail_ok)
+    res, out = cli.openstack('aggregate create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if res == 1:
         return res, out
 
@@ -1302,15 +805,15 @@ def create_aggregate(rtn_val='name', name=None, avail_zone=None, properties=None
 
     succ_msg = "Aggregate {} is successfully created".format(name)
     LOG.info(succ_msg)
-    return 0, table_parser.get_value_two_col_table(out_tab, rtn_val)
+    return 0, table_parser.get_value_two_col_table(out_tab, field)
 
 
-def get_aggregates(rtn_val='name', name=None, avail_zone=None, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_aggregates(field='name', name=None, avail_zone=None, con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get a list of aggregates
 
     Args:
-        rtn_val (str): id or name
+        field (str|list|tuple): id or name
         name (str|list): filter out the aggregates with given name if specified
         avail_zone (str): filter out the aggregates with given availability zone if specified
         con_ssh (SSHClient):
@@ -1325,8 +828,8 @@ def get_aggregates(rtn_val='name', name=None, avail_zone=None, con_ssh=None, aut
     if name:
         kwargs['Name'] = name
 
-    aggregates_tab = table_parser.table(cli.openstack('aggregate list', ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_values(aggregates_tab, rtn_val, **kwargs)
+    aggregates_tab = table_parser.table(cli.openstack('aggregate list', ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.get_multi_values(aggregates_tab, field, **kwargs)
 
 
 def delete_aggregates(names, check_first=True, remove_hosts=True, fail_ok=False, con_ssh=None,
@@ -1362,8 +865,8 @@ def delete_aggregates(names, check_first=True, remove_hosts=True, fail_ok=False,
             remove_hosts_from_aggregate(aggregate=name, check_first=True)
 
     LOG.info("Deleting aggregate {}".format(names))
-    res, out = cli.openstack('aggregate delete', ' '.join(names), ssh_client=con_ssh, auth_info=auth_info,
-                             rtn_code=True, fail_ok=fail_ok)
+    res, out = cli.openstack('aggregate delete', ' '.join(names), ssh_client=con_ssh, fail_ok=fail_ok,
+                             auth_info=auth_info)
     if res == 1:
         return res, out
 
@@ -1381,22 +884,22 @@ def delete_aggregates(names, check_first=True, remove_hosts=True, fail_ok=False,
     return 0, succ_msg
 
 
-def get_compute_services(rtn_val, con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
+def get_compute_services(field, con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
     """
     Get values from compute services list
 
     System: Regular, Small footprint
 
     Args:
-        rtn_val (str)
+        field (str)
         con_ssh (SSHClient):
         auth_info (dict):
         kwargs: Valid keys: Id, Binary, Host, Zone, Status, State, Updated At
 
     Returns (list): a list of hypervisors in given zone
     """
-    table_ = table_parser.table(cli.openstack('compute service list', ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_values(table_, rtn_val, **kwargs)
+    table_ = table_parser.table(cli.openstack('compute service list', ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.get_values(table_, field, **kwargs)
 
 
 def remove_hosts_from_aggregate(aggregate, hosts=None, check_first=True, fail_ok=False, con_ssh=None,
@@ -1423,7 +926,8 @@ def remove_hosts_from_aggregate(aggregate, hosts=None, check_first=True, fail_ok
                                        fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
 
 
-def add_hosts_to_aggregate(aggregate, hosts, check_first=True, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin')):
+def add_hosts_to_aggregate(aggregate, hosts, check_first=True, fail_ok=False, con_ssh=None,
+                           auth_info=Tenant.get('admin')):
     """
     Add host(s) to specified aggregate
 
@@ -1467,7 +971,7 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
         (2, "Host(s) still exist in aggregate <aggr> after aggregate-remove-host: <unremoved_hosts>)
 
     """
-    hosts_in_aggregate = host_helper.get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
+    hosts_in_aggregate = get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
 
     if hosts is None:
         if remove:
@@ -1499,7 +1003,7 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
     cmd = 'aggregate remove host' if remove else 'aggregate add host'
     for host in hosts_to_rm_or_add:
         args = '{} {}'.format(aggregate, host)
-        code, output = cli.openstack(cmd, args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=True, rtn_code=True)
+        code, output = cli.openstack(cmd, args, ssh_client=con_ssh, fail_ok=True, auth_info=auth_info)
         if code > 0:
             failed_res[host] = output
 
@@ -1511,7 +1015,7 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
         else:
             raise exceptions.NovaError(err_msg)
 
-    post_hosts_in_aggregate = host_helper.get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
+    post_hosts_in_aggregate = get_hosts_in_aggregate(aggregate, con_ssh=con_ssh)
     if remove:
         failed_hosts = list(set(hosts) & set(post_hosts_in_aggregate))
     else:
@@ -1540,7 +1044,7 @@ def get_migration_list_table(con_ssh=None, auth_info=Tenant.get('admin')):
 
     """
     LOG.info("Listing migration history...")
-    return table_parser.table(cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info))
+    return table_parser.table(cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info)[1])
 
 
 def create_keypair(name, public_key=None, private_key=None, fail_ok=False, con_ssh=None,
@@ -1561,8 +1065,8 @@ def create_keypair(name, public_key=None, private_key=None, fail_ok=False, con_s
     args_dict = {'--public-key': public_key, '--private-key': private_key}
     args = '{} "{}"'.format(common.parse_args(args_dict), name)
     LOG.info("Creating keypair with args: {}".format(args))
-    code, out = cli.openstack('keypair create', args, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok,
-                              rtn_code=True)
+
+    code, out = cli.openstack('keypair create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, out
 
@@ -1595,8 +1099,8 @@ def delete_keypairs(keypairs, check_first=True, fail_ok=False, con_ssh=None, aut
             return -1, msg
 
     LOG.info('Deleting keypairs: {}'.format(keypairs))
-    code, out = cli.openstack('keypair delete', ' '.join(keypairs), ssh_client=con_ssh, auth_info=auth_info,
-                              fail_ok=fail_ok, rtn_code=True)
+    code, out = cli.openstack('keypair delete', ' '.join(keypairs), ssh_client=con_ssh, fail_ok=fail_ok,
+                              auth_info=auth_info)
     if code > 0:
         return code, out
 
@@ -1608,3 +1112,27 @@ def delete_keypairs(keypairs, check_first=True, fail_ok=False, con_ssh=None, aut
     msg = 'keypairs deleted successfully: {}'.format(keypairs)
     LOG.info(msg)
     return 0, msg
+
+
+def get_hosts_in_aggregate(aggregate, con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
+    """
+    Get list of hosts in given nova aggregate
+    Args:
+        aggregate (str):
+        con_ssh:
+        auth_info:
+        fail_ok (bool)
+
+    Returns (list):
+
+    """
+    if 'image' in aggregate:
+        aggregate = 'local_storage_image_hosts'
+    elif 'remote' in aggregate:
+        aggregate = 'remote_storage_hosts'
+
+    hosts = get_aggregate_values(aggregate, 'hosts', con_ssh=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
+    if hosts:
+        hosts = hosts[0]
+    LOG.info("Hosts in {} aggregate: {}".format(aggregate, hosts))
+    return hosts

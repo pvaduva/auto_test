@@ -3,15 +3,15 @@
 # Launch VMs using 4k-memory-pages, cold and live migrate the vm
 ###
 
-from pytest import fixture, mark, skip
+from pytest import fixture, mark, skip, param
 
 from consts.cgcs import FlavorSpec
-from keywords import nova_helper, vm_helper, host_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.recover_hosts import HostsToRecover
 from utils import table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+from keywords import nova_helper, vm_helper, host_helper, system_helper
+from testfixtures.fixture_resources import ResourceCleanup
+from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(autouse=True)
@@ -20,7 +20,7 @@ def check_alarms():
 
 
 @fixture(scope='module', autouse=True)
-def skip_for_ovs():
+def check_avs_pattern():
     if not system_helper.is_avs():
         skip("4k vm unsupported by OVS-dpdk")
 
@@ -40,61 +40,30 @@ def ensure_sufficient_4k_pages(request):
     if len(hypervisors) < 2:
         skip("Less than two hypersvisors with {} instance backing".format(storage_backing))
 
-    is_cpe = system_helper.is_two_node_cpe()
     hypervisors = hypervisors[:2]
     LOG.fixture_step("Configure {} with sufficient 4k pages".format(hypervisors))
 
-    revert_dict = {}
-
-    def revert_hosts():
-        pre_active_con = system_helper.get_active_controller_name()
-        revert_active_con = False
-
-        for host_, page_num in revert_dict.items():
-            if host_ == pre_active_con:
-                revert_active_con = True
-                continue
-
-            LOG.fixture_step("Revert host mem page setting for {}".format(host_))
-            host_helper.lock_host(host_)
-            system_helper.set_host_4k_pages(host_, proc_id=1, smallpage_num=page_num)
-
-            if is_cpe:
-                LOG.fixture_step("Unlock host one by one for CPE lab")
-                host_helper.unlock_host(host_)
-
-        if revert_active_con:
-            LOG.fixture_step("Swact active controller and revert host mem page settings")
-            host_helper.lock_host(pre_active_con, swact=True)
-            system_helper.set_host_4k_pages(pre_active_con, proc_id=1, smallpage_num=revert_dict[pre_active_con])
-            host_helper.unlock_host(pre_active_con, check_hypervisor_up=True, check_webservice_up=True)
-
-    request.addfinalizer(revert_hosts)
-
     for host in hypervisors:
         LOG.fixture_step("Modify 4k page numbers to 600000 for {}".format(host))
-        num_4k_pages = system_helper.get_host_mem_values(host, ['app_total_4K'], proc_id=(0, 1))
-        proc0_num_4k_page = int(num_4k_pages[0][0])
-        proc1_num_4k_page = int(num_4k_pages[1][0])
-
-        if proc0_num_4k_page < 600000 and proc1_num_4k_page < 600000:
-
+        num_4k_pages = host_helper.get_host_memories(host, 'app_total_4K')
+        for proc, pages_4k in num_4k_pages.items():
+            if pages_4k[0] > 1024*1024/4:
+                break
+        else:
+            proc_to_set = 1 if len(num_4k_pages) > 1 else 0
             HostsToRecover.add(host, scope='module')
             host_helper.lock_host(host, swact=True)
-
-            # chose to set 4k page of proc1 to 600000
-            system_helper.set_host_4k_pages(host, proc_id=1, smallpage_num=600000)
-            revert_dict[host] = proc1_num_4k_page
+            host_helper.modify_host_memory(host, proc=proc_to_set, gib_4k_range=(2, 4))
             host_helper.unlock_host(host, check_hypervisor_up=True, check_webservice_up=True)
 
     return storage_backing, hypervisors
 
 
 @mark.parametrize(('ephemeral', 'swap', 'cpu_pol', 'vcpus', 'vm_type'), [
-    mark.p1((0, 0, None, 1, 'volume')),
-    mark.p2((1, 512, 'dedicated', 2, 'volume')),
-    mark.p1((0, 0, 'dedicated', 3, 'image')),
-    mark.p2((1, 512, None, 1, 'image')),
+    param(0, 0, None, 1, 'volume', marks=mark.p2),
+    param(1, 512, 'dedicated', 2, 'volume', marks=mark.p2),
+    param(0, 0, 'dedicated', 3, 'image', marks=mark.p2),
+    param(1, 512, None, 1, 'image', marks=mark.p2),
 ])
 def test_migrate_4k_vm_positive(ephemeral, swap, cpu_pol, vcpus, vm_type, ensure_sufficient_4k_pages):
     """

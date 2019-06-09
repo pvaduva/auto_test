@@ -45,7 +45,7 @@ def test_horizon_storage_overview_service_display(storage_overview_pg):
     LOG.tc_step('Check storage cluster UUID, ceph health and storage usage display')
     cli_storage_service_info = []
 
-    uuid = system_helper.get_cluster_values(header='cluster_uuid')[0]
+    uuid = system_helper.get_clusters(field='cluster_uuid')[0]
     cli_storage_service_info.append(uuid)
 
 #   'ceph health' cmd output sample:
@@ -86,7 +86,7 @@ def test_horizon_storage_overview_service_display(storage_overview_pg):
     for osd_id in osd_list:
         expt_horizon = {}
         for header in storage_overview_pg.osds_table.column_names:
-            host_name = storage_helper.get_osd_host(osd_id)[0]
+            host_name = storage_helper.get_osd_host(osd_id)
             osd_name = 'osd.{}'.format(osd_id)
             expt_horizon['Host'] = host_name
             expt_horizon['Name'] = osd_name
@@ -96,39 +96,4 @@ def test_horizon_storage_overview_service_display(storage_overview_pg):
             horizon_val = storage_overview_pg.get_storage_overview_osd_info(osd_name, header)
             assert expt_horizon[header] == horizon_val, '{}{} display incorrect'.format(osd_name, header)
     LOG.info('Osd table display correct')
-    horizon.test_result = True
-
-
-# cmd obsolete
-def _test_horizon_storage_overview_usage_display(storage_overview_pg):
-    """
-    Tests the storage overview display:
-
-    Setups:
-        - Login as Admin
-        - Go to Admin > Platform > Storage Overview
-
-    Teardown:
-        - Logout
-
-    Test Steps:
-        - Test backend type and name, service name, total capacity and free capacity(GiB) display
-    """
-    LOG.tc_step('Test usage details display')
-    storage_overview_pg.go_to_usage_tab()
-    usage_table = table_parser.table(cli.system('storage-usage-list --nowrap'))
-    horizon_headers = ['Backend type', 'Backend name', 'Service name', 'Free Capacity (GiB)', 'Total Capacity (GiB)']
-    rows = storage_overview_pg.get_rows_from_usage_table()
-    horizon_rows_val = []
-    for row in rows:
-        row_dict = []
-        for header in horizon_headers:
-            row_dict.append(row.cells[header].text)
-        horizon_rows_val.append(row_dict)
-    cli_rows_val = usage_table.get('values')
-
-    for row in cli_rows_val:
-        assert row in horizon_rows_val, 'row {} not found in usage table.'.format(row)
-
-    LOG.info('Storage overview usage details display correct')
     horizon.test_result = True

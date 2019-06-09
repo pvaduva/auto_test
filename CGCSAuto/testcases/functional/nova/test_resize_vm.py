@@ -1,10 +1,11 @@
 import time
 import math
 
-from pytest import fixture, mark, skip
+from pytest import fixture, mark, skip, param
+
 from utils.tis_log import LOG
 
-from keywords import vm_helper, nova_helper, host_helper, check_helper
+from keywords import vm_helper, nova_helper, host_helper, check_helper, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from consts.cgcs import FlavorSpec, GuestImages
 from consts.reasons import SkipStorageBacking
@@ -52,7 +53,7 @@ def get_expt_disk_increase(origin_flavor, dest_flavor, boot_source, storage_back
 
 
 def get_disk_avail_least(host):
-    return host_helper.get_hypervisor_info(hosts=host, rtn_val='disk_available_least')[host]
+    return host_helper.get_hypervisor_info(hosts=host, field='disk_available_least')[host]
 
 
 def check_correct_post_resize_value(original_disk_value, expected_increase, host, sleep=True):
@@ -66,7 +67,7 @@ def check_correct_post_resize_value(original_disk_value, expected_increase, host
 
     if expected_increase < 0:
         # vm is on this host, backup image files may be created if not already existed
-        backup_val = math.ceil(GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][3])
+        backup_val = math.ceil(glance_helper.get_image_size(guest_os=GuestImages.DEFAULT['guest'], virtual_size=False))
         assert expt_post-backup_val <= post_resize_value <= expt_post
     elif expected_increase > 0:
         # vm moved away from this host, or resized to smaller disk on same host, backup files will stay
@@ -105,11 +106,11 @@ class TestResizeSameHost:
         ('remote',      (4, 0, 0), (5, 1, 512), 'image'),
         ('remote',      (4, 1, 512), (5, 2, 1024), 'image'),
         ('remote',      (4, 1, 512), (4, 1, 0), 'image'),       # https://bugs.launchpad.net/nova/+bug/1762423
-        mark.priorities('nightly', 'sx_nightly')(('remote', (4, 0, 0), (1, 1, 512), 'volume')),
+        param('remote', (4, 0, 0), (1, 1, 512), 'volume', marks=mark.priorities('nightly', 'sx_nightly')),
         ('remote',      (4, 1, 512), (8, 2, 1024), 'volume'),
         ('remote',      (4, 1, 512), (0, 1, 0), 'volume'),
         ('local_image', (4, 0, 0), (5, 1, 512), 'image'),
-        mark.priorities('nightly', 'sx_nightly')(('local_image', (4, 1, 512), (5, 2, 1024), 'image')),
+        param('local_image', (4, 1, 512), (5, 2, 1024), 'image', marks=mark.priorities('nightly', 'sx_nightly')),
         ('local_image', (5, 1, 512), (5, 1, 0), 'image'),
         ('local_image', (4, 0, 0), (5, 1, 512), 'volume'),
         ('local_image', (4, 1, 512), (0, 2, 1024), 'volume'),
@@ -169,7 +170,7 @@ class TestResizeSameHost:
         vm_disks = vm_helper.get_vm_devices_via_virsh(vm_id)
         root, ephemeral, swap = origin_flavor
         if boot_source == 'volume':
-            root = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][1]
+            root = GuestImages.IMAGE_FILES[GuestImages.DEFAULT['guest']][1]
         file_paths, content = touch_files_under_vm_disks(vm_id=vm_id, ephemeral=ephemeral, swap=swap,
                                                          vm_type=boot_source, disks=vm_disks)
 
@@ -190,7 +191,7 @@ class TestResizeSameHost:
             swap_size = dest_flavor[2]
 
         time.sleep(30)
-        prev_host = nova_helper.get_vm_host(vm_id)
+        prev_host = vm_helper.get_vm_host(vm_id)
         check_helper.check_vm_files(vm_id=vm_id, storage_backing=storage_backing, root=root, ephemeral=ephemeral,
                                     swap=swap_size, vm_type=boot_source, vm_action=None, file_paths=file_paths,
                                     content=content, disks=vm_disks, check_volume_root=True)
@@ -203,10 +204,10 @@ class TestResizeSameHost:
         LOG.tc_step('Resize vm to dest flavor and confirm')
         vm_helper.resize_vm(vm_id, dest_flavor_id, revert=False, fail_ok=False)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        post_host = nova_helper.get_vm_host(vm_id)
+        post_host = vm_helper.get_vm_host(vm_id)
         post_root, post_ephemeral, post_swap = dest_flavor
         if boot_source == 'volume':
-            post_root = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][1]
+            post_root = GuestImages.IMAGE_FILES[GuestImages.DEFAULT['guest']][1]
         post_ephemeral = ephemeral if ephemeral else post_ephemeral      # CGTS-8041
         LOG.tc_step("Check files after resize attempt")
         check_helper.check_vm_files(vm_id=vm_id, storage_backing=storage_backing, ephemeral=post_ephemeral,
@@ -283,7 +284,7 @@ class TestResizeSameHost:
         code, output = vm_helper.resize_vm(vm_id, dest_flavor_id, fail_ok=True)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-        assert nova_helper.get_vm_flavor(vm_id) == origin_flavor_id, 'VM did not keep origin flavor'
+        assert vm_helper.get_vm_flavor(vm_id) == origin_flavor_id, 'VM did not keep origin flavor'
         assert code > 0, "Resize VM CLI is not rejected"
 
         LOG.tc_step("Check files after resize attempt")
@@ -368,7 +369,7 @@ class TestResizeDiffHost:
 
         origin_host, cpu_count, compute_space_dict = get_cpu_count(hosts_with_backing)
 
-        root_disk_size = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][1] + 5
+        root_disk_size = GuestImages.IMAGE_FILES[GuestImages.DEFAULT['guest']][1] + 5
 
         # make vm (1 cpu)
         LOG.tc_step("Create flavor with 1 cpu")
@@ -407,7 +408,7 @@ class TestResizeDiffHost:
 
         LOG.tc_step("Resize the vm and verify if it is on a different host")
         vm_helper.resize_vm(vm_to_resize, resize_flavor)
-        new_host = nova_helper.get_vm_host(vm_to_resize)
+        new_host = vm_helper.get_vm_host(vm_to_resize)
         assert new_host != origin_host, "vm did not change hosts following resize"
 
         LOG.tc_step('Check disk usage on computes after resize')

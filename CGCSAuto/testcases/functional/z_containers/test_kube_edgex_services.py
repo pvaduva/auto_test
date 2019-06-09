@@ -20,25 +20,25 @@ def deploy_edgex(request):
     con_ssh = ControllerClient.get_active_controller()
 
     LOG.fixture_step("Downloading EdgeX-on-Kubernetes")
-    con_ssh.exec_cmd('wget {}'.format(EDGEX_URL))
+    con_ssh.exec_cmd('wget {}'.format(EDGEX_URL), fail_ok=False)
     charts_exist = con_ssh.file_exists(os.path.join(WRSROOT_HOME, EDGEX_ARCHIVE))
     assert charts_exist, '{} does not exist'.format(EDGEX_ARCHIVE)
 
     LOG.fixture_step("Extracting EdgeX-on-Kubernetes")
-    con_ssh.exec_cmd('unzip {}'.format(os.path.join(WRSROOT_HOME, EDGEX_ARCHIVE)))
+    con_ssh.exec_cmd('unzip {}'.format(os.path.join(WRSROOT_HOME, EDGEX_ARCHIVE)), fail_ok=False)
 
     LOG.fixture_step("Deploying EdgeX-on-Kubernetes")
-    con_ssh.exec_cmd(EDGEX_START, 180)
+    con_ssh.exec_cmd(EDGEX_START, 300, fail_ok=False)
 
     def delete_edgex():
         LOG.fixture_step("Destroying EdgeX-on-Kubernetes")
-        con_ssh.exec_cmd(EDGEX_STOP, 180)
+        con_ssh.exec_cmd(EDGEX_STOP, 300, fail_ok=False)
 
         LOG.fixture_step("Removing EdgeX-on-Kubernetes")
         con_ssh.exec_cmd('rm -rf {} {}'.format(os.path.join(WRSROOT_HOME, EDGEX_ARCHIVE),
                                                os.path.join(WRSROOT_HOME, EDGEX_HOME)))
-
     request.addfinalizer(delete_edgex)
+
     return
 
 
@@ -69,34 +69,32 @@ def test_kube_edgex_services(deploy_edgex, controller):
         - ssh to given controller
         - Wait for EdgeX pods deployment
         - Check all EdgeX pods are running
-        - Check EdgeX services displayed: 'edgex-core-command', 'edgex-core-consul', 'edgex-core-data', 'edgex-core-metadata'
-        - Check EdgeX deployments displayed: 'edgex-core-command', 'edgex-core-consul', 'edgex-core-data', 'edgex-core-metadata'
+        - Check EdgeX services displayed:
+            'edgex-core-command', 'edgex-core-consul', 'edgex-core-data', 'edgex-core-metadata'
+        - Check EdgeX deployments displayed:
+            'edgex-core-command', 'edgex-core-consul', 'edgex-core-data', 'edgex-core-metadata'
 
     """
+    pods = ('edgex-core-command', 'edgex-core-consul', 'edgex-core-data', 'edgex-core-metadata')
+    services = ('edgex-core-command', 'edgex-core-consul', 'edgex-core-data', 'edgex-core-metadata')
+    deployments = ('edgex-core-command', 'edgex-core-consul', 'edgex-core-data', 'edgex-core-metadata')
+
     host = check_host(controller=controller)
     with host_helper.ssh_to_host(hostname=host) as con_ssh:
+        LOG.tc_step("Check EdgeX pods on {}: {}".format(controller, pods))
+        edgex_services = kube_helper.get_resources(resource_type='service', namespace='default', con_ssh=con_ssh)
+        edgex_deployments = kube_helper.get_resources(resource_type='deployment.apps', namespace='default',
+                                                      con_ssh=con_ssh)
 
-        pods = ('edgex-core-command', 'edgex-core-consul', 'edgex-core-data', 'edgex-core-metadata')
-        LOG.tc_step("Check EdgeX pods on {} : {}".format(controller, pods))
-        kube_system_info = kube_helper.get_pods_info(namespace='default', con_ssh=con_ssh,
-                                                     type_names=('pod', 'service', 'deployment.apps'),
-                                                     keep_type_prefix=False)
+        LOG.tc_step("Wait for EdgeX pods Running")
+        kube_helper.wait_for_pods_status(partial_names=pods, namespace='default', status=PodStatus.RUNNING,
+                                         con_ssh=con_ssh, fail_ok=False)
 
-        for pod_info in kube_system_info['pod']:
-            res, actual_pod_info = kube_helper.wait_for_pods(pod_info['name'], namespace='default', con_ssh=con_ssh)
-            assert res, "Pod {} status is {} instead of {}". \
-                format(actual_pod_info['name'], pod_info['status'], PodStatus.RUNNING)
-
-        services = ('edgex-core-command', 'edgex-core-consul', 'edgex-core-data', 'edgex-core-metadata')
         LOG.tc_step("Check EdgeX services on {}: {}".format(controller, services))
-        existing_services = kube_system_info['service']
-        existing_services = [service['name'] for service in existing_services]
         for service in services:
-            assert service in existing_services, "{} not in kube-system service table".format(service)
+            assert service in edgex_services, "{} not in kube-system service table".format(service)
 
-        deployments = ('edgex-core-command', 'edgex-core-consul', 'edgex-core-data', 'edgex-core-metadata')
-        LOG.tc_step("Check kube-system deployments on {}: {}".format(controller, deployments))
-        existing_deployments = kube_system_info['deployment.apps']
-        existing_deployments = [deployment['name'] for deployment in existing_deployments]
+        LOG.tc_step("Check EdgeX deployments on {}: {}".format(controller, deployments))
         for deployment in deployments:
-            assert deployment in existing_deployments, "{} not in kube-system deployment.apps table".format(deployment)
+            assert deployment in edgex_deployments, \
+                "{} not in kube-system deployment.apps table".format(deployment)

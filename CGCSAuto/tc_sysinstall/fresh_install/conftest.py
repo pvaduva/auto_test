@@ -7,7 +7,7 @@ from utils.node import Node
 from utils.jenkins_utils import build_info
 from consts.proj_vars import InstallVars, ProjVar
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
-from consts.cgcs import VSWITCH_TYPES
+from consts.cgcs import VSwitchType
 from tc_sysinstall.fresh_install import fresh_install_helper
 from keywords import host_helper
 
@@ -65,12 +65,9 @@ def pytest_configure(config):
     else:
         raise ValueError("Lab name must be provided")
 
-    vswitch_types = [VSWITCH_TYPES.OVS, VSWITCH_TYPES.OVS_DPDK, VSWITCH_TYPES.AVS, VSWITCH_TYPES.NONE]
+    vswitch_types = [VSwitchType.OVS, VSwitchType.OVS_DPDK, VSwitchType.AVS, VSwitchType.NONE]
     if vswitch_type not in vswitch_types:
         raise ValueError("Invalid vswitch type {}; Valid types are: {} ".format(vswitch_type, vswitch_types))
-    if vswitch_type == VSWITCH_TYPES.OVS_DPDK and no_openstack:
-        raise ValueError("Invalid vswitch type = {}; For platform only or no openstack install the vswitch type must be ovs"
-                         " or none.".format(vswitch_type))
 
     is_subcloud, sublcoud_name, dc_float_ip = setups.is_lab_subcloud(lab_dict)
 
@@ -156,7 +153,7 @@ def pytest_configure(config):
             extract_deploy_config=extract_deploy_config)
 
     frame_str = '*'*len('Install Arguments:')
-    print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))
+    args = "\n\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str)
     install_vars = InstallVars.get_install_vars()
     bs = install_vars['BUILD_SERVER']
     for var, value in install_vars.items():
@@ -165,11 +162,11 @@ def pytest_configure(config):
         elif var == 'LAB':
             for k, v in dict(value).items():
                 if re.search('_nodes| ip', k):
-                    print("{:<20}: {}".format(k, v))
+                    args += "\n{:<20}: {}".format(k, v)
         else:
-            print("{:<20}: {}".format(var, value))
-    print("{:<20}: {}".format('LOG_DIR', ProjVar.get_var('LOG_DIR')))
-    print('')
+            args += "\n{:<20}: {}".format(var, value)
+    args += "\n{:<20}: {}\n".format('LOG_DIR', ProjVar.get_var('LOG_DIR'))
+    LOG.info(args)
 
     if resume_install:
         try:

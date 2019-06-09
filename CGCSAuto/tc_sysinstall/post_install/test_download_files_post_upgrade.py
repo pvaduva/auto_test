@@ -17,13 +17,13 @@ def pre_download_setup():
 
     # establish ssh connection with controller-0
     controller0_conn = ControllerClient.get_active_controller()
-    cpe = system_helper.is_small_footprint(controller0_conn)
+    cpe = system_helper.is_aio_system(controller0_conn)
 
     bld_server = get_build_server_info(InstallVars.get_install_var('BUILD_SERVER'))
 
     output_dir = ProjVar.get_var('LOG_DIR')
 
-    current_version = install_helper.get_current_system_version()
+    current_version = system_helper.get_sw_version(use_existing=False)
     load_path = BuildServerPath.LATEST_HOST_BUILD_PATHS[current_version]
 
     bld_server_attr = dict()

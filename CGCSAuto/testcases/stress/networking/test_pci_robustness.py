@@ -28,7 +28,7 @@ def check_vm_pci_interface(vms, net_type, seg_id=None, ping_timeout=VMTimeout.PI
             vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_id, net_seg_id=seg_id)
 
     # Ensure pci interface working well
-    vm_helper.ping_vms_from_vm(vms, vms[0], net_types=['mgmt', net_type], vlan_zero_only=True)
+    vm_helper.ping_vms_from_vm(vms, vms[0], net_types=['mgmt', net_type])
 
 
 def get_pci_net(request, vif_model, primary_tenant, primary_tenant_name, other_tenant):
@@ -233,7 +233,7 @@ class TestSriov:
 
         LOG.tc_step("Check vms are migrated to other host: {}".format(other_host))
         for vm in vms:
-            vm_host = nova_helper.get_vm_host(vm_id=vm)
+            vm_host = vm_helper.get_vm_host(vm_id=vm)
             assert other_host == vm_host, "VM did not move to {} after locking {}".format(other_host, initial_host)
 
         check_vm_pci_interface(vms, net_type=net_type, ping_timeout=VMTimeout.DHCP_RETRY)
@@ -366,12 +366,12 @@ class TestPcipt:
 
             LOG.tc_step("Test lock {} vms hosts started - iter{}".format(vif_model, i+1))
             for vm in vms:
-                pre_lock_host = nova_helper.get_vm_host(vm)
+                pre_lock_host = vm_helper.get_vm_host(vm)
                 assert pre_lock_host in pci_hosts, "VM is not booted on pci_host"
 
                 LOG.tc_step("Lock host of {} vms: {}".format(vif_model, pre_lock_host))
                 code, output = host_helper.lock_host(host=pre_lock_host, check_first=False, swact=True, fail_ok=True)
-                post_lock_host = nova_helper.get_vm_host(vm)
+                post_lock_host = vm_helper.get_vm_host(vm)
                 assert post_lock_host in pci_hosts, "VM is not on pci host after migrating"
 
                 if len(pci_hosts) < 3 and i == 0:
@@ -390,7 +390,7 @@ class TestPcipt:
 
             LOG.tc_step("Test evacuate {} vms started - iter{}".format(vif_model, i+1))
             for vm in vms:
-                pre_evac_host = nova_helper.get_vm_host(vm)
+                pre_evac_host = vm_helper.get_vm_host(vm)
 
                 LOG.tc_step("Reboot {} and ensure {} vm are evacuated when applicable".format(pre_evac_host, vif_model))
                 code, output = vm_helper.evacuate_vms(pre_evac_host, vm, fail_ok=True, wait_for_host_up=True)
@@ -400,7 +400,7 @@ class TestPcipt:
                     vm_helper.wait_for_vm_status(vm_id=vm)
                 else:
                     assert 0 == code, "Expect vm evacuated to other host. Actual: {}".format(output)
-                    post_evac_host = nova_helper.get_vm_host(vm)
+                    post_evac_host = vm_helper.get_vm_host(vm)
                     assert post_evac_host in pci_hosts, "VM is not on pci host after evacuation"
 
                 check_vm_pci_interface(vms, net_type=net_type)

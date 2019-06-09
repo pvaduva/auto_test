@@ -2,7 +2,7 @@
 #
 # from consts.cli_errs import PciAddrErr  # Don't remove - used in eval()
 # from keywords import vm_helper, network_helper
-# from testfixtures.pre_checks_and_configs import skip_for_ovs
+# from testfixtures.pre_checks_and_configs import check_avs_pattern
 #
 #
 # @mark.parametrize(('unsupported_pci_addr', 'vif_model', 'expt_err'), [
@@ -19,7 +19,7 @@
 #     ('0000:04:1e', 'virtio', "PciAddrErr.BAD_FORMAT"),
 #     ('0000_04:1e.0', 'virtio', "PciAddrErr.BAD_FORMAT"),
 # ])
-# def test_boot_vm_with_configurable_pci_addr_negative(unsupported_pci_addr, vif_model, expt_err, skip_for_ovs):
+# def test_boot_vm_with_configurable_pci_addr_negative(unsupported_pci_addr, vif_model, expt_err, check_avs_pattern):
 #     """
 #     Verify boot vm with invalid pci_address is rejected.
 #

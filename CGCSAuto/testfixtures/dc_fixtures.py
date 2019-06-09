@@ -30,7 +30,7 @@ def check_central_alarms_module(request):
 
 def __verify_central_alarms(request, scope):
     region = 'RegionOne'
-    auth_info = Tenant.get('admin', dc_region=region)
+    auth_info = Tenant.get('admin_platform', dc_region=region)
     con_ssh = ControllerClient.get_active_controller(name=region)
     LOG.fixture_step("({}) Gathering fm alarms in central region before test {} begins.".format(scope, scope))
     before_alarms = system_helper.get_alarms(auth_info=auth_info, con_ssh=con_ssh)

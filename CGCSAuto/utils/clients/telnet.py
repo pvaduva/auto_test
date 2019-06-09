@@ -249,7 +249,7 @@ class TelnetClient(Telnet):
             else:
                 raise
 
-        code, output = self._process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
+        code, output = self._process_exec_result(rm_date, get_exit_code=get_exit_code)
 
         self.__force_end(force_end)
 
@@ -297,7 +297,7 @@ class TelnetClient(Telnet):
             prompts.remove(pw_prompt)
             self.expect(prompts, timeout=expect_timeout, searchwindowsize=searchwindowsize, fail_ok=fail_ok)
 
-        code, output = self._process_exec_result(cmd, rm_date, get_exit_code=get_exit_code)
+        code, output = self._process_exec_result(rm_date, get_exit_code=get_exit_code)
         if code != 0 and not fail_ok:
             raise exceptions.TelnetError("Non-zero return code for sudo cmd: {}. Output: {}".format(cmd, output))
 
@@ -306,7 +306,7 @@ class TelnetClient(Telnet):
     def msg(self, msg, *args):
         return
 
-    def _process_exec_result(self, cmd, rm_date=False, get_exit_code=True):
+    def _process_exec_result(self, rm_date=False, get_exit_code=True):
 
         cmd_output_list = self.cmd_output.splitlines()[0:-1]  # exclude prompt
         # LOG.info("cmd output list: {}".format(cmd_output_list))
@@ -325,7 +325,7 @@ class TelnetClient(Telnet):
             #                        format(cmd, exit_code, cmd_output))
         else:
             exit_code = -1
-            self.logger.debug("Actual exit code for following cmd is unknown: {}".format(cmd))
+            self.logger.debug("Actual exit code is unknown")
 
         cmd_output = cmd_output.strip()
         return exit_code, cmd_output

@@ -21,11 +21,11 @@ def test_system_host_cpu_list():
 
     """
 
-    hosts = system_helper.get_hostnames()
+    hosts = system_helper.get_hosts()
 
     for host in hosts:
         LOG.tc_step("Verify the system host-cpu-list output table contains the expected headers.")
-        table_ = table_parser.table(cli.system('host-cpu-list', host))
+        table_ = table_parser.table(cli.system('host-cpu-list', host)[1])
         LOG.tc_step("Check there are 7 columns in the table")
         expt_sub_headers = ['uuid', 'log_core', 'processor', 'phy_core', 'thread', 'processor_model',
                             'assigned_function']
@@ -38,7 +38,7 @@ def test_system_host_cpu_list():
 
 @mark.p3
 def test_system_show():
-    table_ = table_parser.table(cli.system('show'))
+    table_ = table_parser.table(cli.system('show')[1])
     expt_sub_fields = ['name', 'system_type', 'description', 'software_version', 'uuid', 'created_at', 'updated_at']
 
     LOG.tc_step("Check 'system show' contains expected fields")

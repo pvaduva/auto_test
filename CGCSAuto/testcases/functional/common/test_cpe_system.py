@@ -13,7 +13,7 @@ def test_cpe_services_and_functions():
     LOG.tc_step("Check controller+compute subfunction via system host-show")
     controllers = system_helper.get_controllers()
     for controller in controllers:
-        assert system_helper.is_small_footprint(controller=controller), \
+        assert system_helper.is_aio_system(controller=controller), \
             "{} does not have controller+compute subfunction in system host-show".format(controller)
 
     LOG.tc_step("Check CPE system services via nova service-list")
@@ -23,7 +23,7 @@ def test_cpe_services_and_functions():
                     "nova-consoleauth",
                     "nova-compute"]
 
-    binaries = nova_helper.get_compute_services(rtn_val='Binary')
+    binaries = nova_helper.get_compute_services(field='Binary')
     assert set(check_params) <= set(binaries), "Not all binaries from {} exist in 'nova service-list'".\
         format(check_params)
 

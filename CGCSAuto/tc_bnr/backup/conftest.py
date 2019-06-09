@@ -49,14 +49,12 @@ def setup_test_session(global_setup):
     """
 
     ProjVar.set_var(PRIMARY_TENANT=Tenant.get('admin'))
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
+    ProjVar.set_var(SOURCE_OPENRC=True)
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
     setups.copy_test_files()
 
     # set build id to be used to upload/write test results
     setups.set_build_info(con_ssh)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
-
     setups.set_session(con_ssh=con_ssh)
 
 
@@ -80,7 +78,7 @@ def pytest_collectstart():
     if auth:
         CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
 
-    Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
+    Tenant.set_platform_url(CliAuth.get_var('OS_AUTH_URL'))
     Tenant.set_region(CliAuth.get_var('OS_REGION_NAME'))
 
 

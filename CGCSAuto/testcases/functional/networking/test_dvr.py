@@ -1,12 +1,12 @@
 import time
 
-from pytest import mark, fixture, skip
+from pytest import mark, fixture, skip, param
 
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
 from consts.cgcs import RouterStatus
-from keywords import network_helper, vm_helper, system_helper, host_helper, cinder_helper, nova_helper
+from keywords import network_helper, vm_helper, system_helper, host_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -99,10 +99,10 @@ def test_dvr_update_router(router_info, _bring_up_router):
 
 
 @mark.parametrize(('vms_num', 'srv_grp_policy'), [
-    mark.p2((2, 'affinity')),
-    mark.priorities('nightly')((2, 'anti-affinity')),
-    mark.p2((3, 'affinity')),
-    mark.p2((3, 'anti-affinity')),
+    param(2, 'affinity', marks=mark.p2),
+    param(2, 'anti-affinity', marks=mark.nightly),
+    param(3, 'affinity', marks=mark.p2),
+    param(3, 'anti-affinity', marks=mark.p2),
 ])
 def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, router_info):
     """
@@ -131,7 +131,7 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
 
     """
     # Increase instance quota count if needed
-    current_vms = len(nova_helper.get_vms(strict=False))
+    current_vms = len(vm_helper.get_vms(strict=False))
     quota_needed = current_vms + vms_num
     vm_helper.ensure_vms_quotas(quota_needed)
 
@@ -169,4 +169,4 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
 
     from_vm = vms[0]
     LOG.tc_step("Ping vms over management and data networks from vm {}, and verify ping successful.".format(from_vm))
-    vm_helper.ping_vms_from_vm(from_vm=from_vm, to_vms=vms, net_types=['data', 'mgmt', 'internal'], fail_ok=False)
+    vm_helper.ping_vms_from_vm(to_vms=vms, from_vm=from_vm, fail_ok=False, net_types=['data', 'mgmt', 'internal'])

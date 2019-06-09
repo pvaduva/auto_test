@@ -18,7 +18,7 @@ from keywords import network_helper, vm_helper, common, nova_helper, host_helper
 
 
 @fixture(scope='module', autouse=True)
-def ixia_required(ixia_supported):
+def ixia_required(ixia_required):
     pass
 
 
@@ -275,7 +275,7 @@ def qos_apply(net_id, qos_id, request):
 def ensure_vms_on_host(vms, host, *args, **kwargs):
     results = dict()
     for vm in vms:
-        vm_host = nova_helper.get_vm_host(vm)
+        vm_host = vm_helper.get_vm_host(vm)
         if host != vm_host:
             results[vm] = vm_helper.live_migrate_vm(vm, host, *args, **kwargs)
 
@@ -299,12 +299,12 @@ def ensure_vms_on_same_host(vms):
     if len(vms) == 0:
         return None
     if len(vms) == 1:
-        return nova_helper.get_vm_host(vms[0])
+        return vm_helper.get_vm_host(vms[0])
 
     LOG.info("Ensuring the following VMs are on the same compute host: {}".format(vms))
     host_map = dict()
     for vm in vms:
-        host_map[vm] = nova_helper.get_vm_host(vm)
+        host_map[vm] = vm_helper.get_vm_host(vm)
 
     most_common, num_most_common = Counter(list(host_map.values())).most_common(1)[0]
     if num_most_common == len(vms):
@@ -316,7 +316,7 @@ def ensure_vms_on_same_host(vms):
     return most_common
 
 
-def test_qos_weight_enforced(request, no_ovs, skip_if_25g):
+def test_qos_weight_enforced(request, avs_required, skip_if_25g):
     """
     Verify QoS weights are impacting networks
     DPDK-only test case (kpktgen does not supply enough Tx rate)
@@ -383,7 +383,7 @@ def test_qos_weight_enforced(request, no_ovs, skip_if_25g):
     LOG.tc_step("Ensure VM locations")
     compute_a = ensure_vms_on_same_host(pair1)
     for vm in pair2:
-        if nova_helper.get_vm_host(vm) == compute_a:
+        if vm_helper.get_vm_host(vm) == compute_a:
             vm_helper.live_migrate_vm(vm)
     compute_b = ensure_vms_on_same_host(pair2)
 
@@ -401,7 +401,7 @@ def test_qos_weight_enforced(request, no_ovs, skip_if_25g):
             dst_ip = network_helper.get_data_ips_for_vms(vm2)[0]
             dst_mac = None
             for vm_id, info in vm_helper.get_vms_ports_info([vm2], rtn_subnet_id=True).items():
-                for ip, subnet_id, mac, net_id in info:
+                for port, ip, subnet_id, mac, net_id in info:
                     if ip == dst_ip:
                         dst_mac = mac
                         break
@@ -502,7 +502,7 @@ def setup_busy_loop_net(host, vlan_a, vlan_b, request, mtu=1492, eth='eth0'):
     'virtio',
     'avp',
 ])
-def test_qos_phb_enforced(vm_type, no_ovs, skip_if_25g, update_network_quotas):
+def test_qos_phb_enforced(vm_type, avs_required, skip_if_25g, update_network_quotas):
     """
     Verify QoS PHB policies are applied via traffic, driven by Ixia
     PHB precedence weights are hardcoded
@@ -590,7 +590,7 @@ def test_qos_phb_enforced(vm_type, no_ovs, skip_if_25g, update_network_quotas):
                 break
 
         LOG.tc_step("Collecting vshell statistics over 60 seconds interval for post analytics")
-        with host_helper.ssh_to_host(nova_helper.get_vm_host(vm_test)) as host_ssh:
+        with host_helper.ssh_to_host(vm_helper.get_vm_host(vm_test)) as host_ssh:
             host_ssh.exec_cmd("vshell engine-stats-clear", fail_ok=False)
             host_ssh.exec_cmd("vshell port-stats-clear", fail_ok=False)
             host_ssh.exec_cmd("vshell interface-stats-clear", fail_ok=False)
@@ -608,7 +608,7 @@ def test_qos_phb_enforced(vm_type, no_ovs, skip_if_25g, update_network_quotas):
     'avp',
     'dpdk',
 ])
-def test_jumbo_frames(vm_type, skip_for_ovs, update_network_quotas):
+def test_jumbo_frames(vm_type, check_avs_pattern, update_network_quotas):
     """
     Verify jumbo frames processed correctly
 
@@ -632,14 +632,14 @@ def test_jumbo_frames(vm_type, skip_for_ovs, update_network_quotas):
     vm_test = vms[0]
     tenant_net = nics[1]['net-id']
     providernet = network_helper.get_network_values(tenant_net, fields='provider:physical_network')[0]
-    vm_test_mtu = int(system_helper.get_data_networks(name=providernet, rtn_val='mtu')[0])
+    vm_test_mtu = int(system_helper.get_data_networks(name=providernet, field='mtu')[0])
 
     vms, nics = vm_helper.launch_vms(
         vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_secondary())
     vm_observer = vms[0]
     tenant_net = nics[1]['net-id']
     providernet = network_helper.get_network_values(tenant_net, fields='provider:physical_network')[0]
-    vm_observer_mtu = int(system_helper.get_data_networks(name=providernet, rtn_val='mtu')[0])
+    vm_observer_mtu = int(system_helper.get_data_networks(name=providernet, field='mtu')[0])
 
     if vm_test_mtu != vm_observer_mtu:
         LOG.warning("Mismatched MTUs for data network(s) launched for VMs, taking the smaller one")

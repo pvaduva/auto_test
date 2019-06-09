@@ -44,11 +44,11 @@ def setups(request):
     ('net_id', 'virtio'),
     ('port_id', 'avp')
 ])
-def test_network_without_subnets(skip_for_ovs, base_vm, if_attach_param, vif_model):
+def test_network_without_subnets(check_avs_pattern, base_vm, if_attach_param, vif_model):
     """
     Sample test case for Boot an instance with network without subnet
     Args:
-        skip_for_ovs: skip test if avp is specified
+        check_avs_pattern: skip test if avp is specified
         base_vm (tuple): (base_vm_id, mgmt_nic, net_without_subnet)
         if_attach_param (str): whether to attach interface
         vif_model (str): vif_model to pass to interface-attach cli, or None
@@ -179,7 +179,7 @@ def _assign_ip_to_nic(vm_id, ports, base_vm_id=None):
     Args:
         vm_id (str):
     """
-    vm_macs = network_helper.get_ports(rtn_val='MAC Address', server=vm_id, port_id=ports)
+    vm_macs = network_helper.get_ports(field='MAC Address', server=vm_id, port_id=ports)
     static_ips = []
     for _ in vm_macs:
         static_ips.append(__get_unassigned_ip())

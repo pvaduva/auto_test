@@ -35,7 +35,7 @@ HOST = ''
 @fixture(scope='module', autouse=True)
 def sensor_data_fit(request):
     LOG.fixture_step("Get hosts with sensor enabled")
-    hosts = system_helper.get_hostnames()
+    hosts = system_helper.get_hosts()
     bmc_hosts = []
     for host in hosts:
         if bmc_helper.get_sensors_table(host=host)['values']:
@@ -177,17 +177,17 @@ def test_sensorgroup_action_taken(host,
     host_state_timeout = 120
     if action == 'reset':
         host_state_timeout = 1080    # 15 min reset interval in between two reset triggers
-    host_helper.wait_for_host_values(host, timeout=host_state_timeout, fail_ok=False,
-                                     availability=expected_host_state)
+    system_helper.wait_for_host_values(host, timeout=host_state_timeout, fail_ok=False,
+                                                availability=expected_host_state)
     if action == 'power-cycle':
-        host_helper.wait_for_host_values(host, timeout=20, task=HostTask.POWER_CYCLE, strict=False)
+        system_helper.wait_for_host_values(host, timeout=20, task=HostTask.POWER_CYCLE, strict=False)
 
     LOG.tc_step("Check the alarm clears and host in available state after clearing events")
     bmc_helper.clear_events(host)
     system_helper.wait_for_alarm_gone(alarm_id=EventLogID.BMC_SENSOR_ACTION, entity_id=host, strict=False,
                                       timeout=60)
     wait_time = 3000 if action == 'power-cycle' else HostTimeout.REBOOT
-    host_helper.wait_for_host_values(host, fail_ok=False, timeout=wait_time, availability='available')
+    system_helper.wait_for_host_values(host, fail_ok=False, timeout=wait_time, availability='available')
 
     HOST = ''
 
@@ -277,10 +277,10 @@ def test_sensorgroup_power_cycle(host,
         host_state_timeout = 120
         if action == 'reset':
             host_state_timeout = 1080  # 15 min reset interval in between two reset triggers
-        host_helper.wait_for_host_values(host, timeout=host_state_timeout, fail_ok=False,
-                                         availability=expected_host_state)
+        system_helper.wait_for_host_values(host, timeout=host_state_timeout, fail_ok=False,
+                                                    availability=expected_host_state)
         if action == 'power-cycle':
-            host_helper.wait_for_host_values(host, timeout=20, task=HostTask.POWER_CYCLE, strict=False)
+            system_helper.wait_for_host_values(host, timeout=20, task=HostTask.POWER_CYCLE, strict=False)
 
         LOG.tc_step("Check the alarm clears and host in available state after clearing events")
         bmc_helper.clear_events(host)
@@ -297,7 +297,7 @@ def test_sensorgroup_power_cycle(host,
                            'administrative': HostAdminState.UNLOCKED,
                            'task': HostTask.POWER_DOWN}
 
-        host_helper.wait_for_host_values(host, fail_ok=False, timeout=wait_time, strict=strict, **expt_states)
+        system_helper.wait_for_host_values(host, fail_ok=False, timeout=wait_time, strict=strict, **expt_states)
 
     LOG.tc_step("Power on {} after test ends".format(host))
     host_helper.lock_host(host=host)
@@ -391,7 +391,7 @@ def test_transition_sensorgroup_actions(host,
             assert not res, "FAIL: Alarm raised but no alarms were expected for sensor on {}".format(host)
 
         LOG.tc_step("Check the host status for sensor: {}".format(sensor_name))
-        host_helper.wait_for_host_values(host, timeout=90, availability=expt_host_avail, fail_ok=False)
+        system_helper.wait_for_host_values(host, timeout=90, availability=expt_host_avail, fail_ok=False)
 
         start_time = common.get_date_in_format()
         # modify sensorgroup with new action/suppression level
@@ -419,13 +419,13 @@ def test_transition_sensorgroup_actions(host,
                                                   timeout=5, fail_ok=False)
 
         LOG.tc_step("Check the host status for sensor: {}".format(sensor_name))
-        host_helper.wait_for_host_values(host, timeout=90, availability=new_expt_host_avail, fail_ok=False)
+        system_helper.wait_for_host_values(host, timeout=90, availability=new_expt_host_avail, fail_ok=False)
 
         LOG.tc_step("Check the alarm clears and host in available state after clearing events")
         bmc_helper.clear_events(host)
         system_helper.wait_for_alarm_gone(alarm_id=EventLogID.BMC_SENSOR_ACTION, entity_id=host, strict=False,
                                           timeout=60)
-        host_helper.wait_for_host_values(host, fail_ok=False, availability='available')
+        system_helper.wait_for_host_values(host, fail_ok=False, availability='available')
 
     HOST = ''
 

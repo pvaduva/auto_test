@@ -1,12 +1,8 @@
 import math
-import time
 
 from pytest import skip, mark
 
-from consts.auth import Tenant
-from consts.reasons import SkipStorageBacking
-from keywords import vm_helper, nova_helper, glance_helper, cinder_helper, host_helper, storage_helper, common
-from testfixtures.fixture_resources import ResourceCleanup
+from keywords import vm_helper, glance_helper, cinder_helper
 from utils import cli
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -40,7 +36,7 @@ def test_create_snapshot_using_boot_from_image_vm():
     LOG.tc_step("Boot a VM from image")
     vm_id = vm_helper.boot_vm(source="image", cleanup='function')[1]
     assert vm_id, "Failed to boot VM"
-    vm_name = nova_helper.get_vm_name_from_id(vm_id)
+    vm_name = vm_helper.get_vm_name_from_id(vm_id)
     snapshot_name = vm_name + "_snapshot"
 
     # nova image-create generates a glance image
@@ -118,14 +114,14 @@ def test_create_snapshot_using_boot_from_volume_vm():
     LOG.tc_step("Create a cinder bootable volume")
     # Check if lab has emc-vnx volume types. Use volume type = iscsi; Creating snapshot with emc-vnx(EMS San)
     # is not supported yet.
-    volume_types = cinder_helper.get_volume_types(rtn_val='Name')
+    volume_types = cinder_helper.get_volume_types(field='Name')
     vol_type = 'iscsi' if any('emc' in t for t in volume_types) else None
     vol_id = cinder_helper.create_volume(source_id=image_uuid, vol_type=vol_type, size=vol_size, fail_ok=False,
                                          cleanup='function')[1]
 
     LOG.tc_step("Boot VM using newly created bootable volume")
     vm_id = vm_helper.boot_vm(source="volume", source_id=vol_id, cleanup='function')[1]
-    vm_name = nova_helper.get_vm_name_from_id(vm_id)
+    vm_name = vm_helper.get_vm_name_from_id(vm_id)
     snapshot_name = vm_name + "_snapshot"
 
     # nova image-create generates a glance image of 0 size
@@ -206,7 +202,7 @@ def test_attempt_to_delete_volume_associated_with_snapshot():
     LOG.tc_step("Create a cinder bootable volume")
     # Check if lab has emc-vnx volume types. Use volume type = iscsi; Creating snapshot with emc-vnx(EMS San)
     # is not supported yet.
-    volume_types = cinder_helper.get_volume_types(rtn_val='Name')
+    volume_types = cinder_helper.get_volume_types(field='Name')
     vol_type = 'iscsi' if any('emc' in t for t in volume_types) else None
     vol_id = cinder_helper.create_volume(source_id=image_uuid, vol_type=vol_type, size=vol_size, fail_ok=False,
                                          cleanup='function')[1]
@@ -218,7 +214,7 @@ def test_attempt_to_delete_volume_associated_with_snapshot():
     # nova image-create generates a glance image of 0 size
     # real snapshot is stored in cinder
     LOG.tc_step("Create a snapshot based on that VM")
-    vm_name = nova_helper.get_vm_name_from_id(vm_id)
+    vm_name = vm_helper.get_vm_name_from_id(vm_id)
     snapshot_name = vm_name + "_snapshot"
     code, image_id, snapshot_id = vm_helper.create_image_from_vm(vm_id, image_name=snapshot_name, cleanup='function',
                                                                  expt_cinder_snapshot=True)

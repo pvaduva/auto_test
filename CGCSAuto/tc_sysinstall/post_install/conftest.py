@@ -36,9 +36,7 @@ def setup_test_session(global_setup):
     Setup primary tenant and Nax Box ssh before the first test gets executed.
     TIS ssh was already set up at collecting phase.
     """
-    ProjVar.set_var(PRIMARY_TENANT=Tenant.ADMIN)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
-    setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
+    ProjVar.set_var(SOURCE_OPENRC=True)
     setups.copy_test_files()
 
     global natbox_ssh
@@ -47,8 +45,6 @@ def setup_test_session(global_setup):
 
     # set build id to be used to upload/write test results
     setups.set_build_info(con_ssh)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
-
     setups.set_session(con_ssh=con_ssh)
 
 
@@ -64,10 +60,8 @@ def pytest_collectstart():
         con_ssh = setups.setup_tis_ssh(lab)
     ProjVar.set_var(con_ssh=con_ssh)
     CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
-    # if setups.is_https(con_ssh):
-    #     CliAuth.set_vars(HTTPS=True)
-    Tenant.ADMIN['auth_url'] = CliAuth.get_var('OS_AUTH_URL')
-    Tenant.ADMIN['region'] = CliAuth.get_var('OS_REGION_NAME')
+    Tenant.set_region(region=CliAuth.get_var('OS_REGION_NAME'))
+    Tenant.set_platform_url(url='OS_AUTH_URL')
 
 
 def pytest_runtest_teardown():

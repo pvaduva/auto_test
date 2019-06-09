@@ -6,6 +6,7 @@
 import re
 from pytest import mark, skip, fixture
 
+import keywords.host_helper
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages, CpuModel
 from consts.cli_errs import VCPUSchedulerErr
@@ -16,8 +17,8 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 @fixture(scope='module')
 def cpu_models_supported():
-    storage_backing, hypervisors, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
-    hosts_cpu_model_dict = host_helper.get_hypervisor_info(hosts=hypervisors, rtn_val='cpu_info_model')
+    storage_backing, hypervisors = keywords.host_helper.get_storage_backing_with_max_hosts()
+    hosts_cpu_model_dict = host_helper.get_hypervisor_info(hosts=hypervisors, field='cpu_info_model')
     all_cpu_models = list(CpuModel.CPU_MODELS)
     max_index = second_index = len(all_cpu_models)
 
@@ -77,7 +78,7 @@ def test_vcpu_model_flavor_and_image(flv_model, img_model, boot_source, error, c
     if error:
         assert 1 == code
         vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR', fail_ok=False)
-        err = nova_helper.get_vm_fault_message(vm)
+        err = vm_helper.get_vm_fault_message(vm)
 
         expt_fault = VCPUSchedulerErr.CPU_MODEL_CONFLICT
         assert re.search(expt_fault, err), "Incorrect fault reported. Expected: {} Actual: {}" \
@@ -100,7 +101,7 @@ def _boot_vm_vcpu_model(flv_model=None, img_model=None, boot_source='volume', av
         image_id = glance_helper.create_image(name='vcpu_{}'.format(img_model), cleanup='function',
                                               **{ImageMetadata.CPU_MODEL: img_model})[1]
     else:
-        image_id = glance_helper.get_guest_image(guest_os=GuestImages.DEFAULT_GUEST)
+        image_id = glance_helper.get_guest_image(guest_os=GuestImages.DEFAULT['guest'])
 
     if boot_source == 'image':
         source_id = image_id
@@ -108,8 +109,8 @@ def _boot_vm_vcpu_model(flv_model=None, img_model=None, boot_source='volume', av
         source_id = cinder_helper.create_volume(name='vcpu_model', source_id=image_id)[1]
         ResourceCleanup.add('volume', source_id)
 
-    code, vm, msg, vol = vm_helper.boot_vm(name='vcpu_model', flavor=flv_id, source=boot_source, source_id=source_id,
-                                           fail_ok=True, cleanup='function', avail_zone=avail_zone, vm_host=vm_host)
+    code, vm, msg = vm_helper.boot_vm(name='vcpu_model', flavor=flv_id, source=boot_source, source_id=source_id,
+                                      fail_ok=True, cleanup='function', avail_zone=avail_zone, vm_host=vm_host)
     return code, vm, msg
 
 
@@ -167,7 +168,7 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source, cpu_models_supporte
 
         expt_fault = VCPUSchedulerErr.CPU_MODEL_UNAVAIL
         res_bool, vals = vm_helper.wait_for_vm_values(vm, 10, regex=True, strict=False, status='ERROR')
-        err = nova_helper.get_vm_fault_message(vm)
+        err = vm_helper.get_vm_fault_message(vm)
 
         assert res_bool, "VM did not reach expected error state. Actual: {}".format(vals)
         assert re.search(expt_fault, err), "Incorrect fault reported. Expected: {} Actual: {}" \
@@ -177,7 +178,7 @@ def test_vm_vcpu_model(vcpu_model, vcpu_source, boot_source, cpu_models_supporte
     # System supports specified vcpu, continue to verify
     expt_arch = None
     if vcpu_model == 'Passthrough':
-        host = nova_helper.get_vm_host(vm)
+        host = vm_helper.get_vm_host(vm)
         expt_arch = host_helper.get_host_cpu_model(host)
 
     LOG.tc_step("Check vm is launched with expected vcpu model")
@@ -218,7 +219,7 @@ def check_vm_cpu_model(vm_id, vcpu_model, expt_arch=None):
         virsh_tag = 'cpu/model'
         type_ = 'text'
         if vcpu_model == 'Haswell':
-            pattern_ps = pattern_virsh = '(haswell|haswell\-notsx)'
+            pattern_ps = pattern_virsh = r'(haswell|haswell\-notsx)'
         else:
             pattern_ps = pattern_virsh = vcpu_model.lower()
     else:
@@ -229,15 +230,15 @@ def check_vm_cpu_model(vm_id, vcpu_model, expt_arch=None):
         type_ = 'dict'
 
     LOG.info("Check vcpu model successfully applied to vm via ps aux and virsh dumpxml on vm host")
-    host = nova_helper.get_vm_host(vm_id)
-    inst_name = nova_helper.get_vm_instance_name(vm_id)
+    host = vm_helper.get_vm_host(vm_id)
+    inst_name = vm_helper.get_vm_instance_name(vm_id)
     with host_helper.ssh_to_host(host) as host_ssh:
         output_ps = host_ssh.exec_cmd("ps aux | grep --color='never' -i {}".format(vm_id), fail_ok=False)[1]
         output_virsh = host_helper.get_values_virsh_xmldump(inst_name, host_ssh, tag_paths=virsh_tag, target_type=type_)
         output_virsh = output_virsh[0]
 
     if vcpu_model:
-        assert re.search('\s-cpu\s{}(\s|,)'.format(pattern_ps), output_ps.lower()), \
+        assert re.search(r'\s-cpu\s{}(\s|,)'.format(pattern_ps), output_ps.lower()), \
             'cpu_model {} not found for vm {}'.format(pattern_ps, vm_id)
     else:
         assert '-cpu' not in output_ps, "cpu model is specified in ps aux"
@@ -303,7 +304,7 @@ def test_vcpu_model_resize(source_model, dest_model):
     expt_arch = None
     if source_model == dest_model == 'Passthrough':
         # Ensure vm resize to host with exact same cpu model when vcpu_model is passthrough
-        host = nova_helper.get_vm_host(vm_id)
+        host = vm_helper.get_vm_host(vm_id)
         expt_arch = host_helper.get_host_cpu_model(host)
 
     LOG.tc_step("Resize vm to destination flavor {}".format(dest_flv))
@@ -354,7 +355,7 @@ def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy, cpu_models_supp
                                              FlavorSpec.CPU_POLICY: 'dedicated',
                                              FlavorSpec.CPU_THREAD_POLICY: thread_policy})
 
-    code, vm, msg, vol = vm_helper.boot_vm(name=name, flavor=flv_id, fail_ok=True, cleanup='function')
+    code, vm, msg = vm_helper.boot_vm(name=name, flavor=flv_id, fail_ok=True, cleanup='function')
     ht_hosts = host_helper.get_hypersvisors_with_config(hyperthreaded=True, up_only=True)
     if thread_policy == 'require' and not ht_hosts:
         assert 1 == code
@@ -362,7 +363,7 @@ def test_vcpu_model_and_thread_policy(vcpu_model, thread_policy, cpu_models_supp
     else:
         assert 0 == code, "VM is not launched successfully"
         check_vm_cpu_model(vm_id=vm, vcpu_model=vcpu_model)
-        vm_host = nova_helper.get_vm_host(vm)
+        vm_host = vm_helper.get_vm_host(vm)
         check_helper.check_topology_of_vm(vm_id=vm, vcpus=2, cpu_pol='dedicated',
                                           cpu_thr_pol=thread_policy, numa_num=1, vm_host=vm_host)
 
@@ -421,7 +422,7 @@ def test_vcpu_model_evacuation(add_admin_role_func, cpu_models_supported):
             if len(vm_dict) == 3:
                 break
             if not target_host:
-                target_host = nova_helper.get_vm_host(vm_id=vm)
+                target_host = vm_helper.get_vm_host(vm_id=vm)
 
         if len(vm_dict) == 3:
             break
@@ -469,10 +470,10 @@ def test_vmx_setting():
     nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
     LOG.tc_step("Create VM for vcpu model {}".format(host_cpu_model))
-    code, vm, msg, vol = vm_helper.boot_vm(flavor=flavor_id, cleanup='function', fail_ok=False)
+    code, vm, msg = vm_helper.boot_vm(flavor=flavor_id, cleanup='function', fail_ok=False)
     ResourceCleanup.add('vm', vm)
     LOG.tc_step("Check vcpu model is correct")
-    host = nova_helper.get_vm_host(vm)
+    host = vm_helper.get_vm_host(vm)
     expt_arch = host_helper.get_host_cpu_model(host)
     check_vm_cpu_model(vm_id=vm, vcpu_model='Passthrough', expt_arch=expt_arch)
 

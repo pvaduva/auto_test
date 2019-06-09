@@ -10,7 +10,7 @@ from consts.compliance import VM_ROUTE_VIA, Dovetail, USER_PASSWORD
 from consts.auth import Tenant, ComplianceCreds, CumulusCreds
 from consts.cgcs import Prompt
 from consts.proj_vars import ProjVar
-from keywords import network_helper, nova_helper, keystone_helper, vm_helper
+from keywords import network_helper, keystone_helper, vm_helper
 
 
 def add_route_for_vm_access(compliance_client):
@@ -24,7 +24,7 @@ def add_route_for_vm_access(compliance_client):
     """
     LOG.fixture_step("Add routes to access VM from compliance server if not already done")
     cidrs = network_helper.get_subnets(name="tenant[1|2].*-mgmt0-subnet0|external-subnet0", regex=True,
-                                       rtn_val='cidr', auth_info=Tenant.get('admin'))
+                                       field='cidr', auth_info=Tenant.get('admin'))
     cidrs_to_add = [r'{}.0/24'.format(re.findall(r'(.*).\d+/\d+', item)[0]) for item in cidrs]
     for cidr in cidrs_to_add:
         if compliance_client.exec_cmd('ip route | grep "{}"'.format(cidr))[0] != 0:
@@ -136,10 +136,10 @@ def update_dovetail_mgmt_interface():
 
     with ssh_to_cumulus_server() as cumulus_con:
         cumulus_auth = CumulusCreds.TENANT_TIS_LAB
-        vm_id = nova_helper.get_vm_id_from_name(vm_name='dovetail', con_ssh=cumulus_con, auth_info=cumulus_auth)
+        vm_id = vm_helper.get_vm_id_from_name(vm_name='dovetail', con_ssh=cumulus_con, auth_info=cumulus_auth)
 
-        dovetail_networks = nova_helper.get_vms(vms=vm_id, rtn_val='Networks', con_ssh=cumulus_con,
-                                                auth_info=cumulus_auth)[0]
+        dovetail_networks = vm_helper.get_vms(vms=vm_id, field='Networks', con_ssh=cumulus_con,
+                                                       auth_info=cumulus_auth)[0]
 
         actual_nets = dovetail_networks.split(sep=';')
         prev_mgmt_nets = []
@@ -156,8 +156,8 @@ def update_dovetail_mgmt_interface():
 
         if prev_mgmt_nets:
             LOG.info("Detach interface(s) {} from dovetail vm".format(prev_mgmt_nets))
-            vm_ports_table = table_parser.table(cli.nova('interface-list', vm_id, ssh_client=cumulus_con,
-                                                         auth_info=cumulus_auth))
+            vm_ports_table = table_parser.table(
+                cli.nova('interface-list', vm_id, ssh_client=cumulus_con, auth_info=cumulus_auth)[1])
             for prev_mgmt_net in prev_mgmt_nets:
                 prev_net_id = network_helper.get_net_id_from_name(net_name=prev_mgmt_net, con_ssh=cumulus_con,
                                                                   auth_info=cumulus_auth)
@@ -173,8 +173,8 @@ def update_dovetail_mgmt_interface():
             args = '--net-id {} {}'.format(mgmt_net_id, vm_id)
             cli.nova('interface-attach', args, ssh_client=cumulus_con, auth_info=cumulus_auth)
 
-        vm_ports_table = table_parser.table(cli.nova('interface-list', vm_id, ssh_client=cumulus_con,
-                                                     auth_info=cumulus_auth))
+        vm_ports_table = table_parser.table(
+            cli.nova('interface-list', vm_id, ssh_client=cumulus_con, auth_info=cumulus_auth)[1])
         mgmt_mac = table_parser.get_values(vm_ports_table, 'MAC Addr', **{'Net ID': mgmt_net_id})[0]
 
     ComplianceCreds.set_host(Dovetail.TEST_NODE)

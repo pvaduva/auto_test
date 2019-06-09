@@ -8,9 +8,8 @@ from urllib.request import urlopen
 import setups
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.auth import Tenant, CliAuth
-# from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
-from consts.cgcs import HostAvailState, HostAdminState, Prompt, PREFIX_BACKUP_FILE, TITANIUM_BACKUP_FILE_PATTERN,\
-    IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
+from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, IMAGE_BACKUP_FILE_PATTERN, \
+    CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
     PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH
 from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar, RestoreVars
@@ -52,13 +51,9 @@ def get_ssh_public_key():
     return local_client().get_ssh_key()
 
 
-def get_current_system_version():
-    return system_helper.get_system_software_version(use_existing=False)
-
-
 def check_system_health_for_upgrade():
-    # system_helper.source_admin()
-    return system_helper.get_system_health_query_upgrade()
+    from keywords import upgrade_helper
+    return upgrade_helper.get_system_health_query_upgrade()
 
 
 def download_upgrade_license(lab, server, license_path):
@@ -115,7 +110,7 @@ def download_license(lab, server, license_path, dest_name="upgrade_license"):
             external_ip = lab['external_ip']
             external_port = lab['external_port']
             server.ssh_conn.rsync("-L " + license_path, external_ip, dest_path,
-                              pre_opts=pre_opts, ssh_port=external_port)
+                                  pre_opts=pre_opts, ssh_port=external_port)
         else:
             temp_path = '/tmp'
             local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
@@ -182,7 +177,7 @@ def download_upgrade_load(lab, server, load_path, upgrade_ver):
 
 def get_mgmt_boot_device(node):
     boot_device = {}
-    boot_interfaces = system_helper.get_host_mgmt_pci_address(node.name)
+    boot_interfaces = host_helper.get_host_mgmt_pci_address(node.name)
     for boot_interface in boot_interfaces:
         a1, a2, a3 = boot_interface.split(":")
         boot_device[node.name] = a2 + "0" + a3.split(".")[1]
@@ -287,7 +282,7 @@ def bring_node_console_up(node, boot_device,
 
 def get_non_controller_system_hosts():
 
-    hosts = system_helper.get_hostnames()
+    hosts = system_helper.get_hosts()
     controllers = sorted([h for h in hosts if "controller" in h])
     storages = sorted([h for h in hosts if "storage" in h])
     computes = sorted([h for h in hosts if h not in storages and h not in controllers])
@@ -388,8 +383,8 @@ def wipe_disk_hosts(hosts, lab=None, close_telnet_conn=True):
 
                 else:
                     try:
-                        with host_helper.ssh_to_remote_node(hostname, prompt=prompt, use_telnet=True,
-                                                            telnet_session=controller0_node.telnet_conn) as host_ssh:
+                        with common.ssh_to_remote_node(hostname, prompt=prompt, use_telnet=True,
+                                                       telnet_session=controller0_node.telnet_conn) as host_ssh:
                             host_ssh.send("sudo wipedisk")
                             prompts = [Prompt.PASSWORD_PROMPT, "\[y/n\]", "wipediskscompletely"]
                             index = host_ssh.expect(prompts)
@@ -529,7 +524,7 @@ def power_on_host(hosts, lab=None, wait_for_hosts_state_=True):
 def wait_for_hosts_state(hosts, state=HostAvailState.ONLINE):
 
     if len(hosts) > 0:
-        locked_hosts_in_states = host_helper.wait_for_hosts_states(hosts, availability=[state])
+        locked_hosts_in_states = system_helper.wait_for_hosts_states(hosts, availability=[state])
         LOG.info("Host(s) {} are online".format(locked_hosts_in_states))
 
 
@@ -682,11 +677,11 @@ def bulk_add_hosts(lab, hosts_xml_file, con_ssh=None):
 
     cmd = "test -f {}/{}".format(WRSROOT_HOME, hosts_xml_file)
     if controller_ssh.exec_cmd(cmd)[0] == 0:
-        rc, output = cli.system("host-bulk-add", hosts_xml_file, fail_ok=True, ssh_client=con_ssh)
+        rc, output = cli.system("host-bulk-add", hosts_xml_file, ssh_client=con_ssh, fail_ok=True)
         if rc != 0 or "Configuration failed" in output:
             msg = "system host-bulk-add failed"
             return rc, None, msg
-        hosts = system_helper.get_hostnames_per_personality(con_ssh=con_ssh, rtn_tuple=True)
+        hosts = system_helper.get_hosts_per_personality(con_ssh=con_ssh, rtn_tuple=True)
         return 0, hosts, ''
     else:
         msg = "{} file not found in {}".format(hosts_xml_file, WRSROOT_HOME)
@@ -1578,7 +1573,7 @@ def upgrade_controller_simplex(system_backup, tel_net_session=None, fail_ok=Fals
     Restores the controller system config for system restore.
     Args:
         system_backup(str): The system config backup file
-        tel_net_session:
+        tel_net_session (TelnetClient):
         fail_ok:
 
     Returns (tuple): rc, text message
@@ -1641,7 +1636,7 @@ def restore_compute(tel_net_session=None, fail_ok=False):
     """
     Restores the controller system compute for system restore.
     Args:
-       tel_net_session:
+        tel_net_session:
         fail_ok:
 
     Returns (tuple): rc, text message
@@ -1679,8 +1674,8 @@ def restore_compute(tel_net_session=None, fail_ok=False):
     tel_net_session.login()
     LOG.info('Waiting for the simplex to reconnect')
     host_helper._wait_for_simplex_reconnect(timeout=HostTimeout.REBOOT)
-    if not host_helper.wait_for_host_values('controller-0', timeout=HostTimeout.CONTROLLER_UNLOCK,
-                                            check_interval=10, availability=[HostAvailState.AVAILABLE]):
+    if not system_helper.wait_for_host_values('controller-0', timeout=HostTimeout.CONTROLLER_UNLOCK,
+                                              check_interval=10, availability=[HostAvailState.AVAILABLE]):
         err_msg = "Host did not become online  after downgrade"
         if fail_ok:
             return 2, err_msg
@@ -2083,10 +2078,7 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
                     if local_client().exec_cmd("test -e {}".format(backup_dest_path))[0] != 0:
                         local_client().exec_cmd("mkdir -p {}".format(backup_dest_path))
 
-                common.scp_from_active_controller_to_test_server(src_files,
-                                                                 backup_dest_path,
-                                                                 is_dir=is_dir,
-                                                                 multi_files=True)
+                common.scp_from_active_controller_to_test_server(src_files, backup_dest_path, is_dir=is_dir)
 
                 LOG.info("Verifying if backup files are copied to destination")
                 if dest_server:
@@ -2195,7 +2187,7 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, backup_dest='usb',
         LOG.info("The backup system and image tgz file will be copied to {}:{}"
                  .format(copy_to_usb, get_usb_mount_point(usb_device=copy_to_usb)))
     date = time.strftime(BACKUP_FILE_DATE_STR)
-    build_id = ProjVar.get_var('BUILD_ID')
+    build_id = system_helper.get_build_info(con_ssh=con_ssh)['BUILD_ID']
     backup_file_name = "{}{}_{}_{}".format(backup_file_prefix, date, build_id, lab_system_name)
     cmd = 'config_controller --backup {}'.format(backup_file_name)
 
@@ -2224,7 +2216,7 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, backup_dest='usb',
                 local_client().exec_cmd("mkdir -p {}".format(backup_dest_path))
 
         src_files = "{} {}".format(backup_files[0].strip(), backup_files[1].strip())
-        common.scp_from_active_controller_to_test_server(src_files, backup_dest_path, is_dir=False, multi_files=True)
+        common.scp_from_active_controller_to_test_server(src_files, backup_dest_path, is_dir=False)
 
         LOG.info("Verifying if backup files are copied to destination")
         if dest_server:
@@ -2338,7 +2330,7 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
             if local_client().exec_cmd("test -e {}".format(backup_dest_path))[0] != 0:
                 local_client().exec_cmd("mkdir -p {}".format(backup_dest_path))
 
-        common.scp_from_active_controller_to_test_server(src_file, backup_dest_path, is_dir=False, multi_files=True)
+        common.scp_from_active_controller_to_test_server(src_file, backup_dest_path, is_dir=False)
 
         LOG.info("Verifying if image backup files are copied to destination")
         base_name_src = os.path.basename(src_file)
@@ -2769,7 +2761,7 @@ def update_auth_url(ssh_con, region=None, use_telnet=False, con_telnet=None, fai
     LOG.info('Attempt to update OS_AUTH_URL from openrc')
 
     CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh=ssh_con, use_telnet=use_telnet, con_telnet=con_telnet ))
-    Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
+    Tenant.set_platform_url(CliAuth.get_var('OS_AUTH_URL'))
     Tenant.set_region(CliAuth.get_var('OS_REGION_NAME'))
 
 
@@ -2796,68 +2788,6 @@ def get_lab_info(barcode):
     lab_ini_info[barcode] = settings
 
     return settings
-
-
-def run_cpe_compute_config_complete(controller0_node, controller0):
-    output_dir = ProjVar.get_var('LOG_DIR')
-
-    if controller0_node.telnet_conn is None:
-        controller0_node.telnet_conn = open_telnet_session(controller0_node)
-        controller0_node.telnet_conn.login()
-
-    controller0_node.telnet_conn.exec_cmd("cd; source /etc/platform/openrc")
-
-    telnet_client = controller0_node.telnet_conn
-
-    cmd = 'system compute-config-complete'
-    LOG.info('To run CLI:{}'.format(cmd))
-
-    LOG.info('execute CLI:{}'.format(cmd))
-    rc, output = telnet_client.exec_cmd(cmd)
-    if rc != 0:
-        msg = '{} failed, rc:{}\noutput:\n{}'.format(cmd, rc, output)
-        LOG.error(msg)
-        raise exceptions.RestoreSystem
-
-    LOG.info('wait controller reboot after CLI:{}'.format(cmd))
-    time.sleep(30)
-    for count in range(50):
-        try:
-            hosts = host_helper.system_helper.get_hostnames()
-            if hosts:
-                LOG.debug('hosts:{}'.format(hosts))
-        except:
-            break
-
-        time.sleep(10)
-
-    LOG.info('SSH connectiong is down, wait 120 seconds and reconnect with telnet')
-    time.sleep(120)
-
-    LOG.info('re-login')
-    controller0_node.telnet_conn.login()
-    os.environ["TERM"] = "xterm"
-
-    for _ in range(40):
-        try:
-            controller0_node.telnet_conn.exec_cmd('source /etc/platform/openrc')
-            if rc == 0:
-                rc, output = controller0_node.telnet_conn.exec_cmd('system host-show {}'.format(controller0))
-                if rc == 0 and output.strip():
-                    LOG.info('System is ready, {} status: {}'.format(controller0, output))
-                    break
-        except exceptions.TelnetError as e:
-            LOG.warn('got error:{}'.format(e))
-
-        LOG.info('{} is not ready yet, failed to source /etc/platform/openrc, continue to wait'.format(controller0))
-        time.sleep(15)
-
-    LOG.info('closing the telnet connnection to node:{}'.format(controller0))
-    controller0_node.telnet_conn.close()
-
-    LOG.info('waiting for node:{} to be ready'.format(controller0))
-    host_helper.wait_for_hosts_ready(controller0)
-    LOG.info('OK, {} is up and ready'.format(controller0))
 
 
 def create_cloned_image(cloned_image_file_prefix=PREFIX_CLONED_IMAGE_FILE, lab_system_name=None,
@@ -2999,7 +2929,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
         controller_0_node.telnet_conn.login()
 
     LOG.info("Executing system show on cloned system")
-    table_ = table_parser.table(cli.system('show', use_telnet=True, con_telnet=controller_0_node.telnet_conn))
+    table_ = table_parser.table(cli.system('show', use_telnet=True, con_telnet=controller_0_node.telnet_conn)[1])
     system_name = table_parser.get_value_two_col_table(table_, 'name')
     assert "Cloned_system" in system_name, "Unexpected system name {} after install-clone".format(system_name)
 
@@ -3012,24 +2942,20 @@ def check_cloned_hardware_status(host, fail_ok=False):
     software_version = table_parser.get_value_two_col_table(table_, 'software_version')
 
     LOG.info("Executing system host show on cloned system host".format(host))
-    table_ = table_parser.table(cli.system('host-show {}'.format(host), use_telnet=True,
-                                           con_telnet=controller_0_node.telnet_conn))
-    host_name = table_parser.get_value_two_col_table(table_, 'hostname')
+    fields = ('hostname', 'mgmt_ip', 'mgmt_mac', 'software_load')
+    host_name, host_mgmt_ip, host_mgmt_mac, host_software_load = \
+        system_helper.get_host_values(host, fields=fields, use_telnet=True, con_telnet=controller_0_node.telnet_conn)
+
     assert host == host_name, "Unexpected hostname {} after install-clone".format(host_name)
     if system_mode == 'duplex':
-        host_mgmt_ip = table_parser.get_value_two_col_table(table_, 'mgmt_ip')
         assert "192.168" in host_mgmt_ip, "Unexpected mgmt_ip {} in host {} after install-clone"\
             .format(host_mgmt_ip, host)
-
-    host_mgmt_mac = table_parser.get_value_two_col_table(table_, 'mgmt_mac')
-
-    host_software_load = table_parser.get_value_two_col_table(table_, 'software_load')
     assert host_software_load == software_version, "Unexpected software load {} in host {} after install-clone"\
         .format(host_software_load, host)
 
     LOG.info("Executing system host ethernet port list on cloned system host {}".format(host))
     table_ = table_parser.table(cli.system('host-ethernet-port-list {} --nowrap'.format(host), use_telnet=True,
-                                           con_telnet=controller_0_node.telnet_conn))
+                                           con_telnet=controller_0_node.telnet_conn)[1])
     assert len(table_['values']) >= 2, "Fewer ethernet ports listed than expected for host {}: {}".format(host, table_)
     if system_mode == 'duplex':
         assert len(table_parser.filter_table(table_, **{'mac address': host_mgmt_mac})['values']) >= 1, \
@@ -3038,14 +2964,14 @@ def check_cloned_hardware_status(host, fail_ok=False):
     LOG.info("Executing system host interface list on cloned system host {}".format(host))
 
     table_ = table_parser.table(cli.system('host-if-list {} --nowrap'.format(host), use_telnet=True,
-                                           con_telnet=controller_0_node.telnet_conn))
+                                           con_telnet=controller_0_node.telnet_conn)[1])
     assert table_parser.get_values(table_, target_header='name', **{'class': 'data'}), \
         "No data interface type found in Host {} after system clone-install".format(host)
     platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
     net_types = ['mgmt', 'oam']
     for pif in platform_ifs:
         host_if_show_tab = table_parser.table(cli.system('host-if-show', '{} {}'.format(host, pif), use_telnet=True,
-                                                         con_telnet=controller_0_node.telnet_conn))
+                                                         con_telnet=controller_0_node.telnet_conn)[1])
         net_type = table_parser.get_value_two_col_table(host_if_show_tab, 'networks')
         if net_type in net_types:
             net_types.remove(net_type)
@@ -3053,7 +2979,7 @@ def check_cloned_hardware_status(host, fail_ok=False):
 
     LOG.info("Executing system host disk list on cloned system host {}".format(host))
     table_ = table_parser.table(cli.system('host-disk-list {} --nowrap'.format(host), use_telnet=True,
-                                           con_telnet=controller_0_node.telnet_conn))
+                                           con_telnet=controller_0_node.telnet_conn)[1])
     assert len(table_['values']) >= 2, "Fewer disks listed than expected for host {}: {}".format(host, table_)
 
 
@@ -3173,7 +3099,7 @@ def scp_cloned_image_to_labs(dest_labs, clone_image_iso_filename, boot_lab=True,
         dest_labs = [dest_labs]
 
     src_lab = ProjVar.get_var("LAB")
-    if 'system_type' not in  src_lab.keys() or  src_lab['system_type'] != 'CPE':
+    if 'system_type' not in src_lab.keys() or src_lab['system_type'] != 'CPE':
         err_msg = "Lab {} is not AIO; System clone is only supported for AIO systems only".format(src_lab['name'])
         if fail_ok:
             return 1, err_msg
@@ -3292,15 +3218,11 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
                 else:
                     raise exceptions.BackupSystem(msg)
 
-        log_file_prefix = ''
-        install_output_dir = ProjVar.get_var("LOG_DIR")
-        log_file_prefix += "{}_".format(dest_lab_name)
+        con_ssh.scp_on_source(source_path=clone_image_iso_full_path, dest_user=HostLinuxCreds.get_user(),
+                              dest_ip=controller0_node.host_ip, dest_path=clone_image_iso_dest_path,
+                              dest_password=HostLinuxCreds.get_password(), timeout=1200)
 
-        con_ssh.scp_files(clone_image_iso_full_path, clone_image_iso_dest_path, dest_server=controller0_node.host_ip,
-                          dest_password=HostLinuxCreds.get_password(), dest_user=HostLinuxCreds.get_user())
-
-
-    with host_helper.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, ssh_client=con_ssh) \
+    with common.ssh_to_remote_node(controller0_node.host_ip, prompt=Prompt.CONTROLLER_PROMPT, ssh_client=con_ssh) \
             as node_ssh:
 
         if node_ssh.exec_cmd("ls {}".format(clone_image_iso_dest_path))[0] != 0:
@@ -3450,9 +3372,9 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         con_telnet.set_prompt(admin_prompt)
         con_telnet.exec_cmd('source /etc/platform/openrc')
         update_auth_url(ssh_con=None, use_telnet=True, con_telnet=con_telnet)
-        host_helper.wait_for_hosts_states(controller0.name,
-                                          availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
-                                          use_telnet=True, con_telnet=con_telnet)
+        system_helper.wait_for_hosts_states(controller0.name,
+                                                     availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
+                                                     use_telnet=True, con_telnet=con_telnet)
         # if kubernetes:
         #     LOG.info("Setting DNS server ...")
         #     system_helper.set_dns_servers(["8.8.8.8"], with_action_option='apply', use_telnet=True,
@@ -3548,70 +3470,6 @@ def post_install(controller0_node=None):
         rc, msg = 1, "No post install directory"
 
     return rc, msg
-
-
-# def unlock_controller(host, lab=None, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=True, fail_ok=False,
-#                       con_ssh=None, use_telnet=False, con_telnet=None, auth_info=Tenant.ADMIN, check_first=True):
-#
-#     if check_first:
-#         if host_helper.get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
-#                               con_telnet=con_telnet,) in [HostAvailState.OFFLINE, HostAvailState.FAILED]:
-#             LOG.info("Host is offline or failed, waiting for it to go online, available or degraded first...")
-#             host_helper.wait_for_hosts_states(host, availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE,
-#                                                      HostAvailState.DEGRADED], con_ssh=con_ssh,
-#                                  use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=False)
-#
-#         if host_helper.get_hostshow_value(host, 'administrative', con_ssh=con_ssh, use_telnet=use_telnet,
-#                               con_telnet=con_telnet) == HostAdminState.UNLOCKED:
-#             message = "Host already unlocked. Do nothing"
-#             LOG.info(message)
-#             return -1, message
-#
-#     sys_mode = system_helper.get_system_value(field="system_mode",  con_ssh=con_ssh, use_telnet=use_telnet,
-#                                                       con_telnet=con_telnet, auth_info=auth_info)
-
-    # exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh, use_telnet=use_telnet,
-    #                               con_telnet=con_telnet, auth_info=auth_info, rtn_list=True, fail_ok=fail_ok,
-    #                               timeout=60)
-    # if exitcode == 1:
-    #     return 1, output
-    # if not lab:
-    #     lab = InstallVars.get_install_var('LAB')
-    #
-    # if not len(lab['controller_nodes']) > 1:
-    #     LOG.info("This is simplex lab; Waiting for controller reconnection after unlock")
-    #     host_helper._wait_for_simplex_reconnect(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
-    #                                             duplex_direct=True if sys_mode == "duplex-direct" else False)
-    #
-    # if not host_helper.wait_for_hosts_states(host, timeout=60, administrative=HostAdminState.UNLOCKED, con_ssh=con_ssh,
-    #                             use_telnet=use_telnet, con_telnet=con_telnet, fail_ok=fail_ok):
-    #     return 2, "Host is not in unlocked state"
-    #
-    # if not host_helper.wait_for_hosts_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-    #                             use_telnet=use_telnet, con_telnet=con_telnet,
-    #                             availability=[HostAvailState.AVAILABLE, HostAvailState.DEGRADED]):
-    #     return 3, "Host state did not change to available or degraded within timeout"
-    #
-    # if sys_mode != 'duplex-direct':
-    #     if not host_helper.wait_for_host_values(host, timeout=HostTimeout.TASK_CLEAR, fail_ok=fail_ok, con_ssh=con_ssh,
-    #                                 use_telnet=use_telnet, con_telnet=con_telnet, task=''):
-    #         return 5, "Task is not cleared within {} seconds after host goes available".format(HostTimeout.TASK_CLEAR)
-    #
-    # if host_helper.get_hostshow_value(host, 'availability', con_ssh=con_ssh, use_telnet=use_telnet,
-    #                       con_telnet=con_telnet) == HostAvailState.DEGRADED:
-    #     if not available_only:
-    #         LOG.warning("Host is in degraded state after unlocked.")
-    #         return 4, "Host is in degraded state after unlocked."
-    #     else:
-    #         if not host_helper.wait_for_hosts_states(host, timeout=timeout, fail_ok=fail_ok, check_interval=10, con_ssh=con_ssh,
-    #                                     use_telnet=use_telnet, con_telnet=con_telnet,
-    #                                     availability=HostAvailState.AVAILABLE):
-    #             err_msg = "Failed to wait for host to reach Available state after unlocked to Degraded state"
-    #             LOG.warning(err_msg)
-    #             return 8, err_msg
-    #
-    # LOG.info("Host {} is successfully unlocked and in available state".format(host))
-    # return 0, "Host is unlocked and in available state."
 
 
 def enter_bios_option(node_obj, bios_option, reboot=False, expect_prompt=True):
@@ -4420,7 +4278,7 @@ def download_stx_helm_charts(lab, server, stx_helm_charts_path=None):
 
     server_ssh = server.ssh_conn
     if server_ssh.exec_cmd('test -d {}'.format(stx_helm_charts_path), rm_date=False)[0] == 0:
-        charts = 'stx-openstack-1.0-*.tgz'
+        charts = 'stx-openstack-1.0-*stable-versioned.tgz'
         if server_ssh.exec_cmd('test -f {}/{}'.format(stx_helm_charts_path, charts), rm_date=False)[0] != 0:
             charts = 'helm-charts-stx-openstack-centos-stable-versioned.tgz'
             if server_ssh.exec_cmd('test -f {}/{}'.format(stx_helm_charts_path, charts), rm_date=False)[0] != 0:

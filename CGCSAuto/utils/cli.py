@@ -1,8 +1,9 @@
 import os
 
+from pytest import skip
+
 from consts.auth import Tenant
 from consts.cgcs import Prompt
-from consts.openstack_cli import NEUTRON_MAP
 from consts.proj_vars import ProjVar
 from consts.timeout import CLI_TIMEOUT
 from utils import exceptions
@@ -10,9 +11,9 @@ from utils.clients.ssh import ControllerClient
 from utils.clients.local import RemoteCLIClient
 
 
-def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
-             flags='', fail_ok=False, cli_dir='', auth_info=None, source_openrc=None, err_only=False,
-             timeout=CLI_TIMEOUT, rtn_code=False, force_source=False, platform=None):
+def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None, flags='',
+             fail_ok=False, cli_dir='', auth_info=None, source_openrc=None, err_only=False, timeout=CLI_TIMEOUT,
+             force_source=False):
     """
 
     Args:
@@ -30,15 +31,13 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
         use_telnet
         con_telnet
         auth_info: (dict) authorization information to run cli commands.
-        source_openrc (None|bool)
+        source_openrc (None|bool): In general this should NOT be set unless necessary.
         force_source (bool): whether to source if already sourced.
             This is usually used if any env var was changed in test. such as admin password changed, etc.
         fail_ok:
         cli_dir:
         err_only:
         timeout:
-        rtn_code (bool):
-        platform (None|bool)
 
     Returns:
         if command executed successfully: return command_output
@@ -49,8 +48,36 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
     if use_telnet and con_telnet is None:
         raise ValueError("No Telnet session provided")
 
+    # Determine region and auth_url
+    raw_cmd = cmd.strip().split()[0]
+    is_dc = ProjVar.get_var('IS_DC')
+    platform_cmds = ('system', 'fm')
+
     if auth_info is None:
         auth_info = Tenant.get_primary()
+
+    platform = True if auth_info.get('platform') else False
+
+    if not platform and ProjVar.get_var('OPENSTACK_DEPLOYED') is False:
+        skip('stx-openstack application is not applied.')
+
+    region = auth_info.get('region')
+    dc_region = region if region and is_dc else None
+    default_region_and_url = Tenant.get_region_and_url(platform=platform, dc_region=dc_region)
+
+    region = region if region else default_region_and_url['region']
+    auth_url = auth_info.get('auth_url', default_region_and_url['auth_url'])
+
+    if is_dc:
+        # Set proper region when cmd is against DC central cloud. This is needed due to the same auth_info may be
+        # passed to different keywords that require different region
+        if region in ('RegionOne', 'SystemController'):
+            region = 'RegionOne' if raw_cmd in platform_cmds else 'SystemController'
+
+        # # Reset auth_url if cmd is against DC central cloud RegionOne containerized services. This is needed due to
+        # # the default auth_url for central controller RegionOne is platform auth_url
+        # if region == 'RegionOne' and not platform:
+        #     auth_url = default_region_and_url['auth_url']
 
     positional_args = __convert_args(positional_args)
     flags = __convert_args(flags)
@@ -65,20 +92,18 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
                 source_openrc = True
                 use_remote_cli = True
         if not ssh_client:
-            if ProjVar.get_var('IS_DC'):
-                region = auth_info['region']
+            if is_dc:
                 # This may not exist if cli cmd used before DC vars are initialized
                 ssh_client = ControllerClient.get_active_controller(name=region, fail_ok=True)
 
             if not ssh_client:
                 ssh_client = ControllerClient.get_active_controller()
 
-    if not source_openrc:
-        source_openrc = ProjVar.get_var('SOURCE_CREDENTIAL')
+    if source_openrc is None:
+        source_openrc = ProjVar.get_var('SOURCE_OPENRC')
 
-    raw_cmd = cmd.strip().split()[0]
     if source_openrc:
-        source_file = _get_rc_path(tenant=auth_info['tenant'], remote_cli=use_remote_cli)
+        source_file = _get_rc_path(user=auth_info['user'], remote_cli=use_remote_cli, platform=platform)
         if use_telnet:
             cmd = 'source {}; {}'.format(source_file, cmd)
         else:
@@ -86,15 +111,10 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
                                remote_cli=use_remote_cli, force=force_source)
         flags = ''
     elif auth_info:
-        # os auth url handling
-        if raw_cmd not in ('fm', 'system') and platform is not True:
-            auth_info = dict(auth_info)
-            auth_info['auth_url'] = 'http://keystone.openstack.svc.cluster.local/v3'
-
-        # auth params handling
+        # auth params
         auth_args = ("--os-username '{}' --os-password '{}' --os-project-name {} --os-auth-url {} "
                      "--os-user-domain-name Default --os-project-domain-name Default".
-                     format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_info['auth_url']))
+                     format(auth_info['user'], auth_info['password'], auth_info['tenant'], auth_url))
 
         flags = '{} {}'.format(auth_args.strip(), flags.strip())
 
@@ -104,13 +124,8 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
     else:
         flags += ' --os-endpoint-type internalURL'
 
-    # region name handling
+    # region handling
     if raw_cmd != 'dcmanager':
-        region = auth_info['region']
-        if ProjVar.get_var('IS_DC') and region in ('RegionOne', 'SystemController'):
-            syscon_cmds = ('system', 'fm')
-            region = 'RegionOne' if raw_cmd in syscon_cmds else 'SystemController'
-
         if raw_cmd == 'cinder':
             flags += ' --os_region_name {}'.format(region)
         else:
@@ -118,7 +133,7 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
 
     complete_cmd = ' '.join([os.path.join(cli_dir, cmd), flags.strip(), sub_cmd, positional_args]).strip()
 
-    # workaround for CGTS-10031
+    # workaround for dcmanager cmd not supporting --os-project-name
     if complete_cmd.startswith('dcmanager'):
         complete_cmd = complete_cmd.replace('--os-project-name', '--os-tenant-name')
 
@@ -128,16 +143,11 @@ def exec_cli(cmd, sub_cmd, positional_args='', ssh_client=None, use_telnet=False
         exit_code, cmd_output = ssh_client.exec_cmd(complete_cmd, err_only=err_only, expect_timeout=timeout,
                                                     searchwindowsize=100)
 
-    if fail_ok:
-        if exit_code == 0:
-            return 0, cmd_output
-        elif exit_code in [1, 2]:
-            return 1, cmd_output
-    elif exit_code == 0:
-        if rtn_code:
-            return exit_code, cmd_output
-        else:
-            return cmd_output
+    if exit_code == 0:
+        return 0, cmd_output
+
+    if fail_ok and exit_code in [1, 2]:
+        return 1, cmd_output
 
     raise exceptions.CLIRejected("CLI '{}' failed to execute. Output: {}".format(complete_cmd, cmd_output))
 
@@ -153,11 +163,11 @@ def __convert_args(args):
     return args.strip()
 
 
-def _get_rc_path(tenant, remote_cli=False):
+def _get_rc_path(user, remote_cli=False, platform=None):
     if remote_cli:
-        openrc_path = os.path.join(ProjVar.get_var('LOG_DIR'), 'horizon', '{}-openrc.sh'.format(tenant))
+        openrc_path = os.path.join(ProjVar.get_var('LOG_DIR'), 'horizon', '{}-openrc.sh'.format(user))
     else:
-        openrc_path = '/etc/platform/openrc' if 'admin' in tenant else '~/openrc.{}'.format(tenant)
+        openrc_path = '/etc/platform/openrc' if platform and user == 'admin' else '~/openrc.{}'.format(user)
 
     return openrc_path
 
@@ -218,143 +228,89 @@ def source_openrc_file(ssh_client, auth_info, rc_file, fail_ok=False, remote_cli
     return exit_code, cmd_output
 
 
-def openstack(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-              auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_code=False, source_openrc=False,
-              platform=False, use_telnet=False, con_telnet=None):
+def openstack(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='', auth_info=None,
+              err_only=False, timeout=CLI_TIMEOUT, source_openrc=False, use_telnet=False, con_telnet=None):
     flags += ' --os-identity-api-version 3'
 
-    return exec_cli('openstack', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_code=rtn_code, source_openrc=source_openrc,
-                    platform=platform, use_telnet=use_telnet, con_telnet=con_telnet)
+    return exec_cli('openstack', sub_cmd=cmd, positional_args=positional_args, ssh_client=ssh_client,
+                    use_telnet=use_telnet, con_telnet=con_telnet, flags=flags, fail_ok=fail_ok, cli_dir=cli_dir,
+                    auth_info=auth_info, source_openrc=source_openrc, err_only=err_only, timeout=timeout)
 
 
-def nova(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-         auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_code=False, use_telnet=False,
-         con_telnet=None):
+def nova(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='', auth_info=None, err_only=False,
+         timeout=CLI_TIMEOUT, use_telnet=False, con_telnet=None):
 
-    return exec_cli('nova', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_code=rtn_code, use_telnet=use_telnet,
-                    con_telnet=con_telnet)
+    return exec_cli('nova', sub_cmd=cmd, positional_args=positional_args, ssh_client=ssh_client, use_telnet=use_telnet,
+                    con_telnet=con_telnet, flags=flags, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
+                    err_only=err_only, timeout=timeout)
 
 
-def heat(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-         auth_info=Tenant.get('admin'), err_only=False, timeout=CLI_TIMEOUT, rtn_code=False):
+def heat(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='', auth_info=Tenant.get('admin'),
+         err_only=False, timeout=CLI_TIMEOUT):
 
-    return exec_cli('heat', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_code=rtn_code)
-
-
-def neutron(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-            auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_code=False, convert_openstack=None,
-            force_neutron=False):
-
-    openstack_cmd = None
-    if not force_neutron:
-        convert_openstack = convert_openstack if openstack_cmd is not None else ProjVar.get_var('OPENSTACK_CLI')
-        if convert_openstack:
-            openstack_cmd = NEUTRON_MAP.get(cmd, None)
-
-    if openstack_cmd is not None:
-        return openstack(cmd=openstack_cmd, positional_args=positional_args, flags=flags,
-                         ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                         err_only=err_only, timeout=timeout, rtn_code=rtn_code)
-
-    return exec_cli('neutron', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_code=rtn_code)
+    return exec_cli('heat', sub_cmd=cmd, positional_args=positional_args, ssh_client=ssh_client, flags=flags,
+                    fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, err_only=err_only, timeout=timeout)
 
 
-# def ceilometer(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
-#                auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
-#
-#     return exec_cli('ceilometer', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-#                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-#                     err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+def neutron(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='', auth_info=None,
+            err_only=False, timeout=CLI_TIMEOUT):
+
+    return exec_cli('neutron', sub_cmd=cmd, positional_args=positional_args, ssh_client=ssh_client, flags=flags,
+                    fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, err_only=err_only, timeout=timeout)
 
 
-def cinder(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-           auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_code=False):
+def cinder(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='', auth_info=None,
+           err_only=False, timeout=CLI_TIMEOUT):
 
-    return exec_cli('cinder', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_code=rtn_code)
+    return exec_cli('cinder', sub_cmd=cmd, positional_args=positional_args, ssh_client=ssh_client, flags=flags,
+                    fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, err_only=err_only, timeout=timeout)
 
 
-def swift(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-          auth_info=Tenant.get('admin'), source_creden_=None, err_only=False, timeout=CLI_TIMEOUT, rtn_code=False):
+def swift(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='', auth_info=Tenant.get('admin'),
+          source_openrc=None, err_only=False, timeout=CLI_TIMEOUT):
 
-    return exec_cli('swift', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    source_openrc=source_creden_, err_only=err_only, timeout=timeout, rtn_code=rtn_code)
-
-#
-# def glance(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-#            auth_info=Tenant.get('admin'), err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
-#
-#     return exec_cli('glance', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-#                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-#                     err_only=err_only, timeout=timeout, rtn_list=rtn_list)
-
-#
-# def keystone(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-#              auth_info=Tenant.get('admin'), err_only=False, timeout=CLI_TIMEOUT, rtn_list=False, source_admin_=False):
-#
-#     source_cred_ = Tenant.get('admin') if source_admin_ else None
-#     return exec_cli('keystone', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-#                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-#                     err_only=err_only, timeout=timeout, rtn_list=rtn_list, source_openrc=source_cred_)
-
-#
-# def murano(cmd, positional_args='', ssh_client=None,  flags='', fail_ok=False, cli_dir='',
-#            auth_info=None, err_only=False, timeout=CLI_TIMEOUT, rtn_list=False):
-#
-#     return exec_cli('murano', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-#                     ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-#                     err_only=err_only, timeout=timeout, rtn_list=rtn_list)
+    return exec_cli('swift', sub_cmd=cmd, positional_args=positional_args, ssh_client=ssh_client, flags=flags,
+                    fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, source_openrc=source_openrc,
+                    err_only=err_only, timeout=timeout)
 
 
 def sw_manager(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-               auth_info=Tenant.get('admin'), source_creden_=None, err_only=False, timeout=CLI_TIMEOUT, rtn_code=False):
+               auth_info=Tenant.get('admin_platform'), source_openrc=None, err_only=False, timeout=CLI_TIMEOUT):
 
-    return exec_cli('sw-manager', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    source_openrc=source_creden_, err_only=err_only, timeout=timeout, rtn_code=rtn_code, platform=True)
-
-
-def system(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
-           flags='', fail_ok=False, cli_dir='', auth_info=Tenant.get('admin'), source_openrc=None, err_only=False,
-           timeout=CLI_TIMEOUT, rtn_code=False, force_source=False):
-
-    return exec_cli('system', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, use_telnet=use_telnet, con_telnet=con_telnet,
+    return exec_cli('sw-manager', sub_cmd=cmd, positional_args=positional_args, ssh_client=ssh_client, flags=flags,
                     fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, source_openrc=source_openrc,
-                    err_only=err_only, timeout=timeout, rtn_code=rtn_code, force_source=force_source)
+                    err_only=err_only, timeout=timeout)
 
 
-def fm(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None,
-       flags='', fail_ok=False, cli_dir='', auth_info=Tenant.ADMIN, source_openrc=None, err_only=False,
-       timeout=CLI_TIMEOUT, rtn_code=False, force_source=False):
+def system(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None, flags='', fail_ok=False,
+           cli_dir='', auth_info=Tenant.get('admin_platform'), source_openrc=None, err_only=False, timeout=CLI_TIMEOUT,
+           force_source=False):
 
-    # FIXME: temp workaround to maintain backward compatibility for non-STX build until TC branch is created.
-    build = ProjVar.get_var('BUILD_ID')
+    return exec_cli('system', sub_cmd=cmd, positional_args=positional_args, ssh_client=ssh_client,
+                    use_telnet=use_telnet, con_telnet=con_telnet, flags=flags, fail_ok=fail_ok, cli_dir=cli_dir,
+                    auth_info=auth_info, source_openrc=source_openrc, err_only=err_only, timeout=timeout,
+                    force_source=force_source)
+
+
+def fm(cmd, positional_args='', ssh_client=None, use_telnet=False, con_telnet=None, flags='', fail_ok=False, cli_dir='',
+       auth_info=Tenant.get('admin_platform'), source_openrc=None, err_only=False, timeout=CLI_TIMEOUT,
+       force_source=False):
+
+    build = ProjVar.get_var('BUILD_INFO').get('BUILD_ID')
     cmd_ = 'fm'
     if build and build != 'n/a' and build < '2018-08-19':
         cmd_ = 'system'
 
-    return exec_cli(cmd_, sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, use_telnet=use_telnet, con_telnet=con_telnet,
-                    fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, source_openrc=source_openrc,
-                    err_only=err_only, timeout=timeout, rtn_code=rtn_code, force_source=force_source)
+    return exec_cli(cmd_, sub_cmd=cmd, positional_args=positional_args, ssh_client=ssh_client, use_telnet=use_telnet,
+                    con_telnet=con_telnet, flags=flags, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
+                    source_openrc=source_openrc, err_only=err_only, timeout=timeout, force_source=force_source)
 
 
 def dcmanager(cmd, positional_args='', ssh_client=None, flags='', fail_ok=False, cli_dir='',
-              auth_info=Tenant.get('admin', dc_region='RegionOne'), err_only=False, timeout=CLI_TIMEOUT,
-              rtn_code=False, source_openrc=None):
+              auth_info=Tenant.get('admin_platform', dc_region='RegionOne'), err_only=False, timeout=CLI_TIMEOUT,
+              source_openrc=None):
     if ssh_client is None:
         ssh_client = ControllerClient.get_active_controller('RegionOne')
-    return exec_cli('dcmanager', sub_cmd=cmd, positional_args=positional_args, flags=flags,
-                    ssh_client=ssh_client, fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info,
-                    err_only=err_only, timeout=timeout, rtn_code=rtn_code, source_openrc=source_openrc)
+    return exec_cli('dcmanager', sub_cmd=cmd, positional_args=positional_args, ssh_client=ssh_client, flags=flags,
+                    fail_ok=fail_ok, cli_dir=cli_dir, auth_info=auth_info, source_openrc=source_openrc,
+                    err_only=err_only, timeout=timeout)

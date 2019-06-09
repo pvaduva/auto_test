@@ -14,14 +14,14 @@ from utils.tis_log import LOG
 
 
 @fixture(scope='function')
-def check_stx_openstack(request):
+def stx_openstack_required(request):
     app_name = 'stx-openstack'
     if not container_helper.is_stx_openstack_deployed(applied_only=True):
         skip('stx-openstack application is not applied')
 
     def wait_for_recover():
 
-        post_status = container_helper.get_apps_values(apps=(app_name,), rtn_dict=False)[0][0]
+        post_status = container_helper.get_apps(application=app_name)[0]
         if not post_status == AppStatus.APPLIED:
             LOG.info("Dump info for unhealthy pods")
             kube_helper.dump_pods_info()
@@ -44,7 +44,7 @@ def skip_for_one_proc():
 
 
 @fixture(scope='function')
-def skip_for_ovs():
+def check_avs_pattern():
     """
     Skip test for OVS system, if test name contains certain pattern
     """
@@ -55,7 +55,7 @@ def skip_for_ovs():
 
 
 @fixture(scope='session')
-def no_ovs():
+def avs_required():
     if not system_helper.is_avs():
         skip('Test unsupported by OVS')
 
@@ -63,14 +63,14 @@ def no_ovs():
 @fixture(scope='session')
 def no_simplex():
     LOG.fixture_step("(Session) Skip if Simplex")
-    if system_helper.is_simplex():
+    if system_helper.is_aio_simplex():
         skip(SkipSysType.SIMPLEX_SYSTEM)
 
 
 @fixture(scope='session')
 def simplex_only():
     LOG.fixture_step("(Session) Skip if not Simplex")
-    if not system_helper.is_simplex():
+    if not system_helper.is_aio_simplex():
         skip(SkipSysType.SIMPLEX_ONLY)
 
 
@@ -105,8 +105,8 @@ def wait_for_con_drbd_sync_complete():
         assert False, "drbd sync alarm {} is not cleared within timeout".format(EventLogID.CON_DRBD_SYNC)
 
     LOG.fixture_step("Wait for {} becomes available in system host-list".format(host))
-    host_helper.wait_for_host_values(host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False,
-                                     check_interval=10)
+    system_helper.wait_for_host_values(host, availability=HostAvailState.AVAILABLE, timeout=120, fail_ok=False,
+                                       check_interval=10)
 
     LOG.fixture_step("Wait for {} drbd-cinder in sm-dump to reach desired state".format(host))
     host_helper.wait_for_sm_dump_desired_states(host, 'drbd-', strict=False, timeout=30, fail_ok=False)
@@ -120,7 +120,7 @@ def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
     post_pswd = '!{}9'.format(prev_pswd)
 
     LOG.fixture_step('(Session) Changing admin password to {}'.format(post_pswd))
-    keystone_helper.update_user('admin', password=post_pswd)
+    keystone_helper.set_user('admin', password=post_pswd)
 
     def _lock_unlock_controllers():
         LOG.fixture_step("Sleep for 120 seconds after admin password change")
@@ -136,14 +136,14 @@ def change_admin_password_session(request, wait_for_con_drbd_sync_complete):
                 host_helper.unlock_host(active)
             else:
                 LOG.warning("Standby controller unavailable. Skip lock unlock controllers post admin password change.")
-        elif system_helper.is_simplex():
+        elif system_helper.is_aio_simplex():
             LOG.fixture_step("(Session) Simplex lab - lock/unlock controller to complete action")
             host_helper.lock_host('controller-0', swact=False)
             host_helper.unlock_host('controller-0')
 
     def revert_pswd():
         LOG.fixture_step("(Session) Reverting admin password to {}".format(prev_pswd))
-        keystone_helper.update_user('admin', password=prev_pswd)
+        keystone_helper.set_user('admin', password=prev_pswd)
         _lock_unlock_controllers()
 
         LOG.fixture_step("(Session) Check admin password is reverted to {} in keyring".format(prev_pswd))
@@ -166,7 +166,7 @@ def collect_kpi(request):
 
 
 @fixture(scope='session')
-def ixia_supported():
+def ixia_required():
     if 'ixia_ports' not in ProjVar.get_var("LAB"):
         skip("This system is not configured with ixia_ports")
 
@@ -188,7 +188,7 @@ def heat_files_check():
 def set_test_patch_info():
 
     build_path = ProjVar.get_var('BUILD_PATH')
-    build_server = ProjVar.get_var('BUILD_SERVER')
+    build_server = system_helper.get_build_info()['BUILD_SERVER']
     if not build_path or not build_server:
         skip('Build path or server not found from /etc/build.info')
 

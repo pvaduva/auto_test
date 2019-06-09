@@ -1,10 +1,11 @@
 import re
 import time
 from multiprocessing import Process, Queue, Event
+
 from consts.proj_vars import InstallVars, ProjVar
 from consts.timeout import HostTimeout
 from consts.vlm import VlmAction
-from consts.auth import SvcCgcsAuto,Tenant
+from consts.auth import SvcCgcsAuto, Tenant
 from keywords import host_helper, system_helper
 from utils import exceptions, local_host
 from utils.clients.ssh import ControllerClient
@@ -287,7 +288,8 @@ def power_on_hosts(hosts, reserve=True, post_check=True, reconnect=True, reconne
     if post_check:
         if con_ssh is None:
             con_ssh = ControllerClient.get_active_controller(name=region)
-        auth_info = Tenant.get('admin', dc_region='RegionOne' if region and region == 'central_region' else region)
+        auth_info = Tenant.get('admin_platform',
+                               dc_region='RegionOne' if region and region == 'central_region' else region)
         if reconnect:
             con_ssh.connect(retry=True, retry_timeout=reconnect_timeout)
             host_helper._wait_for_openstack_cli_enable(con_ssh=con_ssh, auth_info=auth_info, timeout=300,
@@ -366,9 +368,9 @@ def power_off_hosts_simultaneously(hosts=None, region=None):
             LOG.error("Failed to power off {}.".format(barcode_))
         output_queue.put({barcode_: rtn})
 
-    auth_info = Tenant.get('admin', dc_region='RegionOne' if region and region == 'central_region' else region)
+    auth_info = Tenant.get('admin_platform', dc_region='RegionOne' if region and region == 'central_region' else region)
     if not hosts:
-        hosts = system_helper.get_hostnames(auth_info=auth_info)
+        hosts = system_helper.get_hosts(auth_info=auth_info)
 
     lab = None
     if region and ProjVar.get_var('IS_DC'):

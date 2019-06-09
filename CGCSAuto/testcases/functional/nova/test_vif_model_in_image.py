@@ -1,4 +1,4 @@
-from pytest import mark
+from pytest import mark, param
 
 from utils.tis_log import LOG
 from consts.cgcs import ImageMetadata
@@ -11,7 +11,7 @@ from keywords import vm_helper, glance_helper, cinder_helper, network_helper, sy
     'avp',
     'virtio',
 ])
-def test_attach_cinder_volume_to_instance(vol_vif, skip_for_ovs):
+def test_attach_cinder_volume_to_instance(vol_vif, check_avs_pattern):
     """
     Validate that cinder volume can be attached to VM created using wrl5_avp and wrl5_virtio image
 
@@ -61,16 +61,16 @@ def test_attach_cinder_volume_to_instance(vol_vif, skip_for_ovs):
 
 
 @mark.parametrize('img_vif', [
-    mark.sanity('avp'),
-    mark.p2('virtio'),
-    mark.p3('e1000')
+    param('avp', marks=mark.sanity),
+    param('virtio', marks=mark.p2),
+    param('e1000', marks=mark.p2)
 ])
-def test_vif_model_from_image(img_vif, skip_for_ovs):
+def test_vif_model_from_image(img_vif, check_avs_pattern):
     """
     Test vif model set in image metadata is reflected in vm nics when use normal vnic type.
     Args:
         img_vif (str):
-        skip_for_ovs:
+        check_avs_pattern:
 
     Test Steps:
         - Create a glance image with given img_vif in metadata
@@ -104,7 +104,7 @@ def test_vif_model_from_image(img_vif, skip_for_ovs):
                               cleanup='function')[1]
 
     LOG.tc_step("Verify vnics info from virsh to ensure tenant net vif is as specified in image metadata")
-    internal_mac = network_helper.get_ports(server=vm_id, network=internal_net_id, rtn_val='MAC Address')[0]
+    internal_mac = network_helper.get_ports(server=vm_id, network=internal_net_id, field='MAC Address')[0]
     vm_interfaces = vm_helper.get_vm_interfaces_via_virsh(vm_id)
     for vm_if in vm_interfaces:
         if_mac, if_model = vm_if

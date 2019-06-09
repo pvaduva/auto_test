@@ -4,15 +4,11 @@ from pytest import fixture, skip, mark
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.auth import Tenant
-from consts.cgcs import VMStatus
 from consts.reasons import SkipHypervisor
 from consts.kpi_vars import Evacuate
-from consts.proj_vars import ProjVar
 
-from keywords import vm_helper, host_helper, nova_helper, cinder_helper, system_helper, network_helper, \
-    check_helper, keystone_helper, common
+from keywords import vm_helper, host_helper, nova_helper, system_helper, network_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from testfixtures.recover_hosts import HostsToRecover
 
 
 @fixture(scope='module', autouse=True)
@@ -31,7 +27,6 @@ class TestTisGuest:
 
     @fixture(scope='class')
     def vms_(self, add_admin_role_class):
-
         LOG.fixture_step("Create a flavor without ephemeral or swap disks")
         flavor_1 = nova_helper.create_flavor('flv_nolocaldisk')[1]
         ResourceCleanup.add('flavor', flavor_1, scope='class')
@@ -45,7 +40,7 @@ class TestTisGuest:
         vm1 = vm_helper.boot_vm(vm1_name, flavor=flavor_1, source='volume', cleanup='class')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm1)
 
-        vm_host = nova_helper.get_vm_host(vm_id=vm1)
+        vm_host = vm_helper.get_vm_host(vm_id=vm1)
 
         LOG.fixture_step("Boot vm2 from volume with flavor flv_localdisk and wait for it pingable from NatBox")
         vm2_name = "vol_local"
@@ -100,8 +95,8 @@ class TestTisGuest:
 
         pre_res_sys, pre_msg_sys = system_helper.wait_for_services_enable(timeout=20, fail_ok=True)
         up_hypervisors = host_helper.get_up_hypervisors()
-        pre_res_neutron, pre_msg_neutron = network_helper.wait_for_agents_alive(up_hypervisors, timeout=20,
-                                                                                fail_ok=True)
+        pre_res_neutron, pre_msg_neutron = network_helper.wait_for_agents_healthy(up_hypervisors, timeout=20,
+                                                                                  fail_ok=True)
 
         LOG.tc_step("reboot -f on vms host, ensure vms are successfully evacuated and host is recovered after reboot")
         vm_helper.evacuate_vms(host=target_host, vms_to_check=vms, wait_for_host_up=True, ping_vms=True)
@@ -112,11 +107,11 @@ class TestTisGuest:
 
         LOG.tc_step("Check system services and neutron agents after {} reboot".format(target_host))
         post_res_sys, post_msg_sys = system_helper.wait_for_services_enable(fail_ok=True)
-        post_res_neutron, post_msg_neutron = network_helper.wait_for_agents_alive(hosts=up_hypervisors, fail_ok=True)
+        post_res_neutron, post_msg_neutron = network_helper.wait_for_agents_healthy(hosts=up_hypervisors, fail_ok=True)
 
-        assert post_res_sys, "\nPost-evac system services stats: {}\nPre-evac system services stats: {}".\
+        assert post_res_sys, "\nPost-evac system services stats: {}\nPre-evac system services stats: {}". \
             format(post_msg_sys, pre_msg_sys)
-        assert post_res_neutron, "\nPost evac neutron agents stats: {}\nPre-evac neutron agents stats: {}".\
+        assert post_res_neutron, "\nPost evac neutron agents stats: {}\nPre-evac neutron agents stats: {}". \
             format(pre_msg_neutron, post_msg_neutron)
 
 
@@ -171,7 +166,7 @@ class TestVariousGuests:
         LOG.tc_step("Wait for VM pingable from NATBox")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-        vm_host = nova_helper.get_vm_host(vm_id)
+        vm_host = vm_helper.get_vm_host(vm_id)
         LOG.tc_step("Reboot VM host {}".format(vm_host))
         vm_helper.evacuate_vms(host=vm_host, vms_to_check=vm_id, ping_vms=True)
 
@@ -182,7 +177,7 @@ class TestEvacKPI:
         pass
 
     @fixture(scope='class')
-    def get_hosts(self, ixia_supported, skip_test_if_less_than_two_hosts):
+    def get_hosts(self, ixia_required, skip_test_if_less_than_two_hosts):
         hosts = host_helper.get_hosts_in_storage_backing()
         if len(hosts) < 2:
             skip("Lab not suitable for this test. Too many or too few hosts with local_image backing")
@@ -210,8 +205,8 @@ class TestEvacKPI:
             VM2: traffic observer
         """
 
-        vm1_host = nova_helper.get_vm_host(vm1)
-        vm2_host = nova_helper.get_vm_host(vm2)
+        vm1_host = vm_helper.get_vm_host(vm1)
+        vm2_host = vm_helper.get_vm_host(vm2)
         vm1_router = network_helper.get_tenant_router(auth_info=Tenant.get_primary())
         vm2_router = network_helper.get_tenant_router(auth_info=Tenant.get_secondary())
         vm1_router_host = network_helper.get_router_host(router=vm1_router)
@@ -219,13 +214,14 @@ class TestEvacKPI:
         targets = list(get_hosts)
 
         if vm1_router_host == vm2_router_host:
-            def _chk_same_router_host():
+            end_time = time.time() + 360
+            while time.time() < end_time:
                 vm1_router_host = network_helper.get_router_host(router=vm1_router)
                 vm2_router_host = network_helper.get_router_host(router=vm2_router)
-                return vm1_router_host == vm2_router_host
-            succ, val = common.wait_for_val_from_func(False, 360, 10, _chk_same_router_host)
-            assert succ, \
-                "two routers are located on the same compute host, cannot run without_router test"
+                if vm1_router_host != vm2_router_host:
+                    break
+            else:
+                assert vm1_router_host != vm2_router_host, "two routers are located on the same compute host"
 
         if not with_router:
             """
@@ -241,7 +237,7 @@ class TestEvacKPI:
             LOG.tc_step("Ensure VM2, ROUTER2 not on COMPUTE-A, for simplicity, ensure they are on the same compute")
             if vm2_host != vm2_router_host:
                 vm_helper.live_migrate_vm(vm_id=vm2, destination_host=vm2_router_host)
-                vm2_host = nova_helper.get_vm_host(vm2)
+                vm2_host = vm_helper.get_vm_host(vm2)
                 assert vm2_host == vm2_router_host, "live-migration failed"
             host_observer = vm2_host
 
@@ -259,12 +255,12 @@ class TestEvacKPI:
                 assert targets, "no suitable compute for vm1, after excluding ROUTER1, VM2, ROUTER2 's hosts"
                 host_src_evacuation = targets[0]
                 vm_helper.live_migrate_vm(vm_id=vm1, destination_host=host_src_evacuation)
-                vm1_host = nova_helper.get_vm_host(vm1)
+                vm1_host = vm_helper.get_vm_host(vm1)
                 assert vm1_host == host_src_evacuation, "live-migration failed"
 
             # verify setup
-            vm1_host = nova_helper.get_vm_host(vm1)
-            vm2_host = nova_helper.get_vm_host(vm2)
+            vm1_host = vm_helper.get_vm_host(vm1)
+            vm2_host = vm_helper.get_vm_host(vm2)
             vm1_router_host = network_helper.get_router_host(router=vm1_router)
             vm2_router_host = network_helper.get_router_host(router=vm2_router)
             assert vm1_router_host != vm1_host and vm2_host != vm1_host and vm2_router_host != vm1_host, \
@@ -283,7 +279,7 @@ class TestEvacKPI:
 
             if vm1_host != vm1_router_host:
                 vm_helper.live_migrate_vm(vm_id=vm1, destination_host=vm1_router_host)
-                vm1_host = nova_helper.get_vm_host(vm1)
+                vm1_host = vm_helper.get_vm_host(vm1)
                 assert vm1_host == vm1_router_host, "live-migration failed"
             host_src_evacuation = vm1_host
 
@@ -295,12 +291,12 @@ class TestEvacKPI:
                 assert targets, "no suitable compute for vm2, after excluding COMPUTE-A"
                 host_observer = targets[0]
                 vm_helper.live_migrate_vm(vm_id=vm2, destination_host=host_observer)
-                vm2_host = nova_helper.get_vm_host(vm2)
+                vm2_host = vm_helper.get_vm_host(vm2)
                 assert vm2_host == host_observer, "live-migration failed"
 
             # verify setup
-            vm1_host = nova_helper.get_vm_host(vm1)
-            vm2_host = nova_helper.get_vm_host(vm2)
+            vm1_host = vm_helper.get_vm_host(vm1)
+            vm2_host = vm_helper.get_vm_host(vm2)
             vm1_router_host = network_helper.get_router_host(router=vm1_router)
             vm2_router_host = network_helper.get_router_host(router=vm2_router)
             assert vm1_host == vm1_router_host and vm2_host != vm1_host and vm2_router_host != vm1_host, \
@@ -336,7 +332,7 @@ class TestEvacKPI:
             vm_test, vm_observer, operation, vm_test, host_src_evacuation)
         assert with_router_kpi > 0, "Traffic loss duration is not properly detected"
         kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Evacuate.NAME.format(vm_type, 'with'),
-                                  kpi_val=with_router_kpi/1000, uptime=5)
+                                  kpi_val=with_router_kpi / 1000, uptime=5)
 
         host_helper.wait_for_hosts_ready(hosts=host_src_evacuation)
 
@@ -348,4 +344,4 @@ class TestEvacKPI:
                 vm_test, vm_observer, operation, vm_test, host_src_evacuation)
             assert without_router_kpi > 0, "Traffic loss duration is not properly detected"
             kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Evacuate.NAME.format(vm_type, 'no'),
-                                      kpi_val=without_router_kpi/1000, uptime=5)
+                                      kpi_val=without_router_kpi / 1000, uptime=5)

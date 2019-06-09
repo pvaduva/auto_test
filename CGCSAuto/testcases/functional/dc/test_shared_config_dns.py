@@ -11,7 +11,7 @@ from keywords import dc_helper, system_helper, host_helper
 def subclouds_to_test(request):
 
     LOG.info("Gather DNS config and subcloud management info")
-    sc_auth = Tenant.get('admin', dc_region='RegionOne')
+    sc_auth = Tenant.get('admin_platform', dc_region='RegionOne')
     dns_servers = system_helper.get_dns_servers(auth_info=sc_auth)
 
     subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
@@ -59,9 +59,9 @@ def ensure_synced(subclouds_to_test, check_central_alarms):
     primary_subcloud, managed_subclouds = subclouds_to_test
 
     LOG.fixture_step("Ensure {} is managed and DNS config is valid and synced".format(primary_subcloud))
-    subcloud_auth = Tenant.get('admin', dc_region=primary_subcloud)
+    subcloud_auth = Tenant.get('admin_platform', dc_region=primary_subcloud)
     subcloud_dns = system_helper.get_dns_servers(con_ssh=None, auth_info=subcloud_auth)
-    sc_dns = system_helper.get_dns_servers(con_ssh=None, auth_info=Tenant.get('admin', dc_region='RegionOne'))
+    sc_dns = system_helper.get_dns_servers(con_ssh=None, auth_info=Tenant.get('admin_platform', dc_region='RegionOne'))
 
     if subcloud_dns != sc_dns:
         dc_helper.manage_subcloud(subcloud=primary_subcloud, check_first=True)
@@ -105,7 +105,7 @@ def test_dc_dns_modify(ensure_synced, scenario):
     dc_helper.unmanage_subcloud(subcloud=primary_subcloud, check_first=True)
 
     LOG.tc_step("Reconfigure DNS servers on central region from {} to {}".format(prev_dns_servers, new_dns_servers))
-    system_helper.set_dns_servers(new_dns_servers, auth_info=Tenant.get('admin', dc_region='RegionOne'))
+    system_helper.set_dns_servers(new_dns_servers, auth_info=Tenant.get('admin_platform', dc_region='RegionOne'))
 
     LOG.tc_step("Wait for new DNS config to sync over to managed online subclouds")
     for managed_sub in managed_subclouds:
@@ -154,7 +154,7 @@ def test_dc_dns_override_local_change(ensure_synced):
     dc_helper.unmanage_subcloud(subcloud=primary_subcloud, check_first=True)
 
     LOG.tc_step("Reconfigure DNS on {} from {} to {}".format(primary_subcloud, sc_dns, new_dns_servers))
-    system_helper.set_dns_servers(new_dns_servers, auth_info=Tenant.get('admin', dc_region=primary_subcloud))
+    system_helper.set_dns_servers(new_dns_servers, auth_info=Tenant.get('admin_platform', dc_region=primary_subcloud))
 
     managed_cloud = managed_subclouds[0]
     LOG.tc_step("Wait for sync update log for managed subcloud {} with best effort".format(managed_cloud))
@@ -170,7 +170,7 @@ def test_dc_dns_override_local_change(ensure_synced):
     assert 0 == central_res, "nslookup failed on central region"
     assert 1 == local_res, "nslookup succeeded on {} with unreachable DNS servers configured".format(primary_subcloud)
 
-    central_auth = Tenant.get('admin', dc_region='RegionOne')
+    central_auth = Tenant.get('admin_platform', dc_region='RegionOne')
     if system_helper.get_standby_controller_name(auth_info=central_auth):
         LOG.tc_step("Swact in central region")
         host_helper.swact_host(auth_info=central_auth)

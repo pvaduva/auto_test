@@ -20,7 +20,7 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
         - Verify vm is still pingable
 
     """
-    if system_helper.is_simplex():
+    if system_helper.is_aio_simplex():
         skip("Simplex system detected")
 
     if not wait_for_con_drbd_sync_complete:
@@ -32,8 +32,8 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
 
     pre_res_sys, pre_msg_sys = system_helper.wait_for_services_enable(timeout=20, fail_ok=True)
     up_hypervisors = host_helper.get_up_hypervisors()
-    pre_res_neutron, pre_msg_neutron = network_helper.wait_for_agents_alive(up_hypervisors, timeout=20,
-                                                                            fail_ok=True)
+    pre_res_neutron, pre_msg_neutron = network_helper.wait_for_agents_healthy(up_hypervisors, timeout=20,
+                                                                              fail_ok=True)
 
     LOG.tc_step("Boot a vm from image and ping it")
     vm_id_img = vm_helper.boot_vm(name='swact_img', source='image', cleanup='function')[1]
@@ -64,7 +64,7 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
 
     LOG.tc_step("Check system services and neutron agents after swact from {}".format(pre_active_controller))
     post_res_sys, post_msg_sys = system_helper.wait_for_services_enable(fail_ok=True)
-    post_res_neutron, post_msg_neutron = network_helper.wait_for_agents_alive(hosts=up_hypervisors, fail_ok=True)
+    post_res_neutron, post_msg_neutron = network_helper.wait_for_agents_healthy(hosts=up_hypervisors, fail_ok=True)
 
     assert post_res_sys, "\nPost-evac system services stats: {}\nPre-evac system services stats: {}". \
         format(post_msg_sys, pre_msg_sys)
@@ -86,7 +86,7 @@ def test_swact_controller_platform(wait_for_con_drbd_sync_complete):
         - Verify nodes are ready in kubectl get nodes
 
     """
-    if system_helper.is_simplex():
+    if system_helper.is_aio_simplex():
         skip("Simplex system detected")
 
     if not wait_for_con_drbd_sync_complete:

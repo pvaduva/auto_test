@@ -1,11 +1,12 @@
-import pytest
-from pytest import skip
 import time
+
+import pytest
+
 from utils.tis_log import LOG
-from keywords import system_helper, host_helper, install_helper
-from consts.proj_vars import InstallVars
 from utils import table_parser
+from consts.proj_vars import InstallVars
 from consts.cgcs import HostAvailState, HostOperState
+from keywords import system_helper, host_helper, install_helper, upgrade_helper
 
 
 # def test_system_upgrade_controller_1(upgrade_setup, check_system_health_query_upgrade):
@@ -54,7 +55,7 @@ def check_for_upgrade_abort():
     upgrade_info = dict()
     lab = InstallVars.get_install_var('LAB')
     upgrade_info['LAB'] = lab
-    table_ = system_helper.system_upgrade_show()[1]
+    table_ = upgrade_helper.system_upgrade_show()[1]
     print("Upgrade show {}".format(table_))
     if "No upgrade in progress" in table_:
         LOG.warning("No upgrade in progress, cannot be aborted")
@@ -62,7 +63,7 @@ def check_for_upgrade_abort():
 
     upgrade_release = table_parser.get_value_two_col_table(table_, "to_release")
     current_release = table_parser.get_value_two_col_table(table_, "from_release")
-    upgraded_hostnames = host_helper.get_upgraded_host_names(upgrade_release)
+    upgraded_hostnames = upgrade_helper.get_upgraded_host_names(upgrade_release)
     upgraded = len(upgraded_hostnames)
     upgrade_info['current_release'] = current_release
     upgrade_info['upgrade_release'] = upgrade_release
@@ -142,7 +143,6 @@ def check_for_upgrade_abort():
 #
 
 def test_system_upgrade_controllers(upgrade_setup, check_system_health_query_upgrade):
-
     lab = upgrade_setup['lab']
     current_version = upgrade_setup['current_version']
     upgrade_version = upgrade_setup['upgrade_version']
@@ -166,12 +166,12 @@ def test_system_upgrade_controllers(upgrade_setup, check_system_health_query_upg
         assert False, "System health query upgrade failed: {}".format(check_system_health_query_upgrade[1])
 
     LOG.info("Starting upgrade from release {} to target release {}".format(current_version, upgrade_version))
-    system_helper.system_upgrade_start(force=force)
+    upgrade_helper.system_upgrade_start(force=force)
     LOG.tc_step("upgrade started successfully......")
 
     # upgrade standby controller
     LOG.tc_step("Upgrading controller-1")
-    host_helper.upgrade_host("controller-1", lock=True)
+    upgrade_helper.upgrade_host("controller-1", lock=True)
     LOG.tc_step("Host controller-1 is upgraded successfully......")
 
     # unlock upgraded controller-1
@@ -181,9 +181,9 @@ def test_system_upgrade_controllers(upgrade_setup, check_system_health_query_upg
 
     time.sleep(60)
     # Before Swacting ensure the controller-1 is in available state
-    if not host_helper.wait_for_host_values("controller-1", timeout=360, fail_ok=True,
-                                            operational=HostOperState.ENABLED,
-                                            availability=HostAvailState.AVAILABLE):
+    if not system_helper.wait_for_host_values("controller-1", timeout=360, fail_ok=True,
+                                              operational=HostOperState.ENABLED,
+                                              availability=HostAvailState.AVAILABLE):
         err_msg = " Swacting to controller-1 is not possible because controller-1 is not in available state " \
                   "within  the specified timeout"
         assert False, err_msg
@@ -199,7 +199,7 @@ def test_system_upgrade_controllers(upgrade_setup, check_system_health_query_upg
     controller0 = lab['controller-0']
 
     LOG.info("Ensure controller-0 is provisioned before upgrade.....")
-    host_helper.ensure_host_provisioned(controller0.name)
+    upgrade_helper.ensure_host_provisioned(controller0.name)
     LOG.info("Host {} is provisioned for upgrade.....".format(controller0.name))
 
     # open vlm console for controller-0 for boot through mgmt interface
@@ -207,7 +207,7 @@ def test_system_upgrade_controllers(upgrade_setup, check_system_health_query_upg
     install_helper.open_vlm_console_thread("controller-0")
 
     LOG.info("Starting {} upgrade.....".format(controller0.name))
-    host_helper.upgrade_host(controller0.name, lock=True)
+    upgrade_helper.upgrade_host(controller0.name, lock=True)
     LOG.info("controller-0 is upgraded successfully.....")
 
     # unlock upgraded controller-0

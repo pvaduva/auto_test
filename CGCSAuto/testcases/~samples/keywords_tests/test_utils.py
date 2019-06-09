@@ -10,11 +10,11 @@ con_ssh = ControllerClient.get_active_controller()
 
 def test_scp_files():
     con0_ssh = ssh_to_controller0()
-    con0_ssh.scp_files_to_local_host('/home/wrsroot/instances/*', dest_password='test_pwd')
+    con0_ssh.scp_on_source_to_localhost('/home/wrsroot/instances/*', dest_password='test_pwd')
 
     host_helper.swact_host()
     con0_ssh = ssh_to_controller0()
-    con0_ssh.scp_files_to_local_host('/home/wrsroot/instances/*', dest_password='test_pwd')
+    con0_ssh.scp_on_source_to_localhost('/home/wrsroot/instances/*', dest_password='test_pwd')
 
 
 def test_sudo_cmd():

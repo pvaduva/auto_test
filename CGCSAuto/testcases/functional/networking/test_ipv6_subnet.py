@@ -1,7 +1,7 @@
 import time
 import re
 
-from pytest import fixture, mark
+from pytest import fixture, mark, param
 
 from utils.tis_log import LOG
 from keywords import vm_helper, network_helper, glance_helper
@@ -95,11 +95,11 @@ def _ping6_vms(ssh_client, ipv6_addr, num_pings=5, timeout=60, fail_ok=False,):
 
 
 @mark.parametrize('vif_model', [
-    mark.p1('avp'),
-    mark.p2('virtio'),
-    mark.p2('e1000')
+    param('avp', marks=mark.p1),
+    param('virtio', marks=mark.p2),
+    param('e1000', marks=mark.p3)
 ])
-def test_ipv6_subnet(vif_model, skip_for_ovs):
+def test_ipv6_subnet(vif_model, check_avs_pattern):
     """
     Ipv6 Subnet feature test cases
 

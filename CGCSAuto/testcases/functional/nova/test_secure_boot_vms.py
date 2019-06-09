@@ -1,4 +1,5 @@
 import time
+
 from utils.tis_log import LOG
 from consts.cgcs import GuestImages, ImageMetadata
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
@@ -55,7 +56,7 @@ def create_image_with_metadata(guest_os, property_key, values, disk_format, cont
         image_name = str(image_name) + "_auto"
         img_id = glance_helper.get_image_id_from_name(image_name, strict=True)
         if not img_id:
-            image_path = glance_helper._scp_guest_image(img_os=guest_os)
+            image_path = glance_helper.scp_guest_image(img_os=guest_os)
 
             image_id = glance_helper.create_image(source_image_file=image_path, cleanup='function',
                                                   disk_format=disk_format, container_format=container_format,
@@ -102,14 +103,15 @@ def test_vm_actions_secure_boot_vm():
                               block_device=block_device_dic, cleanup='function', guest_os=guests_os[0])[1]
 
     _check_secure_boot_on_vm(vm_id=vm_id)
-    if system_helper.is_simplex():
-        vm_actions_list = [['reboot'], ['pause', 'unpause'], ['suspend', 'resume']]
+    if system_helper.is_aio_simplex():
+        vm_actions_list = ('reboot', ['pause', 'unpause'], ['suspend', 'resume'])
     else:
-        vm_actions_list = [['reboot'], ['pause', 'unpause'], ['suspend', 'resume'], ['live_migrate'],
-                      ['cold_migrate'], ['cold_mig_revert']]
+        vm_actions_list = ('reboot', ['pause', 'unpause'], ['suspend', 'resume'], 'live_migrate', 'cold_migrate',
+                           'cold_mig_revert')
 
     for vm_actions in vm_actions_list:
-
+        if isinstance(vm_actions, str):
+            vm_actions = (vm_actions, )
         LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_id, vm_actions))
         for action in vm_actions:
             vm_helper.perform_action_on_vm(vm_id, action=action)
@@ -149,13 +151,13 @@ def test_lock_unlock_secure_boot_vm():
     _check_secure_boot_on_vm(vm_id=vm_id)
 
     # Lock the compute node with the secure Vms
-    compute_host = nova_helper.get_vm_host(vm_id=vm_id)
+    compute_host = vm_helper.get_vm_host(vm_id=vm_id)
     host_helper.lock_host(compute_host, timeout=800)
-    if not system_helper.is_simplex():
+    if not system_helper.is_aio_simplex():
         _check_secure_boot_on_vm(vm_id=vm_id)
     host_helper.unlock_host(compute_host, timeout=800)
 
-    if system_helper.is_simplex():
+    if system_helper.is_aio_simplex():
         _check_secure_boot_on_vm(vm_id=vm_id)
 
 
@@ -188,6 +190,6 @@ def test_host_reboot_secure_boot_vm():
 
     _check_secure_boot_on_vm(vm_id=vm_id)
 
-    compute_host = nova_helper.get_vm_host(vm_id=vm_id)
+    compute_host = vm_helper.get_vm_host(vm_id=vm_id)
     vm_helper.evacuate_vms(compute_host, vms_to_check=vm_id, timeout=800)
     _check_secure_boot_on_vm(vm_id=vm_id)

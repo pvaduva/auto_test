@@ -57,15 +57,15 @@ class PrivKeyPath:
     OPT_PLATFORM = '/opt/platform/id_rsa'
     WRS_HOME = '/home/wrsroot/.ssh/id_rsa'
 
+
 class BuildDirs:
     VALID_BUILD_DIRS = ['TS_15.12_Host', 'TS_16.10_Host', 'TS_16.10_Prestaging_Build', 'TC_17.06_Host',
                         'TC_17.06_Prestaging_Build', 'TC_18.03_Host', 'TC_18.03_Prestaging_Build', 'TC_18.07_Host',
                         'CGCS_6.0_Host', 'Titanium_R6_build', 'StarlingX_18.10', 'StarlingX_Upstream_build']
 
-
     def is_builds_dir_name_valid(self, builds_dir_name):
         if builds_dir_name:
-            return builds_dir_name in BuildDirs.VALID_BUILD_DIRS
+            return builds_dir_name in self.VALID_BUILD_DIRS
         else:
             return False
 
@@ -107,7 +107,7 @@ class BuildServerPath:
 
     class BldsDirNames:
         TS_15_12_HOST = 'TS_15.12_Host'
-        TS_16_10_HOST =  'TS_16.10_Host'
+        TS_16_10_HOST = 'TS_16.10_Host'
         TS_16_10_PRESTAGING_BUILD = 'TS_16.10_Prestaging_Build'
         TC_17_06_HOST = 'TC_17.06_Host'
         TC_17_06_PRESTAGING_BUILD = 'TC_17.06_Prestaging_Build'
@@ -166,7 +166,7 @@ class BuildServerPath:
     TEST_PATCH_DIR_PATHS = {'18.03': DEFAULT_WORK_SPACE + '/TC_18.03_Test_Patch_Build/latest_build',
                             '18.04': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
                             'default': DEFAULT_WORK_SPACE + '/CGCS_6.0_Test_Patch_Build/latest_build',
-                           }
+                            }
 
     PATCH_ENABLE_DEV_CERTIFICATES = {
         'default': DEFAULT_PATCH_ENABLE_DEV_DIR + 'PATCH.ENABLE_DEV_CERTIFICATE.patch',

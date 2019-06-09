@@ -191,13 +191,14 @@ def delete_swift_container(container, con_ssh=None, fail_ok=False):
     return delete_objects(container=container, con_ssh=con_ssh, fail_ok=fail_ok)
 
 
-def create_swift_container(container, con_ssh=None, fail_ok=False):
+def create_swift_container(container, con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
     """
     Creates a swift object container
     Args:
         container (str): the container of objects to be created.
         con_ssh:
         fail_ok:
+        auth_info
 
     Returns:
         0  - success
@@ -212,22 +213,20 @@ def create_swift_container(container, con_ssh=None, fail_ok=False):
             return 1, None
         else:
             raise exceptions.SwiftError(msg)
-    try:
-        cli.swift('post', container, ssh_client=con_ssh)
 
-        if container in get_swift_containers(con_ssh=con_ssh, fail_ok=True)[1]:
-            return 0, "Container {} created successfully".format(container)
-        else:
-            msg = "Container {} not created".format(container)
+    code, output = cli.swift('post', container, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    if code > 0:
+        return 1, output
 
-    except exceptions.CLIRejected as e:
-        msg = "swift post cli command failed: {}".format(e.message)
+    if container in get_swift_containers(con_ssh=con_ssh, fail_ok=True, auth_info=auth_info)[1]:
+        return 0, "Container {} created successfully".format(container)
 
-        if fail_ok:
-            LOG.warning(msg)
-            return 2, msg
-        else:
-            raise exceptions.SwiftError(msg)
+    msg = "Container {} not created".format(container)
+    LOG.warning(msg)
+    if fail_ok:
+        return 2, msg
+    else:
+        raise exceptions.SwiftError(msg)
 
 
 def post(container=None, object_=None, read_acl=None, write_acl=None, sync_to=None, sync_key=None,
@@ -352,8 +351,8 @@ def copy(container=None, object_=None, dest_container=None, dest_object=None, fr
             raise exceptions.SwiftError(msg)
 
 
-def get_swift_containers(con_ssh=None, fail_ok=False):
-    rc, out = cli.swift('list', ssh_client=con_ssh, auth_info=Tenant.get('admin'), fail_ok=True)
+def get_swift_containers(con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
+    rc, out = cli.swift('list', ssh_client=con_ssh, fail_ok=True, auth_info=auth_info)
     if rc == 0:
         if out:
             return 0, out.split('\n'), None
@@ -366,9 +365,9 @@ def get_swift_containers(con_ssh=None, fail_ok=False):
         raise exceptions.CLIRejected(msg)
 
 
-def get_swift_container_object_list(container, con_ssh=None, fail_ok=False):
+def get_swift_container_object_list(container, con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
     args = " {}".format(container)
-    rc, out = cli.swift('list', args, ssh_client=con_ssh,  fail_ok=True)
+    rc, out = cli.swift('list', args, ssh_client=con_ssh, fail_ok=True, auth_info=auth_info)
     if rc == 0:
         if out:
             return 0, out.split('\n'), None
@@ -381,7 +380,7 @@ def get_swift_container_object_list(container, con_ssh=None, fail_ok=False):
         raise exceptions.CLIRejected(msg)
 
 
-def get_swift_container_stat_info(container=None, object_=None, con_ssh=None):
+def get_swift_container_stat_info(container=None, object_=None, con_ssh=None, auth_info=Tenant.get('admin')):
     stat_values = {}
     args = ''
     if container:
@@ -389,7 +388,7 @@ def get_swift_container_stat_info(container=None, object_=None, con_ssh=None):
     if object_:
         args += " {}".format(object_)
 
-    rc, out = cli.swift('stat', args, ssh_client=con_ssh, auth_info=Tenant.get('admin'), fail_ok=True)
+    rc, out = cli.swift('stat', args, ssh_client=con_ssh, fail_ok=True, auth_info=auth_info)
     if rc == 0:
         value_pairs = out.split('\n')
         for pair in value_pairs:
@@ -402,8 +401,9 @@ def get_swift_container_stat_info(container=None, object_=None, con_ssh=None):
     return stat_values
 
 
-def download_objects(container=None, objects=None, download_all=False, out_file=None, output_dir=None, skip_identical=False,
-                     object_threads=None, container_threads=None, con_ssh=None, fail_ok=False):
+def download_objects(container=None, objects=None, download_all=False, out_file=None, output_dir=None,
+                     skip_identical=False, object_threads=None, container_threads=None, con_ssh=None,
+                     auth_info=Tenant.get('admin'), fail_ok=False):
     """
     Downloads objects from container
     Args:
@@ -418,6 +418,7 @@ def download_objects(container=None, objects=None, download_all=False, out_file=
         object_threads (str): Number of threads to use for deleting objects. Default is 10.
         container_threads (str): Number of threads to use for deleting containers. Default is 10.
         con_ssh:
+        auth_info
         fail_ok:
 
     Returns:
@@ -434,7 +435,7 @@ def download_objects(container=None, objects=None, download_all=False, out_file=
         if skip_identical:
             args += " --skip-identical"
 
-        rc, out = cli.swift('download', args, ssh_client=con_ssh, fail_ok=True)
+        rc, out = cli.swift('download', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
         if rc == 0:
             if out:
@@ -466,7 +467,7 @@ def download_objects(container=None, objects=None, download_all=False, out_file=
             for o in objects:
                 args_ += " {}".format(o)
 
-        rc, out = cli.swift('download', args_, ssh_client=con_ssh, fail_ok=True)
+        rc, out = cli.swift('download', args_, ssh_client=con_ssh, fail_ok=fail_ok)
         if rc == 0:
             if out:
                 download_list = out.split('\n')
@@ -478,13 +479,11 @@ def download_objects(container=None, objects=None, download_all=False, out_file=
         else:
             msg = "Failed to down load objects: {}".format(out)
             LOG.warning(msg)
-            if fail_ok:
-                return rc, [], msg
-            else:
-                raise exceptions.SwiftError(msg)
+            return rc, [], msg
 
 
-def get_swift_public_url():
-    endpoints_url = keystone_helper.get_endpoints(rtn_val='URL', service_name='swift', interface='public')
+def get_swift_public_url(con_ssh=None, auth_info=Tenant.get('admin')):
+    endpoints_url = keystone_helper.get_endpoints(field='URL', service_name='swift', interface='public',
+                                                  con_ssh=con_ssh, auth_info=auth_info)
     LOG.info("Swift endpoints URL: {}".format(endpoints_url))
     return endpoints_url[0]

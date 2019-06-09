@@ -7,6 +7,7 @@
 import re
 import time
 import copy
+
 from pytest import skip
 
 from utils.tis_log import LOG
@@ -14,8 +15,7 @@ from utils.rest import Rest
 from consts.auth import Tenant
 from consts.cgcs import MELLANOX_DEVICE, GuestImages, EventLogID
 from consts.reasons import SkipStorageSpace
-from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper, common, cinder_helper, \
-    glance_helper, storage_helper
+from keywords import host_helper, system_helper, vm_helper, common, cinder_helper, glance_helper, storage_helper
 
 SEP = '\n------------------------------------ '
 
@@ -26,10 +26,11 @@ def check_host_vswitch_port_engine_map(host, con_ssh=None):
         expt_vswitch_map = host_helper.get_expected_vswitch_port_engine_map(host_ssh)
         actual_vswitch_map = host_helper.get_vswitch_port_engine_map(host_ssh)
 
-    data_ports = system_helper.get_host_ports_for_net_type(host, net_type='data', ports_only=True)
-    all_ports_used = system_helper.get_host_ports_for_net_type(host, net_type=None, ports_only=True)
+    data_ports = host_helper.get_host_ports_for_net_type(host, net_type='data', ports_only=True)
+    all_ports_used = host_helper.get_host_ports_for_net_type(host, net_type=None, ports_only=True)
 
-    ports_dict = system_helper.get_host_ports_values(host, ['device type', 'name'], if_name=data_ports, strict=True)
+    ports_dict = host_helper.get_host_ports(host, ['device type', 'name'], if_name=data_ports, strict=True,
+                                            rtn_dict=True)
 
     extra_mt_ports = 0
     for i in range(len(ports_dict['device type'])):
@@ -103,7 +104,7 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus=None, numa_num=None, vm_h
     #     format(actual_vcpus, expt_vcpus_all)
 
     if vm_host is None:
-        vm_host = nova_helper.get_vm_host(vm_id, con_ssh=con_ssh)
+        vm_host = vm_helper.get_vm_host(vm_id, con_ssh=con_ssh)
 
     log_cores_siblings = host_helper.get_logcore_siblings(host=vm_host, con_ssh=con_ssh)
 
@@ -119,12 +120,12 @@ def check_topology_of_vm(vm_id, vcpus, prev_total_cpus=None, numa_num=None, vm_h
         expt_used_vcpus = prev_total_cpus + expt_increase
         end_time = time.time() + 70
         while time.time() < end_time:
-            post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='vcpus_used')
+            post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, field='vcpus_used')
             if expt_used_vcpus == post_hosts_cpus[vm_host]:
                 break
             time.sleep(10)
         else:
-            post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, rtn_val='used_now')
+            post_hosts_cpus = host_helper.get_vcpus_for_computes(hosts=vm_host, field='used_now')
             assert expt_used_vcpus == post_hosts_cpus[vm_host], "Used vcpus on host {} is not as expected. " \
                 "Expected: {}; Actual: {}".format(vm_host, expt_used_vcpus, post_hosts_cpus[vm_host])
 
@@ -365,7 +366,7 @@ def _check_vm_topology_on_host(vm_id, vcpus, vm_host, cpu_pol, cpu_thr_pol,
             shared_host_cpus += shared_cores
 
     LOG.info('======= Check vm topology from vm_host via: virsh vcpupin, taskset')
-    instance_name = nova_helper.get_vm_instance_name(vm_id)
+    instance_name = vm_helper.get_vm_instance_name(vm_id)
 
     # TODO: remove numa checking for now
     # procs = host_helper.get_host_procs(hostname=vm_host)
@@ -607,15 +608,14 @@ def check_fs_sufficient(guest_os, boot_source='volume'):
 
     """
     LOG.info("Check if storage fs is sufficient to launch boot-from-{} vm with {}".format(boot_source, guest_os))
-    if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
-        if not cinder_helper.is_volumes_pool_sufficient(min_size=35):
-            skip(SkipStorageSpace.SMALL_CINDER_VOLUMES_POOL)
+    # if guest_os in ['opensuse_12', 'win_2016'] and boot_source == 'volume':
+    #     if not cinder_helper.is_volumes_pool_sufficient(min_size=35):
+    #         skip(SkipStorageSpace.SMALL_CINDER_VOLUMES_POOL)
 
-    if guest_os == 'win_2016' and boot_source == 'volume':
-        if not glance_helper.is_image_conversion_sufficient(guest_os=guest_os):
-            skip(SkipStorageSpace.INSUFFICIENT_IMG_CONV.format(guest_os))
+    # if guest_os == 'win_2016' and boot_source == 'volume':
+    #     if not glance_helper.is_image_conversion_sufficient(guest_os=guest_os):
+    #         skip(SkipStorageSpace.INSUFFICIENT_IMG_CONV.format(guest_os))
 
-    LOG.tc_step("Get/Create {} image".format(guest_os))
     check_disk = True if 'win' in guest_os else False
     cleanup = None if re.search('ubuntu_14|{}'.format(GuestImages.TIS_GUEST_PATTERN), guest_os) else 'function'
     img_id = glance_helper.get_guest_image(guest_os, check_disk=check_disk, cleanup=cleanup)
@@ -680,7 +680,7 @@ def check_vm_files(vm_id, storage_backing, ephemeral, swap, vm_type, file_paths,
         # local_lvm, boot-from-image, non-live migrate actions
         disk_check = 'local_loss'
         if vm_action == 'resize':
-            post_host = post_host if post_host else nova_helper.get_vm_host(vm_id)
+            post_host = post_host if post_host else vm_helper.get_vm_host(vm_id)
             if post_host == prev_host:
                 disk_check = 'eph_swap_loss'
 
@@ -792,7 +792,7 @@ def _check_disk_size(vm_ssh, disk_name, expt_size):
     assert actual_size == expt_size, "Expected disk size: {}M. Actual: {}M".format(expt_size, actual_size)
 
 
-def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
+def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin_platform'), con_ssh=None, fail_ok=False):
     after_alarms = system_helper.get_alarms(auth_info=auth_info, con_ssh=con_ssh)
     new_alarms = []
     check_interval = 5
@@ -805,7 +805,7 @@ def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin'), con_
                 # NTP alarm handling
                 LOG.info("NTP alarm found, checking ntpq stats")
                 host = entity_id.split('host=')[1].split('.ntp')[0]
-                host_helper.wait_for_ntp_sync(host=host, fail_ok=False, auth_info=auth_info, con_ssh=con_ssh)
+                system_helper.wait_for_ntp_sync(host=host, fail_ok=False, auth_info=auth_info, con_ssh=con_ssh)
                 continue
 
             new_alarms.append((alarm_id, entity_id))

@@ -2,24 +2,21 @@
 This file contains CEPH-related storage test cases.
 """
 
-import ast
 import random
 import re
 import time
 
-from pytest import mark
+from pytest import mark, param
 
-from consts.cgcs import EventLogID, GuestImages
-from keywords import nova_helper, vm_helper, host_helper, system_helper, \
-    storage_helper, glance_helper, cinder_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from consts.cgcs import EventLogID
+from keywords import vm_helper, host_helper, system_helper, storage_helper
 from testfixtures.recover_hosts import HostsToRecover
-from utils import exceptions, cli, table_parser
-from utils.clients.ssh import ControllerClient, get_cli_client
+from utils import cli, table_parser
+from utils.clients.ssh import ControllerClient
 from utils.multi_thread import Events
 from utils.tis_log import LOG
 
-PROC_RESTART_TIME = 30          # number of seconds between process restarts
+PROC_RESTART_TIME = 30  # number of seconds between process restarts
 
 
 # Tested on PV1.  Runtime: 278.40  Date: Aug 2nd, 2017.  Status: Pass
@@ -66,23 +63,19 @@ def _test_ceph_osd_process_kill():
     con_ssh = ControllerClient.get_active_controller()
 
     LOG.tc_step('Determine which OSDs to kill')
-    osd_id = random.randint(0, storage_helper.get_num_osds(con_ssh) - 1)
+    osd_id = random.randint(0, storage_helper.get_ceph_osd_count(con_ssh) - 1)
 
     LOG.info('We will kill the process of OSD ID {}'.format(osd_id))
 
     LOG.tc_step('Determine host of OSD ID {}'.format(osd_id))
-    osd_host, msg = storage_helper.get_osd_host(osd_id, con_ssh)
-    assert osd_host, msg
-    LOG.info(msg)
+    osd_host = storage_helper.get_osd_host(osd_id, con_ssh)
 
     LOG.tc_step('Determine the storage group for host {}'.format(osd_host))
     storage_group, msg = storage_helper.get_storage_group(osd_host)
     LOG.info(msg)
 
     LOG.tc_step('Determine the pid of OSD ID {}'.format(osd_id))
-    osd_pid, msg = storage_helper.get_osd_pid(osd_host, str(osd_id))
-    assert osd_pid, msg
-    LOG.info(msg)
+    osd_pid = storage_helper.get_osd_pid(osd_host, str(osd_id))
 
     LOG.tc_step('Kill OSD processes')
     proc_killed, msg = storage_helper.kill_process(osd_host, osd_pid)
@@ -91,21 +84,21 @@ def _test_ceph_osd_process_kill():
 
     LOG.tc_step('Check the OSD process is restarted with a different pid')
     endtime = time.time() + 300
-    osd_pid2 = osd_pid
+    osd_pid2 = None
     while time.time() < endtime:
-        osd_pid2, msg = storage_helper.get_osd_pid(osd_host, osd_id)
-        if osd_pid2 != osd_pid:
+        osd_pid2 = storage_helper.get_osd_pid(osd_host, osd_id, fail_ok=True)
+        if osd_pid2 and osd_pid2 != osd_pid:
             time.sleep(5)  # Process might still be initializing
             break
-        time.sleep(1)
-    msg = 'Process did not restart in time'
-    assert osd_pid2 != osd_pid, msg
-
-    LOG.info('Old pid is {} and new pid is {}'.format(osd_pid, osd_pid2))
+        time.sleep(10)
+    else:
+        LOG.info('Old pid is {} and new pid is {}'.format(osd_pid, osd_pid2))
+        msg = 'Process did not restart in time'
+        assert False, msg
 
 
 @mark.parametrize('monitor', [
-    mark.nightly('controller-0'),
+    param('controller-0', marks=mark.nightly),
     'controller-1',
     'storage-0'])
 # Tested on PV0.  Runtime: 222.34 seconds.  Date: Aug 4, 2017  Status: Pass
@@ -145,11 +138,10 @@ def test_ceph_mon_process_kill(monitor):
 
     """
     LOG.tc_step('Get process ID of ceph monitor')
-    mon_pid, msg = storage_helper.get_mon_pid(monitor)
+    mon_pid = storage_helper.get_mon_pid(monitor)
 
     with host_helper.ssh_to_host(monitor) as host_ssh:
         with host_ssh.login_as_root() as root_ssh:
-
             LOG.tc_step('Remove the monitor')
             cmd = 'ceph mon remove {}'.format(monitor)
             root_ssh.exec_cmd(cmd)
@@ -180,15 +172,16 @@ def test_ceph_mon_process_kill(monitor):
     system_helper.wait_for_alarm_gone(alarm_id=EventLogID.STORAGE_DEGRADE, timeout=360)
 
     LOG.tc_step('Check the ceph-mon process is restarted with a different pid')
+    mon_pid2 = None
     for i in range(0, PROC_RESTART_TIME):
-        mon_pid2, msg = storage_helper.get_mon_pid(monitor)
-        if mon_pid2 != mon_pid:
+        mon_pid2 = storage_helper.get_mon_pid(monitor, fail_ok=True)
+        if mon_pid2 and mon_pid2 != mon_pid:
             break
-        time.sleep(1)
+        time.sleep(5)
 
-    msg = 'Process did not restart in time'
-    assert mon_pid2 != mon_pid, msg
     LOG.info('Old pid is {} and new pid is {}'.format(mon_pid, mon_pid2))
+    msg = 'Process did not restart in time'
+    assert mon_pid2 and mon_pid2 != mon_pid, msg
 
 
 # Testd on PV0.  Ruentime: 1899.93 seconds.  Date: Aug 4, 2017.  Status: Pass
@@ -255,11 +248,14 @@ def test_ceph_reboot_storage_node():
             host_helper.reboot_hosts(host, wait_for_offline=True, wait_for_reboot_finish=False)
 
             LOG.tc_step('Check health of CEPH cluster')
+            ceph_healthy = True
+            msg = None
             end_time = time.time() + 10
             while time.time() < end_time:
                 ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
                 if not ceph_healthy:
                     break
+
             assert not ceph_healthy, msg
             LOG.info(msg)
 
@@ -284,7 +280,7 @@ def test_ceph_reboot_storage_node():
 
             assert not all_osds_up, " One or more OSD(s) {}  is(are) up but should be down".format(up_list)
 
-            host_helper.wait_for_host_values(host, availability='available')
+            system_helper.wait_for_host_values(host, availability='available')
 
             LOG.tc_step('Check that OSDs are up')
             osd_list = storage_helper.get_osds(host, con_ssh)
@@ -318,9 +314,6 @@ def test_ceph_reboot_storage_node():
 
         for vm_thread in vm_threads:
             assert vm_thread.res is True, "Writing in vm stopped unexpectedly"
-
-    except:
-        raise
     finally:
         end_event.set()
         for vm_thread in vm_threads:
@@ -375,7 +368,7 @@ def test_lock_stor_check_osds_down(host):
     con_ssh = ControllerClient.get_active_controller()
 
     if host == 'any':
-        storage_nodes = system_helper.get_hostnames(personality='storage')
+        storage_nodes = system_helper.get_hosts(personality='storage')
         LOG.info('System has {} storage nodes:'.format(storage_nodes))
         storage_nodes.remove('storage-0')
         node_id = random.randint(0, len(storage_nodes) - 1)
@@ -471,8 +464,6 @@ def test_lock_stor_check_osds_down(host):
 
         for vm_thread in vm_threads:
             assert vm_thread.res is True, "Writing in vm stopped unexpectedly"
-    except:
-        raise
     finally:
         # wait_for_thread_end needs to be called even if test failed in the middle, otherwise thread will not end
         end_event.set()
@@ -603,7 +594,7 @@ def test_storgroup_semantic_checks():
 
     con_ssh = ControllerClient.get_active_controller()
 
-    table_ = table_parser.table(cli.system('storage-backend-show ceph-store'))
+    table_ = table_parser.table(cli.system('storage-backend-show ceph-store')[1])
     capabilities = table_parser.get_value_two_col_table(table_, 'capabilities')
     replication_factor = capabilities[1]
     LOG.info("The replication factor is: {}".format(replication_factor))
@@ -719,7 +710,7 @@ def _test_modify_ceph_pool_size():
 
     LOG.tc_step('Query the size of the CEPH storage pools')
     glance_pool, cinder_pool, ephemeral_pool, object_pool, ceph_total_space, object_gateway = \
-        storage_helper.get_storage_backend_show_vals(backend='ceph', fields=(
+        storage_helper.get_storage_backend_values(backend='ceph', fields=(
             'glance_pool_gib', 'cinder_pool_gib', 'ephemeral_pool_gib', 'object_pool_gib',
             'ceph_total_space_gib', 'object_gateway'))
 
@@ -750,15 +741,15 @@ def _test_modify_ceph_pool_size():
 
     LOG.info('Check the ceph images pool is set to the right value')
     glance_pool2, cinder_pool2, ephemeral_pool2, object_pool2, ceph_total_space2, object_gateway2 = \
-        storage_helper.get_storage_backend_show_vals(backend='ceph', fields=(
+        storage_helper.get_storage_backend_values(backend='ceph', fields=(
             'glance_pool_gib', 'cinder_pool_gib', 'ephemeral_pool_gib', 'object_pool_gib',
             'ceph_total_space_gib', 'object_gateway'))
 
-    assert glance_pool2 == new_glance_pool, "Glance pool should be {} but is {}".\
+    assert glance_pool2 == new_glance_pool, "Glance pool should be {} but is {}". \
         format(new_glance_pool, glance_pool2)
-    assert cinder_pool2 == new_cinder_pool, "Cinder pool should be {} but is {}".\
+    assert cinder_pool2 == new_cinder_pool, "Cinder pool should be {} but is {}". \
         format(new_cinder_pool, cinder_pool2)
-    assert ephemeral_pool2 == new_ephemeral_pool, "Ephemeral pool should be {} but is {}".\
+    assert ephemeral_pool2 == new_ephemeral_pool, "Ephemeral pool should be {} but is {}". \
         format(new_ephemeral_pool, ephemeral_pool2)
     assert object_pool2 == new_object_pool, "Object pool should be {} but is {}".format(new_object_pool, object_pool2)
 
@@ -767,7 +758,7 @@ def _test_modify_ceph_pool_size():
 
     LOG.tc_step("Check ceph pool information")
     cmd = "ceph osd pool get-quota {}"
-    max_bytes_regex = "max bytes.* (\d+)([M|K|G]B)"
+    max_bytes_regex = r"max bytes.* (\d+)([M|K|G]B)"
 
     newcmd = cmd.format('images')
     rc, out = con_ssh.exec_cmd(newcmd)
@@ -802,11 +793,11 @@ def _test_modify_ceph_pool_size():
         if max_bytes.group(2) == 'MB':
             ceph_object_pool /= 1000
         LOG.info("Ceph pool values after modification: Glance {}, Cinder {}, Ephemeral {}, Object {}".format(
-                ceph_glance_pool, ceph_cinder_pool, ceph_ephemeral_pool, ceph_object_pool))
+            ceph_glance_pool, ceph_cinder_pool, ceph_ephemeral_pool, ceph_object_pool))
     else:
         ceph_object_pool = 0
         LOG.info("Ceph pool values after modification: Glance {}, Cinder {}, Ephemeral {}".format(
-                ceph_glance_pool, ceph_cinder_pool, ceph_ephemeral_pool))
+            ceph_glance_pool, ceph_cinder_pool, ceph_ephemeral_pool))
 
     # Set margin of error to some reasonable value to account for unit
     # conversion and rounding errors

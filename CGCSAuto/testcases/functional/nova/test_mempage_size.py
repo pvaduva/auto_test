@@ -2,8 +2,9 @@ import re
 import time
 import random
 
-from pytest import fixture, mark, skip
+from pytest import fixture, mark, skip, param
 
+import keywords.host_helper
 from utils.tis_log import LOG
 from consts.filepaths import CompConfPath
 from consts.cgcs import FlavorSpec, ImageMetadata, NovaCLIOutput
@@ -53,7 +54,7 @@ def _get_expt_indices(mempage_size):
 
 
 def is_host_mem_sufficient(host, mempage_size=None, mem_gib=1):
-    host_mems_per_proc = system_helper.get_host_mem_values(host, headers=MEMPAGE_HEADERS)
+    host_mems_per_proc = host_helper.get_host_memories(host, headers=MEMPAGE_HEADERS)
     mempage_size = 'small' if not mempage_size else mempage_size
     expt_mempage_indices = _get_expt_indices(mempage_size)
 
@@ -76,7 +77,7 @@ def check_mempage_change(vm, host, prev_host_mems, mempage_size=None, mem_gib=1,
         numa_node = vm_helper.get_vm_numa_nodes_via_ps(vm_id=vm, host=host)[0]
 
     prev_host_mems = prev_host_mems[numa_node]
-    current_host_mems = system_helper.get_host_mem_values(host, headers=MEMPAGE_HEADERS)[numa_node]
+    current_host_mems = host_helper.get_host_memories(host, headers=MEMPAGE_HEADERS)[numa_node]
 
     if 0 in expt_mempage_indics:
         if current_host_mems[1:] == prev_host_mems[1:] and \
@@ -99,10 +100,10 @@ def check_mempage_change(vm, host, prev_host_mems, mempage_size=None, mem_gib=1,
 
 
 @mark.parametrize('mem_page_size', [
-    mark.domain_sanity('2048'),
-    mark.p1('large'),
-    mark.domain_sanity('small'),
-    mark.p1('1048576'),
+    param('2048', marks=mark.domain_sanity),
+    param('large', marks=mark.p1),
+    param('small', marks=mark.domain_sanity),
+    param('1048576', marks=mark.p3),
 ])
 def test_vm_mem_pool_default_config(prepare_resource, mem_page_size):
     """
@@ -142,8 +143,8 @@ def test_vm_mem_pool_default_config(prepare_resource, mem_page_size):
     is_sufficient, prev_host_mems = is_host_mem_sufficient(host=hypervisor, mempage_size=mem_page_size)
 
     LOG.tc_step("Boot a vm with mem page size spec - {}".format(mem_page_size))
-    code, vm_id, msg, vol_id = vm_helper.boot_vm('mempool_'+mem_page_size, flavor_1g, source='volume', fail_ok=True,
-                                                 vm_host=hypervisor, source_id=volume_, cleanup='function')
+    code, vm_id, msg = vm_helper.boot_vm('mempool_'+mem_page_size, flavor_1g, source='volume', fail_ok=True,
+                                         vm_host=hypervisor, source_id=volume_, cleanup='function')
 
     if not is_sufficient:
         LOG.tc_step("Check boot vm rejected due to insufficient memory from {} pool".format(mem_page_size))
@@ -160,7 +161,7 @@ def get_hosts_to_configure(candidates):
     hosts_to_configure = [None, None]
     max_4k, expt_p1_4k, max_1g, expt_p1_1g = 1.5*1048576/4, 2.5*1048576/4, 1, 2
     for host in candidates:
-        host_mems = system_helper.get_host_mem_values(host, headers=MEMPAGE_HEADERS)
+        host_mems = host_helper.get_host_memories(host, headers=MEMPAGE_HEADERS)
         if 1 not in host_mems:
             LOG.info("{} has only 1 processor".format(host))
             continue
@@ -193,7 +194,7 @@ class TestConfigMempage:
     @fixture(scope='class')
     def add_1g_and_4k_pages(self, request, config_host_class, skip_for_one_proc, add_cgcsauto_zone,
                             add_admin_role_module):
-        storage_backing, candidate_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, candidate_hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
 
         if len(candidate_hosts) < 2:
             skip("Less than two up hosts have same storage backing")
@@ -219,7 +220,7 @@ class TestConfigMempage:
                     config_host_class(host=host_to_config, modify_func=_modify)
                     LOG.fixture_step("Check mem pages for {} are modified and updated successfully".
                                      format(host_to_config))
-                    host_helper.wait_for_mempage_update(host=host_to_config)
+                    host_helper.wait_for_memory_update(host=host_to_config)
 
             LOG.fixture_step("Check host memories for {} after mem config completed".format(hosts_selected))
             _, hosts_unconfigured = get_hosts_to_configure(hosts_selected)
@@ -258,7 +259,7 @@ class TestConfigMempage:
         hosts, storage_backing = add_1g_and_4k_pages
         host_helper.get_hypervisor_info(hosts=hosts)
         for host in hosts:
-            system_helper.get_host_mem_list(host=host)
+            host_helper.get_host_memories(host, wait_for_update=False)
 
     @fixture(params=MEM_CONFIGS)
     def flavor_mem_page_size(self, request, flavor_2g):
@@ -318,9 +319,9 @@ class TestConfigMempage:
         LOG.tc_step("Attempt to boot a vm with flavor_mem_page_size: {}, and image_mem_page_size: {}. And check return "
                     "code is {}.".format(flavor_mem_page_size, image_mem_page_size, expt_code))
 
-        actual_code, vm_id, msg, vol_id = vm_helper.boot_vm(name='mem_page_size', flavor=flavor_id, source='image',
-                                                            source_id=image_mempage, fail_ok=True,
-                                                            avail_zone='cgcsauto', cleanup='function')
+        actual_code, vm_id, msg = vm_helper.boot_vm(name='mem_page_size', flavor=flavor_id, source='image',
+                                                    source_id=image_mempage, fail_ok=True,
+                                                    avail_zone='cgcsauto', cleanup='function')
 
         assert expt_code == actual_code, "Expect boot vm to return {}; Actual result: {} with msg: {}".format(
                 expt_code, actual_code, msg)
@@ -328,14 +329,14 @@ class TestConfigMempage:
         if expt_code != 0:
             assert re.search(NovaCLIOutput.VM_BOOT_REJECT_MEM_PAGE_SIZE_FORBIDDEN, msg)
         else:
-            assert nova_helper.get_vm_host(vm_id) in hosts, "VM is not booted on hosts in cgcsauto zone"
+            assert vm_helper.get_vm_host(vm_id) in hosts, "VM is not booted on hosts in cgcsauto zone"
             LOG.tc_step("Ensure VM is pingable from NatBox")
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     @mark.parametrize('mem_page_size', [
-        mark.priorities('domain_sanity', 'nightly')('1048576'),
-        mark.p2('large'),
-        mark.nightly('small'),
+        param('1048576', marks=mark.priorities('domain_sanity', 'nightly')),
+        param('large'),
+        param('small', marks=mark.nightly),
     ])
     def test_schedule_vm_mempage_config(self, flavor_2g, mem_page_size):
         """
@@ -390,17 +391,16 @@ class TestConfigMempage:
         host_helper.wait_for_hypervisors_up(hosts_configured)
         prev_computes_mems = {}
         for host in hosts_configured:
-            prev_computes_mems[host] = system_helper.get_host_mem_values(host=host, headers=MEMPAGE_HEADERS)
+            prev_computes_mems[host] = host_helper.get_host_memories(host=host, headers=MEMPAGE_HEADERS)
 
         LOG.tc_step("Boot a vm with mem page size spec - {}".format(mem_page_size))
 
         host_1g, host_4k = hosts_configured
-        code, vm_id, msg, vo = vm_helper.boot_vm('mempool_configured', flavor_id, fail_ok=True, avail_zone='cgcsauto',
-                                                 cleanup='function')
+        code, vm_id, msg = vm_helper.boot_vm('mempool_configured', flavor_id, fail_ok=True, avail_zone='cgcsauto',
+                                             cleanup='function')
         assert 0 == code, "VM is not successfully booted."
 
-        instance_name, vm_host = nova_helper.get_vm_values(vm_id, fields=[":instance_name", ":host"],
-                                                           strict=False)
+        instance_name, vm_host = vm_helper.get_vm_values(vm_id, fields=[":instance_name", ":host"], strict=False)
         vm_node = vm_helper.get_vm_numa_nodes_via_ps(vm_id=vm_id, instance_name=instance_name, host=vm_host)
         if mem_page_size == '1048576':
             assert host_1g == vm_host, "VM is not created on the configured host {}".format(hosts_configured[0])
@@ -441,7 +441,7 @@ def test_compute_mempage_vars(hosts=None):
         skip('No hosts available')
 
     LOG.info("---Wait for system host-memory-list updated for a random host")
-    host_helper.wait_for_mempage_update(hosts[0])
+    host_helper.wait_for_memory_update(hosts[0])
 
     for host in hosts:
         LOG.info("---Check {} memory info in system host-memory-list and on host".format(host))
@@ -455,7 +455,7 @@ def check_meminfo_via_sysinv_nova_cli(host, headers):
     end_time = time.time() + 306
     err = None
     while time.time() < end_time:
-        sysinv_mems = system_helper.get_host_mem_values(host, headers, rtn_dict=False)
+        sysinv_mems = host_helper.get_host_memories(host, headers, rtn_dict=False)
         proc_vars = []
         for proc in range(len(sysinv_mems)):
             proc_mems = sysinv_mems[proc]

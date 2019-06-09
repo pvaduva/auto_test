@@ -20,7 +20,7 @@ HOSTS_IF_MODIFY_ARGS = []
 
 def __get_mtu_to_mod(providernet_name, mtu_range='middle'):
     LOG.tc_step("Get a MTU value that is in mtu {} range".format(mtu_range))
-    pnet_mtus, pnet_types = system_helper.get_data_networks(rtn_val=('mtu', 'network_type'),
+    pnet_mtus, pnet_types = system_helper.get_data_networks(field=('mtu', 'network_type'),
                                                             strict=False, name=providernet_name)
 
     min_mtu = 1000
@@ -52,7 +52,7 @@ def get_if_info(host):
     if_info = {}
 
     try:
-        if_table = system_helper.get_host_interfaces_table(host)
+        if_table = host_helper.get_host_interfaces_table(host)
         index_name = if_table['headers'].index('name')
         index_type = if_table['headers'].index('type')
         index_uses_ifs = if_table['headers'].index('uses i/f')
@@ -68,7 +68,7 @@ def get_if_info(host):
             if_class = value[index_class]
             network_types = [if_class]
             if if_class == 'platform':
-                net_type_str = system_helper.get_host_if_show_values(host=host, interface=name, fields='networks')[0]
+                net_type_str = host_helper.get_host_interface_values(host=host, interface=name, fields='networks')[0]
                 network_types = [net_type.strip() for net_type in net_type_str.split(sep=',')]
             attributes = value[index_attributes].split(',')
 
@@ -165,7 +165,7 @@ def test_modify_mtu_oam_interface(mtu_range):
         - Nothing
 
     """
-    is_sx = system_helper.is_simplex()
+    is_sx = system_helper.is_aio_simplex()
     origin_active, origin_standby = system_helper.get_active_standby_controllers()
     if not origin_standby and not is_sx:
         skip("Standby controller unavailable. Cannot lock controller.")
@@ -179,7 +179,7 @@ def test_modify_mtu_oam_interface(mtu_range):
     if not expecting_pass:
         LOG.warn('Expecting to fail in changing MTU: changing to:{}, max-mtu:{}'.format(mtu, max_mtu))
 
-    oam_attributes = system_helper.get_host_interfaces(host=first_host, rtn_val='attributes', net_type='oam')
+    oam_attributes = host_helper.get_host_interfaces(host=first_host, field='attributes', net_type='oam')
 
     # sample attributes: [MTU=9216,AE_MODE=802.3ad]
     pre_oam_mtu = int(oam_attributes[0].split(',')[0].split('=')[1])
@@ -187,7 +187,7 @@ def test_modify_mtu_oam_interface(mtu_range):
 
     if not is_sx:
         HostsToRecover.add(origin_standby)
-        prev_bad_pods = kube_helper.get_pods(grep='-v -e {} -e {}'.format(PodStatus.COMPLETED, PodStatus.RUNNING))
+        prev_bad_pods = kube_helper.get_unhealthy_pods(all_namespaces=True)
 
         LOG.tc_step("Modify {} oam interface MTU from {} to {} on standby controller, and "
                     "ensure it's applied successfully after unlock".format(origin_standby, pre_oam_mtu, mtu))
@@ -214,11 +214,11 @@ def test_modify_mtu_oam_interface(mtu_range):
 
         LOG.tc_step("Ensure standby controller is in available state and attempt to swact active controller to {}".
                     format(origin_standby))
-        host_helper.wait_for_hosts_states(origin_active, availability=['available'])
+        system_helper.wait_for_hosts_states(origin_active, availability=['available'])
         host_helper.swact_host(fail_ok=False)
         host_helper.wait_for_webservice_up(origin_standby)
 
-    prev_bad_pods = kube_helper.get_pods(grep='-v -e {} -e {}'.format(PodStatus.COMPLETED, PodStatus.RUNNING))
+    prev_bad_pods = kube_helper.get_unhealthy_pods(all_namespaces=True)
     HostsToRecover.add(origin_active)
     LOG.tc_step("Modify {} oam interface MTU to: {}, and "
                 "ensure it's applied successfully after unlock".format(origin_active, mtu))
@@ -245,7 +245,10 @@ def check_containers(prev_bad_pods, check_app):
     res_app = True
     if check_app:
         res_app = container_helper.wait_for_apps_status(apps='stx-openstack', status=AppStatus.APPLIED)[0]
-    res_pods = kube_helper.wait_for_pods_ready(check_interval=10, pods_to_exclude=prev_bad_pods)[0]
+
+    prev_bad_pods = None if not prev_bad_pods else prev_bad_pods
+    res_pods = kube_helper.wait_for_pods_healthy(check_interval=10, name=prev_bad_pods, exclude=True,
+                                                 all_namespaces=True)[0]
     assert (res_app and res_pods), "Application status or pods status check failed after modify and unlock host"
 
 
@@ -274,7 +277,7 @@ def revert_data_mtu(request):
 @mark.p3
 @mark.parametrize('mtu_range', [
     'middle',
-    ])
+])
 def test_modify_mtu_data_interface(mtu_range, revert_data_mtu):
     """
     23) Change the MTU value of the data interface using CLI
@@ -302,7 +305,7 @@ def test_modify_mtu_data_interface(mtu_range, revert_data_mtu):
     if len(hypervisors) < 2:
         skip("Less than two hypervisors available.")
 
-    if system_helper.is_two_node_cpe():
+    if system_helper.is_aio_duplex():
         standby = system_helper.get_standby_controller_name()
         if not standby:
             skip("Standby controller unavailable on CPE system. Unable to lock host")
@@ -348,7 +351,7 @@ def test_modify_mtu_data_interface(mtu_range, revert_data_mtu):
             if not expecting_pass:
                 LOG.warn('Expecting to fail in changing MTU: changing to:{}, max-mtu:{}'.format(mtu, max_mtu))
 
-            pre_mtu = int(system_helper.get_host_if_show_values(host, interface, 'imtu')[0])
+            pre_mtu = int(host_helper.get_host_interface_values(host, interface, 'imtu')[0])
 
             LOG.tc_step('Modify MTU of IF:{} on host:{} to:{}, expeting: {}'.format(
                 interface, host, mtu, 'PASS' if expecting_pass else 'FAIL'))
@@ -372,7 +375,7 @@ def test_modify_mtu_data_interface(mtu_range, revert_data_mtu):
         host_helper.unlock_host(host)
         for interface in revert_ifs:
             if interface in changed_ifs:
-                actual_mtu = int(system_helper.get_host_if_show_values(host,
+                actual_mtu = int(host_helper.get_host_interface_values(host,
                                                                        interface=interface, fields=['imtu'])[0])
                 assert actual_mtu == mtu, \
                     'Actual MTU after modification did not match expected, expected:{}, actual:{}'.format(
@@ -387,7 +390,7 @@ def test_modify_mtu_data_interface(mtu_range, revert_data_mtu):
 
 
 def get_ifs_to_mod(host, network_type, mtu_val):
-    table_ = table_parser.table(cli.system('host-if-list', '{} --nowrap'.format(host)))
+    table_ = table_parser.table(cli.system('host-if-list', '{} --nowrap'.format(host))[1])
 
     if_class = network_type
     network = ''
@@ -399,7 +402,7 @@ def get_ifs_to_mod(host, network_type, mtu_val):
     if 'platform' == if_class:
         platform_ifs = table_parser.get_values(table_, target_header='name', **{'class': 'platform'})
         for pform_if in platform_ifs:
-            if_nets = system_helper.get_host_if_show_values(host=host, interface=pform_if, fields='networks')[0]
+            if_nets = host_helper.get_host_interface_values(host=host, interface=pform_if, fields='networks')[0]
             if_nets = [if_net.strip() for if_net in if_nets.split(sep=',')]
             if network not in if_nets:
                 table_ = table_parser.filter_table(table_, strict=True, exclude=True, name=pform_if)
@@ -408,7 +411,8 @@ def get_ifs_to_mod(host, network_type, mtu_val):
     non_uses_if_names = table_parser.get_values(table_, 'name', exclude=False, **{'uses i/f': '[]'})
     uses_if_first = False
     if uses_if_names:
-        current_mtu = int(system_helper.get_host_if_show_values(host, interface=uses_if_names[0], fields=['imtu'])[0])
+        current_mtu = int(
+            host_helper.get_host_interface_values(host, interface=uses_if_names[0], fields=['imtu'])[0])
         if current_mtu <= mtu_val:
             uses_if_first = True
 

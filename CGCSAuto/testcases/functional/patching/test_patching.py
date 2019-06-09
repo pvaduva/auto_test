@@ -1,10 +1,9 @@
 from pytest import fixture, skip, mark
 
-from consts.proj_vars import ProjVar
 from consts.cgcs import PatchState, VMStatus
 from utils.tis_log import LOG
 from utils.exceptions import TiSError
-from keywords import patching_helper, system_helper, vm_helper, cinder_helper, nova_helper, orchestration_helper
+from keywords import patching_helper, system_helper, vm_helper, cinder_helper, orchestration_helper
 
 
 @fixture(scope='function', autouse=True)
@@ -23,7 +22,11 @@ def is_reboot_required(patch_states):
 
 
 def get_test_patches(state=None):
-    test_patch_name = ProjVar.get_var('BUILD_ID') + '_'
+    test_patch_name = system_helper.get_build_info()['BUILD_ID']
+    if not test_patch_name:
+        skip('BUILD ID unknown, unable to find matching test patches')
+
+    test_patch_name += '_'
     test_patches = patching_helper.get_patches_in_state(expected_states=state)
     test_patches = [p.strip() for p in test_patches if p.startswith(test_patch_name)]
     return test_patches
@@ -39,7 +42,8 @@ def remove_test_patches(delete=True, failure_patch=False, fail_ok=False):
         LOG.info("Install hosts to remove test patch if needed")
         code, installed, failed = patching_helper.install_patches(remove=True, fail_ok=True)
 
-        unavail_patches = get_test_patches(state=(PatchState.PARTIAL_REMOVE, PatchState.PARTIAL_APPLY, PatchState.APPLIED))
+        unavail_patches = get_test_patches(state=(PatchState.PARTIAL_REMOVE, PatchState.PARTIAL_APPLY,
+                                                  PatchState.APPLIED))
 
         if delete:
             available_patches = get_test_patches(state=PatchState.AVAILABLE)
@@ -87,7 +91,7 @@ def patching_setup():
         vm_id = vm_helper.boot_vm(name='patch_{}'.format(source), source=source, cleanup='module')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-    controllers, computes, storages = system_helper.get_hostnames_per_personality(rtn_tuple=True)
+    controllers, computes, storages = system_helper.get_hosts_per_personality(rtn_tuple=True)
     return patches, controllers, computes, storages
 
 
@@ -99,11 +103,11 @@ def patch_function_check(request):
         patching_helper.delete_patches(available_patches)
 
     LOG.info("Check vms status, delete and create new if in bad state")
-    vms = nova_helper.get_vms(name='patch_', strict=False)
+    vms = vm_helper.get_vms(name='patch_', strict=False)
     boot_vm = False if len(vms) == 2 else True
     if not boot_vm:
         for vm in vms:
-            if nova_helper.get_vm_status(vm) != VMStatus.ACTIVE or not vm_helper.ping_vms_from_natbox(vm, fail_ok=True):
+            if vm_helper.get_vm_status(vm) != VMStatus.ACTIVE or not vm_helper.ping_vms_from_natbox(vm, fail_ok=True):
                 boot_vm = True
                 break
     if boot_vm:
@@ -115,7 +119,7 @@ def patch_function_check(request):
 
     def remove_on_teardown():
         for vm_ in vms:
-            if nova_helper.get_vm_status(vm_) != VMStatus.ACTIVE:
+            if vm_helper.get_vm_status(vm_) != VMStatus.ACTIVE:
                 LOG.info("Delete inactive vm {} before test patch removal".format(vm_))
                 vm_helper.delete_vms(vm_, remove_cleanup='module')
 
@@ -146,7 +150,7 @@ def upload_test_patches(search_str, downloaded_patches, failure_patch=False):
 
 def check_vms(vms):
     for vm in vms:
-        assert nova_helper.get_vm_status(vm) == VMStatus.ACTIVE
+        assert vm_helper.get_vm_status(vm) == VMStatus.ACTIVE
         vm_helper.ping_vms_from_natbox(fail_ok=False)
 
 
@@ -271,8 +275,8 @@ def test_patch_process(patching_setup, patch_function_check, patch_type, install
     patching_helper.apply_patches(patch_ids=patch_ids)
 
     LOG.tc_step("Install patch(es): {}".format(patch_ids))
-    async = True if install_type == 'async' else False
-    patching_helper.install_patches(async_=async)
+    async_ = True if install_type == 'async' else False
+    patching_helper.install_patches(async_=async_)
 
     LOG.tc_step("Check vms are in good state after install patches: {}".format(patch_ids))
     check_vms(vms)

@@ -41,7 +41,7 @@ def check_cinder_type(cinder_type="ceph-external-ceph-external"):
     Returns:
     - (bool) True if type is found, False if not
     """
-    cinder_types = cinder_helper.get_volume_types(rtn_val='Name')
+    cinder_types = cinder_helper.get_volume_types(field='Name')
 
     return bool(cinder_type in cinder_types)
 
@@ -57,7 +57,7 @@ def check_external_ceph():
     - (bool) True if provisioned, False if not
     """
 
-    table_ = table_parser.table(cli.system('storage-backend-list'))
+    table_ = table_parser.table(cli.system('storage-backend-list')[1])
     backends = table_parser.get_values(table_, 'backend')
 
     return bool('ceph-external' in backends)
@@ -159,16 +159,13 @@ def test_configure_external_ceph(ceph_lab, ceph_services):
     ceph_lab = get_lab_dict(ceph_lab)
     source_server = ceph_lab['floating ip']
     source_lab_name = ceph_lab['short_name']
-    dest_server = ProjVar.get_var('LAB').get('floating ip')
 
     source_filepath = "/etc/ceph/ceph.conf"
     dest_filepath = "/home/wrsroot/ceph_{}.conf".format(source_lab_name)
 
-    con_ssh.scp_files(source_file=source_filepath, source_server=source_server,
-                      source_password=HostLinuxCreds.get_password(),
-                      source_user=HostLinuxCreds.get_user(), dest_file=dest_filepath,
-                      dest_password=HostLinuxCreds.get_password(),
-                      dest_server=dest_server, fail_ok=True)
+    con_ssh.scp_on_dest(source_user=HostLinuxCreds.get_user(), source_ip=source_server,
+                        source_pswd=HostLinuxCreds.get_password(), source_path=source_filepath,
+                        dest_path=dest_filepath, timeout=60)
 
     LOG.tc_step("Confirm ceph.conf file was successfully copied before proceeding")
     if not con_ssh.file_exists(dest_filepath):

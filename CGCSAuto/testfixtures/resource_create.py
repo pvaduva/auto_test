@@ -1,7 +1,6 @@
 from pytest import fixture
 
 from consts.cgcs import GuestImages
-from consts.proj_vars import ProjVar
 from keywords import nova_helper, glance_helper, keystone_helper, container_helper
 from utils.tis_log import LOG
 
@@ -116,10 +115,10 @@ def rhel7_image():
 
 
 @fixture(scope='session', autouse=True)
-def tis_centos_image():
+def default_glance_image():
     if not container_helper.is_stx_openstack_deployed():
         return None
-    return __create_image('tis-centos-guest', 'session')
+    return __create_image(None, 'session')
 
 
 @fixture(scope='session', autouse=False)
@@ -128,15 +127,17 @@ def cgcs_guest_image():
 
 
 def __create_image(img_os, scope):
+    if not img_os:
+        img_os = GuestImages.DEFAULT['guest']
 
     LOG.fixture_step("({}) Get or create a glance image with {} guest OS".format(scope, img_os))
     img_info = GuestImages.IMAGE_FILES[img_os]
     img_id = glance_helper.get_image_id_from_name(img_os, strict=True)
     if not img_id:
         if img_info[0] is not None:
-            image_path = glance_helper._scp_guest_image(img_os=img_os)
+            image_path = glance_helper.scp_guest_image(img_os=img_os)
         else:
-            img_dir = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
+            img_dir = GuestImages.DEFAULT['image_dir']
             image_path = "{}/{}".format(img_dir, img_info[2])
 
         disk_format = 'raw' if img_os in ['cgcs-guest', 'tis-centos-guest', 'vxworks'] else 'qcow2'

@@ -57,7 +57,7 @@ class LocalHostClient(SSHClient):
     def connect(self, retry=False, retry_interval=3, retry_timeout=300, prompt=None,
                 use_current=True, timeout=None):
         # Do nothing if current session is connected and force_close is False:
-        if use_current and self._is_connected():
+        if use_current and self.is_connected():
             LOG.debug("Already connected to {}. Do nothing.".format(self.host))
             # LOG.debug("ID of the session: {}".format(id(self)))
             return
@@ -73,11 +73,11 @@ class LocalHostClient(SSHClient):
         while time.time() < end_time:
             try:
                 LOG.debug("Attempt to connect to localhost - {}".format(self.host))
-                self._session = pexpect.spawnu(command='bash', timeout=timeout, maxread=100000)
+                self.session = pexpect.spawnu(command='bash', timeout=timeout, maxread=100000)
 
                 self.logpath = self._get_logpath()
                 if self.logpath:
-                    self._session.logfile = open(self.logpath, 'w+')
+                    self.session.logfile = open(self.logpath, 'w+')
 
                 # Set prompt for matching
                 self.set_prompt(prompt)
@@ -87,15 +87,8 @@ class LocalHostClient(SSHClient):
                 return
 
             except (OSError, pexpect.TIMEOUT, pexpect.EOF):
-                # fail login if retry=False
-                # LOG.debug("Reset session.after upon ssh error")
-                # self._session.after = ''
                 if not retry:
                     raise
-
-            except:
-                LOG.error("Failed to spawn pexpect object due to unknown exception!")
-                raise
 
             self.close()
             LOG.debug("Retry in {} seconds".format(retry_interval))
@@ -185,7 +178,7 @@ class LocalHostClient(SSHClient):
         # determine on the new prompt
         if not new_prompt:
             if venv_name in self.prompt:
-                new_prompt = self.prompt.split('\({}\) '.format(venv_name))[-1]
+                new_prompt = self.prompt.split(r'\({}\) '.format(venv_name))[-1]
             else:
                 new_prompt = self.initial_prompt
 
@@ -199,13 +192,13 @@ class LocalHostClient(SSHClient):
 
     def get_ssh_key(self, ssh_key_path=None):
         if not ssh_key_path:
-            ssh_key_path = os.path.expanduser('~/.ssh/id_rsa')
+            ssh_key_path = os.path.expanduser('~/.ssh/id_rsa_cgcsauto')
         # KNOWN_HOSTS_PATH = SSH_DIR + "/known_hosts"
         # REMOVE_HOSTS_SSH_KEY_CMD = "ssh-keygen -f {} -R {}"
         if not self.file_exists(ssh_key_path):
             self.exec_cmd("ssh-keygen -f {} -t rsa -N ''".format(ssh_key_path), fail_ok=False)
+        ssh_key = self.exec_cmd("ssh-keygen -y -f {} -P ''".format(ssh_key_path), fail_ok=False)
 
-        ssh_key = self.exec_cmd("ssh-keygen -y -f {}".format(ssh_key_path), fail_ok=False)[1]
         return ssh_key
 
     def ping_server(self, server, ping_count=5, timeout=60, fail_ok=False, retry=0):
@@ -301,7 +294,7 @@ class RemoteCLIClient:
         lab_name = lab_name.lower()
 
         curr_thread = threading.current_thread()
-        idx = 0 if isinstance(curr_thread, threading._MainThread) else int(curr_thread.name.split('-')[-1])
+        idx = 0 if curr_thread is threading.main_thread() else int(curr_thread.name.split('-')[-1])
         local_clients_for_lab = cls.__lab_remote_clients_map.get(lab_name, [])
         if local_clients_for_lab:
             if len(local_clients_for_lab) > idx:
@@ -328,11 +321,12 @@ class RemoteCLIClient:
         if not remote_cli_dir:
             remote_cli_dir = '{}/{}'.format(ProjVar.get_var('LOG_DIR'), dest_name)
             LOG.info("SCP wrs-remote-clients sdk to localhost...")
+            build_info = ProjVar.get_var('BUILD_INFO')
             source_path = '{}/{}/{}/export/cgts-sdk/wrs-remote-clients-*.tgz'. \
-                format(BuildServerPath.DEFAULT_WORK_SPACE, ProjVar.get_var('JOB'), ProjVar.get_var('BUILD_ID'))
+                format(BuildServerPath.DEFAULT_WORK_SPACE, build_info.get('JOB', ''), build_info.get('BUILD_ID', ''))
             dest_dir = os.path.dirname(remote_cli_dir)
             dest_path = os.path.join(dest_dir, '{}.tgz'.format(dest_name))
-            localclient.scp_on_dest(source_user=SvcCgcsAuto.USER, source_ip=ProjVar.get_var('BUILD_SERVER'),
+            localclient.scp_on_dest(source_user=SvcCgcsAuto.USER, source_ip=build_info.get('BUILD_SERVER'),
                                     source_pswd=SvcCgcsAuto.PASSWORD,
                                     source_path=source_path,
                                     dest_path=dest_path, timeout=300)
@@ -354,7 +348,7 @@ class RemoteCLIClient:
                 localclient.exec_cmd('cd {}'.format(os.path.join(dest_dir, dest_name)), fail_ok=False)
                 localclient.exec_cmd('./install_clients.sh', fail_ok=False, expect_timeout=600)
                 cls.__remote_cli_info['remote_cli_dir'] = remote_cli_dir
-            except:
+            except Exception:
                 # Do the cleanup in case of remote cli clients install failure.
                 if not ProjVar.get_var('NO_TEARDOWN'):
                     cls.remove_remote_cli_clients(remote_cli_dir=remote_cli_dir, venv_dir=venv_dir)

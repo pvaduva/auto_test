@@ -1,13 +1,13 @@
 import re
 import time
 import random
-from pytest import mark, skip, fixture
+from pytest import mark, skip, fixture, param
 
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 
 from consts.cli_errs import SrvGrpErr
-from keywords import nova_helper, vm_helper
+from keywords import nova_helper, vm_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -16,7 +16,8 @@ MSG = 'HELLO SRV GRP MEMBERS!'
 
 @fixture(scope='module', autouse=True)
 def check_system():
-    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts = host_helper.get_storage_backing_with_max_hosts()
+    up_hypervisors = host_helper.get_up_hypervisors()
     vm_helper.ensure_vms_quotas(vms_num=10, cores_num=20, vols_num=10)
 
     return hosts, storage_backing, up_hypervisors
@@ -38,9 +39,9 @@ def create_flavor_and_server_group(storage_backing=None, policy=None):
 # TC2915 + TC2915 + TC_6566 + TC2917
 # server group messaging is removed since STX
 @mark.parametrize(('policy', 'vms_num'), [
-    mark.priorities('nightly', 'domain_sanity', 'sx_nightly')(('affinity', 2)),
+    param('affinity', 2, marks=mark.priorities('nightly', 'domain_sanity', 'sx_nightly')),
     ('soft_anti_affinity', 3),
-    mark.priorities('nightly', 'domain_sanity')(('anti_affinity', 2)),   # For system with 2+ hypervisors
+    param('anti_affinity', 2, marks=mark.priorities('nightly', 'domain_sanity')),   # For system with 2+ hypervisors
     ('soft_affinity', 3),
 ])
 def test_server_group_boot_vms(policy, vms_num, check_system):
@@ -95,14 +96,14 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
         # assert srv_grp_id in server_group_output, \
         #     'Server group info does not appear in nova show for vm {}'.format(vm_id)
 
-        vm_hosts.append(nova_helper.get_vm_host(vm_id))
+        vm_hosts.append(vm_helper.get_vm_host(vm_id))
 
     for i in range(failed_num):
         LOG.tc_step("Boot vm{} in server group {} that's expected to fail".format(i, srv_grp_id))
-        code, vm_id, err, vol = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
-                                                  fail_ok=True, cleanup='function')
+        code, vm_id, err = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
+                                             fail_ok=True, cleanup='function')
 
-        nova_helper.get_vm_fault_message(vm_id)
+        vm_helper.get_vm_fault_message(vm_id)
         assert 1 == code, "Boot vm is not rejected"
 
     unique_vm_hosts = list(set(vm_hosts))
@@ -129,7 +130,7 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
                     assert 1 == code, "{} was not rejected. {}".format(action, output)
                 else:
                     assert 0 == code, "{} failed. {}".format(action, output)
-                vm_host = nova_helper.get_vm_host(vm)
+                vm_host = vm_helper.get_vm_host(vm)
                 vm_hosts_after_mig.append(vm_host)
                 vm_helper.wait_for_vm_pingable_from_natbox(vm)
 
@@ -292,7 +293,7 @@ def _test_server_group_launch_vms_in_parallel(policy, min_count, max_count, chec
         assert 1 == code, msg
         expt_err = SrvGrpErr.HOST_UNAVAIL_ANTI_AFFINITY
         for vm in vms:
-            fault = nova_helper.get_vm_fault_message(vm)
+            fault = vm_helper.get_vm_fault_message(vm)
             assert expt_err in fault
 
     elif policy == 'anti_affinity' and max_count > host_count:

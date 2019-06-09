@@ -115,7 +115,7 @@ def test_horizon_manage_volume_attachments(instances_pg):
     LOG.tc_step('Create new instance {}'.format(instance_name))
     mgmt_net_name = '-'.join([Tenant.get_primary()['tenant'], 'mgmt', 'net'])
     flavor_name = nova_helper.get_basic_flavor(rtn_id=False)
-    guest_img = GuestImages.DEFAULT_GUEST
+    guest_img = GuestImages.DEFAULT['guest']
     instances_pg.create_instance(instance_name,
                                  boot_source_type='Image',
                                  create_new_volume=False,

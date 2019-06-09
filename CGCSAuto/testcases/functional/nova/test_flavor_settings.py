@@ -1,6 +1,7 @@
 import re
 
-from pytest import fixture, mark
+from pytest import fixture, mark, param
+
 from utils.tis_log import LOG
 from consts.cgcs import FlavorSpec
 from keywords import nova_helper
@@ -23,7 +24,7 @@ def test_flavor_default_specs():
        - Check "aggregate_instance_extra_specs:storage": "local_image" is included in extra specs of the flavor
     """
     LOG.tc_step("Create flavor with minimal input.")
-    flavor = nova_helper.create_flavor(cleanup='function', add_extra_specs=False)[1]
+    flavor = nova_helper.create_flavor(cleanup='function', add_default_specs=False)[1]
 
     extra_specs = nova_helper.get_flavor_properties(flavor=flavor)
     LOG.tc_step("Check local_image storage is by default included in flavor extra specs")
@@ -31,11 +32,11 @@ def test_flavor_default_specs():
 
 
 @mark.parametrize(('extra_spec_name', 'values'), [
-    # mark.p3((FlavorSpec.STORAGE_BACKING, ['remote', 'local_image'])),     # feature deprecated
-    mark.p3((FlavorSpec.VCPU_MODEL, ['Nehalem', 'SandyBridge', 'Westmere', 'Haswell'])),
-    mark.p3((FlavorSpec.CPU_POLICY, ['dedicated', 'shared'])),
-    # mark.p3((FlavorSpec.NUMA_NODES, [1])),    # feature deprecated
-    mark.p2((FlavorSpec.AUTO_RECOVERY, ['true', 'false', 'TRUE', 'FALSE'])),
+    # param(FlavorSpec.STORAGE_BACKING, ['remote', 'local_image'], marks=mark.p3),     # feature deprecated
+    param(FlavorSpec.VCPU_MODEL, ['Nehalem', 'SandyBridge', 'Westmere', 'Haswell'], marks=mark.p3),
+    param(FlavorSpec.CPU_POLICY, ['dedicated', 'shared'], marks=mark.p3),
+    # param(FlavorSpec.NUMA_NODES, [1], marks=mark.p3),    # feature deprecated
+    param(FlavorSpec.AUTO_RECOVERY, ['true', 'false', 'TRUE', 'FALSE'], marks=mark.p3),
 ])
 def test_set_flavor_extra_specs(flavor_to_test, extra_spec_name, values):
     """

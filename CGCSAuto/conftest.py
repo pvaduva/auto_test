@@ -1,6 +1,6 @@
 import logging
 import os
-import threading    # Used for formatting logger
+# import threading    # Used for formatting logger
 
 from time import strftime, gmtime
 
@@ -89,9 +89,10 @@ def _write_results(res_in_tests, test_name):
     global test_count
     test_count += 1
     # reset tc_start and end time for next test case
-    build_id = ProjVar.get_var('BUILD_ID')
-    build_server = ProjVar.get_var('BUILD_SERVER')
-    build_job = ProjVar.get_var('JOB')
+    build_info = ProjVar.get_var('BUILD_INFO')
+    build_id = build_info.get('BUILD_ID', '')
+    build_server = build_info.get('BUILD_SERVER', '')
+    build_job = build_info.get('JOB', '')
 
     if ProjVar.get_var("REPORT_ALL") or ProjVar.get_var("REPORT_TAG"):
         if ProjVar.get_var('SESSION_ID'):
@@ -116,8 +117,8 @@ def _write_results(res_in_tests, test_name):
             if not upload_res:
                 with open(ProjVar.get_var("TCLIST_PATH"), mode='a') as f:
                     f.write('\tUPLOAD_UNSUCC')
-        except:
-            LOG.exception("Unable to upload test result to mongoDB! Test case: {}".format(test_name))
+        except Exception as e:
+            LOG.exception("Unable to upload test result to mongoDB! Test case: {}\n{}".format(test_name, e.__str__()))
 
     tc_start_time = None
 
@@ -231,8 +232,6 @@ def pytest_runtest_teardown(item):
     print('')
     message = 'Teardown started:'
     testcase_log(message, item.nodeid, log_type='tc_teardown')
-    # con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
-    # con_ssh.flush()
 
 
 def testcase_log(msg, nodeid, separator=None, log_type=None):
@@ -265,7 +264,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers",
                             "features(feature_name1, feature_name2, ...): mark impacted feature(s) for a test case.")
     config.addinivalue_line("markers",
-                            "priorities(sanity, cpe_sanity, p2, ...): mark priorities for a test case.")
+                            "priorities(, cpe_sanity, p2, ...): mark priorities for a test case.")
     config.addinivalue_line("markers",
                             "known_issue(CGTS-xxxx): mark known issue with JIRA ID or description if no JIRA needed.")
 
@@ -284,11 +283,10 @@ def pytest_configure(config):
     telnet_log = config.getoption('telnetlog')
 
     # Test case params on installed system
+    testcase_config = config.getoption('testcase_config')
     lab_arg = config.getoption('lab')
     natbox_arg = config.getoption('natbox')
     tenant_arg = config.getoption('tenant')
-    bootvms_arg = config.getoption('bootvms')
-    openstack_cli = config.getoption('openstackcli')
     horizon_visible = config.getoption('horizon_visible')
     remote_cli = config.getoption('remote_cli')
 
@@ -323,39 +321,58 @@ def pytest_configure(config):
     collect_netinfo = config.getoption('netinfo')
 
     # decide on the values of custom options based on cmdline inputs or values in setup_consts
-    lab = setups.get_lab_from_cmdline(lab_arg=lab_arg,
-                                      installconf_path=install_conf,
-                                      controller_arg=controller_arg,
-                                      compute_arg=compute_arg,
-                                      storage_arg=storage_arg,
-                                      lab_files_dir=lab_file_dir,
-                                      bs=build_server)
-    natbox = setups.get_natbox_dict(natbox_arg) if natbox_arg else setup_consts.NATBOX
-    tenant = setups.get_tenant_dict(tenant_arg) if tenant_arg else setup_consts.PRIMARY_TENANT
-    is_boot = True if bootvms_arg else setup_consts.BOOT_VMS
+
+    # Determine lab value.
+    lab = natbox = None
+    # Separate install conf parsing so that it's easy to take it out for upstream project
+    if install_conf and not lab_arg:
+        lab = setups.get_lab_from_installconf(installconf_path=install_conf,
+                                              controller_arg=controller_arg,
+                                              compute_arg=compute_arg,
+                                              storage_arg=storage_arg,
+                                              lab_files_dir=lab_file_dir,
+                                              bs=build_server)
+    if lab_arg:
+        lab = setups.get_lab_dict(lab_arg)
+    if natbox_arg:
+        natbox = setups.get_natbox_dict(natbox_arg)
+
+    lab, natbox = setups.setup_testcase_config(testcase_config, lab=lab, natbox=natbox)
+
+    tenant = tenant_arg.upper() if tenant_arg else 'TENANT1'
+
+    # Log collection params
     collect_all = True if collect_all else setup_consts.COLLECT_ALL
     always_collect = True if always_collect else False
+    if no_cgcs:
+        ProjVar.set_var(CGCS_DB=False)
+    if telnet_log:
+        ProjVar.set_var(COLLECT_TELNET=True)
+    if keystone_debug:
+        ProjVar.set_var(KEYSTONE_DEBUG=True)
+    if config.getoption('noconsolelog'):
+        global console_log
+        console_log = False
+
+    # If floating ip cannot be reached, whether to try to ping/ssh controller-0 unit IP, etc.
+    if collect_netinfo:
+        ProjVar.set_var(COLLECT_SYS_NET_INFO=True)
+
+    # Reporting params
     report_all = True if report_all else setup_consts.REPORT_ALL
-    openstack_cli = True if openstack_cli else False
+    if report_all:
+        report_tag = report_tag if report_tag else 'cgcsauto'
+
     horizon_visible = True if horizon_visible else False
     remote_cli = True if remote_cli else False
     if remote_cli:
         ProjVar.set_var(REMOTE_CLI=True)
-    if collect_netinfo:
-        ProjVar.set_var(COLLECT_SYS_NET_INFO=True)
-    if no_cgcs:
-        ProjVar.set_var(CGCS_DB=False)
-    if keystone_debug:
-        ProjVar.set_var(KEYSTONE_DEBUG=True)
+
     if col_kpi:
         ProjVar.set_var(COLLECT_KPI=True)
-    if telnet_log:
-        ProjVar.set_var(COLLECT_TELNET=True)
 
-    # Compliance configs:
-
+    # Compliance params:
     file_or_dir = config.getoption('file_or_dir')
-
     refstack_suite = dovetail_suite = config.getoption('compliance_suite')
     if 'refstack' in str(file_or_dir):
         if not refstack_suite:
@@ -388,65 +405,37 @@ def pytest_configure(config):
             log_dir = '{}/{}/{}'.format(resultlog, lab_name, time_stamp)
     os.makedirs(log_dir, exist_ok=True)
 
-    if report_all:
-        report_tag = report_tag if report_tag else 'cgcsauto'
-
-    # set project constants, which will be used when scp keyfile, and save ssh log, etc
-    ProjVar.set_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, is_boot=is_boot, collect_all=collect_all,
-                     report_all=report_all, report_tag=report_tag, openstack_cli=openstack_cli,
-                     always_collect=always_collect, horizon_visible=horizon_visible)
+    # set global constants, which will be used for the entire test session, etc
+    ProjVar.init_vars(lab=lab, natbox=natbox, logdir=log_dir, tenant=tenant, collect_all=collect_all,
+                      report_all=report_all, report_tag=report_tag, always_collect=always_collect,
+                      horizon_visible=horizon_visible)
 
     if lab.get('central_region'):
-        ProjVar.set_var(IS_DC=True)
-        ProjVar.set_var(PRIMARY_SUBCLOUD=config.getoption('subcloud'))
-
-    # put keyfile to home directory of localhost
-    if natbox['ip'] == 'localhost':
-        labname = ProjVar.get_var('LAB_NAME')
-        ProjVar.set_var(NATBOX_KEYFILE_PATH='~/priv_keys/keyfile_{}.pem'.format(labname))
+        ProjVar.set_var(IS_DC=True, PRIMARY_SUBCLOUD=config.getoption('subcloud'))
 
     if setups.is_vbox():
         ProjVar.set_var(IS_VBOX=True)
 
     InstallVars.set_install_var(lab=lab)
 
-    if config.getoption('noconsolelog'):
-        global console_log
-        console_log = False
-
     config_logger(log_dir, console=console_log)
 
     # set resultlog save location
     config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
-    # Add 'iter' to stress test names
-    # print("config_options: {}".format(config.option))
-    origin_file_dir = list(file_or_dir)
 
+    # Repeat test params
+    origin_file_dir = list(file_or_dir)
     if count > 1:
         print("Repeat following tests {} times: {}".format(count, file_or_dir))
         del file_or_dir[:]
         for f_or_d in origin_file_dir:
             for i in range(count):
                 file_or_dir.append(f_or_d)
-            # Note! Below code was a workaround for parametrized repeat.
-            # if '[' in f_or_d:
-            #     # Below setting seems to have no effect. Test did not continue upon collection failure.
-            #     # config.option.continue_on_collection_errors = True
-            #     # return
-            #     file_or_dir.remove(f_or_d)
-            #     origin_f_or_list = list(f_or_d)
-            #
-            #     for i in range(count):
-            #         extra_str = 'iter{}-'.format(i)
-            #         f_or_d_list = list(origin_f_or_list)
-            #         f_or_d_list.insert(f_or_d_list.index('[') + 1, extra_str)
-            #         new_f_or_d = ''.join(f_or_d_list)
-            #         file_or_dir.append(new_f_or_d)
-
-        # print("after modify: {}".format(config.option.file_or_dir))
 
 
 def pytest_addoption(parser):
+    testconf_help = "Absolute path for testcase config file. Template can be found from " \
+                    "CGCSAuto/utils/stx-test.conf"
     lab_help = "Lab to connect to. Valid input: Hardware labs - use lab name such as 'r720_2-7', 'yow-cgcs-r720-3_7';" \
                "if it's a new lab, use floating ip before it is added to the automation framework. " \
                "VBox - use vbox or the floating ip of your tis system if it is not 10.10.10.2. " \
@@ -454,18 +443,70 @@ def pytest_addoption(parser):
     tenant_help = "Default tenant to use when unspecified. Valid values: tenant1, tenant2, or admin"
     natbox_help = "NatBox to use. Default: NatBox for hardware labs. Valid values: nat_hw (for hardware labs), " \
                   "<your own natbox ip> (for VBox, choose the 128.224 ip), or nat_cumulus (for Cumulus)."
-    bootvm_help = "Boot 2 vms at the beginning of the test session as background VMs."
-    collect_all_help = "Run collect all on TiS server at the end of test session if any test fails."
+    changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
+    region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
+                  "e.g., creating vm on RegionTwo from RegionOne"
+    subcloud_help = "Default subcloud used for automated test when boot vm, etc. 'subcloud-1' if unspecified."
     report_help = "Upload results and logs to the test results database."
     tag_help = "Tag to be used for uploading logs to the test results database."
+    collect_all_help = "Run collect all on TiS server at the end of test session if any test fails."
     logdir_help = "Directory to store test session logs. If this is specified, then --resultlog will be ignored."
-    openstackcli_help = "Use openstack cli whenever possible. e.g., 'neutron net-list' > 'openstack network list'"
     stress_help = "Number of iterations to run specified testcase(s). Abort rest of the test session on first failure"
     count_help = "Repeat tests x times - NO stop on failure"
-    skip_help = "Comma seperated list of parts of the install to skip. Usage: --skip=labsetup,config_controller \n" \
-                "labsetup: Do not run lab_setup post lab install \n" \
-                "pxeboot: Don't modify pxeboot.cfg \n" \
-                "feed: skip setup of network feed"
+    telnetlog_help = "Collect telnet logs throughout the session"
+    horizon_visible_help = "Display horizon on screen"
+    remote_cli_help = 'Run testcases using remote CLI'
+    no_console_log = 'Print minimal console logs'
+
+    # Test session options on installed and configured STX system:
+    parser.addoption('--testcase-config', action='store', metavar='testcase_config', default=None, help=testconf_help)
+    parser.addoption('--lab', action='store', metavar='lab', default=None, help=lab_help)
+    parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
+    parser.addoption('--natbox', action='store', metavar='natbox', default=None, help=natbox_help)
+
+    # Optional test case args
+    parser.addoption('--changeadmin', '--change-admin', '--change_admin', dest='changeadmin', action='store_true',
+                     help=changeadmin_help)
+    parser.addoption('--remote-cli', '--remotecli', '--remote_cli', action='store_true', dest='remote_cli',
+                     help=remote_cli_help)
+    parser.addoption('--kpi', '--collect-kpi', '--collect_kpi', action='store_true', dest='col_kpi',
+                     help="Collect kpi for applicable test cases")
+
+    # Reporting options:
+    parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
+                     help=report_help)
+    parser.addoption('--report_tag', '--report-tag', action='store', dest='report_tag', metavar='tagname', default=None,
+                     help=tag_help)
+    parser.addoption('--sessiondir', '--session_dir', '--session-dir', action='store', dest='sessiondir',
+                     metavar='sessiondir', default=None, help=logdir_help)
+    parser.addoption('--no-cgcsdb', '--no-cgcs-db', '--nocgcsdb', action='store_true', dest='nocgcsdb')
+
+    # Debugging/Log collection options:
+    parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
+                     help=collect_all_help)
+    parser.addoption('--alwayscollect', '--always-collect', '--always_collect', dest='alwayscollect',
+                     action='store_true', help=collect_all_help)
+    parser.addoption('--keystone_debug', '--keystone-debug', action='store_true', dest='keystone_debug')
+    parser.addoption('--repeat', action='store', metavar='repeat', type=int, default=-1, help=stress_help)
+    parser.addoption('--stress', metavar='stress', action='store', type=int, default=-1, help=count_help)
+    parser.addoption('--no-teardown', '--no_teardown', '--noteardown', dest='noteardown', action='store_true')
+    parser.addoption('--telnetlog', '--telnet-log', dest='telnetlog', action='store_true', help=telnetlog_help)
+    parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
+                     help="Collect system networking info if scp keyfile fails")
+    parser.addoption('--horizon-visible', '--horizon_visible', action='store_true', dest='horizon_visible',
+                     help=horizon_visible_help)
+    parser.addoption('--noconsolelog', '--noconsole', '--no-console-log', '--no_console_log', '--no-console',
+                     '--no_console', action='store_true', dest='noconsolelog', help=no_console_log)
+
+    # Multi-region or distributed cloud options
+    parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
+    parser.addoption('--subcloud', action='store', metavar='subcloud', default='subcloud-1', help=subcloud_help)
+
+    ##################################
+    # Lab fresh_install or upgrade options #
+    ##################################
+
+    # Install
     installconf_help = "Full path of lab fresh_install configuration file. Template location: " \
                        "/folk/cgts/lab/autoinstall_template.ini"
     resumeinstall_help = 'Resume fresh_install of current lab from where it stopped/failed or from a given step'
@@ -477,61 +518,12 @@ def pytest_addoption(parser):
                 'pxe_iso: iso install flag'
     iso_path_help = 'Full path to ISO file. Default is <build-dir'
     ovs_help = 'Run using lab_setup_ovs.conf rather than lab_setup.conf (for StarlingX install)'
-    changeadmin_help = "Change password for admin user before test session starts. Revert after test session completes."
-    region_help = "Multi-region parameter. Use when connected region is different than region to test. " \
-                  "e.g., creating vm on RegionTwo from RegionOne"
-    subcloud_help = "Default subcloud used for automated test when boot vm, etc. 'subcloud-1' if unspecified."
-    telnetlog_help = "Collect telnet logs throughout the session"
-    horizon_visible_help = "Display horizon on screen"
-    remote_cli_help = 'Run testcases using remote CLI'
-    no_console_log = 'Print minimal console logs'
-    kuber_help = 'Use kubernetes option in config_controller)'
+    skip_help = "Comma seperated list of parts of the install to skip. Usage: --skip=labsetup,config_controller \n" \
+                "labsetup: Do not run lab_setup post lab install \n" \
+                "pxeboot: Don't modify pxeboot.cfg \n" \
+                "feed: skip setup of network feed"
+    kuber_help = 'Use kubernetes option in config_controller'
 
-    # Common reporting options:
-    parser.addoption('--collectall', '--collect_all', '--collect-all', dest='collectall', action='store_true',
-                     help=collect_all_help)
-    parser.addoption('--alwayscollect', '--always-collect', '--always_collect', dest='alwayscollect',
-                     action='store_true', help=collect_all_help)
-    parser.addoption('--reportall', '--report_all', '--report-all', dest='reportall', action='store_true',
-                     help=report_help)
-    parser.addoption('--report_tag', '--report-tag', action='store', dest='report_tag', metavar='tagname', default=None,
-                     help=tag_help)
-    parser.addoption('--sessiondir', '--session_dir', '--session-dir', action='store', dest='sessiondir',
-                     metavar='sessiondir', default=None, help=logdir_help)
-    parser.addoption('--no-cgcsdb', '--no-cgcs-db', '--nocgcsdb', action='store_true', dest='nocgcsdb')
-
-    # Test session options on installed lab:
-    parser.addoption('--lab', action='store', metavar='lab', default=None, help=lab_help)
-    parser.addoption('--tenant', action='store', metavar='tenantname', default=None, help=tenant_help)
-    parser.addoption('--natbox', action='store', metavar='natbox', default=None, help=natbox_help)
-    parser.addoption('--changeadmin', '--change-admin', '--change_admin', dest='changeadmin', action='store_true',
-                     help=changeadmin_help)
-    parser.addoption('--bootvms', '--boot_vms', '--boot-vms', dest='bootvms', action='store_true', help=bootvm_help)
-    parser.addoption('--openstackcli', '--openstack_cli', '--openstack-cli', action='store_true', dest='openstackcli',
-                     help=openstackcli_help)
-    parser.addoption('--repeat', action='store', metavar='repeat', type=int, default=-1, help=stress_help)
-    parser.addoption('--stress', metavar='stress', action='store', type=int, default=-1, help=count_help)
-    parser.addoption('--no-teardown', '--no_teardown', '--noteardown', dest='noteardown', action='store_true')
-    parser.addoption('--keystone_debug', '--keystone-debug', action='store_true', dest='keystone_debug')
-    parser.addoption('--kpi', '--collect-kpi', '--collect_kpi', action='store_true', dest='col_kpi',
-                     help="Collect kpi for applicable test cases")
-    parser.addoption('--region', action='store', metavar='region', default=None, help=region_help)
-    parser.addoption('--subcloud', action='store', metavar='subcloud', default='subcloud-1', help=subcloud_help)
-    parser.addoption('--telnetlog', '--telnet-log', dest='telnetlog', action='store_true', help=telnetlog_help)
-    parser.addoption('--netinfo', '--net-info', dest='netinfo', action='store_true',
-                     help="Collect system networking info if scp keyfile fails")
-    parser.addoption('--horizon-visible', '--horizon_visible', action='store_true', dest='horizon_visible',
-                     help=horizon_visible_help)
-    parser.addoption('--remote-cli', '--remotecli', '--remote_cli', action='store_true', dest='remote_cli',
-                     help=remote_cli_help)
-    parser.addoption('--noconsolelog', '--noconsole', '--no-console-log', '--no_console_log', '--no-console',
-                     '--no_console', action='store_true', dest='noconsolelog', help=no_console_log)
-
-    ##################################
-    # Lab fresh_install or upgrade options #
-    ##################################
-
-    # Install
     parser.addoption('--resumeinstall', '--resume-install', '--resume_install', dest='resumeinstall', action='store',
                      help=resumeinstall_help, const=True, nargs='?', default=False)
     parser.addoption('--stop', dest='stop_step', action='store', help='Which test step to stop at', default=None)
@@ -813,6 +805,8 @@ def config_logger(log_dir, console=True):
     stream_hdler.setLevel(console_level)
     LOG.addHandler(stream_hdler)
 
+    print("LOG DIR: {}".format(log_dir))
+
 
 def pytest_unconfigure(config):
     # collect all if needed
@@ -855,9 +849,10 @@ def pytest_unconfigure(config):
 
     try:
         tc_res_path = log_dir + '/test_results.log'
-        build_id = ProjVar.get_var('BUILD_ID')
-        build_job = ProjVar.get_var('JOB')
-        build_server = ProjVar.get_var('BUILD_SERVER')
+        build_info = ProjVar.get_var('BUILD_INFO')
+        build_id = build_info.get('BUILD_ID', '')
+        build_job = build_info.get('JOB', '')
+        build_server = build_info.get('BUILD_SERVER', '')
         session_id = ProjVar.get_var('SESSION_ID')
         session_tag = ProjVar.get_var('REPORT_TAG')
         system_config = ProjVar.get_var('SYS_TYPE')
@@ -910,18 +905,13 @@ def pytest_unconfigure(config):
     except Exception as e:
         LOG.warning("Unable to parse test steps. \nDetails: {}".format(e.__str__()))
 
-    # try:
-    #     setups.list_migration_history(con_ssh=con_ssh)
-    # except:
-    #     LOG.warning("Failed to run nova migration-list")
-
     if test_count > 0 and (ProjVar.get_var('ALWAYS_COLLECT') or (has_fail and ProjVar.get_var('COLLECT_ALL'))):
         # Collect tis logs if collect all required upon test(s) failure
         # Failure on collect all would not change the result of the last test case.
         try:
             setups.collect_tis_logs(con_ssh)
-        except:
-            LOG.warning("'collect all' failed.")
+        except Exception as e:
+            LOG.warning("'collect all' failed. {}".format(e.__str__()))
 
     ssh_list = ControllerClient.get_active_controllers(fail_ok=True, current_thread_only=True)
     for con_ssh_ in ssh_list:
@@ -938,28 +928,28 @@ def pytest_collection_modifyitems(items):
 
     for item in items:
         # re-order tests:
-        trylast_marker = item.get_marker('trylast')
-        abslast_marker = item.get_marker('abslast')
+        trylast_marker = item.get_closest_marker('trylast')
+        abslast_marker = item.get_closest_marker('abslast')
 
         if abslast_marker:
             absolute_last.append(item)
         elif trylast_marker:
             move_to_last.append(item)
 
-        priority_marker = item.get_marker('priorities')
+        priority_marker = item.get_closest_marker('priorities')
         if priority_marker is not None:
             priorities = priority_marker.args
             for priority in priorities:
                 item.add_marker(eval("pytest.mark.{}".format(priority)))
 
-        feature_marker = item.get_marker('features')
+        feature_marker = item.get_closest_marker('features')
         if feature_marker is not None:
             features = feature_marker.args
             for feature in features:
                 item.add_marker(eval("pytest.mark.{}".format(feature)))
 
         # known issue marker
-        known_issue_mark = item.get_marker('known_issue')
+        known_issue_mark = item.get_closest_marker('known_issue')
         if known_issue_mark is not None:
             issue = known_issue_mark.args[0]
             msg = "{} has a workaround due to {}".format(item.nodeid, issue)
@@ -1081,7 +1071,7 @@ def global_setup():
 #####################################
 
 
-def pytest_sessionfinish(session):
+def pytest_sessionfinish():
     if ProjVar.get_var('TELNET_THREADS'):
         threads, end_event = ProjVar.get_var('TELNET_THREADS')
         end_event.set()

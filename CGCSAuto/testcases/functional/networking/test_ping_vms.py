@@ -1,8 +1,8 @@
-from pytest import mark
+from pytest import mark, param
 
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, GuestImages
-from keywords import vm_helper, glance_helper, nova_helper, network_helper, cinder_helper, check_helper
+from consts.cgcs import FlavorSpec
+from keywords import vm_helper, glance_helper, nova_helper, network_helper, cinder_helper
 
 
 def id_gen(val):
@@ -41,12 +41,12 @@ def _compose_nics(vifs, net_ids, image_id, guest_os):
 
 @mark.parametrize(('guest_os', 'vm1_vifs', 'vm2_vifs'), [
     # ('cgcs-guest', 'avp', 'virtio'),
-    mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')(('tis-centos-guest', 'virtio', 'virtio')),
-    mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')(('tis-centos-guest', ('virtio', 'avp', 'virtio'), ('e1000', 'e1000', 'avp'))),
-    mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')(('ubuntu_14', 'virtio', 'virtio')),
+    param('tis-centos-guest', 'virtio', 'virtio', marks=mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')),
+    param('tis-centos-guest', ('virtio', 'avp', 'virtio'), ('e1000', 'e1000', 'avp'), marks=mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')),
+    param('ubuntu_14', 'virtio', 'virtio', marks=mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')),
     ('ubuntu_14', 'e1000', 'virtio'),
 ], ids=id_gen)
-def test_ping_between_two_vms(guest_os, vm1_vifs, vm2_vifs, skip_for_ovs):
+def test_ping_between_two_vms(guest_os, vm1_vifs, vm2_vifs, check_avs_pattern):
     """
     Ping between two vms with given vif models
 

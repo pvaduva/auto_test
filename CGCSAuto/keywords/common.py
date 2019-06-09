@@ -5,6 +5,7 @@
 import os
 import re
 import time
+from contextlib import contextmanager
 from datetime import datetime
 
 import pexpect
@@ -13,6 +14,8 @@ from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import Prompt
 from consts.filepaths import WRSROOT_HOME
 from consts.proj_vars import ProjVar
+from keywords import security_helper
+from utils import exceptions
 from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, get_cli_client
 from utils.tis_log import LOG
 
@@ -141,7 +144,7 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
 
 
 def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=900, is_dir=False,
-                                              multi_files=False, con_ssh=None):
+                                              con_ssh=None):
 
     """
     SCP file or files under a directory from test server to TiS server
@@ -556,7 +559,7 @@ def collect_software_logs(con_ssh=None):
     con_ssh.send('collect all')
 
     expect_list = ['.*password for wrsroot:', 'collecting data.', con_ssh.prompt]
-    index_1 = con_ssh.expect(expect_list, timeout=10)
+    index_1 = con_ssh.expect(expect_list, timeout=20)
     if index_1 == 2:
         LOG.error("Something is wrong with collect all. Check ssh console log for detail.")
         return
@@ -564,7 +567,7 @@ def collect_software_logs(con_ssh=None):
         con_ssh.send(con_ssh.password)
         con_ssh.expect('collecting data')
 
-    index_2 = con_ssh.expect(['/scratch/ALL_NODES.*', con_ssh.prompt], timeout=900)
+    index_2 = con_ssh.expect(['/scratch/ALL_NODES.*', con_ssh.prompt], timeout=1200)
     if index_2 == 0:
         output = con_ssh.cmd_output
         con_ssh.expect()
@@ -696,7 +699,7 @@ def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=Tru
         else:
             tmp_time = ssh_client.exec_cmd(tmp_cmd, fail_ok=False, prefix_space=prefix_space)[1]
 
-        if re.search('\dT\d', tmp_time):
+        if re.search(r'\dT\d', tmp_time):
             start_time = start_time.strip().replace(' ', 'T')
         else:
             start_time = start_time.strip().replace('T', ' ')
@@ -714,3 +717,61 @@ def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=Tru
         out = ssh_client.exec_cmd(cmd, fail_ok=True, prefix_space=prefix_space)[1]
 
     return out
+
+
+@contextmanager
+def ssh_to_remote_node(host, username=None, password=None, prompt=None, ssh_client=None, use_telnet=False,
+                       telnet_session=None):
+    """
+    ssh to a external node from sshclient.
+
+    Args:
+        host (str|None): hostname or ip address of remote node to ssh to.
+        username (str):
+        password (str):
+        prompt (str):
+        ssh_client (SSHClient): client to ssh from
+        use_telnet:
+        telnet_session:
+
+    Returns (SSHClient): ssh client of the host
+
+    Examples: with ssh_to_remote_node('128.224.150.92) as remote_ssh:
+                  remote_ssh.exec_cmd(cmd)
+\    """
+
+    if not host:
+        raise exceptions.SSHException("Remote node hostname or ip address must be provided")
+
+    if use_telnet and not telnet_session:
+        raise exceptions.SSHException("Telnet session cannot be none if using telnet.")
+
+    if not ssh_client and not use_telnet:
+        ssh_client = ControllerClient.get_active_controller()
+
+    if not use_telnet:
+        default_user, default_password = security_helper.LinuxUser.get_current_user_password()
+    else:
+        default_user = HostLinuxCreds.get_user()
+        default_password = HostLinuxCreds.get_password()
+
+    user = username if username else default_user
+    password = password if password else default_password
+    if use_telnet:
+        original_host = telnet_session.exec_cmd('hostname')[1]
+    else:
+        original_host = ssh_client.host
+
+    if not prompt:
+        prompt = '.*' + host + r'\:~\$'
+
+    remote_ssh = SSHClient(host, user=user, password=password, initial_prompt=prompt)
+    remote_ssh.connect()
+    current_host = remote_ssh.host
+    if not current_host == host:
+        raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, host))
+    try:
+        yield remote_ssh
+    finally:
+        if current_host != original_host:
+            remote_ssh.close()

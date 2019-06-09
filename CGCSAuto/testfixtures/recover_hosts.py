@@ -99,14 +99,14 @@ class HostsToRecover():
 
     @staticmethod
     def _recover_hosts(hostnames, scope):
-        if system_helper.is_simplex():
+        if system_helper.is_aio_simplex():
             LOG.fixture_step('{} Recover simplex host'.format(scope))
             host_helper.recover_simplex(fail_ok=False)
             return
 
         # Recover hosts for non-simplex system
         hostnames = sorted(set(hostnames))
-        table_ = table_parser.table(cli.system('host-list'))
+        table_ = table_parser.table(cli.system('host-list')[1])
         table_ = table_parser.filter_table(table_, hostname=hostnames)
 
         # unlocked_hosts = table_parser.get_values(table_, 'hostname', administrative='unlocked')

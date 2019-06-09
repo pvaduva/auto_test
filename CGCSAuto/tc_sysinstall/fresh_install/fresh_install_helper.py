@@ -5,18 +5,17 @@ import time
 from pytest import skip
 
 import setups
-from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \
-    keystone_helper
 from utils import cli
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto
 from consts.timeout import InstallTimeout, HostTimeout
-from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState, VSWITCH_TYPES
+from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState, VSwitchType
 from consts.filepaths import BuildServerPath, WRSROOT_HOME, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
-
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \
+    keystone_helper
 
 DEPLOY_TOOL = 'deploy'
 DEPLOY_SOUCE_PATH = '/folk/cgts/lab/bin/'
@@ -51,52 +50,51 @@ def reset_global_vars():
     return lab_setup_count_, completed_resume_step_
 
 
-def set_preinstall_projvars(build_dir, build_server):
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
-    ProjVar.set_var(BUILD_SERVER=build_server.name + '.wrs.com')
-    set_build_job(build_dir=build_dir)
-    set_build_id(build_dir=build_dir, build_server_conn=build_server.ssh_conn)
+#
+# def set_preinstall_projvars(build_dir, build_server):
+#     ProjVar.set_var(SOURCE_OPENRC=True)
+#     ProjVar.set_var(BUILD_SERVER=build_server.name)
+#     # set_build_job(build_dir=build_dir)
+#     set_build_id(build_dir=build_dir, build_server_conn=build_server.ssh_conn)
 
 
-def set_build_job(build_dir):
-    job_regex = r"(CGCS_\d+.\d+_Host)|(TC_\d+.\d+_Host)"
-    match = re.search(job_regex, build_dir)
-    if match:
-        job = match.group(0)
-        ProjVar.set_var(JOB=job)
+# def set_build_job(build_dir):
+#     job_regex = r"(CGCS_\d+.\d+_Host)|(TC_\d+.\d+_Host)"
+#     match = re.search(job_regex, build_dir)
+#     if match:
+#         job = match.group(0)
+#         ProjVar.set_var(JOB=job)
+#
+#         return job
+#     else:
+#         ProjVar.set_var(JOB='n/a')
+#
+#         return 'n/a'
 
-        return job
-    else:
-        ProjVar.set_var(JOB='n/a')
 
-        return 'n/a'
-
-
-def set_build_id(build_dir, build_server_conn=None):
-    id_regex = r'\d+-\d+-\d+_\d+-\d+-\d+'
-
-    if build_dir.endswith("/"):
-        build_dir = build_dir[:-1]
-    rc, output = build_server_conn.exec_cmd("readlink {}".format(build_dir))
-    if rc == 0:
-        output_parts = output.split("/")
-        build_dir_parts = build_dir.split("/")
-        for part in output_parts:
-            if part not in build_dir_parts:
-                if re.search(id_regex, part):
-                    ProjVar.set_var(BUILD_ID=part)
-
-                    return part
-    else:
-        match = re.search(id_regex, build_dir)
-        if match:
-            ProjVar.set_var(BUILD_ID=match.group(0))
-
-            return match.group(0)
-        else:
-            ProjVar.set_var("n/a")
-
-            return "n/a"
+# def set_build_id(build_dir, build_server_conn=None):
+#     id_regex = r'\d+-\d+-\d+_\d+-\d+-\d+'
+#
+#     if build_dir.endswith("/"):
+#         build_dir = build_dir[:-1]
+#     rc, output = build_server_conn.exec_cmd("readlink {}".format(build_dir))
+#     if rc == 0:
+#         output_parts = output.split("/")
+#         build_dir_parts = build_dir.split("/")
+#         for part in output_parts:
+#             if part not in build_dir_parts:
+#                 if re.search(id_regex, part):
+#                     ProjVar.set_var(BUILD_ID=part)
+#
+#                     return part
+#     else:
+#         match = re.search(id_regex, build_dir)
+#         build_id = 'n/a'
+#         if match:
+#             build_id = match.group(0)
+#
+#         ProjVar.set_var(BUILD_ID=match.group(0))
+#         return build_id
 
 
 def do_step(step_name=None):
@@ -157,7 +155,6 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
                                        low_latency=low_latency, patch_dir_paths=patch_dir,
                                        bld_server_conn=patch_server_conn, init_global_vars=init_global_vars)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
-
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -165,15 +162,16 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
 def download_lab_files(lab_files_server, build_server, guest_server, sys_version=None, sys_type=None,
                        lab_files_dir=None, load_path=None, guest_path=None, helm_chart_server=None, license_path=None,
                        lab=None, final_step=None):
-
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
-    if load_path is None:
-        load_path = set_load_path(build_server_conn=build_server.ssh_conn, sys_version=sys_version)
-    if not load_path.endswith("/"):
-        load_path += "/"
+
     if not sys_version:
         sys_version = ProjVar.get_var('SW_VERSION')
-        sys_version = sys_version[0] if sys_version else 'default'
+        sys_version = sys_version[-1] if sys_version else 'default'
+
+    if load_path is None:
+        load_path = set_load_path(sys_version=sys_version)
+    if not load_path.endswith("/"):
+        load_path += "/"
 
     if guest_path is None or guest_path == BuildServerPath.DEFAULT_GUEST_IMAGE_PATH:
         guest_path = set_guest_image_var(sys_version=sys_version)
@@ -240,21 +238,21 @@ def set_license_var(sys_version=None, sys_type=None):
     return license_path
 
 
-def set_load_path(build_server_conn, sys_version=None):
+def set_load_path(sys_version=None):
     if sys_version is None:
-        sys_version = ProjVar.get_var('SW_VERSION')[0]
+        sys_version = ProjVar.get_var('SW_VERSION')[-1]
     host_build_path = install_helper.get_default_latest_build_path(version=sys_version)
     load_path = host_build_path + "/"
 
     InstallVars.set_install_var(tis_build_dir=host_build_path)
-    set_build_id(host_build_path, build_server_conn)
+    ProjVar.set_var(BUILD_PATH=load_path)
 
     return load_path
 
 
 def set_guest_image_var(sys_version=None):
     if sys_version is None:
-        sys_version = ProjVar.get_var('SW_VERSION')[0]
+        sys_version = ProjVar.get_var('SW_VERSION')[-1]
 
     sys_version = sys_version if sys_version in BuildServerPath.GUEST_IMAGE_PATHS else 'default'
     guest_path = BuildServerPath.GUEST_IMAGE_PATHS[sys_version]
@@ -265,8 +263,7 @@ def set_guest_image_var(sys_version=None):
 
 
 def configure_controller_(controller0_node, config_file='TiS_config.ini_centos', lab=None, banner=True, branding=True,
-                          ansible=False, final_step=None):
-
+                          final_step=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
     kubernetes = InstallVars.get_install_var("KUBERNETES")
@@ -276,7 +273,7 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
         controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
 
     ansible = True if controller0_node.telnet_conn.exec_cmd("test -f {}localhost.yml".format(WRSROOT_HOME),
-                                                            fail_ok=True)[0] == 0  else False
+                                                            fail_ok=True)[0] == 0 else False
     test_step = "Configure controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
@@ -286,7 +283,7 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
 
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
-    install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
+    # install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
     # WK Touch .this_didnt_work to avoid using heat for kubernetes
     controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
@@ -296,7 +293,7 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def unlock_active_controller(controller0_node,  lab=None, final_step=None):
+def unlock_active_controller(controller0_node, lab=None, final_step=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
     test_step = "unlock_active_controller"
@@ -305,7 +302,7 @@ def unlock_active_controller(controller0_node,  lab=None, final_step=None):
         if controller0_node.ssh_conn is None:
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-        sys_mode = system_helper.get_system_value(field="system_mode",  con_ssh=controller0_node.ssh_conn)
+        sys_mode = system_helper.get_system_values(fields="system_mode", con_ssh=controller0_node.ssh_conn)[0]
         LOG.info("unlocking {}".format(controller0_node.name))
         host_helper.unlock_host(host=controller0_node.name,
                                 available_only=False if sys_mode == "duplex-direct" else True,
@@ -318,10 +315,8 @@ def unlock_active_controller(controller0_node,  lab=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-
 def configure_controller(controller0_node, config_file='TiS_config.ini_centos', lab_setup_conf_file=None,
                          lab=None, banner=True, branding=True, final_step=None):
-
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
     kubernetes = InstallVars.get_install_var("KUBERNETES")
@@ -354,7 +349,7 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
         if controller0_node.ssh_conn is None:
             controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-        sys_mode = system_helper.get_system_value(field="system_mode",  con_ssh=controller0_node.ssh_conn)
+        sys_mode = system_helper.get_system_values(fields="system_mode", con_ssh=controller0_node.ssh_conn)[0]
         LOG.info("unlocking {}".format(controller0_node.name))
         host_helper.unlock_host(host=controller0_node.name,
                                 available_only=False if sys_mode == "duplex-direct" else True,
@@ -368,7 +363,6 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
 
 
 def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='subcloud-1', lab=None, final_step=None):
-
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
 
@@ -611,11 +605,11 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None, repeat=1, last_run=F
 
         if vswitch_type_from_config and vswitch_type != vswitch_type_from_config:
             con_ssh.exec_cmd("sed -i \'s/VSWITCH_TYPE=\"{}\"/VSWITCH_TYPE=\"{}\"/g\' {}.conf"
-                                 .format(vswitch_type_from_config, vswitch_type, conf_file))
+                             .format(vswitch_type_from_config, vswitch_type, conf_file))
         elif not vswitch_type_from_config:
             con_ssh.exec_cmd("echo \'VSWITCH_TYPE=\"{}\"\' >> {}.conf".format(vswitch_type, conf_file))
 
-        if vswitch_type == VSWITCH_TYPES.NONE:
+        if vswitch_type == VSwitchType.NONE:
             rc, output = con_ssh.exec_cmd("grep \'VSWITCH_PCPU=\' {}.conf".format(conf_file), fail_ok=True)
             if rc == 0:
                 con_ssh.exec_cmd("sed -i \"s/VSWITCH_PCPU=./VSWITCH_PCPU=0/g\" {}.conf".format(conf_file))
@@ -685,7 +679,6 @@ def get_resume_step(lab=None, install_progress_path=None):
 
 def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_type='pxe', files_path=None, lab=None,
                       patch_dir=None, patch_server_conn=None, final_step=None):
-
     if not subcloud:
         raise ValueError("The subcloud name must be provided")
 
@@ -757,7 +750,7 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
         time.sleep(20)
 
     else:
-        assert False, "The subcloud availability did not reach {} status after config"\
+        assert False, "The subcloud availability did not reach {} status after config" \
             .format(SubcloudStatus.AVAIL_ONLINE)
 
     LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, SubcloudStatus.AVAIL_ONLINE,
@@ -796,7 +789,7 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     boot_device = lab['boot_device_dict']
     hostnames = [node.host_name for node in subcloud_nodes if node.host_name != 'controller-0']
     boot_hosts(boot_device, hostnames=hostnames, wait_for_online=False)
-    host_helper.wait_for_hosts_ready(hostnames,  con_ssh=subcloud_controller0.ssh_conn.ssh_conn)
+    host_helper.wait_for_hosts_ready(hostnames, con_ssh=subcloud_controller0.ssh_conn.ssh_conn)
 
     run_lab_setup(conf_file=lab_setup_filename, con_ssh=subcloud_controller0.ssh_conn)
     run_lab_setup(conf_file=lab_setup_filename, con_ssh=subcloud_controller0.ssh_conn)
@@ -830,8 +823,8 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
     if name is None:
         name = 'subcloud'
 
-    ProjVar.set_var(source_credential=True)
-    if not controller0_node.ssh_conn._is_connected():
+    ProjVar.set_var(SOURCE_OPENRC=True)
+    if not controller0_node.ssh_conn.is_connected():
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
     existing_subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn)
@@ -840,7 +833,7 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
         managed = dc_helper.get_subclouds(name=name, avail="managed", con_ssh=controller0_node.ssh_conn)
         if name in managed:
             LOG.info("Subcloud {} is in managed status; unamanage subcloud before install".format(name))
-            dc_helper._manage_unmanage_subcloud(subcloud=name, con_ssh=controller0_node.ssh_conn)
+            dc_helper.manage_subcloud(subcloud=name, con_ssh=controller0_node.ssh_conn)
 
         return 0, [name]
 
@@ -857,7 +850,7 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
     if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
         controller0_node.ssh_conn.exec_cmd(cmd2)
     else:
-        assert False, "The subclouds text file {} is missing in system controller {}"\
+        assert False, "The subclouds text file {} is missing in system controller {}" \
             .format(subclouds_file, controller0_node.host_name)
 
     LOG.info("Generating subclouds config info from {}".format(subclouds_file))
@@ -960,7 +953,6 @@ def get_subcloud_nodes_from_lab_dict(subcloud_lab):
 
 
 def parse_subcloud_boot_info(subcloud_boot_info):
-
     subcloud_boots = {}
     for subcloud_boot in subcloud_boot_info:
         if len(subcloud_boot) == 0:
@@ -991,7 +983,7 @@ def is_dcloud_system_controller_healthy(system_controller_lab):
     if not controller0_node.ssh_conn:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    if controller0_node.ssh_conn._is_connected():
+    if controller0_node.ssh_conn.is_connected():
         rc, health = system_helper.get_system_health_query(controller0_node.ssh_conn)
         if rc == 0:
             LOG.info("System controller {} is healthy".format(system_controller_lab['name']))
@@ -1027,9 +1019,9 @@ def is_dcloud_system_controller_ipv6(controller0_node):
     if not controller0_node.ssh_conn:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    if controller0_node.ssh_conn._is_connected():
+    if controller0_node.ssh_conn.is_connected():
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
-        urls = keystone_helper.get_endpoints(rtn_val='URL', service_name='sysinv',
+        urls = keystone_helper.get_endpoints(field='URL', service_name='sysinv',
                                              service_type='platform', enabled='True',
                                              interface='admin', region='SystemController',
                                              con_ssh=controller0_node.ssh_conn)
@@ -1045,7 +1037,6 @@ def is_dcloud_system_controller_ipv6(controller0_node):
 
 
 def reset_controller_telnet_port(controller_node):
-
     if not controller_node:
         raise ValueError("Controller node object must be specified")
 
@@ -1076,7 +1067,7 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
             LOG.fixture_step("Get build info")
             active_controller_node.ssh_conn.connect(retry=True, retry_interval=10, retry_timeout=60)
             active_controller_node.ssh_conn.flush()
-            active_controller_node.ssh_conn.exec_cmd("cat /etc/build.info", fail_ok=True, expect_timeout=3)
+            system_helper.get_build_info(con_ssh=active_controller_node.ssh_conn)
     except (exceptions.SSHException, exceptions.SSHRetryTimeout, exceptions.SSHExecCommandFailed) as e_:
         LOG.error(e_.__str__())
 
@@ -1093,7 +1084,6 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
 
 
 def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
-
     skip_list = InstallVars.get_install_var("SKIP")
     active_con = lab["controller-0"] if not dist_cloud else lab['central_region']["controller-0"]
 
@@ -1124,7 +1114,6 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         file_server_obj = Node(host_ip=dc_float_ip, host_name='controller-0')
         file_server_obj.ssh_conn = install_helper.establish_ssh_connection(file_server_obj.host_ip)
         ipv6_config = InstallVars.get_install_var("IPV6_CONFIG")
-        set_preinstall_projvars(build_dir=build_dir, build_server=bs_obj)
         v6 = is_dcloud_system_controller_ipv6(file_server_obj)
         if not v6:
             if ipv6_config:
@@ -1139,7 +1128,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     else:
         file_server_obj = servers_map.get(file_server, bs_obj)
 
-    set_preinstall_projvars(build_dir=build_dir, build_server=bs_obj)
+    ProjVar.set_var(SOURCE_OPENRC=True)
 
     boot_type = InstallVars.get_install_var("BOOT_TYPE")
     if "usb" in boot_type:
@@ -1149,12 +1138,12 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
             controller0_node.host_nic = install_helper.get_nic_from_config(conf_server=file_server_obj)
 
     servers = {
-               "build": bs_obj,
-               "lab_files": file_server_obj,
-               "patches": servers_map.get(patch_server, bs_obj),
-               "guest": servers_map.get(guest_server, bs_obj),
-               "helm_charts": servers_map.get(helm_chart_server, bs_obj)
-               }
+        "build": bs_obj,
+        "lab_files": file_server_obj,
+        "patches": servers_map.get(patch_server, bs_obj),
+        "guest": servers_map.get(guest_server, bs_obj),
+        "helm_charts": servers_map.get(helm_chart_server, bs_obj)
+    }
     iso_host_obj = servers_map.get(iso_host, bs_obj)
 
     directories = {"build": build_dir,
@@ -1222,7 +1211,6 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
 
 def verify_install_uuid(lab=None):
-
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
 
@@ -1252,7 +1240,7 @@ def verify_install_uuid(lab=None):
     return True
 
 
-def wait_for_hosts_ready(hosts,  lab=None, timeout=1800):
+def wait_for_hosts_ready(hosts, lab=None, timeout=1800):
     """
 
     Args:
@@ -1276,11 +1264,11 @@ def wait_for_hosts_ready(hosts,  lab=None, timeout=1800):
 
     if not ready:
         LOG.warning("Nodes {} not ready checking floating ip issue ...".format(not_ready))
-        setups.arp_for_fip(lab, controller0_node.ssh_conn )
+        setups.arp_for_fip(lab, controller0_node.ssh_conn)
         kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout)
 
 
-def wait_for_hosts_to_be_online(hosts,  lab=None):
+def wait_for_hosts_to_be_online(hosts, lab=None):
     """
 
     Args:
@@ -1299,9 +1287,9 @@ def wait_for_hosts_to_be_online(hosts,  lab=None):
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
     LOG.info("Verifying {} is Locked, Disabled and Online ...".format(hosts))
-    host_helper.wait_for_hosts_states(hosts, check_interval=20, con_ssh=controller0_node.ssh_conn,
-                                      administrative=HostAdminState.LOCKED, operational=HostOperState.DISABLED,
-                                      availability=HostAvailState.ONLINE)
+    system_helper.wait_for_hosts_states(hosts, check_interval=20, con_ssh=controller0_node.ssh_conn,
+                                        administrative=HostAdminState.LOCKED, operational=HostOperState.DISABLED,
+                                        availability=HostAvailState.ONLINE)
 
 
 def get_host_ceph_osd_devices_from_conf(active_controller_node, host, conf_file='lab_setup.conf'):
@@ -1396,18 +1384,18 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf', final_step
     if do_step(test_step):
 
         controller0_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node, controller0_node.name)
-        controller1_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node,  controller1_node.name)
+        controller1_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node, controller1_node.name)
         assert len(controller0_disk_paths) > 0 and len(controller1_disk_paths) > 0, \
             "Unable to find OSD devices from conf file {} for the controllers".format(conf_file)
 
-        if host_helper.is_active_controller(controller0_node.name, con_ssh=active_node_ssh):
+        if system_helper.is_active_controller(controller0_node.name, con_ssh=active_node_ssh):
             hosts = [controller1_node.name, controller0_node.name]
             active_node = controller0_node
         else:
             hosts = [controller0_node.name, controller1_node.name]
             active_node = controller1_node
 
-        tier_uuid = storage_helper.get_storage_tier_values("ceph_cluster", con_ssh=active_node_ssh)
+        tier_uuid = storage_helper.get_storage_tiers("ceph_cluster", con_ssh=active_node_ssh)
 
         for host in hosts:
             LOG.info("Adding ceph osd to {} ..".format(host))
@@ -1417,10 +1405,10 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf', final_step
             disk_paths = controller1_disk_paths if host == 'controller-1' else controller0_disk_paths
 
             for disk_path in disk_paths:
-                disk_uuid = system_helper.get_disk_values(host, device_path=disk_path,
+                disk_uuid = storage_helper.get_host_disks(host, device_path=disk_path,
                                                           con_ssh=active_node_ssh)[0]
-                storage_helper.add_storage_ceph_osd(host, disk_uuid, tier_uuid=tier_uuid[0],
-                                                    con_ssh=active_node_ssh)
+                storage_helper.add_host_storage(host, disk_uuid, tier_uuid=tier_uuid[0],
+                                                con_ssh=active_node_ssh)
 
             LOG.info("Unlocking host {} after adding ceph osds ..".format(host))
             host_helper.unlock_host(host, con_ssh=active_node_ssh, check_containers=False)
@@ -1471,7 +1459,9 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
 
     Args:
         lab:
+        server
         stage:
+        final_step
 
     Returns:
 
@@ -1498,17 +1488,16 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
     if do_step(test_step):
 
         cmd = "test -f {}".format(deploy_tool_full_path)
-        run_deploy = False
         err_msg = ''
         if controller0_node.ssh_conn.exec_cmd(cmd)[0] != 0:
             # download deploy tool
 
             pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
-            rc,  output = server.ssh_conn.rsync(DEPLOY_SOUCE_PATH + DEPLOY_TOOL, controller0_node.host_ip,
-                                                DEPLOY_DEST_PATH, dest_user=HostLinuxCreds.get_user(),
-                                                dest_password=HostLinuxCreds.get_password(), pre_opts=pre_opts,
-                                                fail_ok=True)
+            rc, output = server.ssh_conn.rsync(DEPLOY_SOUCE_PATH + DEPLOY_TOOL, controller0_node.host_ip,
+                                               DEPLOY_DEST_PATH, dest_user=HostLinuxCreds.get_user(),
+                                               dest_password=HostLinuxCreds.get_password(), pre_opts=pre_opts,
+                                               fail_ok=True)
             if rc != 0:
                 err_msg = err_msg + output
             run_deploy = True if rc == 0 else False
@@ -1518,7 +1507,7 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
             run_deploy = True
 
         if run_deploy and controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
-             controller0_node.ssh_conn.exec_cmd("chmod 777 {}".format(deploy_tool_full_path))
+            controller0_node.ssh_conn.exec_cmd("chmod 777 {}".format(deploy_tool_full_path))
         else:
             LOG.warning("The deploy script  is missing in  controller-0: {}".format(err_msg))
 
@@ -1548,10 +1537,9 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
             unfiltered_dest_results_path = DEPLOY_RESULTS_DEST_PATH + "unfiltered/"
             if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
                 if not server.server_ip:
-                   rc, server_ip = server.ssh_conn.exec_cmd("hostname -i")
-                   if rc == 0:
-                       server.server_ip = server_ip.strip()
-
+                    rc, server_ip = server.ssh_conn.exec_cmd("hostname -i")
+                    if rc == 0:
+                        server.server_ip = server_ip.strip()
                 pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
                 rc, output = controller0_node.ssh_conn.rsync(yaml_files, server.server_ip, unfiltered_dest_results_path,
                                                              dest_user=SvcCgcsAuto.USER,
@@ -1567,9 +1555,9 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                 cmd = "ls {}".format(last_file)
                 if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
                     if not server.server_ip:
-                       rc, server_ip = server.ssh_conn.exec_cmd("hostname -i")
-                       if rc == 0:
-                           server.server_ip = server_ip.strip()
+                        rc, server_ip = server.ssh_conn.exec_cmd("hostname -i")
+                        if rc == 0:
+                            server.server_ip = server_ip.strip()
 
                     pre_opts = 'sshpass -p "{0}"'.format(SvcCgcsAuto.PASSWORD)
                     rc, output = controller0_node.ssh_conn.rsync(last_file, server.server_ip, DEPLOY_RESULTS_DEST_PATH,
@@ -1593,7 +1581,6 @@ def check_ansible_configured_mgmt_interface(controller0_node, lab):
     Args:
         controller0_node:
         lab:
-        ansible:
 
     Returns:
 

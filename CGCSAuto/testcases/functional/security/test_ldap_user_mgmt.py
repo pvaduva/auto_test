@@ -1,6 +1,6 @@
 import uuid
 
-from pytest import mark, skip, fixture
+from pytest import mark, skip, fixture, param
 from consts.auth import Tenant
 
 from utils.tis_log import LOG
@@ -52,8 +52,8 @@ def _make_sure_user_exist(user_name, sudoer=False, secondary_group=False, passwo
 
 
 @mark.parametrize(('user_name', 'change_own_password'), [
-    mark.p1(('ldapuser04', True)),
-    # mark.p1(('ldapuser05', False)),
+    param('ldapuser04', True, marks=mark.p1),
+    # param('ldapuser05', False, marks=mark.p1),
 ])
 def test_ldap_change_password(user_name, change_own_password):
     """
@@ -95,8 +95,8 @@ def test_ldap_change_password(user_name, change_own_password):
 
 
 @mark.parametrize(('user_name', 'pre_store_credential'), [
-    mark.p1(('ldapuser04', False)),
-    mark.p1(('ldapuser05', True)),
+    param('ldapuser04', False, marks=mark.p1),
+    param('ldapuser05', True, marks=mark.p1),
 ])
 def test_ldap_login_as_user(user_name, pre_store_credential):
     """
@@ -135,24 +135,16 @@ def test_ldap_login_as_user(user_name, pre_store_credential):
     LOG.info('OK, succeeded to login as the LDAP User: {}, password: {}'.format(user_name, password))
 
 
-@mark.parametrize(('user_name', ), [
-    mark.p1(('ldapuser04', )),
-])
-def test_ldap_delete_user(user_name):
+def test_ldap_delete_user():
     """
     Delete the LDAP User with the specified name
-
-    User Stories:   US70961
-
-    Args:
-        user_name (str):    User name
-
-    Returns:
 
     Steps:
         1   Create a LDAP User with the specified name (using the existing one if there's any)
         2   Delete the LDAP User
     """
+    user_name = 'ldapuser04'
+    
     LOG.tc_step('Make sure LDAP user exist:{}, create it if not'.format(user_name))
     if not _make_sure_user_exist(user_name, delete_if_existing=False):
         skip('No LDAP User:{} existing to delete'.format(user_name))
@@ -176,7 +168,7 @@ def test_ldap_delete_user(user_name):
 
 
 @mark.parametrize(('user_name', ), [
-    mark.p1(('ldapuser01', )),
+    param('ldapuser01', marks=mark.p1),
 ])
 def test_ldap_find_user(user_name):
     """
@@ -206,12 +198,12 @@ def test_ldap_find_user(user_name):
 
 
 @mark.parametrize(('user_name', 'sudoer', 'secondary_group', 'expiry_days', 'expiry_warn_days'), [
-    # mark.p1(('ldap_defaul_user01', None, None, None, None)),
-    mark.p1(('ldap_bash_user02', None, None, None, None)),
-    mark.p1(('ldap_bash_sudoer_user03', 'sudoer', None, None, None)),
-    mark.p1(('ldap_bash_sudoer_2nd_grp_user04', 'sudoer', 'secondary_group', None, None)),
-    mark.p1(('ldap_bash_sudoer_2nd_grp_2days_user05', 'sudoer', 'secondary_group', 2, None)),
-    mark.p1(('ldap_bash_sudoer_2nd_grp_2days_1day_user06', 'sudoer', 'secondary_group', 2, 1)),
+    # param('ldap_defaul_user01', None, None, None, None),
+    param('ldap_bash_user02', None, None, None, None, marks=mark.p1),
+    param('ldap_bash_sudoer_user03', 'sudoer', None, None, None, marks=mark.p1),
+    param('ldap_bash_sudoer_2nd_grp_user04', 'sudoer', 'secondary_group', None, None, marks=mark.p1),
+    param('ldap_bash_sudoer_2nd_grp_2days_user05', 'sudoer', 'secondary_group', 2, None, marks=mark.p1),
+    param('ldap_bash_sudoer_2nd_grp_2days_1day_user06', 'sudoer', 'secondary_group', 2, 1, marks=mark.p1),
 ])
 def test_ldap_create_user(user_name, sudoer, secondary_group, expiry_days, expiry_warn_days):
 
@@ -329,8 +321,8 @@ def test_ldap_user_password(ldap_user_for_test):
 
 
 @mark.parametrize(('user_name', 'sudo_type'), [
-    mark.p1(('ldapuser06', 'sudoer')),
-    mark.p1(('ldapuser07', 'non-sudoer')),
+    param('ldapuser06', 'sudoer', marks=mark.p1),
+    param('ldapuser07', 'non-sudoer', marks=mark.p1),
 ])
 def test_cmds_login_as_ldap_user(user_name, sudo_type):
     """
@@ -380,7 +372,7 @@ def test_cmds_login_as_ldap_user(user_name, sudo_type):
             assert code == 1, "Non-sudoer ldap user {} is able to run sudo cmd".format(user_name)
 
         LOG.tc_step("Execute openstack command 'openstack user list'")
-        cli.openstack('user list', auth_info=Tenant.get('admin'), ssh_client=ssh_con)
+        cli.openstack('user list', ssh_client=ssh_con, auth_info=Tenant.get('admin'))
 
     finally:
         if logged_in:
@@ -393,7 +385,7 @@ def test_cmds_login_as_ldap_user(user_name, sudo_type):
 
 @mark.parametrize('user_name', [
     mark.p1('admin'),
-    # mark.p1(('operator', 'operator', 'controller-0')),
+    # param('operator', 'operator', 'controller-0'),
 ])
 # TODO: disable for now and re-evaluate later when the features
 #  regarding 'admin' user are ready

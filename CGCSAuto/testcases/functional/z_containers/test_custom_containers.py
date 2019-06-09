@@ -10,7 +10,7 @@ from utils.clients.local import LocalHostClient
 
 from keywords import common, kube_helper, host_helper, system_helper, container_helper, keystone_helper
 from consts.filepaths import TestServerPath, WRSROOT_HOME, TiSPath
-from consts.cgcs import HostAvailState
+from consts.cgcs import HostAvailState, Container
 from consts.proj_vars import ProjVar
 from testfixtures.recover_hosts import HostsToRecover
 
@@ -22,13 +22,6 @@ HELM_TAR = 'hello-kitty.tgz'
 HELM_APP_NAME = 'hello-kitty'
 HELM_POD_FULL_NAME = 'hk-hello-kitty-hello-kit'
 HELM_MSG = '<h3>Hello Kitty World!</h3>'
-
-TEST_IMAGE = 'busybox'
-
-RESOURCE_CONSUMER_APP_NAME = 'resource-consumer'
-RESOURCE_CONSUMER_APP_PARA = '--image=gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4' + ' --expose' \
-                             + ' --service-overrides=' + "'{ " + '"spec": { "type": "LoadBalancer" } }' \
-                             + "' --port 8080 --requests='cpu=1000m,memory=1024Mi'"
 
 
 def controller_precheck(controller):
@@ -52,7 +45,7 @@ def copy_test_apps():
         common.scp_from_test_server_to_active_controller(source_path=TestServerPath.CUSTOM_APPS, con_ssh=con_ssh,
                                                          dest_dir=WRSROOT_HOME, timeout=60, is_dir=True)
 
-    if not system_helper.is_simplex():
+    if not system_helper.is_aio_simplex():
         dest_host = 'controller-1' if con_ssh.get_hostname() == 'controller-0' else 'controller-0'
         con_ssh.rsync(source=app_dir, dest_server=dest_host, dest=app_dir, timeout=60)
 
@@ -62,7 +55,7 @@ def copy_test_apps():
 @fixture()
 def delete_test_pod():
     LOG.info("Delete {} pod if exists".format(POD_NAME))
-    kube_helper.delete_pods(pod_names=POD_NAME, fail_ok=True)
+    kube_helper.delete_resources(resource_names=POD_NAME, fail_ok=True)
 
 
 @mark.platform_sanity
@@ -96,12 +89,12 @@ def test_launch_pod_via_kubectl(copy_test_apps, delete_test_pod, controller):
         kube_helper.apply_pod(file_path=app_path, pod_name=POD_NAME, check_both_controllers=True, con_ssh=con_ssh)
 
         LOG.tc_step("Delete {} pod and check it's removed from both controllers if applicable".format(POD_NAME))
-        kube_helper.delete_pods(pod_names=POD_NAME, con_ssh=con_ssh)
+        kube_helper.delete_resources(resource_names=POD_NAME, con_ssh=con_ssh)
 
 
 @fixture()
 def cleanup_app():
-    if container_helper.get_apps_values(apps=HELM_APP_NAME)[0]:
+    if container_helper.get_apps(application=HELM_APP_NAME):
         LOG.fixture_step("Remove {} app if applied".format(HELM_APP_NAME))
         container_helper.remove_app(app_name=HELM_APP_NAME)
 
@@ -147,7 +140,7 @@ def test_launch_app_via_sysinv(copy_test_apps, cleanup_app):
     assert re.match(r'\d+', node_port), "Unable to get nodePort via jsonpath '{}'".format(json_path)
 
     localhost = LocalHostClient(connect=True)
-    prefix = 'https' if keystone_helper.is_https_lab() else 'http'
+    prefix = 'https' if keystone_helper.is_https_enabled() else 'http'
     oam_ip = ProjVar.get_var('LAB')['floating ip']
     output_file = '{}/{}.html'.format(ProjVar.get_var('TEMP_DIR'), HELM_APP_NAME)
     localhost.exec_cmd('wget {}://{}:{} -O {}'.format(prefix, oam_ip, node_port, output_file), fail_ok=False)
@@ -163,11 +156,11 @@ def test_launch_app_via_sysinv(copy_test_apps, cleanup_app):
     container_helper.delete_app(app_name=app_name)
 
     LOG.tc_step("Wait for pod terminate")
-    kube_helper.wait_for_pods_gone(pod_names=HELM_POD_FULL_NAME, strict=False, check_interval=10, namespace='default')
+    kube_helper.wait_for_resources_gone(resource_names=HELM_POD_FULL_NAME, check_interval=10, namespace='default')
 
 
-def remove_cache_and_pull(con_ssh, name, fail_ok=False):
-    container_helper.remove_docker_images(images=(TEST_IMAGE, name), con_ssh=con_ssh, fail_ok=fail_ok)
+def remove_cache_and_pull(con_ssh, name, test_image, fail_ok=False):
+    container_helper.remove_docker_images(images=(test_image, name), con_ssh=con_ssh, fail_ok=fail_ok)
     container_helper.pull_docker_image(name=name, con_ssh=con_ssh)
 
 
@@ -198,6 +191,8 @@ def test_push_docker_image_to_local_registry(controller):
         - Pull test image from local registry
 
     """
+    test_image = 'busybox'
+    reg_addr = Container.LOCAL_DOCKER_REG
     host = controller_precheck(controller)
     controllers = system_helper.get_controllers(availability=(HostAvailState.AVAILABLE, HostAvailState.DEGRADED,
                                                               HostAvailState.ONLINE))
@@ -205,16 +200,14 @@ def test_push_docker_image_to_local_registry(controller):
 
     with host_helper.ssh_to_host(hostname=host) as con_ssh:
 
-        LOG.tc_step("Pull {} image from external on {} controller {}".format(TEST_IMAGE, controller, host))
-        image_id = container_helper.pull_docker_image(name=TEST_IMAGE, con_ssh=con_ssh)[1]
+        LOG.tc_step("Pull {} image from external on {} controller {}".format(test_image, controller, host))
+        image_id = container_helper.pull_docker_image(name=test_image, con_ssh=con_ssh)[1]
 
-        LOG.tc_step("Remove {} from local registry if exists".format(TEST_IMAGE))
-        con_ssh.exec_sudo_cmd('rm -rf {}/{}'.format(TiSPath.DOCKER_REPO, TEST_IMAGE))
-
-        reg_addr = "registry.local:9001"
-        target_name = '{}/{}'.format(reg_addr, TEST_IMAGE)
+        LOG.tc_step("Remove {} from local registry if exists".format(test_image))
+        con_ssh.exec_sudo_cmd('rm -rf {}/{}'.format(TiSPath.DOCKER_REPO, test_image))
 
         LOG.tc_step("Tag image with local registry")
+        target_name = '{}/{}'.format(reg_addr, test_image)
         container_helper.tag_docker_image(source_image=image_id, target_name=target_name, con_ssh=con_ssh)
 
         LOG.tc_step("Login to local docker registry and push test image from {} controller {}".format(controller, host))
@@ -222,7 +215,7 @@ def test_push_docker_image_to_local_registry(controller):
         container_helper.push_docker_image(target_name, con_ssh=con_ssh)
 
         LOG.tc_step("Remove cached test images and pull from local registry on {}".format(host))
-        remove_cache_and_pull(con_ssh=con_ssh, name=target_name)
+        remove_cache_and_pull(con_ssh=con_ssh, name=target_name, test_image=test_image)
         container_helper.remove_docker_images(images=(target_name, ), con_ssh=con_ssh)
 
         if controllers:
@@ -231,11 +224,11 @@ def test_push_docker_image_to_local_registry(controller):
                 LOG.tc_step("Remove cached test images on the other controller {} if exists and pull from local "
                             "registry".format(other_host))
                 container_helper.login_to_docker(registry=reg_addr, con_ssh=other_ssh)
-                remove_cache_and_pull(con_ssh=other_ssh, name=target_name, fail_ok=True)
+                remove_cache_and_pull(con_ssh=other_ssh, name=target_name, fail_ok=True, test_image=test_image)
                 container_helper.remove_docker_images(images=(target_name,), con_ssh=other_ssh)
 
-        LOG.tc_step("Cleanup {} from local docker registry after test".format(TEST_IMAGE))
-        con_ssh.exec_sudo_cmd('rm -rf {}/{}'.format(TiSPath.DOCKER_REPO, TEST_IMAGE))
+        LOG.tc_step("Cleanup {} from local docker registry after test".format(test_image))
+        con_ssh.exec_sudo_cmd('rm -rf {}/{}'.format(TiSPath.DOCKER_REPO, test_image))
 
 
 @mark.platform_sanity
@@ -268,66 +261,65 @@ def test_upload_charts_via_helm_upload(copy_test_apps):
 
 
 @fixture()
-def cleanup_kubectl_create_app(request):
-    LOG.info("Delete {} pod if exists before test run".format(RESOURCE_CONSUMER_APP_NAME))
-    if kube_helper.get_pods(namespace='default', name=RESOURCE_CONSUMER_APP_NAME, strict=False):
-        kube_helper.delete_pods(pod_names=RESOURCE_CONSUMER_APP_NAME, types_to_delete=('deployment', 'service'))
+def deploy_delete_kubectl_app(request):
+    app_name = 'resource-consumer'
+    app_params = '--image=gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4' + ' --expose' \
+                 + ' --service-overrides=' + "'{ " + '"spec": { "type": "LoadBalancer" } }' \
+                 + "' --port 8080 --requests='cpu=1000m,memory=1024Mi'"
 
-    def delete_kubectl_create_app():
-        LOG.info("Delete {} pod if exists after test run".format(RESOURCE_CONSUMER_APP_NAME))
-        if kube_helper.get_pods(namespace='default', name=RESOURCE_CONSUMER_APP_NAME, strict=False):
-            kube_helper.delete_pods(pod_names=RESOURCE_CONSUMER_APP_NAME, types_to_delete=('deployment', 'service'),
-                                    namespace='default')
-    request.addfinalizer(delete_kubectl_create_app)
+    LOG.fixture_step("Create {} test app by kubectl run".format(app_name))
+    sub_cmd = "run {}".format(app_name)
+    kube_helper.exec_kube_cmd(sub_cmd=sub_cmd, args=app_params, fail_ok=False)
+
+    LOG.fixture_step("Check {} test app is created ".format(app_name))
+    pod_name = kube_helper.get_pods(field='NAME', namespace='default', name=app_name, strict=False)[0]
+
+    def delete_app():
+        LOG.fixture_step("Delete {} pod if exists after test run".format(app_name))
+        kube_helper.delete_resources(resource_names=app_name, resource_types=('deployment', 'service'),
+                                     namespace='default', post_check=False)
+        kube_helper.wait_for_resources_gone(resource_names=pod_name, namespace='default')
+    request.addfinalizer(delete_app)
+
+    kube_helper.wait_for_pods_status(pod_names=pod_name, namespace='default', fail_ok=False)
+    return app_name, pod_name
 
 
 @mark.sanity
 @mark.cpe_sanity
 @mark.sx_sanity
-def test_kubectl_create_app(cleanup_kubectl_create_app):
+def test_host_operations_with_custom_kubectl_app(deploy_delete_kubectl_app):
     """
     Test create, delete custom app via kubectl run cmd
     Args:
-        cleanup_kubectl_create_app: fixture
+        deploy_delete_kubectl_app: fixture
+
+    Setups:
+        - Create kubectl app via kubectl run
 
     Test Steps:
-        - kubectl run to create test app
-        - Verify pod condition
-        - swact controller
-        - Verify pod condition
-        - lock/unlock standby controller
-        - Verify pod condition
-        - kubectl delete test app from system
+        - If duplex: swact and verify pod still Running
+        - Lock/unlock controller and verify pod still Running
+
+    Teardown:
+        - Delete kubectl deployment and service
+        - Verify pod is removed
 
     """
-    pod_app_name = RESOURCE_CONSUMER_APP_NAME
+    app_name, pod_name = deploy_delete_kubectl_app
+    active, standby = system_helper.get_active_standby_controllers()
 
-    LOG.tc_step("Create {} test app by kubectl run".format(pod_app_name))
-    sub_cmd = "run {}".format(pod_app_name)
-    args = RESOURCE_CONSUMER_APP_PARA
-    kube_helper.exec_kube_cmd(sub_cmd=sub_cmd, args=args, fail_ok=False)
-
-    LOG.tc_step("Verify whether {} test app is created ".format(pod_app_name))
-    pod_name = kube_helper.get_pods(namespace='default', name=pod_app_name, strict=False)[0]
-
-    kube_helper.wait_for_pods(pod_names=pod_name, namespace=None, fail_ok=False)
-
-    if system_helper.get_standby_controller_name():
+    if standby:
         LOG.tc_step("Swact active controller and verify {} test app is running ".format(pod_name))
         host_helper.swact_host()
-        kube_helper.wait_for_pods(pod_names=pod_name, namespace=None, fail_ok=False)
+        kube_helper.wait_for_pods_status(pod_names=pod_name, namespace='default', fail_ok=False)
 
-        standby_host = system_helper.get_standby_controller_name()
-        LOG.tc_step("Lock/unlock {} and verify {} test app is running.".format(standby_host, pod_name))
-        HostsToRecover.add(standby_host)
-        host_helper.lock_host(standby_host, swact=False)
+    LOG.tc_step("Lock/unlock {} and verify {} test app is running.".format(active, pod_name))
+    HostsToRecover.add(active)
+    host_helper.lock_host(active, swact=False)
 
-        # wait for services to stabilize before unlocking
-        time.sleep(20)
+    # wait for services to stabilize before unlocking
+    time.sleep(20)
 
-        # unlock standby controller node and verify controller node is successfully unlocked
-        host_helper.unlock_host(standby_host)
-        kube_helper.wait_for_pods(pod_names=pod_name, namespace=None, fail_ok=False)
-
-    LOG.tc_step("Delete {} test app".format(pod_app_name))
-    kube_helper.delete_pods(pod_names=pod_app_name, types_to_delete=('deployment', 'service'), namespace='default')
+    host_helper.unlock_host(active)
+    kube_helper.wait_for_pods_status(pod_names=pod_name, namespace=None, fail_ok=False)

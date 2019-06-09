@@ -1,12 +1,11 @@
 from pytest import fixture, skip, mark
 
-
 from consts import horizon
-from keywords import system_helper, filesystem_helper
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.horizon import helper
 from utils.horizon.pages.admin.platform import systemconfigurationpage
+from keywords import system_helper, storage_helper
 
 
 @fixture(scope='module')
@@ -25,7 +24,6 @@ def sys_config_pg(storage_precheck, admin_home_pg):
 
 
 def test_horizon_sysconfig_system_display(sys_config_pg):
-
     """
     Test the systems tag details display:
 
@@ -43,16 +41,17 @@ def test_horizon_sysconfig_system_display(sys_config_pg):
     LOG.tc_step('Check system details display')
     headers_map = sys_config_pg.systems_table.SYSTEMS_MAP
     expt_horizon = {}
-    for cli_header in headers_map:
+    cli_headers = list(headers_map.keys())
+    cli_values = system_helper.get_system_values(cli_headers, rtn_dict=True)
+    for cli_header in cli_headers:
         horizon_header = headers_map[cli_header]
-        expt_horizon[horizon_header] = system_helper.get_system_value(cli_header)
+        expt_horizon[horizon_header] = cli_values[cli_header]
     table_name = sys_config_pg.systems_table.name
     sys_config_pg.check_horizon_displays(table_name=table_name, expt_horizon=expt_horizon)
     horizon.test_result = True
 
 
 def test_horizon_sysconfig_addrpool_add_delete(sys_config_pg):
-
     """
     Test the address pools edit and display:
 
@@ -73,7 +72,7 @@ def test_horizon_sysconfig_addrpool_add_delete(sys_config_pg):
     """
     sys_config_pg.go_to_address_pools_tab()
     LOG.tc_step('Check address pools display')
-    addr_table = table_parser.table(cli.system('addrpool-list'))
+    addr_table = table_parser.table(cli.system('addrpool-list')[1])
     uuid_list = table_parser.get_values(addr_table, target_header='uuid')
     for uuid in uuid_list:
         expt_horizon = {}
@@ -108,7 +107,6 @@ def test_horizon_sysconfig_addrpool_add_delete(sys_config_pg):
 
 
 def test_horizon_sysconfig_dns_cancel_edit(sys_config_pg):
-
     """
     Test dns edit and display:
 
@@ -129,7 +127,7 @@ def test_horizon_sysconfig_dns_cancel_edit(sys_config_pg):
     dns_list = system_helper.get_dns_servers()
     for i in range(len(dns_list)):
         cli_dns = dns_list[i]
-        horizon_dns = sys_config_pg.get_dns_info(ip=dns_list[0], header='DNS Server {} IP'.format(i+1))
+        horizon_dns = sys_config_pg.get_dns_info(ip=dns_list[0], header='DNS Server {} IP'.format(i + 1))
         assert cli_dns == horizon_dns, 'DNS Server {} IP display incorrectly'
 
     LOG.tc_step('Edit DNS but not submit')
@@ -138,7 +136,6 @@ def test_horizon_sysconfig_dns_cancel_edit(sys_config_pg):
 
 
 def test_horizon_sysconfig_ntp_cancel_edit(sys_config_pg):
-
     """
     Test ntp edit and display:
 
@@ -156,11 +153,11 @@ def test_horizon_sysconfig_ntp_cancel_edit(sys_config_pg):
     """
     LOG.tc_step('Check NTP display')
     sys_config_pg.go_to_ntp_tab()
-    ntp_addr_list = system_helper.get_ntp_vals()[0].split(',')
+    ntp_addr_list = system_helper.get_ntp_values()[0].split(',')
     for i in range(len(ntp_addr_list)):
         cli_ntp = ntp_addr_list[i]
-        horizon_ntp = sys_config_pg.get_ntp_info(addr=ntp_addr_list[0], header='NTP Server {} Address'.format(i+1))
-        assert cli_ntp == horizon_ntp, 'NTP Server {} Address display incorrectly'.format(i+1)
+        horizon_ntp = sys_config_pg.get_ntp_info(addr=ntp_addr_list[0], header='NTP Server {} Address'.format(i + 1))
+        assert cli_ntp == horizon_ntp, 'NTP Server {} Address display incorrectly'.format(i + 1)
 
     LOG.tc_step('Edit NTP but not submit')
     sys_config_pg.edit_ntp(cancel=True)
@@ -168,7 +165,6 @@ def test_horizon_sysconfig_ntp_cancel_edit(sys_config_pg):
 
 
 def test_horizon_sysconfig_ptp_cancel_edit(sys_config_pg):
-
     """
     Test ptp edit and display:
 
@@ -188,7 +184,7 @@ def test_horizon_sysconfig_ptp_cancel_edit(sys_config_pg):
     LOG.tc_step('Check PTP display')
     headers_map = sys_config_pg.ptp_table.PTP_MAP
     cli_headers = list(headers_map.keys())
-    cli_vals = system_helper.get_ptp_vals(cli_headers)
+    cli_vals = system_helper.get_ptp_values(cli_headers)
     expt_horizon = {}
     for i in range(len(cli_headers)):
         horizon_header = headers_map[cli_headers[i]]
@@ -202,7 +198,6 @@ def test_horizon_sysconfig_ptp_cancel_edit(sys_config_pg):
 
 
 def test_horizon_sysconfig_oam_cancel_edit(sys_config_pg):
-
     """
     Test oam edit and display:
 
@@ -220,9 +215,9 @@ def test_horizon_sysconfig_oam_cancel_edit(sys_config_pg):
     """
     LOG.tc_step('Check OAM IP display')
     sys_config_pg.go_to_oam_ip_tab()
-    oam_table = table_parser.table(cli.system('oam-show'))
+    oam_table = table_parser.table(cli.system('oam-show')[1])
     expt_horizon = {}
-    if system_helper.get_system_value(field='system_mode') == 'simplex':
+    if system_helper.get_system_values(fields='system_mode')[0] == 'simplex':
         headers_map = sys_config_pg.oam_table.SIMPLEX_OAM_MAP
     else:
         headers_map = sys_config_pg.oam_table.OAM_MAP
@@ -255,14 +250,16 @@ def test_horizon_sysconfig_controllerfs_cancel_edit(sys_config_pg):
     """
     LOG.tc_step('Check controller filesystem display')
     sys_config_pg.go_to_controller_filesystem_tab()
-    controllerfs_table = table_parser.table(cli.system('controllerfs-list'))
+    controllerfs_table = table_parser.table(cli.system('controllerfs-list')[1])
     headers_map = sys_config_pg.controllerfs_table.CONTROLERFS_MAP
     storage_names = table_parser.get_values(controllerfs_table, target_header='FS Name')
+    cli_headers = list(headers_map)
     for name in storage_names:
         expt_horzion = {}
-        for cli_header in headers_map:
-            horizon_header = headers_map[cli_header]
-            expt_horzion[horizon_header] = filesystem_helper.get_controllerfs(filesystem=name, rtn_value=cli_header)
+        cli_values = storage_helper.get_controllerfs_values(filesystem=name, fields=cli_headers)[0]
+        for i in range(len(cli_headers)):
+            horizon_header = headers_map[cli_headers[i]]
+            expt_horzion[horizon_header] = cli_values[i]
         table_name = sys_config_pg.controllerfs_table.name
         sys_config_pg.check_horizon_displays(table_name=table_name, expt_horizon=expt_horzion)
 
@@ -273,7 +270,6 @@ def test_horizon_sysconfig_controllerfs_cancel_edit(sys_config_pg):
 
 @mark.usefixtures('storage_precheck')
 def test_horizon_sysconfig_ceph_storage_pools_cancel_edit(sys_config_pg):
-
     """
     Test ceph storage pools edit and display:
 
@@ -291,7 +287,7 @@ def test_horizon_sysconfig_ceph_storage_pools_cancel_edit(sys_config_pg):
     """
     LOG.tc_step('Check ceph storage pools display')
     sys_config_pg.go_to_ceph_storage_pools_tab()
-    ceph_table = table_parser.table(cli.system('storage-backend-show ceph-store'))
+    ceph_table = table_parser.table(cli.system('storage-backend-show ceph-store')[1])
     expt_horizon = {}
     headers_map = sys_config_pg.ceph_storage_pools_table.CEPH_STORAGE_POOLS_MAP
     table_name = sys_config_pg.ceph_storage_pools_table.name

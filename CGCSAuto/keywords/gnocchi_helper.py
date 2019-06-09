@@ -7,13 +7,13 @@ from consts.auth import Tenant
 from keywords import common
 
 
-def get_aggregated_measures(rtn_val='value', resource_type=None, metrics=None, start=None, stop=None, overlap=None,
+def get_aggregated_measures(field='value', resource_type=None, metrics=None, start=None, stop=None, overlap=None,
                             refresh=None, resource_ids=None, extra_query=None, fail_ok=False,
                             auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get measurements via 'openstack metric measures aggregation'
     Args:
-        rtn_val (str): header of a column
+        field (str): header of a column
         resource_type (str|None):  used in --resource-type <resource_type>
         metrics (str|list|tuple|None): used in --metric <metric1> [metric2 ...]
         start (str|None): used in --start <start>
@@ -55,29 +55,29 @@ def get_aggregated_measures(rtn_val='value', resource_type=None, metrics=None, s
     if query_str:
         args += ' --query "{}"'.format(query_str)
 
-    code, out = cli.openstack('metric measures aggregation', args, ssh_client=con_ssh, fail_ok=fail_ok, rtn_code=True,
+    code, out = cli.openstack('metric measures aggregation', args, ssh_client=con_ssh, fail_ok=fail_ok,
                               auth_info=auth_info)
     if code > 0:
         return 1, out
 
     table_ = table_parser.table(out)
-    return 0, table_parser.get_values(table_, rtn_val)
+    return 0, table_parser.get_values(table_, field)
 
 
-def get_metric_value(metric_id=None, metric_name=None, resource_id=None, rtn_val='id', fail_ok=False,
-                     auth_info=Tenant.get('admin'), con_ssh=None):
+def get_metric_values(metric_id=None, metric_name=None, resource_id=None, fields='id', fail_ok=False,
+                      auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Get metric info via 'openstack metric show'
     Args:
         metric_id (str|None):
         metric_name (str|None): Only used if metric_id is not provided
         resource_id (str|None):  Only used if metric_id is not provided
-        rtn_val (str): field name
+        fields (str|list|tuple): field name
         fail_ok (bool):
         auth_info:
         con_ssh:
 
-    Returns (str):
+    Returns (list):
 
     """
     if metric_id is None and metric_name is None:
@@ -93,21 +93,20 @@ def get_metric_value(metric_id=None, metric_name=None, resource_id=None, rtn_val
                 raise ValueError("resource_id needs to be provided when using metric_name")
             arg = '"{}"'.format(metric_name)
 
-    code, output = cli.openstack('openstack metric show', arg, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True,
-                                 fail_ok=fail_ok)
+    code, output = cli.openstack('openstack metric show', arg, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return output
 
     table_ = table_parser.table(output)
-    return table_parser.get_value_two_col_table(table_, rtn_val)
+    return table_parser.get_multi_values_two_col_table(table_, fields)
 
 
-def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=True, auth_info=Tenant.get('admin'),
+def get_metrics(field='id', metric_name=None, resource_id=None, fail_ok=True, auth_info=Tenant.get('admin'),
                 con_ssh=None):
     """
     Get metrics values via 'openstack metric list'
     Args:
-        rtn_val (str): header of the metric list table
+        field (str|list|tuple): header of the metric list table
         metric_name (str|None):
         resource_id (str|None):
         fail_ok (bool):
@@ -129,12 +128,22 @@ def get_metrics(rtn_val='id', metric_name=None, resource_id=None, fail_ok=True, 
 
     arg += grep_str
 
-    code, output = cli.openstack('metric list', arg, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True,
-                                 fail_ok=fail_ok)
+    code, output = cli.openstack('metric list', arg, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return []
 
-    lines = output.splitlines()
-    index = columns.index(rtn_val.lower())
-    vals = [line.split(sep=' ')[index] for line in lines]
-    return vals
+    values = []
+    convert = False
+    if isinstance(field, str):
+        field = (field, )
+        convert = True
+
+    for header in field:
+        lines = output.splitlines()
+        index = columns.index(header.lower())
+        vals = [line.split(sep=' ')[index] for line in lines]
+        values.append(vals)
+
+    if convert:
+        values = values[0]
+    return values

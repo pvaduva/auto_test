@@ -10,7 +10,6 @@ import pexpect
 from consts.auth import Tenant
 from consts.timeout import MTCTimeout
 from keywords import system_helper, host_helper
-from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
@@ -390,73 +389,6 @@ def is_controller_swacted(prev_active, prev_standby,
     return 0 == code
 
 
-def search_event(event_id='', type_id='', instance_id='', severity='', start='', end='', limit=30,
-                 con_ssh=None, auth_info=Tenant.get('admin'), strict=False, regex=False, **kwargs):
-    """
-    Search for event using fm event-list
-    Args:
-        event_id (str):       Event ID to search for
-        type_id (str):        Type ID
-        instance_id (str):    Entity Instance ID
-        severity (str):       valid values include: critical, major, minor
-        start (str):          start time of events
-        end (str):            end time of events
-        limit (int):          upper limit of number of records to get
-        con_ssh:        connection to the active controller
-        auth_info:      Authentitcation information
-        strict (bool):
-        regex (bool):   using regex
-        **kwargs:
-
-    Returns:
-        table of events matching the searching criteria
-    """
-
-    base_cmd = 'event-list --nowrap --nopaging --include_suppress --uuid'
-    criteria = []
-
-    if event_id:
-        criteria.append('event_log_id={}'.format(event_id))
-
-    if start:
-        criteria.append('start={}'.format(start))
-
-    if end:
-        criteria.append('end={}'.format(end))
-
-    if type_id:
-        criteria.append('entity_type_id="{}"'.format(type_id))
-
-    if instance_id:
-        criteria.append('entity_instance_id="{}"'.format(instance_id))
-
-    if severity:
-        criteria.append('severity="{}"'.format(severity))
-
-    limit = '-l {}'.format(limit) if limit >= 1 else ''
-
-    query = '' 
-    if criteria:
-        query = '-q "{}"'.format(';'.join(criteria))
-
-    cmd = '{} {} {}'.format(base_cmd, limit, query)
-
-    table = table_parser.table(cli.system(cmd, ssh_client=con_ssh, auth_info=auth_info))
-
-    matched = table
-    if table and table['values'] and kwargs:
-        matched = table_parser.filter_table(table, strict=strict, regex=regex, **kwargs)
-
-    if matched['values']:
-        pass
-    else:
-        LOG.warn('No matched events found')
-        LOG.info('search event: cmd={}'.format(cmd))
-        LOG.info('search event kwargs={}'.format(kwargs))
-
-    return matched
-
-
 def wait_for_sm_process_events(service, host, target_status, expecting=True, severity='major',
                                last_events=None, process_type='sm', timeout=60, interval=3, con_ssh=None):
 
@@ -571,8 +503,8 @@ def wait_for_sm_process_events(service, host, target_status, expecting=True, sev
     return -1, tuple()
 
 
-def _check_status_after_killing_process(service, host, target_status, expecting=True,
-                                        process_type='sm', last_events=None, con_ssh=None):
+def _check_status_after_killing_process(service, host, target_status, expecting=True, process_type='sm',
+                                        last_events=None, con_ssh=None, auth_info=Tenant.get('admin_platform')):
 
     LOG.info('check for process:{} on host:{} expecting status:{}, process_type:{}'.format(
         service, host, target_status, process_type))
@@ -601,15 +533,16 @@ def _check_status_after_killing_process(service, host, target_status, expecting=
     total_wait = 120 if expecting else 30
     time.sleep(1)
 
-    found = host_helper.wait_for_host_values(host, timeout=total_wait / 2, con_ssh=con_ssh, fail_ok=True, **expected)
+    found = system_helper.wait_for_host_values(host, timeout=total_wait / 2, con_ssh=con_ssh, fail_ok=True,
+                                                        auth_info=auth_info, **expected)
 
     if expecting and found:
         LOG.debug('OK, process:{} in status:{} as expected.'.format(service, target_status))
 
         LOG.debug('Next, wait and verify the sytstem recovers')
         expected = {'operational': 'enabled', 'availability': 'available'}
-        return host_helper.wait_for_host_values(
-            host, timeout=total_wait / 2, con_ssh=con_ssh, fail_ok=True, **expected)
+        return system_helper.wait_for_host_values(
+            host, timeout=total_wait / 2, con_ssh=con_ssh, auth_info=auth_info, fail_ok=True, **expected)
         # return True
 
     elif not expecting and found:
@@ -689,7 +622,7 @@ def check_impact(impact, service_name, host='', last_events=None,
         operational, available = impact.split('-')
         expected = {'operational': operational, 'available': available}
 
-        reached = host_helper.wait_for_host_values(host, timeout=timeout, con_ssh=con_ssh, fail_ok=True, **expected)
+        reached = system_helper.wait_for_host_values(host, timeout=timeout, con_ssh=con_ssh, fail_ok=True, **expected)
         if reached and expecting_impact:
             LOG.info('host {} reached status {} as expected after killing process {}'.format(
                 host, expected, service_name))
@@ -706,7 +639,7 @@ def check_impact(impact, service_name, host='', last_events=None,
 
             # todo: it's better to do this in parallel with process-monitoring
             expected = {'operational': 'enabled', 'available': ['available', 'degraded']}
-            reached = host_helper.wait_for_host_values(host, timeout=timeout, con_ssh=con_ssh, fail_ok=True, **expected)
+            reached = system_helper.wait_for_host_values(host, timeout=timeout, con_ssh=con_ssh, fail_ok=True, **expected)
 
             if reached:
                 LOG.info('Host:{} did not recover into status:{} in {} seconds'.format(host, expected, timeout))
@@ -733,7 +666,8 @@ def get_pmon_process_id(pid_file, host, con_ssh=None):
     return -1
 
 
-def get_process_info(name, cmd='', pid_file='', host='', process_type='sm', con_ssh=None):
+def get_process_info(name, cmd='', pid_file='', host='', process_type='sm', con_ssh=None,
+                     auth_info=Tenant.get('admin_platform')):
     """
     Get the information of the process with the specified name
 
@@ -744,6 +678,7 @@ def get_process_info(name, cmd='', pid_file='', host='', process_type='sm', con_
         host (str):     host on which the process resides
         process_type (str):  type of service/process, must be one of 'sm', 'pm', 'other'
         con_ssh:        ssh connection/client to the active controller
+        auth_info
 
     Returns:
 
@@ -751,7 +686,7 @@ def get_process_info(name, cmd='', pid_file='', host='', process_type='sm', con_
     LOG.info('name:{} cmd={} pid_file={} host={} process_type={}'.format(
         name, cmd, pid_file, host, process_type))
 
-    active_controller = system_helper.get_active_controller_name()
+    active_controller = system_helper.get_active_controller_name(con_ssh=con_ssh, auth_info=auth_info)
     if not host:
         host = active_controller
 
@@ -805,9 +740,8 @@ def is_process_running(pid, host, con_ssh=None, retries=3, interval=3):
     """
     cmd = 'ps -p {}'.format(pid)
     for _ in range(retries):
-        with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
-            # code, output = con.exec_sudo_cmd(cmd, fail_ok=True)
-            code, output = con.exec_cmd(cmd, fail_ok=True)
+        with host_helper.ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+            code, output = host_ssh.exec_cmd(cmd, fail_ok=True)
             if 0 != code:
                 LOG.warn('Process:{} DOES NOT exist, error:{}'.format(pid, output))
             else:
@@ -817,15 +751,16 @@ def is_process_running(pid, host, con_ssh=None, retries=3, interval=3):
     return False, ''
 
 
-def _get_last_events_timestamps(limit=1, event_log_id=None):
-    latest_events = system_helper.get_events_table(limit=limit, event_log_id=event_log_id, show_uuid=True)
+def _get_last_events_timestamps(limit=1, event_log_id=None, con_ssh=None, auth_info=Tenant.get('admin_platform')):
+    latest_events = system_helper.get_events_table(limit=limit, event_log_id=event_log_id, show_uuid=True,
+                                                   con_ssh=con_ssh, auth_info=auth_info)
 
     return latest_events
 
 
-def kill_sm_process_and_verify_impact(
-        name, cmd='', pid_file='', retries=2, impact='swact', host='controller-0', interval=20,
-        action_timeout=90, total_retries=3, process_type='sm', on_active_controller=True, con_ssh=None):
+def kill_sm_process_and_verify_impact(name, cmd='', pid_file='', retries=2, impact='swact', host='controller-0',
+                                      interval=20, action_timeout=90, total_retries=3, process_type='sm',
+                                      on_active_controller=True, con_ssh=None, auth_info=Tenant.get('admin_platform')):
     """
     Kill the process with the specified name and verify the system behaviors as expected
 
@@ -846,6 +781,7 @@ def kill_sm_process_and_verify_impact(
         process_type (str):     valid types are: sm, pmon, other
         on_active_controller (boolean):
         con_ssh:                ssh connection/client to the active controller
+        auth_info
 
     Returns: (pid, host)
         pid:
@@ -856,7 +792,8 @@ def kill_sm_process_and_verify_impact(
         host:
             the host tested on
     """
-    active_controller, standby_controller = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
+    active_controller, standby_controller = system_helper.get_active_standby_controllers(con_ssh=con_ssh,
+                                                                                         auth_info=auth_info)
 
     if on_active_controller:
         LOG.info('on active controller: {}, host:{}'.format(active_controller, host))
@@ -971,16 +908,17 @@ def kill_sm_process_and_verify_impact(
     return -3, host
 
 
-def wait_for_sm_dump_services_active(timeout=60, fail_ok=False, con_ssh=None):
+def wait_for_sm_dump_services_active(timeout=60, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin_platform')):
     """
     Wait for all services
     Args:
         timeout:
         fail_ok:
         con_ssh:
+        auth_info
 
     Returns:
 
     """
-    active_controller = system_helper.get_active_controller_name(con_ssh=con_ssh)
+    active_controller = system_helper.get_active_controller_name(con_ssh=con_ssh, auth_info=auth_info)
     return host_helper.wait_for_sm_dump_desired_states(controller=active_controller, timeout=timeout, fail_ok=fail_ok)

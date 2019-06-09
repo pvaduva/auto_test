@@ -6,18 +6,18 @@ import pytest
 
 from consts.auth import SvcCgcsAuto, HostLinuxCreds, Tenant
 from consts.build_server import Server, get_build_server_info
-from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN,\
+from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN, \
     TIS_BLD_DIR_REGEX, TITANIUM_BACKUP_FILE_PATTERN, BackupRestore
 from consts.filepaths import TiSPath, BuildServerPath, WRSROOT_HOME
 from consts.proj_vars import InstallVars, RestoreVars, ProjVar
 from consts.timeout import HostTimeout
-from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
 from setups import collect_tis_logs
 from utils import cli, table_parser
 from utils import node
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from utils import exceptions
+from keywords import storage_helper, install_helper, cinder_helper, host_helper, system_helper, common
 
 
 def collect_logs(con_ssh=None, fail_ok=True):
@@ -91,7 +91,7 @@ def pre_restore_checkup():
     tis_backup_files = []
     extra_controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
     controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
-                                                              initial_prompt=extra_controller_prompt,  fail_ok=True)
+                                                              initial_prompt=extra_controller_prompt, fail_ok=True)
 
     LOG.info('Collect logs before restore')
     if controller_conn:
@@ -160,7 +160,7 @@ def pre_restore_checkup():
         test_server_attr = dict()
         test_server_attr['name'] = SvcCgcsAuto.HOSTNAME.split('.')[0]
         test_server_attr['server_ip'] = SvcCgcsAuto.SERVER
-        test_server_attr['prompt'] = r'\[{}@{} {}\]\$ '\
+        test_server_attr['prompt'] = r'\[{}@{} {}\]\$ ' \
             .format(SvcCgcsAuto.USER, test_server_attr['name'], SvcCgcsAuto.USER)
 
         test_server_conn = install_helper.establish_ssh_connection(test_server_attr['name'], user=SvcCgcsAuto.USER,
@@ -388,8 +388,8 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
     base_cmd = 'host-lock'
     locked_offline = {'administrative': HostAdminState.LOCKED, 'availability': HostAvailState.OFFLINE}
 
-    for tried in range(1, max_tries+1):
-        hosts = [h for h in system_helper.get_hostnames(con_ssh=con_ssh, administrative='unlocked') if
+    for tried in range(1, max_tries + 1):
+        hosts = [h for h in system_helper.get_hosts(administrative='unlocked', con_ssh=con_ssh) if
                  h != 'controller-0']
         if not hosts:
             LOG.info('all hosts all locked except the controller-0 after tried:{}'.format(tried))
@@ -399,13 +399,13 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
         if tried > 1:
             cmd = base_cmd + ' -f'
 
-        locking = [] 
+        locking = []
         already_locked = 0
         for host in hosts:
             LOG.info('try:{} locking:{}'.format(tried, host))
-            admin_state = host_helper.get_hostshow_value(host, 'administrative', con_ssh=con_ssh)
+            admin_state = system_helper.get_host_values(host, 'administrative', con_ssh=con_ssh)[0]
             if admin_state != 'locked':
-                code, output = cli.system(cmd + ' ' + host, ssh_client=con_ssh, fail_ok=True, rtn_code=True)
+                code, output = cli.system(cmd + ' ' + host, ssh_client=con_ssh, fail_ok=True)
                 if 0 != code:
                     LOG.warn('Failed to lock host:{} using CLI:{}'.format(host, cmd))
                 else:
@@ -415,7 +415,7 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
 
         if locking:
             LOG.info('Wating for those accepted locking instructions to be locked:  try:{}'.format(tried))
-            host_helper.wait_for_hosts_states(locking, con_ssh=con_ssh, timeout=600, **locked_offline)
+            system_helper.wait_for_hosts_states(locking, con_ssh=con_ssh, timeout=600, **locked_offline)
 
         elif already_locked == len(hosts):
             LOG.info('all hosts all locked except the controller-0 after tried:{}'.format(tried))
@@ -430,7 +430,7 @@ def make_sure_all_hosts_locked(con_ssh, max_tries=5):
 
     cli.system('host-list', ssh_client=con_ssh)
 
-    code, output = cli.system('host-list', ssh_client=con_ssh, fail_ok=True, rtn_code=True)
+    code, output = cli.system('host-list', ssh_client=con_ssh, fail_ok=True)
     LOG.debug('code:{}, output:{}'.format(code, output))
 
 
@@ -451,9 +451,9 @@ def install_non_active_node(node_name, lab):
     install_helper.open_vlm_console_thread(node_name, boot_interface=boot_interfaces, vlm_power_on=True)
 
     LOG.info("Verifying {} is Locked, Disabled and Online ...".format(node_name))
-    host_helper.wait_for_hosts_states(node_name, administrative=HostAdminState.LOCKED,
-                                      operational=HostOperState.DISABLED,
-                                      availability=HostAvailState.ONLINE)
+    system_helper.wait_for_hosts_states(node_name, administrative=HostAdminState.LOCKED,
+                                        operational=HostOperState.DISABLED,
+                                        availability=HostAvailState.ONLINE)
 
     LOG.info("Unlocking {} ...".format(node_name))
     rc, output = host_helper.unlock_host(node_name, available_only=False)
@@ -573,13 +573,13 @@ def restore_cinder_backup(backup_id, volume_id, con_ssh):
 
     cmd = 'cinder backup-restore --volume {} {}'.format(volume_id, backup_id)
     rc, output = con_ssh.exec_cmd(cmd)
-    
+
     LOG.info('TODO: output: {}\ncmd:{}'.format(output, cmd))
     wait_for_backup_status(backup_id, target_status='available', con_ssh=con_ssh)
 
     target_volume_status = ['available', 'in-use']
     cinder_helper.wait_for_volume_status(volume_id, status=target_volume_status, con_ssh=con_ssh,
-                                         auth_info=Tenant.ADMIN)
+                                         auth_info=Tenant.get('admin'))
 
     return 0, 'Volume reached status: {}'.format(target_volume_status)
 
@@ -627,7 +627,7 @@ def create_dummy_rbd_images(volumes, con_ssh):
         if volume_status == 'in-use':
             in_use_volumes.append(volume_id)
             con_ssh.exec_cmd('cinder reset-state --state available ' + volume_id, fail_ok=False)
-            
+
         cmd = 'rbd create --pool cinder-volumes --image volume-{} --size {}G'.format(volume_id, volume_size)
         con_ssh.exec_cmd(cmd, fail_ok=False)
 
@@ -656,7 +656,7 @@ def restore_volumes(con_ssh=None):
             in_use_volumes = create_dummy_rbd_images(volumes, con_ssh=con_ssh)
             rc, restored_vols = restore_from_cinder_backups(volumes, con_ssh)
 
-        assert rc == 0, "All or some volumes has failed import: Restored volumes {}; Expected volumes {}"\
+        assert rc == 0, "All or some volumes has failed import: Restored volumes {}; Expected volumes {}" \
             .format(restored_vols, volumes)
         LOG.info('all {} volumes are imported'.format(len(restored_vols)))
 
@@ -681,7 +681,8 @@ def test_restore(restore_setup):
 
     controller_node = lab[controller0]
     con_ssh = ControllerClient.get_active_controller(name=lab['short_name'], fail_ok=True)
-    controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format('.*' + lab['name'].split('_')[0]) + r'|' + Prompt.CONTROLLER_0
+    sys_prompt = Prompt.TIS_NODE_PROMPT_BASE.format('.*' + lab['name'].split('_')[0])
+    controller_prompt = '{}|{}'.format(sys_prompt, Prompt.CONTROLLER_0)
     controller_node.telnet_conn.set_prompt(controller_prompt)
 
     if not con_ssh:
@@ -719,8 +720,6 @@ def test_restore(restore_setup):
     LOG.info("set prompt to:{}, telnet_conn:{}".format(controller_prompt, controller_node.telnet_conn))
 
     controller_node.telnet_conn.exec_cmd("cd; source /etc/platform/openrc")
-
-
     con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip)
     controller_node.ssh_conn = con_ssh
     ControllerClient.set_active_controller(con_ssh)
@@ -736,7 +735,7 @@ def test_restore(restore_setup):
 
     LOG.info("Images restore from backup file {} ...".format(images_backup_file))
 
-    new_prompt = r'{}.*~.*\$ '.format(lab['name'].split('_')[0]) + '|controller\-0.*~.*\$ '
+    new_prompt = r'{}.*~.*\$ |controller\-0.*~.*\$ '.format(lab['name'].split('_')[0])
     LOG.info('set prompt to:{}'.format(new_prompt))
     con_ssh.set_prompt(new_prompt)
 
@@ -751,18 +750,16 @@ def test_restore(restore_setup):
 
     timeout = HostTimeout.REBOOT + 60
     availability = HostAvailState.AVAILABLE
-    is_available = host_helper.wait_for_hosts_states(controller0,
-                                                     availability=HostAvailState.AVAILABLE,
-                                                     fail_ok=True,
-                                                     timeout=timeout)
+    is_available = system_helper.wait_for_hosts_states(controller0,
+                                                       availability=HostAvailState.AVAILABLE,
+                                                       fail_ok=True, timeout=timeout)
     if not is_available:
         LOG.warn('After {} seconds, the first node:{} does NOT reach {}'.format(timeout, controller0, availability))
         LOG.info('Check if drbd is still synchronizing data')
         con_ssh.exec_sudo_cmd('drbd-overview')
-        is_degraded = host_helper.wait_for_hosts_states(controller0,
-                                                        availability=HostAvailState.DEGRADED,
-                                                        fail_ok=True,
-                                                        timeout=300)
+        is_degraded = system_helper.wait_for_hosts_states(controller0,
+                                                          availability=HostAvailState.DEGRADED,
+                                                          fail_ok=True, timeout=300)
         if is_degraded:
             LOG.warn('Node: {} is degraded: {}'.format(controller0, HostAvailState.DEGRADED))
             con_ssh.exec_sudo_cmd('drbd-overview')
@@ -780,10 +777,10 @@ def test_restore(restore_setup):
         con_ssh.exec_sudo_cmd(cmd_rm_known_host)
 
         # transfer all backup files to /opt/backups from test server
-        con_ssh.scp_files(backup_src_path + "/*", TiSPath.BACKUPS + '/', source_server=SvcCgcsAuto.SERVER,
-                          source_user=SvcCgcsAuto.USER, source_password=SvcCgcsAuto.PASSWORD,
-                          dest_password=HostLinuxCreds.get_password(),  sudo=True,
-                          sudo_password=HostLinuxCreds.get_password())
+        with con_ssh.login_as_root():
+            con_ssh.scp_on_dest(source_user=SvcCgcsAuto.USER, source_ip=SvcCgcsAuto.SERVER,
+                                source_pswd=SvcCgcsAuto.PASSWORD, source_path=backup_src_path + "/*",
+                                dest_path=TiSPath.BACKUPS + '/', timeout=1200)
 
     else:
         # copy all backupfiles from USB to /opt/backups
@@ -849,7 +846,7 @@ def test_restore(restore_setup):
 
         boot_interfaces = lab['boot_device_dict']
 
-        hostnames = system_helper.get_hostnames()
+        hostnames = system_helper.get_hosts()
         storage_hosts = [host for host in hostnames if 'storage' in host]
         compute_hosts = [host for host in hostnames if 'storage' not in host and 'controller' not in host]
 
@@ -860,9 +857,9 @@ def test_restore(restore_setup):
                 install_helper.open_vlm_console_thread(storage_host, boot_interface=boot_interfaces, vlm_power_on=True)
 
                 LOG.info("Verifying {} is Locked, Diabled and Online ...".format(storage_host))
-                host_helper.wait_for_hosts_states(storage_host, administrative=HostAdminState.LOCKED,
-                                                  operational=HostOperState.DISABLED,
-                                                  availability=HostAvailState.ONLINE)
+                system_helper.wait_for_hosts_states(storage_host, administrative=HostAdminState.LOCKED,
+                                                    operational=HostOperState.DISABLED,
+                                                    availability=HostAvailState.ONLINE)
 
                 LOG.info("Unlocking {} ...".format(storage_host))
                 rc, output = host_helper.unlock_host(storage_host, available_only=True)
@@ -872,7 +869,7 @@ def test_restore(restore_setup):
             storage_helper.wait_for_ceph_health_ok(timeout=600)
 
             LOG.info("Importing images ...")
-            image_backup_files = install_helper.get_backup_files(IMAGE_BACKUP_FILE_PATTERN, TiSPath.BACKUPS,  con_ssh)
+            image_backup_files = install_helper.get_backup_files(IMAGE_BACKUP_FILE_PATTERN, TiSPath.BACKUPS, con_ssh)
             LOG.info("Image backup found: {}".format(image_backup_files))
             imported = install_helper.import_image_from_backup(image_backup_files)
             LOG.info("Images successfully imported: {}".format(imported))
@@ -896,9 +893,9 @@ def test_restore(restore_setup):
                 install_helper.open_vlm_console_thread(compute_host, boot_interface=boot_interfaces, vlm_power_on=True)
 
                 LOG.info("Verifying {} is Locked, Diabled and Online ...".format(compute_host))
-                host_helper.wait_for_hosts_states(compute_host, administrative=HostAdminState.LOCKED,
-                                                  operational=HostOperState.DISABLED,
-                                                  availability=HostAvailState.ONLINE)
+                system_helper.wait_for_hosts_states(compute_host, administrative=HostAdminState.LOCKED,
+                                                    operational=HostOperState.DISABLED,
+                                                    availability=HostAvailState.ONLINE)
                 LOG.info("Unlocking {} ...".format(compute_host))
                 rc, output = host_helper.unlock_host(compute_host, available_only=True)
                 assert rc == 0, "Host {} failed to unlock: rc = {}, msg: {}".format(compute_host, rc, output)
@@ -942,14 +939,14 @@ def check_volumes_spaces(con_ssh):
     if total_space and free_space < usage_threshold * total_space:
         if total_space:
             LOG.info('cinder LVM over-used: free:{}, total:{}, ration:{}%'.format(
-                free_space, total_space, free_space/total_space * 100))
+                free_space, total_space, free_space / total_space * 100))
 
         LOG.info('Deleting known LVM alarms')
 
         expected_reason = r'Cinder LVM .* Usage threshold exceeded; threshold: (\d+(\.\d+)?)%, actual: (\d+(\.\d+)?)%'
         expected_entity = 'host=controller'
         value_titles = ('UUID', 'Alarm ID', 'Reason Text', 'Entity ID')
-        lvm_pool_usage = system_helper.get_alarms(rtn_vals=value_titles, con_ssh=con_ssh)
+        lvm_pool_usage = system_helper.get_alarms(fields=value_titles, con_ssh=con_ssh)
 
         if not lvm_pool_usage:
             LOG.warn('Cinder LVM pool is used up to 75%, but no alarm for it')
@@ -971,4 +968,3 @@ def check_volumes_spaces(con_ssh):
 def post_restore_test(con_ssh):
     LOG.info('Perform system testing and checking after the system is restored')
     check_volumes_spaces(con_ssh)
-

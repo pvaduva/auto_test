@@ -106,8 +106,6 @@ def test_storage_install(install_setup):
 
     fresh_install_helper.check_ansible_configured_mgmt_interface(controller0_node, lab)
 
-    #fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTITIAL)
-
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
     fresh_install_helper.unlock_active_controller(controller0_node)
 
@@ -115,6 +113,7 @@ def test_storage_install(install_setup):
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+    install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
     fresh_install_helper.bulk_add_hosts(lab=lab, con_ssh=controller0_node.ssh_conn)
     fresh_install_helper.boot_hosts(boot_device)

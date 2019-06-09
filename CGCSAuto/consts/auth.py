@@ -1,24 +1,33 @@
 class Tenant:
     __PASSWORD = 'Li69nux*'
     __REGION = 'RegionOne'
-    __URL = 'http://192.168.204.2:5000/v3/'
-    __DC_MAP = {'SystemController': {'region': 'SystemController', 'auth_url': __URL},
-                'RegionOne': {'region': 'RegionOne', 'auth_url': __URL}}
+    __URL_PLATFORM = 'http://192.168.204.2:5000/v3/'
+    __URL_CONTAINERS = 'http://keystone.openstack.svc.cluster.local/v3'
+    __DC_MAP = {'SystemController': {'region': 'SystemController', 'auth_url': __URL_PLATFORM},
+                'RegionOne': {'region': 'RegionOne', 'auth_url': __URL_PLATFORM}}
 
+    # Platform openstack user - admin
+    ADMIN_PLATFORM = {
+        'user': 'admin',
+        'password': __PASSWORD,
+        'tenant': 'admin',
+        'domain': 'Default',
+        'platform': True,
+    }
+
+    # Containerized openstack users - admin, and two test users/tenants
     ADMIN = {
         'user': 'admin',
         'password': __PASSWORD,
         'tenant': 'admin',
-        'auth_url': __URL,
-        'region': __REGION
+        'domain': 'Default'
     }
 
     TENANT1 = {
         'user': 'tenant1',
         'password': __PASSWORD,
         'tenant': 'tenant1',
-        'auth_url': __URL,
-        'region': __REGION,
+        'domain': 'Default',
         'nova_keypair': 'keypair-tenant1'
     }
 
@@ -26,8 +35,7 @@ class Tenant:
         'user': 'tenant2',
         'password': __PASSWORD,
         'tenant': 'tenant2',
-        'auth_url': __URL,
-        'region': __REGION,
+        'domain': 'Default',
         'nova_keypair': 'keypair-tenant2'
     }
 
@@ -36,9 +44,9 @@ class Tenant:
         cls.__DC_MAP.update(region_info)
 
     @classmethod
-    def set_url(cls, url, central_region=False):
+    def set_platform_url(cls, url, central_region=False):
         """
-        Set default auth_url for all 3 tenant/user
+        Set auth_url for platform keystone
         Args:
             url (str):
             central_region (bool)
@@ -47,37 +55,34 @@ class Tenant:
             cls.__DC_MAP.get('SystemController')['auth_url'] = url
             cls.__DC_MAP.get('RegionOne')['auth_url'] = url
         else:
-            cls.__URL = url
-            cls.ADMIN['auth_url'] = url
-            cls.TENANT1['auth_url'] = url
-            cls.TENANT2['auth_url'] = url
+            cls.__URL_PLATFORM = url
 
     @classmethod
     def set_region(cls, region):
         """
-        Set default region for all 3 tenant/user
+        Set default region for all tenants
         Args:
             region (str): e.g., SystemController, subcloud-2
 
         """
         cls.__REGION = region
-        cls.ADMIN['region'] = region
-        cls.TENANT1['region'] = region
-        cls.TENANT2['region'] = region
 
     @classmethod
-    def add(cls, tenantname, dictname=None, username=None, password=None, region=None, auth_url=None):
+    def add(cls, tenantname, dictname=None, username=None, password=None, region=None, auth_url=None, domain='Default'):
         tenant_dict = dict(tenant=tenantname)
         tenant_dict['user'] = username if username else tenantname
         tenant_dict['password'] = password if password else cls.__PASSWORD
-        tenant_dict['region'] = region if region else cls.__REGION
-        tenant_dict['auth_url'] = auth_url if auth_url else cls.__URL
+        tenant_dict['domain'] = domain
+        if region:
+            tenant_dict['region'] = region
+        if auth_url:
+            tenant_dict['auth_url'] = auth_url
 
         dict_name = dictname.upper() if dictname else tenantname.upper().replace('-', '_')
         setattr(cls, dict_name, tenant_dict)
         return tenant_dict
 
-    __primary = TENANT1
+    __primary = 'TENANT1'
 
     @classmethod
     def get(cls, tenant_dictname, dc_region=None):
@@ -91,56 +96,69 @@ class Tenant:
         Returns (dict): mutable dictionary. If changed, DC map or tenant dict will update as well.
 
         """
+        import copy
         tenant_dictname = tenant_dictname.upper().replace('-', '_')
         tenant_dict = getattr(cls, tenant_dictname)
+        tenant_dict = copy.deepcopy(tenant_dict)
 
-        if not dc_region:
-            return tenant_dict
+        if dc_region:
+            region_dict = cls.__DC_MAP.get(dc_region, None)
+            if not region_dict:
+                raise ValueError('Distributed cloud region {} is not added to DC_MAP yet. DC_MAP: {}'.
+                                 format(dc_region, cls.__DC_MAP))
+            tenant_dict.update({'region': region_dict['region']})
 
-        region_dict = cls.__DC_MAP.get(dc_region, None)
-        if not region_dict:
-            raise ValueError('Distributed cloud region {} is not added to DC_MAP yet. DC_MAP: {}'.
-                             format(dc_region, cls.__DC_MAP))
+        return tenant_dict
 
-        region_dict.update({'user': tenant_dict['user'],
-                            'password': tenant_dict['password'],
-                            'tenant': tenant_dict['tenant']})
-        return region_dict
+    @classmethod
+    def get_region_and_url(cls, platform=False, dc_region=None):
+        auth_region_and_url = {
+            'auth_url': cls.__URL_PLATFORM if platform else cls.__URL_CONTAINERS,
+            'region': cls.__REGION
+        }
+
+        if dc_region:
+            region_dict = cls.__DC_MAP.get(dc_region, None)
+            if not region_dict:
+                raise ValueError('Distributed cloud region {} is not added to DC_MAP yet. DC_MAP: {}'.
+                                 format(dc_region, cls.__DC_MAP))
+            auth_region_and_url['region'] = region_dict.get('region')
+            if platform:
+                auth_region_and_url['auth_url'] = region_dict.get('auth_url')
+
+        return auth_region_and_url
 
     @classmethod
     def set_primary(cls, tenant):
         """
         should be called after _set_region and _set_url
         Args:
-            tenant (dict): Tenant dict
+            tenant (str): Tenant dict name
 
         Returns:
 
         """
-        cls.__primary = tenant
+        cls.__primary = tenant.upper()
 
     @classmethod
     def get_primary(cls):
-        return cls.__primary
+        return cls.get(tenant_dictname=cls.__primary)
 
     @classmethod
     def get_secondary(cls):
-        primary = cls.get_primary()
-        if primary is cls.TENANT1:
-            return cls.TENANT2
-        elif primary is cls.TENANT2:
-            return cls.TENANT1
-        else:   # primary is neither TENANT1/2
-            return cls.TENANT1
+        secondary = 'TENANT1' if cls.__primary != 'TENANT1' else 'TENANT2'
+        return cls.get(tenant_dictname=secondary)
 
     @classmethod
-    def update(cls, tenant_dictname, username=None, password=None, tenant=None):
-        tenant_dict = cls.get(tenant_dictname)
+    def update(cls, tenant_dictname, username=None, password=None, tenant=None, domain=None):
+        tenant_dictname = tenant_dictname.upper().replace('-', '_')
+        tenant_dict = getattr(cls, tenant_dictname)
+
         if not isinstance(tenant_dict, dict):
             raise ValueError("{} dictionary does not exist in CGCSAuto/consts/auth.py".format(tenant_dictname))
 
-        if not username and not password and not tenant:
-            raise ValueError("Please specify username, password and/or tenant to change to for {} dict".
+        if not username and not password and not tenant and not domain:
+            raise ValueError("Please specify username, password, tenant, and/or domain to update for {} dict".
                              format(tenant_dictname))
 
         if username:
@@ -149,6 +167,8 @@ class Tenant:
             tenant_dict['password'] = password
         if tenant:
             tenant_dict['tenant'] = tenant
+        if domain:
+            tenant_dict['domain'] = domain
 
     @classmethod
     def get_dc_map(cls):

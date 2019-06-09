@@ -1,17 +1,17 @@
 import time
-from pytest import mark, skip
+from pytest import mark, skip, param
 
 from utils.tis_log import LOG
 
 from consts.cgcs import VMStatus
 from consts.timeout import VMTimeout
-from keywords import host_helper, system_helper, vm_helper, nova_helper, network_helper
+from keywords import host_helper, system_helper, vm_helper, network_helper
 from testfixtures.recover_hosts import HostsToRecover
 
 
 @mark.usefixtures('check_alarms')
 @mark.parametrize('host_type', [
-    mark.sanity('controller'),
+    param('controller', marks=mark.sanity),
     'compute',
     # 'storage'
 ])
@@ -29,12 +29,12 @@ def test_system_persist_over_host_reboot(host_type):
     if host_type == 'controller':
         host = system_helper.get_active_controller_name()
     elif host_type == 'compute':
-        if system_helper.is_small_footprint():
+        if system_helper.is_aio_system():
             skip("No compute host for AIO system")
 
         host = None
     else:
-        hosts = system_helper.get_hostnames(personality='storage')
+        hosts = system_helper.get_hosts(personality='storage')
         if not hosts:
             skip(msg="Lab has no storage nodes. Skip rebooting storage node.")
 
@@ -43,14 +43,14 @@ def test_system_persist_over_host_reboot(host_type):
     LOG.tc_step("Pre-check for system status")
     system_helper.wait_for_services_enable()
     up_hypervisors = host_helper.get_up_hypervisors()
-    network_helper.wait_for_agents_alive(hosts=up_hypervisors)
+    network_helper.wait_for_agents_healthy(hosts=up_hypervisors)
 
     LOG.tc_step("Launch a vm")
     vm_id = vm_helper.boot_vm(cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
     if host is None:
-        host = nova_helper.get_vm_host(vm_id)
+        host = vm_helper.get_vm_host(vm_id)
 
     LOG.tc_step("Reboot a {} node and wait for reboot completes: {}".format(host_type, host))
     HostsToRecover.add(host)
@@ -62,11 +62,11 @@ def test_system_persist_over_host_reboot(host_type):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id, timeout=VMTimeout.DHCP_RETRY)
 
     LOG.tc_step("Check neutron agents and system services are in good state after {} reboot".format(host))
-    network_helper.wait_for_agents_alive(up_hypervisors)
+    network_helper.wait_for_agents_healthy(up_hypervisors)
     system_helper.wait_for_services_enable()
 
     if host in up_hypervisors:
         LOG.tc_step("Check {} can still host vm after reboot".format(host))
-        if not nova_helper.get_vm_host(vm_id) == host:
+        if not vm_helper.get_vm_host(vm_id) == host:
             time.sleep(30)
             vm_helper.live_migrate_vm(vm_id, destination_host=host)

@@ -1,6 +1,7 @@
 from pytest import fixture, skip
+
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper, heat_helper, host_helper, html_helper, network_helper
+from keywords import nova_helper, vm_helper, heat_helper, host_helper, html_helper
 from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
 from utils.clients.ssh import ControllerClient
 from consts.auth import HostLinuxCreds, Tenant
@@ -101,28 +102,26 @@ def launch_heat_stack():
     heat_template_file = file_dir + file_name + "/"
 
     LOG.tc_step("Creating pre-request heat stack to create images and flavors")
-    default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2]
-    image_file_path = "file://{}/{}".format(GuestImages.IMAGE_DIR, default_guest_img)
+    default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT['guest']][2]
+    image_file_path = "file://{}/{}".format(GuestImages.DEFAULT['image_dir'], default_guest_img)
     pre_req_template_path = heat_template_file + "pre_req.yaml"
     pre_req_stack_name = "pre_req"
-    pre_req_params = '-f {} -P LOCATION={} {}'.format(pre_req_template_path, image_file_path, pre_req_stack_name)
     LOG.info("Creating heat stack for pre-req, images and flavors")
-    heat_helper.create_stack(stack_name=pre_req_stack_name, params_string=pre_req_params,
-                             auth_info=Tenant.get('admin'), cleanup=None)
+    heat_helper.create_stack(stack_name=pre_req_stack_name, template=pre_req_template_path,
+                             parameters={'LOCATION': image_file_path}, auth_info=Tenant.get('admin'), cleanup=None)
 
     LOG.tc_step("Creating Tenant key via heat stack")
     keypair_template = 'Tenant1_Keypair.yaml'
     keypair_stack_name = 'Tenant1_Keypair'
     keypair_template = '{}/{}'.format(heat_template_file, keypair_template)
-    keypair_params = '-f {} {}'.format(keypair_template, keypair_stack_name)
-    heat_helper.create_stack(stack_name=keypair_stack_name, params_string=keypair_params, cleanup=None)
+    heat_helper.create_stack(stack_name=keypair_stack_name, template=keypair_template, cleanup=None)
 
     # Now create the large-stack
     LOG.tc_step("Creating heat stack to launch networks, ports, volumes, and vms")
     large_heat_template = heat_template_file + "rnc_heat.yaml"
     env_file = heat_template_file + "rnc_heat.env"
-    large_heat_params = '-e {} -f {} {}'.format(env_file, large_heat_template, HeatTemplate.LARGE_HEAT_NAME)
-    heat_helper.create_stack(stack_name=HeatTemplate.LARGE_HEAT_NAME, params_string=large_heat_params, cleanup=None)
+    heat_helper.create_stack(stack_name=HeatTemplate.LARGE_HEAT_NAME, template=large_heat_template,
+                             environments=env_file, cleanup=None)
 
 
 def check_server_group_vms_hosts(server_grp_id):
@@ -141,7 +140,7 @@ def check_vm_hosts(vms, policy='affinity', best_effort=False):
     LOG.tc_step("Check hosts for {} vms with best_effort={}".format(policy, best_effort))
     vm_hosts = []
     for vm in vms:
-        vm_host = nova_helper.get_vm_host(vm_id=vm)
+        vm_host = vm_helper.get_vm_host(vm_id=vm)
         LOG.info("Vm {} is hosted on: {}".format(vm, vm_host))
         vm_hosts.append(vm_host)
 
@@ -173,7 +172,7 @@ def test_heat_stack_update():
     launch_heat_stack()
 
     heat_status = [HeatStackStatus.CREATE_COMPLETE, HeatStackStatus.UPDATE_COMPLETE]
-    current_status = heat_helper.get_stack_status(stack_name=HeatTemplate.LARGE_HEAT_NAME)[0]
+    current_status = heat_helper.get_stack_status(stack=HeatTemplate.LARGE_HEAT_NAME)[0]
 
     if current_status not in heat_status:
         skip("Heat stack Status is not in create_complete or update_complete")

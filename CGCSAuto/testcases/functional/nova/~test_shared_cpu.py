@@ -1,29 +1,30 @@
 import re
 
-from pytest import fixture, mark, skip
+from pytest import fixture, mark, skip, param
 
+import keywords.host_helper
 from consts.cgcs import FlavorSpec
 from consts.cli_errs import SharedCPUErr, ResizeVMErr
-from keywords import nova_helper, vm_helper, host_helper, keystone_helper, check_helper, system_helper
-from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
+from keywords import nova_helper, vm_helper, host_helper, keystone_helper, check_helper
+from testfixtures.fixture_resources import ResourceCleanup, GuestLogs
 
 
 @fixture(scope='module')
 def target_hosts():
-    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
     return hosts
 
 
 @fixture()
 def origin_total_vcpus(target_hosts):
-    return host_helper.get_vcpus_for_computes(hosts=target_hosts, rtn_val='vcpus_used')
+    return host_helper.get_vcpus_for_computes(hosts=target_hosts, field='vcpus_used')
 
 
 def get_failed_live_migrate_action_id(vm_id):
-    action_table = table_parser.table(cli.openstack('event list', vm_id))
+    action_table = table_parser.table(cli.openstack('event list', vm_id)[1])
     req_id = table_parser.get_values(action_table, 'Request ID', **{'Action': 'live-migration', 'Message': 'Error'})
     assert req_id, "request id for failed live migration not found"
     return req_id[0]
@@ -88,10 +89,10 @@ def test_set_shared_vcpu_spec(vcpu_id):
 
 
 @mark.parametrize(('vcpus', 'cpu_policy', 'shared_vcpu'), [
-    mark.p2((4, 'shared', 3)),
-    mark.p3((4, 'dedicated', 5)),
-    mark.p3((4, 'dedicated', -1)),
-    mark.p3((64, 'dedicated', 64)),
+    param(4, 'shared', 3, marks=mark.p3),
+    param(4, 'dedicated', 5, marks=mark.p3),
+    param(4, 'dedicated', -1, marks=mark.p3),
+    param(64, 'dedicated', 64, marks=mark.p3),
 ])
 def test_set_shared_vcpu_spec_reject(cpu_policy, vcpus, shared_vcpu):
     """
@@ -137,7 +138,7 @@ class TestSharedCpuDisabled:
 
     @fixture(scope='class')
     def remove_shared_cpu(self, request, config_host_class):
-        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
         assert hosts, "No hypervisor in storage aggregate"
 
         avail_zone = None
@@ -193,12 +194,12 @@ class TestSharedCpuDisabled:
 
     # Most are deprecated. numa pinning removed. So shared vcpu no longer in conflict with numa pinning.
     @mark.parametrize(('vcpus', 'cpu_policy', 'shared_vcpu'), [
-        # mark.p1((2, 'dedicated', 1, 1, 1)),
-        # mark.p2((2, 'dedicated', 2, None, 1)),
-        # mark.p1((3, 'dedicated', 1, 1, 0)),
-        # mark.p3((5, 'dedicated', 1, 1, 2)),
-        # mark.p3((64, 'dedicated', 1, 1, 63)),   # No host supports this many vcpus atm
-        mark.p3((2, 'dedicated', 1)),
+        # param(2, 'dedicated', 1, 1, 1, marks=mark.p3),
+        # param(2, 'dedicated', 2, None, 1, marks=mark.p3),
+        # param(3, 'dedicated', 1, 1, 0, marks=mark.p3),
+        # param(5, 'dedicated', 1, 1, 2, marks=mark.p3),
+        # param(64, 'dedicated', 1, 1, 63, marks=mark.p3),   # No host supports this many vcpus atm
+        param(2, 'dedicated', 1, marks=mark.p3),
     ])
     def test_launch_vm_shared_cpu_setting_negative(self, vcpus, cpu_policy, shared_vcpu,
                                                    check_numa_num, remove_shared_cpu):
@@ -233,13 +234,13 @@ class TestSharedCpuDisabled:
                                       shared_vcpu=shared_vcpu)
 
         LOG.tc_step("Attempt to launch a vm with conflig numa node requirements")
-        code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu_negative', flavor=flavor, fail_ok=True,
-                                                        cleanup='function', avail_zone=avail_zone)
+        code, vm_id, output = vm_helper.boot_vm(name='shared_cpu_negative', flavor=flavor, fail_ok=True,
+                                                cleanup='function', avail_zone=avail_zone)
 
         assert 1 == code, 'Expect boot vm cli return error, although vm is booted anyway. Actual: {}'.format(output)
         LOG.tc_step("Ensure vm is in error state with expected fault message in nova show")
         vm_helper.wait_for_vm_values(vm_id, 10, status='ERROR', fail_ok=False)
-        actual_fault = nova_helper.get_vm_fault_message(vm_id)
+        actual_fault = vm_helper.get_vm_fault_message(vm_id)
         expt_fault = 'Shared vCPU not enabled on host cell'
 
         assert expt_fault in actual_fault, "Expected fault message mismatch"
@@ -252,7 +253,7 @@ class TestSharedCpuDisabled:
         return vm_id, storage_backing
 
     @mark.parametrize(('vcpus', 'cpu_policy', 'shared_vcpu'), [
-        mark.p1((2, 'dedicated', 1)),
+        param(2, 'dedicated', 1, marks=mark.p3),
     ])
     def test_resize_vm_shared_cpu_negative(self, vcpus, cpu_policy, shared_vcpu, basic_vm):
         """
@@ -311,7 +312,7 @@ def check_host_cpu_and_memory(host, expt_shared_cpu, expt_1g_page):
         assert len(shared_cores_[proc]) == expt_shared_cpu[proc], "Actual shared cpu count is different than expected"
 
     LOG.info("Check {} 1g page config: {}".format(host, expt_1g_page))
-    mempages_1g = system_helper.get_host_mem_values(host, headers=('app_hp_total_1G',))
+    mempages_1g = host_helper.get_host_memories(host, headers=('app_hp_total_1G',))
     for proc in expt_1g_page:
         assert mempages_1g[proc][0] == expt_1g_page[proc], "Actual 1g page is differnt than expected"
 
@@ -332,7 +333,7 @@ class TestSharedCpuEnabled:
         Returns:
 
         """
-        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
         if len(hosts) < 2:
             skip("Less than two hypervisors with same storage backend")
 
@@ -364,7 +365,7 @@ class TestSharedCpuEnabled:
             for host_to_config in shared_disabled_hosts:
                 config_host_class(host=host_to_config, modify_func=_modify)
                 host_helper.wait_for_hypervisors_up(host_to_config)
-                host_helper.wait_for_mempage_update(host_to_config)
+                host_helper.wait_for_memory_update(host_to_config)
                 check_host_cpu_and_memory(host_to_config, expt_shared_cpu={0: 1, 1: 1}, expt_1g_page={0: 4})
                 shared_cpu_hosts.append(host_to_config)
                 modified_hosts.append(host_to_config)
@@ -383,7 +384,7 @@ class TestSharedCpuEnabled:
                         host_helper.modify_host_memory(host_to_revert, proc=0, gib_1g=0)
                     finally:
                         host_helper.unlock_host(host_to_revert)
-                        host_helper.wait_for_mempage_update(host_to_revert)
+                        host_helper.wait_for_memory_update(host_to_revert)
 
                     check_host_cpu_and_memory(host_to_revert,
                                               expt_shared_cpu={0: p0_shared, 1: p1_shared}, expt_1g_page={0: 0})
@@ -411,8 +412,8 @@ class TestSharedCpuEnabled:
 
     # TC2920, TC2921
     @mark.parametrize(('vcpus', 'shared_vcpu', 'error'), [
-        # mark.domain_sanity((3, 1, 1, 2, None)),
-        # mark.domain_sanity((2, 1, 1, 1, None)),
+        # mark.domain_sanity((3, 1, 1, 2, None),
+        # mark.domain_sanity((2, 1, 1, 1, None),
         # (2, 2, None, 1, 'error')
         (3, 1, None)
     ])
@@ -453,15 +454,14 @@ class TestSharedCpuEnabled:
         flavor = create_shared_flavor(vcpus, storage_backing=storage_backing, shared_vcpu=shared_vcpu)
 
         LOG.tc_step("Boot a vm with above flavor")
-        code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu', flavor=flavor, fail_ok=True,
-                                                        cleanup='function')
+        code, vm_id, output = vm_helper.boot_vm(name='shared_cpu', flavor=flavor, fail_ok=True, cleanup='function')
 
         if error:
             LOG.tc_step("Check vm boot fail")
             assert 1 == code, "Expect error vm. Actual result: {}".format(output)
             LOG.tc_step("Ensure vm is in error state with expected fault message in nova show")
             vm_helper.wait_for_vm_values(vm_id, 10, status='ERROR', fail_ok=False)
-            actual_fault = nova_helper.get_vm_fault_message(vm_id)
+            actual_fault = vm_helper.get_vm_fault_message(vm_id)
             expt_fault = 'shared vcpu with 0 requested dedicated vcpus is not allowed'
             assert expt_fault in actual_fault, "Expected fault message mismatch"
             return
@@ -522,8 +522,7 @@ class TestSharedCpuEnabled:
         flavor1 = create_shared_flavor(vcpus=f1_vcpus, storage_backing=storage_backing, shared_vcpu=f1_shared_vcpu)
 
         LOG.tc_step("Boot a vm with above flavor, and ensure vm is booted successfully")
-        code, vm_id, output, vol_id = vm_helper.boot_vm(name='shared_cpu', flavor=flavor1, fail_ok=True,
-                                                        cleanup='function')
+        code, vm_id, output = vm_helper.boot_vm(name='shared_cpu', flavor=flavor1, fail_ok=True, cleanup='function')
 
         assert 0 == code, "Boot vm failed. Details: {}".format(output)
 
@@ -605,7 +604,7 @@ class TestSharedCpuEnabled:
         vm_hosts = []
         LOG.tc_step("Check shared vcpus and numa settings for vms after evacuation")
         for vm_ in vms:
-            vm_host = nova_helper.get_vm_host(vm_id=vm_)
+            vm_host = vm_helper.get_vm_host(vm_id=vm_)
             vm_hosts.append(vm_host)
 
         if len(list(set(vm_hosts))) == 1:
@@ -701,7 +700,7 @@ class TestSharedCpuEnabled:
 
     # Already covered by other test cases such as test_launch_vm_with_shared_vcpu
     @mark.parametrize(('vcpus', 'numa_nodes', 'numa_node0', 'shared_vcpu'), [
-            (3, 1, 1, 0)
+        (3, 1, 1, 0)
     ])
     def _test_shared_vcpu_pinning_constraints(self, vcpus, numa_nodes, numa_node0, shared_vcpu,
                                               add_shared_cpu, add_admin_role_func):
@@ -782,7 +781,7 @@ class TestMixSharedCpu:
 
     @fixture(scope='class')
     def config_host_cpus(self, no_simplex, config_host_class):
-        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
 
         if len(hosts) < 3:
             skip("Require at least three hosts with same storage backing")
@@ -871,19 +870,19 @@ class TestMixSharedCpu:
 
         LOG.tc_step("Boot a vm with above flavor, and ensure vm is booted successfully")
         vm_id = vm_helper.boot_vm(name='shared_cpu', flavor=flavor, fail_ok=False, cleanup='function')[1]
-        origin_host = nova_helper.get_vm_host(vm_id)
+        origin_host = vm_helper.get_vm_host(vm_id)
         assert origin_host in enabled_shared_hosts, "VM not booted on shared cpu host"
 
         LOG.tc_step("Perform a non-forced live migration onto an enabled shared cpu host, expect success")
         vm_helper.live_migrate_vm(vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        new_host = nova_helper.get_vm_host(vm_id)
+        new_host = vm_helper.get_vm_host(vm_id)
         assert new_host in enabled_shared_hosts, "VM not migrated on shared cpu host"
 
         LOG.tc_step("Perform a non-forced cold migration onto an enabled shared cpu host, expect success")
         vm_helper.cold_migrate_vm(vm_id)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
-        new_host = nova_helper.get_vm_host(vm_id)
+        new_host = vm_helper.get_vm_host(vm_id)
         assert new_host in enabled_shared_hosts, "VM not migrated on shared cpu host"
 
         if new_host != enabled_shared_hosts[0]:
@@ -899,7 +898,7 @@ class TestMixSharedCpu:
         code = vm_helper.live_migrate_vm(vm_id, destination_host=disable_shared_cpu_host, fail_ok=True)[0]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
         assert code > 0, "Migrate not rejected as expected"
-        assert nova_helper.get_vm_host(vm_id) == dest_host, "VM not on same compute node"
+        assert vm_helper.get_vm_host(vm_id) == dest_host, "VM not on same compute node"
 
         LOG.tc_step("Verify second live migration failed via nova-scheduler.log")
         req_id = get_failed_live_migrate_action_id(vm_id)

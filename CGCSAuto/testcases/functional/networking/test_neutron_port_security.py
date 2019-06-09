@@ -101,7 +101,7 @@ def test_neutron_port_security(setup_port_security, port_security):
 
     LOG.tc_step("With port security {}, change VM mac address and ensure ping over internal net {}".
                 format(port_security, expt_res))
-    origin_mac_addr = network_helper.get_ports(server=vm2, network=internal_net_id, rtn_val='MAC Address')[0]
+    origin_mac_addr = network_helper.get_ports(server=vm2, network=internal_net_id, field='MAC Address')[0]
     vm2_ip = network_helper.get_internal_ips_for_vms(vm2)[0]
     new_mac_addr = _change_mac_address(vm2, origin_mac_addr)
     packet_loss_rate = _ping_server(vm1, ip_addr=vm2_ip, fail_ok=port_security_enabled)

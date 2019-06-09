@@ -147,10 +147,10 @@ def test_modify_timezone_log_timestamps():
 
 def get_cli_timestamps(vol_id):
 
-    table_ = table_parser.table(cli.system('show'))
+    table_ = table_parser.table(cli.system('show')[1])
     sysinv_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
 
-    table_ = table_parser.table(cli.openstack('volume show', vol_id, auth_info=Tenant.get('admin')))
+    table_ = table_parser.table(cli.openstack('volume show', vol_id, auth_info=Tenant.get('admin'))[1])
     openstack_timestamp = table_parser.get_value_two_col_table(table_, 'created_at')
 
     return  sysinv_timestamp, openstack_timestamp
@@ -229,7 +229,7 @@ def test_modify_timezone_sys_event_timestamp():
         - N/A
     """
     LOG.tc_step("Gathering pre-modify timestamp for last event in system event-list")
-    event = system_helper.get_events(rtn_vals=('UUID', 'Event Log ID', 'Entity Instance ID', 'State', 'Time Stamp'),
+    event = system_helper.get_events(fields=('UUID', 'Event Log ID', 'Entity Instance ID', 'State', 'Time Stamp'),
                                      limit=1, combine_entries=False)[0]
     event_uuid, event_log_id, entity_instance_id, event_state, pre_timestamp = event
 
@@ -243,7 +243,7 @@ def test_modify_timezone_sys_event_timestamp():
     timeout = time.time() + 60
     post_timestamp = None
     while time.time() < timeout:
-        post_timestamp = system_helper.get_events(rtn_vals='Time Stamp', event_id=event_log_id, uuid=event_uuid,
+        post_timestamp = system_helper.get_events(fields='Time Stamp', event_id=event_log_id, uuid=event_uuid,
                                                   entity_id=entity_instance_id, state=event_state)[0][0]
         if pre_timestamp != post_timestamp:
             break
@@ -252,12 +252,12 @@ def test_modify_timezone_sys_event_timestamp():
     else:
         assert pre_timestamp != post_timestamp, "Timestamp did not change with timezone change."
 
-    if not system_helper.is_simplex():
+    if not system_helper.is_aio_simplex():
         LOG.tc_step("Swact and verify timezone persists")
         host_helper.swact_host()
         post_swact_timezone = system_helper.get_timezone()
         assert post_swact_timezone == timezone_to_test
 
-        post_swact_timestamp = system_helper.get_events(rtn_vals='Time Stamp', event_id=event_log_id, uuid=event_uuid,
+        post_swact_timestamp = system_helper.get_events(fields='Time Stamp', event_id=event_log_id, uuid=event_uuid,
                                                         entity_id=entity_instance_id, state=event_state)[0][0]
         assert post_swact_timestamp == post_timestamp

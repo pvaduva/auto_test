@@ -8,13 +8,13 @@ from pytest import mark, skip, fixture
 
 from consts.auth import Tenant
 from keywords import keystone_helper
-from utils.cli import openstack, system
+from utils.cli import openstack
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 TEST_USER_NAME = 'keystoneuser'
 
-SPECIAL_CHARACTERS = '!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
+SPECIAL_CHARACTERS = r'!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
 MIN_PASSWORD_LEN = 7
 
 # Reduce password length due to upsteam issue https://bugs.launchpad.net/keystone/+bug/1735250
@@ -62,7 +62,7 @@ def cleanup_users(request):
 def delete_users(users):
     if users and len(users) > 0:
         command = 'user delete {}'.format(' '.join(users))
-        openstack(command, auth_info=Tenant.get('admin'), fail_ok=False)
+        openstack(command, fail_ok=False, auth_info=Tenant.get('admin'))
 
 
 def save_used_password(user_name, password):
@@ -106,7 +106,7 @@ def is_last_used(password, user_name=None, depth=NUM_TRACKED_PASSWORD):
 def get_valid_password(user_name=None):
     total_length = random.randint(MIN_PASSWORD_LEN, MAX_PASSWORD_LEN)
     password = None
-    frequently_used_words = re.split('\W', SIMPLE_WORD_DICTIONARY.strip())
+    frequently_used_words = re.split(r'\W', SIMPLE_WORD_DICTIONARY.strip())
 
     attempt = 0
     while attempt < 60:
@@ -218,7 +218,7 @@ def multiple_attempts_generator():
 
 
 def dictionary_generator():
-    frequently_used_words = [w for w in re.split('\W', SIMPLE_WORD_DICTIONARY.strip()) if w.strip()]
+    frequently_used_words = [w for w in re.split(r'\W', SIMPLE_WORD_DICTIONARY.strip()) if w.strip()]
 
     while True:
         (args, user_name, _), expecting_pass = yield
@@ -369,11 +369,11 @@ def verify_login(user_name, password, is_admin=True, expecting_pass=True):
     if is_admin:
         command = 'endpoint list'
         LOG.debug('auth_info={}'.format(auth_info))
-        code, output = openstack(command, auth_info=auth_info, fail_ok=True, rtn_code=True)
+        code, output = openstack(command, fail_ok=True, auth_info=auth_info)
     else:
         command = 'user show {}'.format(user_name)
         LOG.info('TODO: command:openstack {}\n'.format(command))
-        code, output = openstack(command, auth_info=auth_info, fail_ok=True)
+        code, output = openstack(command, fail_ok=True, auth_info=auth_info)
 
     message = 'expecting:{}, command=\n{}\nas user:{}, password:{}\nauth_info:{}\ncode:{}, output:{}\n'.format(
         expecting_pass, command, user_name, password, auth_info, code, output)
@@ -411,20 +411,21 @@ def add_role(user_name, password, project=Tenant.get('admin')):
     else:
         role_name = 'member'
 
-    project_id = keystone_helper.get_tenant_ids(project)[0]
+    project_id = keystone_helper.get_projects(field='ID', name=project)[0]
 
-    role_id = keystone_helper.get_role_ids(role_name)[0]
+    role_id = keystone_helper.get_roles(role_name)[0]
 
     command = 'role add --project {} --user {} {}'.format(project_id, user_name, role_id)
-    openstack(command, auth_info=Tenant.get('admin'), fail_ok=False)
+    openstack(command, fail_ok=False, auth_info=Tenant.get('admin'))
 
 
 def create_user(user_name, role, del_if_existing=False, project_name_id=None, project_dommain='default',
-                domain='default', password='Li69nux*', email='', description='', enable=True,
+                domain='default', password='Li69nux*', email='', description='', enable=True, con_ssh=None,
                 auth_info=Tenant.get('admin'), fail_ok=False):
 
-    existing_user = keystone_helper.get_user_ids(user_name, auth_info=auth_info)
+    existing_user = keystone_helper.get_users(user_name, auth_info=auth_info, con_ssh=con_ssh)
     if existing_user:
+        existing_user = existing_user[0]
         LOG.info('User already existing: {}\n'.format(existing_user))
         if del_if_existing:
             LOG.info('Delete the existing user: {}\n'.format(existing_user))
@@ -448,11 +449,8 @@ def create_user(user_name, role, del_if_existing=False, project_name_id=None, pr
     args.append('enable' if enable else 'disable')
     args.append('or-show')
 
-    command = 'user create --{} {}'.format(' --'.join(args), user_name)
-
-    auth_info = auth_info or Tenant.get('admin')
-
-    code, output = openstack(command, fail_ok=True, auth_info=auth_info)
+    args = '--{} {}'.format(' --'.join(args), user_name)
+    code, output = openstack('user create', args, fail_ok=True, auth_info=auth_info, ssh_client=con_ssh)
     assert code == 0 or fail_ok, 'Failed to create user:{}, error code:{}, output:\n{}'.format(user_name, code, output)
 
     is_addmin = False
@@ -463,7 +461,8 @@ def create_user(user_name, role, del_if_existing=False, project_name_id=None, pr
         if role == 'admin':
             is_addmin = True
             user_of_admin = Tenant.get('admin')['user']
-            role_of_admin = keystone_helper.get_assigned_roles(project=Tenant.get('admin')['tenant'], user=user_of_admin)[0]
+            role_of_admin = keystone_helper.get_role_assignments(project=Tenant.get('admin')['tenant'],
+                                                                 user=user_of_admin)[0]
             LOG.info('attempt to add role to user:{}, with role from admin:{}, role:{}\n'.format(
                 user_name, user_of_admin, role_of_admin))
 
@@ -474,8 +473,8 @@ def create_user(user_name, role, del_if_existing=False, project_name_id=None, pr
             is_addmin = False
             project = Tenant.get_primary()
             user_of_primary_tenant = project['user']
-            role_of_primary_tenant = keystone_helper.get_assigned_roles(project=project_name_id,
-                                                                        user=user_of_primary_tenant)[0]
+            role_of_primary_tenant = keystone_helper.get_role_assignments(project=project_name_id,
+                                                                          user=user_of_primary_tenant)[0]
             add_role(user_name, password, project=project['tenant'])
 
             LOG.info('OK, successfully add user to role:{}, user:{}\n'.format(role_of_primary_tenant, user_name))
@@ -495,7 +494,7 @@ def change_user_password(user_name, original_password, password, by_admin=True, 
 
     auth_info = get_user_auth_info(user_name, original_password, in_admin_project=by_admin)
 
-    code, output = openstack(command, auth_info=auth_info, fail_ok=True, rtn_code=True)
+    code, output = openstack(command, fail_ok=True, auth_info=auth_info)
 
     message = '\nuser:{}, password:{}, expecting:{}\ncode={}\noutput=\n{}\nUSED:{}\n'.format(
         user_name, password, expecting_pass, code, output, USERS_INFO)

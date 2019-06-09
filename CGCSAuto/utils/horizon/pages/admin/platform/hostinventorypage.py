@@ -1,4 +1,5 @@
 import re
+import copy
 
 from selenium.webdriver.common import by
 
@@ -9,6 +10,18 @@ from keywords import system_helper
 
 
 class HostsTable(tables.TableRegion):
+    _cli_horizon_fields_map = {
+        'hostname': 'Host Name',
+        'personality': 'Personality',
+        'administrative': 'Admin State',
+        'operational': 'Operational State',
+        'availability': 'Availability State',
+        'uptime': 'Uptime',
+        'task': 'Status'
+    }
+
+    def get_cli_horizon_mapping(self):
+        return self._cli_horizon_fields_map
 
     @tables.bind_row_action('update')
     def edit_host(self, edit_button, row):
@@ -38,16 +51,6 @@ class HostsTable(tables.TableRegion):
 
 class ControllerHostsTable(HostsTable):
     name = 'hostscontroller'
-
-    HOST_TABLE_HEADERS_MAP = {
-        'hostname': 'Host Name',
-        'personality': 'Personality',
-        'administrative': 'Admin State',
-        'operational': 'Operational State',
-        'availability': 'Availability State',
-        'uptime': 'Uptime',
-        'config_status': 'Status'
-    }
     EDIT_HOST_FORM_FIELDS = (("personality", "subfunctions", "hostname", "location",
                               "cpuProfile", "interfaceProfile", "diskProfile", "memoryProfile", "ttys_dcd"),
                              ("boot_device", "rootfs_device", "install_output", "console"),
@@ -69,15 +72,10 @@ class ControllerHostsTable(HostsTable):
 class StorageHostsTable(HostsTable):
     name = 'hostsstorage'
 
-    HOST_TABLE_HEADERS_MAP = {
-        'hostname': 'Host Name',
-        'peers': 'Replication Group',
-        'administrative': 'Admin State',
-        'operational': 'Operational State',
-        'availability': 'Availability State',
-        'uptime': 'Uptime',
-        'config_status': 'Status'
-    }
+    def get_cli_horizon_mapping(self):
+        map_ = copy.deepcopy(self._cli_horizon_fields_map)
+        map_.pop('personality')
+        return map_
 
     @tables.bind_table_action('install-async')
     def install_paches(self, install_button):
@@ -86,16 +84,7 @@ class StorageHostsTable(HostsTable):
 
 class ComputeHostsTable(HostsTable):
     name = 'hostsworker'
-    HOST_TABLE_HEADERS_MAP = {
-        'hostname': 'Host Name',
-        'personality': 'Personality',
-        'administrative': 'Admin State',
-        'operational': 'Operational State',
-        'availability': 'Availability State',
-        'uptime': 'Uptime',
-        'config_status': 'Status'
 
-    }
     EDIT_HOST_FORM_FIELDS = (("personality", "location", "cpuProfile", "interfaceProfile", "ttys_dcd"),
                              ("boot_device", "rootfs_device", "install_output", "console"),
                              ("bm_type", "bm_ip", "bm_username", "bm_password", "bm_confirm_password"))
@@ -172,13 +161,13 @@ class HostInventoryPage(basepage.BasePage):
         return HostInventoryDetailPage(HorizonDriver.get_driver(), host_name)
 
     def go_to_device_usage_tab(self):
-        if system_helper.is_simplex():
+        if system_helper.is_aio_simplex():
             self.go_to_tab(1)
         else:
             self.go_to_tab(self.DEVICE_USAGE_TAB_INDEX)
 
     def horizon_vals(self, host_name):
-        horizon_headers = self.hosts_table(host_name).HOST_TABLE_HEADERS_MAP.values()
+        horizon_headers = self.hosts_table(host_name).get_cli_horizon_mapping().values()
         horizon_vals = {}
         for horizon_header in horizon_headers:
             horizon_val = self.get_host_info(host_name, horizon_header)
@@ -189,25 +178,25 @@ class HostInventoryPage(basepage.BasePage):
 
 
 class HostDetailOverviewDescription(forms.ItemTextDescription):
-        _separator_locator = (by.By.CSS_SELECTOR, 'dl.dl-horizontal-wide')
-        OVERVIEW_INFO_HEADERS_MAP = {
-            'hostname': 'Host Name',
-            'personality': 'Personality',
-            'uuid': 'Host UUID',
-            'id': 'Host ID',
-            'mgmt_mac': 'Management MAC',
-            'mgmt_ip': 'Management IP',
-            'serialid': 'Serial ID',
-            'administrative': 'Administrative State',
-            'operational': 'Operational State',
-            'availability': 'Availability State',
-            'boot_device': 'Boot Device',
-            'rootfs_device': 'Rootfs Device',
-            'install_output': 'Installation Output',
-            'console': 'Console',
-            'bm_ip': 'Board Management Controller IP Address',
-            'bm_username': 'Board Management Controller User Name'
-        }
+    _separator_locator = (by.By.CSS_SELECTOR, 'dl.dl-horizontal-wide')
+    OVERVIEW_INFO_HEADERS_MAP = {
+        'hostname': 'Host Name',
+        'personality': 'Personality',
+        'uuid': 'Host UUID',
+        'id': 'Host ID',
+        'mgmt_mac': 'Management MAC',
+        'mgmt_ip': 'Management IP',
+        'serialid': 'Serial ID',
+        'administrative': 'Administrative State',
+        'operational': 'Operational State',
+        'availability': 'Availability State',
+        'boot_device': 'Boot Device',
+        'rootfs_device': 'Rootfs Device',
+        'install_output': 'Installation Output',
+        'console': 'Console',
+        'bm_ip': 'Board Management Controller IP Address',
+        'bm_username': 'Board Management Controller User Name'
+    }
 
 
 class HostDetailProcessorDescription(forms.ItemTextDescription):

@@ -1,6 +1,7 @@
 import time
 from pytest import fixture, skip, mark
 
+import keywords.host_helper
 from utils.tis_log import LOG
 
 from keywords import vm_helper, host_helper, nova_helper, cinder_helper
@@ -10,7 +11,7 @@ from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unrese
 
 @fixture()
 def add_hosts_to_zone(request, add_admin_role_class, add_cgcsauto_zone, reserve_unreserve_all_hosts_module):
-    storage_backing, target_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, target_hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
     if len(target_hosts) < 2:
         skip("Less than two up hosts have same storage backing")
 

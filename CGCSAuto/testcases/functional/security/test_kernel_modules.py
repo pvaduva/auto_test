@@ -16,7 +16,7 @@ def test_kernel_module_signatures():
             - 'modinfo <failed_module> | grep --color=never -E "sig|filename" to display signing info for each module
 
     """
-    hosts = system_helper.get_hostnames()
+    hosts = system_helper.get_hosts()
     failed_hosts = {}
 
     for host in hosts:

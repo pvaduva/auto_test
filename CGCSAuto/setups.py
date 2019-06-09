@@ -1,16 +1,18 @@
-import configparser
 import os
 import re
-import threading
+import ast
 import time
+import ipaddress
+import threading
+import configparser
 
-from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth
-from consts.cgcs import Prompt, MULTI_REGION_MAP, SUBCLOUD_PATTERN, SysType, DROPS
+from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth, Guest
+from consts.cgcs import Prompt, MULTI_REGION_MAP, SUBCLOUD_PATTERN, SysType, DROPS, GuestImages, Networks
 from consts.filepaths import WRSROOT_HOME, BuildServerPath
 from consts.lab import Labs, add_lab_entry, NatBoxes, update_lab
 from consts.proj_vars import ProjVar, InstallVars
-from consts import build_server
-from keywords import vm_helper, host_helper, nova_helper, system_helper, keystone_helper, common, network_helper, \
+from consts.build_server import Server
+from keywords import host_helper, nova_helper, system_helper, keystone_helper, common, network_helper, \
     install_helper, vlm_helper, dc_helper, container_helper
 from utils import exceptions, lab_info
 from utils import local_host
@@ -21,7 +23,7 @@ from utils.node import create_node_boot_dict, create_node_dict, VBOX_BOOT_INTERF
 from utils.tis_log import LOG
 
 
-def less_than_two_controllers(con_ssh=None, auth_info=Tenant.get('admin')):
+def less_than_two_controllers(con_ssh=None, auth_info=Tenant.get('admin_platform')):
     return len(system_helper.get_controllers(con_ssh=con_ssh, auth_info=auth_info)) < 2
 
 
@@ -64,28 +66,38 @@ def setup_vbox_tis_ssh(lab):
 
 def setup_primary_tenant(tenant):
     Tenant.set_primary(tenant)
-    LOG.info("Primary Tenant for test session is set to {}".format(tenant['tenant']))
+    LOG.info("Primary Tenant for test session is set to {}".format(Tenant.get(tenant)['tenant']))
 
 
-def setup_natbox_ssh(natbox):
-    natbox_ip = natbox['ip']
+def setup_natbox_ssh(natbox, con_ssh):
+    natbox_ip = natbox['ip'] if natbox else None
+    if not natbox_ip and not container_helper.is_stx_openstack_deployed(con_ssh=con_ssh):
+        LOG.info("stx-openstack is not applied and natbox is unspecified. Skip natbox config.")
+        return None
+
     NATBoxClient.set_natbox_client(natbox_ip)
     nat_ssh = NATBoxClient.get_natbox_client()
     ProjVar.set_var(natbox_ssh=nat_ssh)
 
+    setup_keypair(con_ssh=con_ssh, natbox_client=nat_ssh)
+
     return nat_ssh
 
 
-def setup_keypair(con_ssh, nat_ssh=None):
+def setup_keypair(con_ssh, natbox_client=None):
     """
     copy private keyfile from controller-0:/opt/platform to natbox: priv_keys/
     Args:
-        nat_ssh (SSHClient): NATBox client
+        natbox_client (SSHClient): NATBox client
         con_ssh (SSHClient)
     """
     if not container_helper.is_stx_openstack_deployed(con_ssh=con_ssh):
         LOG.info("stx-openstack is not applied. Skip nova keypair config.")
         return
+
+    # ssh private key should now exist under keyfile_path
+    if not natbox_client:
+        natbox_client = NATBoxClient.get_natbox_client()
 
     LOG.info("scp key file from controller to NATBox")
     # keyfile path that can be specified in testcase config
@@ -94,7 +106,6 @@ def setup_keypair(con_ssh, nat_ssh=None):
     # keyfile will always be copied to wrsroot home dir first and update file permission
     keyfile_stx_final = os.path.normpath(ProjVar.get_var('STX_KEYFILE_WRS_HOME'))
     public_key_stx = '{}.pub'.format(keyfile_stx_final)
-    final_dir = os.path.dirname(keyfile_stx_final)
 
     # keyfile will also be saved to /opt/platform as well, so it won't be lost during system upgrade.
     keyfile_opt_pform = '/opt/platform/id_rsa'
@@ -138,12 +149,12 @@ def setup_keypair(con_ssh, nat_ssh=None):
             # copy file from controller-0 home dir to controller-1
             con_ssh.scp_on_dest(source_user=HostLinuxCreds.get_user(),
                                 source_ip='controller-0',
-                                source_path='{}*'.format(keyfile_stx_final),
+                                source_path=keyfile_stx_final,
                                 source_pswd=HostLinuxCreds.get_password(),
-                                dest_path=final_dir, timeout=60)
+                                dest_path=keyfile_stx_final, timeout=60)
 
     if not nova_keypair:
-        LOG.info("Create nova keypair {} using public key {}".format(keypair_name, public_key_stx))
+        LOG.info("Create nova keypair {} using public key {}".format(nova_keypair, public_key_stx))
         if not con_ssh.file_exists(public_key_stx):
             con_ssh.scp_on_dest(source_user=HostLinuxCreds.get_user(), source_ip='controller-0',
                                 source_path=public_key_stx,
@@ -159,19 +170,15 @@ def setup_keypair(con_ssh, nat_ssh=None):
 
         nova_helper.create_keypair(keypair_name, public_key=public_key_stx, auth_info=auth_info)
 
-    # ssh private key should now exist under keyfile_path
-    if not nat_ssh:
-        nat_ssh = NATBoxClient.get_natbox_client()
-
-    nat_ssh.exec_cmd('mkdir -p {}'.format(os.path.dirname(keyfile_path_natbox)))
+    natbox_client.exec_cmd('mkdir -p {}'.format(os.path.dirname(keyfile_path_natbox)))
     tis_ip = ProjVar.get_var('LAB').get('floating ip')
     for i in range(10):
         try:
-            nat_ssh.scp_on_dest(source_ip=tis_ip,
-                                source_user=HostLinuxCreds.get_user(),
-                                source_pswd=HostLinuxCreds.get_password(),
-                                source_path=keyfile_stx_final,
-                                dest_path=keyfile_path_natbox, timeout=120)
+            natbox_client.scp_on_dest(source_ip=tis_ip,
+                                      source_user=HostLinuxCreds.get_user(),
+                                      source_pswd=HostLinuxCreds.get_password(),
+                                      source_path=keyfile_stx_final,
+                                      dest_path=keyfile_path_natbox, timeout=120)
             LOG.info("private key is copied to NatBox: {}".format(keyfile_path_natbox))
             break
         except exceptions.SSHException as e:
@@ -180,18 +187,6 @@ def setup_keypair(con_ssh, nat_ssh=None):
 
             LOG.info(e.__str__())
             time.sleep(10)
-
-
-def boot_vms(is_boot):
-    # boot some vms for the whole test session if boot_vms flag is set to True
-    if is_boot:
-        con_ssh = ControllerClient.get_active_controller()
-        if con_ssh.file_exists('~/instances_group0/launch_tenant1-avp1.sh'):
-            vm_helper.launch_vms_via_script(vm_type='avp', num_vms=1, tenant_name='tenant1')
-            vm_helper.launch_vms_via_script(vm_type='virtio', num_vms=1, tenant_name='tenant2')
-        else:
-            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT1)
-            vm_helper.get_any_vms(count=1, auth_info=Tenant.TENANT2)
 
 
 def get_lab_dict(labname):
@@ -239,7 +234,7 @@ def is_lab_subcloud(lab):
     return False, None, None
 
 
-def get_natbox_dict(natboxname):
+def get_natbox_dict(natboxname, user=None, password=None):
     natboxname = natboxname.lower().strip()
     natboxes = [getattr(NatBoxes, item) for item in dir(NatBoxes) if item.startswith('NAT_')]
 
@@ -247,10 +242,10 @@ def get_natbox_dict(natboxname):
         if natboxname.replace('-', '_') in natbox.get('name').replace('-', '_') or natboxname == natbox.get('ip'):
             return natbox
     else:
-        if natboxname.startswith('128.224'):
-            return NatBoxes.add_natbox(ip=natboxname)
+        if __get_ip_version(natboxname) == 4:
+            return NatBoxes.add_natbox(ip=natboxname, user=user, password=password)
         else:
-            raise ValueError("{} is not a valid input.".format(natboxname))
+            raise ValueError("{} is not valid. Please enter a valid IPv4 address or 'localhost'".format(natboxname))
 
 
 def get_tenant_dict(tenantname):
@@ -273,47 +268,25 @@ def get_tis_timestamp(con_ssh):
 
 
 def set_build_info(con_ssh):
-    code, output = con_ssh.exec_cmd('cat /etc/build.info')
-    build_path = sw_version = None
-    if code != 0:
-        build_id = build_host = job = build_by = ' '
-    else:
-        # get build_id
-        build_id = re.findall('''BUILD_ID=\"(.*)\"''', output)
-        build_id = build_id[0] if build_id else ''
+    build_path = ProjVar.get_var('BUILD_PATH')
+    if build_path:
+        return
 
-        # get build_host
-        build_host = re.findall('''BUILD_HOST=\"(.*)\"''', output)
-        build_host = build_host[0].split(sep='.')[0] if build_host else ' '
-
-        # get jenkins job
-        job = re.findall('''JOB=\"(.*)\"''', output)
-        job = job[0] if job else ' '
-
-        # get build_by
-        build_by = re.findall('''BUILD_BY=\"(.*)\"''', output)
-        build_by = build_by[0] if build_by else 'jenkins'   # Assume built by jenkins although this is likely wrong
-
-        if build_id.strip():
-            build_path = '/localdisk/loadbuild/{}/{}/{}'.format(build_by, job, build_id)
-
-        # get sw_version
-        sw_version = re.findall('''SW_VERSION=\"(.*)\"''', output)
-        sw_version = sw_version[0] if sw_version else None
-
-    ProjVar.set_var(BUILD_ID=build_id, BUILD_SERVER=build_host, JOB=job, BUILD_BY=build_by, BUILD_PATH=build_path,
-                    BUILD_INFO=output)
-    if sw_version:
-        existing_versions = ProjVar.get_var('SW_VERSION')
-        if not (existing_versions and sw_version == existing_versions[-1]):
-            ProjVar.set_var(append=True, SW_VERSION=sw_version)
-
-    return build_id, build_host, job, build_by
+    build_info = system_helper.get_build_info(con_ssh=con_ssh)
+    build_id = build_info['BUILD_ID']
+    build_by = build_info['BUILD_BY']
+    build_path = ''
+    if build_id.strip():
+        if 'cengn' in build_by:
+            build_path = os.path.join(BuildServerPath.STX_MASTER_CENGN_DIR, build_id)
+        else:
+            build_path = os.path.join('/localdisk/loadbuild/', build_info['BUILD_BY'], build_info['JOB'], build_id)
+    ProjVar.set_var(BUILD_PATH=build_path)
 
 
 def _rsync_files_to_con1(con_ssh=None, central_region=False, file_to_check=None):
     region = 'RegionOne' if central_region else None
-    auth_info = Tenant.get('admin', dc_region=region)
+    auth_info = Tenant.get('admin_platform', dc_region=region)
     if less_than_two_controllers(auth_info=auth_info, con_ssh=con_ssh):
         LOG.info("Less than two controllers on system. Skip copying file to controller-1.")
         return
@@ -383,11 +356,9 @@ def get_auth_via_openrc(con_ssh, use_telnet=False, con_telnet=None):
                   'OS_REGION_NAME',
                   'OS_INTERFACE',
                   'OS_KEYSTONE_REGION_NAME']
-    if use_telnet and con_telnet:
-        code, output = con_telnet.exec_cmd('cat /etc/platform/openrc')
-    else:
-        code, output = con_ssh.exec_cmd('cat /etc/platform/openrc')
 
+    client = con_telnet if use_telnet and con_telnet else con_ssh
+    code, output = client.exec_cmd('cat /etc/platform/openrc')
     if code != 0:
         return None
 
@@ -402,34 +373,27 @@ def get_auth_via_openrc(con_ssh, use_telnet=False, con_telnet=None):
     return auth_dict
 
 
-def get_lab_from_cmdline(lab_arg, installconf_path, controller_arg=None, compute_arg=None, storage_arg=None,
-                         lab_files_dir=None, bs=None):
+def get_lab_from_installconf(installconf_path, controller_arg=None, compute_arg=None, storage_arg=None,
+                             lab_files_dir=None, bs=None):
     lab_dict = None
-    if not lab_arg and not installconf_path:
-        raise ValueError("No lab is specified via cmdline or install_conf")
+    if not installconf_path:
+        raise ValueError("No lab is specified via cmdline or conf files.")
+    installconf = configparser.ConfigParser(allow_no_value=True)
+    installconf.read(installconf_path)
 
-    if installconf_path:
-        installconf = configparser.ConfigParser(allow_no_value=True)
-        installconf.read(installconf_path)
-
-        # Parse lab info
-        lab_info_ = installconf['LAB']
-        lab_name = lab_info_['LAB_NAME']
-        if not lab_name:
-            raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
-                             "has to be provided")
-        if lab_arg and lab_arg.lower() != lab_name.lower():
-            LOG.warning("Conflict in --lab={} and install conf file LAB_NAME={}. LAB_NAME in conf file will be used".
-                        format(lab_arg, lab_name))
-        lab_arg = lab_name
+    # Parse lab info
+    lab_info_ = installconf['LAB']
+    lab_name = lab_info_['LAB_NAME']
+    if not lab_name:
+        raise ValueError("Either --lab=<lab_name> or --install-conf=<full path of install configuration file> "
+                         "has to be provided")
 
     if controller_arg:
-        lab_dict = get_lab_from_install_args(lab_arg, controller_arg, compute_arg, storage_arg, lab_files_dir,
+        lab_dict = get_lab_from_install_args(lab_name, controller_arg, compute_arg, storage_arg, lab_files_dir,
                                              bs=bs)
+    if not lab_dict:
+        lab_dict = get_lab_dict(lab_name)
 
-    if lab_dict is None:
-        if lab_arg:
-            lab_dict = get_lab_dict(lab_arg)
     return lab_dict
 
 
@@ -533,7 +497,8 @@ def is_vbox(lab=None):
     if not lab:
         lab = ProjVar.get_var('LAB')
     lab_name = lab['name']
-    nat_name = ProjVar.get_var('NATBOX').get('name')
+    nat_box = ProjVar.get_var('NATBOX')
+    nat_name = nat_box.get('name', '') if nat_box else ''
 
     return 'vbox' in lab_name or nat_name == 'localhost' or nat_name.startswith('128.224.')
 
@@ -619,8 +584,6 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                              vswitch_type=vswitch_type, patch_dir=patch_dir, kubernetes=kubernetes,
                                              helm_chart_path=helm_chart_path)
 
-    # print("Setting Install vars : {} ".format(locals()))
-
     # Initialize values
     errors = []
     lab_to_install = lab
@@ -630,7 +593,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
                                                                  BuildServerPath.DEFAULT_HOST_BUILD_PATH)
     license_path = BuildServerPath.DEFAULT_LICENSE_PATH
     guest_image = files_server = hosts_bulk_add = boot_if_settings = tis_config = lab_setup = files_dir = \
-        heat_templates = out_put_dir = multi_region_lab = dist_cloud_lab = None
+        heat_templates = multi_region_lab = None
 
     vbox = True if lab and 'vbox' in lab.lower() else False
     if vbox:
@@ -652,7 +615,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     if dc_system and 'central_region' not in lab_to_install:
         raise ValueError("Distributed cloud system value mismatch")
 
-    central_reg_info_ = eval(lab_info_.get('CENTRAL_REGION')) if dc_system else None
+    central_reg_info_ = ast.literal_eval(lab_info_.get('CENTRAL_REGION', 'False')) if dc_system else None
     con0_ip = lab_info_.get('CONTROLLER0_IP') if not dc_system else \
         (central_reg_info_['controller-0 ip'] if central_reg_info_ else None)
     if con0_ip:
@@ -707,7 +670,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     conf_guest_image = conf_files['GUEST_IMAGE_PATH']
     conf_heat_templates = conf_files['HEAT_TEMPLATES']
     conf_vswitch_type = conf_files['VSWITCH_TYPE']
-    conf_kuber = eval(conf_files['KUBERNETES_CONFIG'])
+    conf_kuber = ast.literal_eval(conf_files['KUBERNETES_CONFIG'])
     conf_helm_chart = conf_files['HELM_CHART_PATH']
     if conf_files_server:
         files_server = conf_files_server
@@ -732,7 +695,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
 
     boot_info = installconf["BOOT"]
     conf_boot_server = boot_info["BOOT_SERVER"]
-    conf_low_latency = eval(boot_info["LOW_LATENCY_INSTALL"])
+    conf_low_latency = ast.literal_eval(boot_info["LOW_LATENCY_INSTALL"])
     conf_boot_type = boot_info["BOOT_TYPE"]
     if conf_boot_server:
         boot_server = conf_boot_server
@@ -749,7 +712,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False, cont
     if conf_final_step:
         stop = conf_final_step
     if conf_skip_steps:
-        skip = eval(conf_skip_steps)
+        skip = ast.literal_eval(conf_skip_steps)
 
     # install conf file parsing ended. Check for errors.
     if (not dc_system and not lab_to_install.get('controller-0 ip', None)) or \
@@ -935,6 +898,8 @@ def write_installconf(lab, controller, lab_files_dir, build_server, files_server
         boot_server
         resume
         skip
+        kubernetes
+        helm_chart_path
 
     Returns: the path of the written file
 
@@ -1004,7 +969,7 @@ def write_installconf(lab, controller, lab_files_dir, build_server, files_server
     config["CONTROL"] = control_dict
 
     for k in config:
-       config[k] = {kv: vv if vv else '' for kv, vv in config[k].items()}
+        config[k] = {kv: vv if vv else '' for kv, vv in config[k].items()}
 
     install_config_name = "{}_install.cfg.ini".format(lab_dict['short_name'])
     install_config_path = ProjVar.get_var('TEMP_DIR') + install_config_name
@@ -1094,11 +1059,7 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None, host_build_dir
 
 
 def is_https(con_ssh):
-    return keystone_helper.is_https_lab(con_ssh=con_ssh, source_openrc=True)
-
-#
-# def list_migration_history(con_ssh):
-#     nova_helper.get_migration_list_table(con_ssh=con_ssh)
+    return keystone_helper.is_https_enabled(con_ssh=con_ssh, source_openrc=True, auth_info=Tenant.get('admin_platform'))
 
 
 def get_version_and_patch_info():
@@ -1163,8 +1124,9 @@ def set_session(con_ssh):
         try:
             from utils.cgcs_reporter import upload_results
             sw_version = '-'.join(ProjVar.get_var('SW_VERSION'))
-            build_id = ProjVar.get_var('BUILD_ID')
-            bs_ = ProjVar.get_var('BUILD_SERVER')
+            build_info = ProjVar.get_var('BUILD_INFO')
+            build_id = build_info['BUILD_ID']
+            bs_ = build_info('BUILD_SERVER')
             session_id = upload_results.upload_test_session(lab_name=ProjVar.get_var('LAB')['name'],
                                                             build_id=build_id,
                                                             build_server=bs_,
@@ -1248,12 +1210,12 @@ def set_region(region=None):
                 keystone_helper.add_or_remove_role(add_=True, role='admin', user=region_tenant, project=region_tenant)
     elif re.search(SUBCLOUD_PATTERN, region):
         # Distributed cloud, lab specified is a subcloud.
-        urls = keystone_helper.get_endpoints(region=region, rtn_val='URL', interface='internal',
+        urls = keystone_helper.get_endpoints(region=region, field='URL', interface='internal',
                                              service_name='keystone')
         if not urls:
             raise ValueError("No internal endpoint found for region {}. Invalid value for --region with specified lab."
                              "sub-cloud tests can be run on controller, but not the other way round".format(region))
-        Tenant.set_url(urls[0])
+        Tenant.set_platform_url(urls[0])
 
 
 def set_dc_vars():
@@ -1297,7 +1259,7 @@ def set_dc_vars():
         if subcloud == primary_subcloud:
             LOG.info("Set default cli auth to use {}".format(subcloud))
             Tenant.set_region(region=region)
-            Tenant.set_url(url=auth_url)
+            Tenant.set_platform_url(url=auth_url)
 
     LOG.info("Set default controller ssh to {} in ControllerClient".format(primary_subcloud))
     ControllerClient.set_default_ssh(primary_subcloud)
@@ -1474,4 +1436,166 @@ def initialize_server(server_hostname, prompt=None):
     server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
     server_dict = {"name": server_hostname, "prompt": prompt, "ssh_conn": server_conn}
 
-    return build_server.Server(**server_dict)
+    return Server(**server_dict)
+
+
+def __get_ip_version(ip_addr):
+    try:
+        ip_version = ipaddress.ip_address(ip_addr).version
+    except ValueError:
+        ip_version = None
+
+    return ip_version
+
+
+def setup_testcase_config(testcase_config, lab=None, natbox=None):
+
+    fip_error = 'A valid IPv4 OAM floating IP has to be specified via cmdline option --lab=<oam_floating_ip>, ' \
+                'or testcase config file has to be provided via --testcase-config with oam_floating_ip ' \
+                'specified under auth_platform section.'
+    if not testcase_config:
+        if not lab:
+            raise ValueError(fip_error)
+        return lab, natbox
+
+    auth_section = 'auth'
+    guest_image_section = 'guest_image'
+    guest_networks_section = 'guest_networks'
+    guest_keypair_section = 'guest_keypair'
+    natbox_section = 'natbox'
+
+    config = configparser.ConfigParser()
+    config.read(testcase_config)
+
+    #
+    # Update global variables for auth section
+    #
+    # Update OAM floating IP
+    if lab:
+        fip = lab.get('floating ip')
+        config.set(auth_section, 'oam_floating_ip', fip)
+    else:
+        fip = config.get(auth_section, 'oam_floating_ip', fallback='').strip()
+        lab = get_lab_dict(fip)
+
+    if __get_ip_version(fip) != 4:
+        raise ValueError(fip_error)
+
+    # controller-0 oam ip is updated with best effort if a valid IPv4 IP is provided
+    if not lab.get('controller-0 ip') and config.get(auth_section, 'controller0_oam_ip', fallback='').strip():
+        con0_ip = config.get(auth_section, 'controller0_oam_ip').strip()
+        if __get_ip_version(con0_ip) == 4:
+            lab['controller-0 ip'] = con0_ip
+        else:
+            LOG.info("controller0_oam_ip specified in testcase config file is not a valid IPv4 address. Ignore.")
+
+    # Update linux user credentials
+    if config.get(auth_section, 'linux_username', fallback='').strip():
+        HostLinuxCreds.set_user(config.get(auth_section, 'linux_username').strip())
+    if config.get(auth_section, 'linux_user_password', fallback='').strip():
+        HostLinuxCreds.set_user(config.get(auth_section, 'linux_user_password').strip())
+
+    # Update openstack keystone user credentials
+    auth_dict_map = {
+        'platform_admin': 'admin_platform',
+        'admin': 'admin',
+        'test1': 'tenant1',
+        'test2': 'tenant2',
+    }
+    for conf_prefix, dict_name in auth_dict_map.items():
+        kwargs = {}
+        default_auth = Tenant.get(dict_name)
+        conf_user = config.get(auth_section, '{}_username'.format(conf_prefix), fallback='').strip()
+        conf_password = config.get(auth_section, '{}_user_password'.format(conf_prefix), fallback='').strip()
+        conf_project = config.get(auth_section, '{}_project'.format(conf_prefix), fallback='').strip()
+        conf_domain = config.get(auth_section, '{}_domain'.format(conf_prefix), fallback='').strip()
+        conf_keypair = config.get(auth_section, '{}_nova_keypair'.format(conf_prefix), fallback='').strip()
+        if conf_user and conf_user != default_auth.get('user'):
+            kwargs['username'] = conf_user
+        if conf_password and conf_password != default_auth.get('password'):
+            kwargs['password'] = conf_password
+        if conf_project and conf_project != default_auth.get('tenant'):
+            kwargs['tenant'] = conf_project
+        if conf_domain and conf_domain != default_auth.get('domain'):
+            kwargs['domain'] = conf_domain
+        if conf_keypair and conf_keypair != default_auth.get('nova_keypair'):
+            kwargs['nova_keypair'] = conf_keypair
+
+        if kwargs:
+            Tenant.update(dict_name, **kwargs)
+
+    #
+    # Update global variables for natbox section
+    #
+    natbox_host = config.get(natbox_section, 'natbox_host', fallback='').strip()
+    natbox_user = config.get(natbox_section, 'natbox_user', fallback='').strip()
+    natbox_password = config.get(natbox_section, 'natbox_password', fallback='').strip()
+    if natbox_host and natbox and natbox_host != natbox['ip']:
+        natbox = get_natbox_dict(natbox_host, user=natbox_user, password=natbox_password)
+
+    #
+    # Update global variables for guest_image section
+    #
+    img_file_dir = config.get(guest_image_section, 'img_file_dir', fallback='').strip()
+    glance_image_name = config.get(guest_image_section, 'glance_image_name', fallback='').strip()
+    img_file_name = config.get(guest_image_section, 'img_file_name', fallback='').strip()
+    img_disk_format = config.get(guest_image_section, 'img_disk_format', fallback='').strip()
+    min_disk_size = config.get(guest_image_section, 'min_disk_size', fallback='').strip()
+    img_container_format = config.get(guest_image_section, 'img_container_format', fallback='').strip()
+    image_ssh_user = config.get(guest_image_section, 'image_ssh_user', fallback='').strip()
+    image_ssh_password = config.get(guest_image_section, 'image_ssh_password', fallback='').strip()
+
+    if img_file_dir and img_file_dir != GuestImages.DEFAULT['image_dir']:
+        # Update default image file directory
+        img_file_dir = os.path.expanduser(img_file_dir)
+        if not os.path.isabs(img_file_dir):
+            raise ValueError("Please provide a valid absolute path for img_file_dir under guest_image section "
+                             "in testcase config file")
+        GuestImages.DEFAULT['image_dir'] = img_file_dir
+
+    if glance_image_name and glance_image_name != GuestImages.DEFAULT['guest']:
+        # Update default glance image name
+        GuestImages.DEFAULT['guest'] = glance_image_name
+        if glance_image_name not in GuestImages.IMAGE_FILES:
+            # Add guest image info to consts.cgcs.GUESTIMAGES
+            if not (img_file_name and img_disk_format and min_disk_size):
+                raise ValueError("img_file_name and img_disk_format under guest_image section have to be "
+                                 "specified in testcase config file")
+
+            img_container_format = img_container_format if img_container_format else 'bare'
+            GuestImages.IMAGE_FILES[glance_image_name] = \
+                (None, min_disk_size, img_file_name, img_disk_format, img_container_format)
+
+            # Add guest login credentials
+            Guest.CREDS[glance_image_name] = {
+                'user': image_ssh_user if image_ssh_user else 'root',
+                'password': image_ssh_password if image_ssh_password else None,
+            }
+
+    #
+    # Update global variables for guest_keypair section
+    #
+    natbox_keypair_dir = config.get(guest_keypair_section, 'natbox_keypair_dir', fallback='').strip()
+    private_key_path = config.get(guest_keypair_section, 'private_key_path', fallback='').strip()
+
+    if natbox_keypair_dir:
+        natbox_keypair_path = os.path.join(natbox_keypair_dir, 'keyfile_{}.pem'.format(lab['short_name']))
+        ProjVar.set_var(NATBOX_KEYFILE_PATH=natbox_keypair_path)
+    if private_key_path:
+        ProjVar.set_var(STX_KEYFILE_PATH=private_key_path)
+
+    #
+    # Update global variables for guest_networks section
+    #
+    net_name_patterns = {
+        'mgmt': config.get(guest_networks_section, 'mgmt_net_name_pattern', fallback='').strip(),
+        'data': config.get(guest_networks_section, 'data_net_name_pattern', fallback='').strip(),
+        'internal': config.get(guest_networks_section, 'internal_net_name_pattern', fallback='').strip(),
+        'external': config.get(guest_networks_section, 'external_net_name_pattern', fallback='').strip()
+    }
+
+    for net_type, net_name_pattern in net_name_patterns.items():
+        if net_name_pattern:
+            Networks.set_neutron_net_patterns(net_type=net_type, net_name_pattern=net_name_pattern)
+
+    return lab, natbox

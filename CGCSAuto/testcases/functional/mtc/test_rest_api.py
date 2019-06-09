@@ -2,6 +2,7 @@ import copy
 
 from consts.timeout import HostTimeout
 from consts.cgcs import HTTPPort, HostAdminState
+from consts.auth import Tenant
 from pytest import fixture, skip
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import html_helper, host_helper, system_helper
@@ -16,7 +17,7 @@ IP_ADDR = html_helper.get_ip_addr()
 def get_headers():
     headers = {"Content-Type": "application/json",
                "Accept": "application/json",
-               "X-Auth-Token": html_helper.get_user_token(platform=True)}
+               "X-Auth-Token": html_helper.get_user_token(auth_info=Tenant.get('admin_platform'))}
 
     return headers
 
@@ -35,7 +36,7 @@ def prepare_modify_cpu(request):
         skip("There were no unlocked compute nodes.")
 
     host = computes[0]
-    uuid = host_helper.get_hostshow_value(host=host, field='uuid')
+    uuid = system_helper.get_host_values(host=host, fields='uuid')[0]
     headers = get_headers()
 
     url = html_helper.create_url(IP_ADDR, HTTPPort.SYS_PORT, HTTPPort.SYS_VER, 'iprofile')
@@ -47,7 +48,7 @@ def prepare_modify_cpu(request):
     LOG.info("The new profile uuid is: {}".format(iprofile_uuid))
 
     def unlock():
-        host_helper.apply_cpu_profile(host, iprofile_uuid)
+        host_helper.apply_host_cpu_profile(host, iprofile_uuid)
 
         url_ = html_helper.create_url(IP_ADDR, HTTPPort.SYS_PORT, HTTPPort.SYS_VER,
                                       'iprofile/{}'.format(iprofile_uuid))
@@ -242,7 +243,7 @@ def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
     HostsToRecover.add(hostname, scope='function')
     html_helper.patch_request(url=url, headers=headers, data=lock_data, verify=False)
 
-    host_helper.wait_for_host_values(hostname, timeout=HostTimeout.LOCK, administrative=HostAdminState.LOCKED)
+    system_helper.wait_for_host_values(hostname, timeout=HostTimeout.LOCK, administrative=HostAdminState.LOCKED)
 
     hostinfo = html_helper.get_request(url=url, headers=headers, verify=False)
     assert 'locked' == hostinfo['administrative'], "FAIL: Couldn't lock {}".format(hostname)

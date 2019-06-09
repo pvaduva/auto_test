@@ -1,10 +1,10 @@
 import re
-from consts.cgcs import Networks
-from keywords import host_helper
+
+from keywords import system_helper
 
 
 def test_ntpq_parser():
-    code, msg = host_helper.get_ntpq_status(host='controller-0')
+    system_helper.get_ntpq_status(host='controller-0')
 
     healthy = """
      remote           refid      st t when poll reach   delay   offset  jitter
@@ -67,7 +67,7 @@ def _ntp_test(output, host):
     invalid = []
     unreachable = []
     for server_line in server_lines:
-        if re.match("{}.*".format(Networks.MGMT_IP), server_line[1:]):
+        if re.match("192.168..*", server_line[1:]):
             continue
 
         if server_line.startswith('*'):

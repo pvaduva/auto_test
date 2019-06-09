@@ -23,7 +23,7 @@ def _wait_for_heat_stack_deleted(stack_name=None, timeout=120, check_interval=3,
     LOG.info("Waiting for {} to be deleted...".format(stack_name))
     end_time = time.time() + timeout
     while time.time() < end_time:
-        stack_status = get_stack_status(stack_name=stack_name, auth_info=auth_info, con_ssh=con_ssh)
+        stack_status = get_stack_status(stack=stack_name, auth_info=auth_info, con_ssh=con_ssh, fail_ok=True)
         if not stack_status:
             return True
         elif stack_status[0] == HeatStackStatus.DELETE_FAILED:
@@ -64,11 +64,11 @@ def wait_for_heat_status(stack_name=None, status=HeatStackStatus.CREATE_COMPLETE
         fail_status = HeatStackStatus.UPDATE_FAILED
 
     while time.time() < end_time:
-        current_status = get_stack_status(stack_name=stack_name, auth_info=auth_info, con_ssh=con_ssh)[0]
+        current_status = get_stack_status(stack=stack_name, auth_info=auth_info, con_ssh=con_ssh)[0]
         if status == current_status:
             return True, 'Heat stack {} has reached {} status'.format(stack_name, status)
         elif fail_status == current_status:
-            stack_id = get_stack_value(stack=stack_name, rtn_val='id', auth_info=auth_info, con_ssh=con_ssh)
+            stack_id = get_stack_values(stack=stack_name, fields='id', auth_info=auth_info, con_ssh=con_ssh)[0]
             get_stack_resources(stack=stack_id, auth_info=auth_info, con_ssh=con_ssh)
 
             err = "Heat stack {} failed to reach {}, actual status: {}".format(stack_name, status, fail_status)
@@ -79,7 +79,7 @@ def wait_for_heat_status(stack_name=None, status=HeatStackStatus.CREATE_COMPLETE
 
         time.sleep(check_interval)
 
-    stack_id = get_stack_value(stack=stack_name, rtn_val='id', auth_info=auth_info, con_ssh=con_ssh)
+    stack_id = get_stack_values(stack=stack_name, fields='id', auth_info=auth_info, con_ssh=con_ssh)[0]
     get_stack_resources(stack=stack_id, auth_info=auth_info, con_ssh=con_ssh)
     err_msg = "Heat stack {} did not reach {} within {}s. Actual status: {}".format(stack_name, status, timeout,
                                                                                     current_status)
@@ -89,12 +89,16 @@ def wait_for_heat_status(stack_name=None, status=HeatStackStatus.CREATE_COMPLETE
     raise exceptions.HeatError(err_msg)
 
 
-def get_stack_value(stack, rtn_val='stack_status_reason', con_ssh=None, auth_info=None):
-    table_ = table_parser.table(cli.openstack('stack show', stack, ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_value_two_col_table(table_=table_, field=rtn_val)
+def get_stack_values(stack, fields='stack_status_reason', con_ssh=None, auth_info=None, fail_ok=False):
+    code, out = cli.openstack('stack show', stack, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
+    if code > 0:
+        return None
+
+    table_ = table_parser.table(out)
+    return table_parser.get_multi_values_two_col_table(table_=table_, fields=fields)
 
 
-def get_stacks(name=None, con_ssh=None, auth_info=None, all_=True):
+def get_stacks(name=None, field='id', con_ssh=None, auth_info=None, all_=True):
     """
     Get the stacks list based on name if given for a given tenant.
 
@@ -103,49 +107,46 @@ def get_stacks(name=None, con_ssh=None, auth_info=None, all_=True):
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
         all_ (bool): whether to display all stacks for admin user
         name (str): Given name for the heat stack
+        field (str|list|tuple)
 
-    Returns (str): Heat stack id of a specific tenant.
+    Returns (list): list of heat stacks.
 
     """
     args = ''
     if auth_info is not None:
         if auth_info['user'] == 'admin' and all_:
             args = '--a'
-    table_ = table_parser.table(cli.openstack('stack list', positional_args=args, ssh_client=con_ssh,
-                                              auth_info=auth_info))
-    if name is not None:
-        return table_parser.get_values(table_, 'id', stack_name=name)
-    else:
-        return table_parser.get_column(table_, 'id')
+    table_ = table_parser.table(
+        cli.openstack('stack list', positional_args=args, ssh_client=con_ssh, auth_info=auth_info)[1])
+
+    kwargs = {'Stack Name': name} if name else {}
+    return table_parser.get_multi_values(table_, field, **kwargs)
 
 
-def get_stack_status(stack_name, con_ssh=None, auth_info=None, all_=True):
+def get_stack_status(stack, con_ssh=None, auth_info=None, fail_ok=False):
     """
     Get the stacks status based on name if given for a given tenant.
 
     Args:
         con_ssh (SSHClient): If None, active controller ssh will be used.
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
-        stack_name (str): Given name for the heat stack
-        all_ (bool): Whether to list all stacks for admin user
+        stack (str): Given name for the heat stack
+        fail_ok (bool):
 
     Returns (str): Heat stack status of a specific tenant.
 
     """
-    args = ''
-    if auth_info is not None:
-        if auth_info['user'] == 'admin' and all_:
-            args = '--a'
-    table_ = table_parser.table(cli.openstack('stack list', args, ssh_client=con_ssh, auth_info=auth_info))
-    return table_parser.get_values(table_, 'Stack Status', ** {'Stack Name': stack_name})
+    status = get_stack_values(stack, fields='stack_status', con_ssh=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
+    status = status[0] if status else None
+    return status
 
 
-def get_stack_resources(stack, rtn_val='resource_name', auth_info=None, con_ssh=None, **kwargs):
+def get_stack_resources(stack, field='resource_name', auth_info=None, con_ssh=None, **kwargs):
     """
 
     Args:
         stack (str): id (or name) for the heat stack. ID is required if admin user is used to display tenant resource.
-        rtn_val: values to return
+        field: values to return
         auth_info:
         con_ssh:
         kwargs: key/value pair to filer out the values to return
@@ -153,12 +154,12 @@ def get_stack_resources(stack, rtn_val='resource_name', auth_info=None, con_ssh=
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.openstack('stack resource list --long', stack, auth_info=auth_info,
-                                              ssh_client=con_ssh))
-    return table_parser.get_values(table_, target_header=rtn_val, **kwargs)
+    table_ = table_parser.table(
+        cli.openstack('stack resource list --long', stack, ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.get_values(table_, target_header=field, **kwargs)
 
 
-def delete_stack(stack_name, fail_ok=False, check_first=False, con_ssh=None, auth_info=None):
+def delete_stack(stack, fail_ok=False, check_first=False, con_ssh=None, auth_info=None):
     """
     Delete the given heat stack for a given tenant.
 
@@ -167,39 +168,38 @@ def delete_stack(stack_name, fail_ok=False, check_first=False, con_ssh=None, aut
         fail_ok (bool):
         check_first (bool): whether or not to check the stack existence before attempt to delete
         auth_info (dict): Tenant dict. If None, primary tenant will be used.
-        stack_name (str): Given name for the heat stack
+        stack (str): Given name for the heat stack
 
     Returns (tuple): Status and msg of the heat deletion.
 
     """
 
-    if not stack_name:
+    if not stack:
         raise ValueError("stack_name is not provided.")
 
     if check_first:
-        if not get_stack_status(stack_name, con_ssh=con_ssh, auth_info=auth_info):
-            msg = "Heat stack {} doesn't exist on the system. Do nothing.".format(stack_name)
+        if not get_stack_status(stack, con_ssh=con_ssh, auth_info=auth_info, fail_ok=True):
+            msg = "Heat stack {} doesn't exist on the system. Do nothing.".format(stack)
             LOG.info(msg)
             return -1, msg
 
-    LOG.info("Deleting Heat Stack %s", stack_name)
-    exitcode, output = cli.heat('stack-delete -y', stack_name, ssh_client=con_ssh, auth_info=auth_info,
-                                fail_ok=fail_ok, rtn_code=True)
-    if exitcode == 1:
+    LOG.info("Deleting Heat Stack %s", stack)
+    exitcode, output = cli.openstack('stack delete -y', stack, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    if exitcode > 1:
         LOG.warning("Delete heat stack request rejected.")
         return 1, output
 
-    if not _wait_for_heat_stack_deleted(stack_name=stack_name, auth_info=auth_info):
-        stack_id = get_stack_value(stack=stack_name, rtn_val='id', auth_info=auth_info, con_ssh=con_ssh)
+    if not _wait_for_heat_stack_deleted(stack_name=stack, auth_info=auth_info):
+        stack_id = get_stack_values(stack=stack, fields='id', auth_info=auth_info, con_ssh=con_ssh)[0]
         get_stack_resources(stack=stack_id, auth_info=auth_info, con_ssh=con_ssh)
 
-        msg = "heat stack {} is not removed after stack-delete.".format(stack_name)
+        msg = "heat stack {} is not removed after stack-delete.".format(stack)
         if fail_ok:
             LOG.warning(msg)
             return 2, msg
         raise exceptions.HeatError(msg)
 
-    succ_msg = "Heat stack {} is successfully deleted.".format(stack_name)
+    succ_msg = "Heat stack {} is successfully deleted.".format(stack)
     LOG.info(succ_msg)
     return 0, succ_msg
 
@@ -220,35 +220,55 @@ def get_heat_params(param_name=None):
     elif param_name is 'FLAVOR':
         return 'small_ded'
     elif param_name is 'IMAGE':
-        return GuestImages.DEFAULT_GUEST
+        return GuestImages.DEFAULT['guest']
     else:
         return None
 
 
-def create_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_info=None, cleanup='function',
-                 timeout=300):
+def create_stack(stack_name, template, pre_creates=None, environments=None, stack_timeout=None,
+                 parameters=None, param_files=None, enable_rollback=None, dry_run=None,
+                 wait=None, tags=None, fail_ok=False, con_ssh=None, auth_info=None, cleanup='function', timeout=300):
     """
     Create the given heat stack for a given tenant.
 
     Args:
-        con_ssh (SSHClient): If None, active controller ssh will be used.
-        fail_ok (bool):
-        params_string: Parameters to pass to the heat create cmd. ex: -f <stack.yaml> -P IMAGE=tis <stack_name>
-        auth_info (dict): Tenant dict. If None, primary tenant will be used.
         stack_name (str): Given name for the heat stack
+        template (str): path of heat template
+        pre_creates (str|list|None)
+        environments (str|list|None)
+        stack_timeout (int|str|None): stack creating timeout in minutes
+        parameters (str|dict|None)
+        param_files (str|dict|None)
+        enable_rollback (bool|None)
+        dry_run (bool|None)
+        wait (bool|None)
+        tags (str|list|None)
+        auth_info (dict): Tenant dict. If None, primary tenant will be used.
+        con_ssh (SSHClient): If None, active controller ssh will be used.
+        timeout (int): automation timeout in seconds
+        fail_ok (bool):
         cleanup (str|None)
 
     Returns (tuple): Status and msg of the heat deletion.
     """
 
-    if not params_string:
-        raise ValueError("Parameters not provided.")
-
-    LOG.info("Create Heat Stack %s", params_string)
-    exitcode, output = cli.heat('stack-create', params_string, ssh_client=con_ssh, auth_info=auth_info,
-                                fail_ok=fail_ok, timeout=timeout, rtn_code=True)
-    if exitcode == 1:
-        LOG.warning("Create heat stack request rejected.")
+    args_dict = {
+        '--template': template,
+        '--environment': environments,
+        '--timeout': stack_timeout,
+        '--pre-create': pre_creates,
+        '--enable-rollback': enable_rollback,
+        '--parameter': parameters,
+        '--parameter-file': param_files,
+        '--wait': wait,
+        '--tags': ','.join(tags) if isinstance(tags, (list, tuple)) else tags,
+        '--dry-run': dry_run,
+    }
+    args = common.parse_args(args_dict, repeat_arg=True)
+    LOG.info("Create Heat Stack {} with args: {}".format(stack_name, args))
+    exitcode, output = cli.openstack('stack create', '{} {}'.format(args, stack_name), ssh_client=con_ssh,
+                                     fail_ok=fail_ok, auth_info=auth_info, timeout=timeout)
+    if exitcode > 0:
         return 1, output
 
     if cleanup:
@@ -282,8 +302,7 @@ def update_stack(stack_name, params_string, fail_ok=False, con_ssh=None, auth_in
         raise ValueError("Parameters not provided.")
 
     LOG.info("Create Heat Stack %s", params_string)
-    exitcode, output = cli.heat('stack-update', params_string, ssh_client=con_ssh, auth_info=auth_info,
-                                fail_ok=fail_ok, rtn_code=True)
+    exitcode, output = cli.heat('stack-update', params_string, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if exitcode == 1:
         LOG.warning("Create heat stack request rejected.")
         return 1, output

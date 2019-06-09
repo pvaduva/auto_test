@@ -20,7 +20,7 @@ def _test_tc4693_verify_no_alarms():
 
     alarms_found = False
 
-    output = cli.fm('alarm-list')
+    output = cli.fm('alarm-list')[1]
 
     LOG.tc_step("Check no unexpected alarms in output for fm alarm-list: \n%s" % output)
 

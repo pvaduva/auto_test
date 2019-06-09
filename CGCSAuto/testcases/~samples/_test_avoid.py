@@ -88,7 +88,7 @@ def host_to_modify(request):
 
     """
 
-    target_host = host_helper.get_nova_host_with_min_or_max_vms(rtn_max=False)
+    target_host = host_helper.get_up_hypervisors()[0]
     original_backing = host_helper.get_host_instance_backing(host=target_host)
 
     # Ensure unlock attempt on target_host after running all test cases using this fixture

@@ -51,7 +51,7 @@ def test_remote_cli():
     glance_helper.get_images()
     system_helper.get_computes()
     ceilometer_helper.get_alarms()
-    keystone_helper.is_https_lab()
+    keystone_helper.is_https_enabled()
 
 
     # import sys

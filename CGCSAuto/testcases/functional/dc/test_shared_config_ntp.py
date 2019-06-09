@@ -12,11 +12,11 @@ from keywords import dc_helper, system_helper
 def ntp_precheck(request, check_alarms):
 
     LOG.info("Gather NTP config and subcloud management info")
-    central_auth = Tenant.get('admin', dc_region='RegionOne')
+    central_auth = Tenant.get('admin_platform', dc_region='RegionOne')
     central_ntp = system_helper.get_ntp_servers(auth_info=central_auth)
 
     primary_subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
-    subcloud_auth = Tenant.get('admin', dc_region=primary_subcloud)
+    subcloud_auth = Tenant.get('admin_platform', dc_region=primary_subcloud)
     subcloud_ntp = system_helper.get_ntp_servers(auth_info=subcloud_auth)
 
     if not central_ntp == subcloud_ntp:
@@ -39,7 +39,7 @@ def ntp_precheck(request, check_alarms):
         LOG.info("Unmange: {}".format(managed_subclouds))
         for subcloud in managed_subclouds:
             if not system_helper.get_alarms(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                            auth_info=Tenant.get('admin', subcloud)):
+                                            auth_info=Tenant.get('admin_platform', subcloud)):
                 subclouds_to_revert.append(subcloud)
                 dc_helper.unmanage_subcloud(subcloud)
 
@@ -71,7 +71,7 @@ def ntp_precheck(request, check_alarms):
                 for subcloud in subclouds_to_revert:
                     dc_helper.manage_subcloud(subcloud)
                     assert not system_helper.get_alarms(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
-                                                        auth_info=Tenant.get('admin', dc_region=subcloud))
+                                                        auth_info=Tenant.get('admin_platform', dc_region=subcloud))
             reverted = True
 
         finally:
@@ -117,11 +117,11 @@ def test_dc_ntp_modify(ntp_precheck):
     new_central_ntp = ['8.8.8.8'] + prev_central_ntp[:-1]
     local_subcloud_ntp = prev_central_ntp[1:]
 
-    central_auth = Tenant.get('admin', dc_region='RegionOne')
-    primary_sub_auth = Tenant.get('admin', dc_region=primary_subcloud)
+    central_auth = Tenant.get('admin_platform', dc_region='RegionOne')
+    primary_sub_auth = Tenant.get('admin_platform', dc_region=primary_subcloud)
     auth_list = [central_auth, primary_sub_auth]
     if managed_subcloud:
-        managed_sub_auth = Tenant.get('admin', dc_region=managed_subcloud)
+        managed_sub_auth = Tenant.get('admin_platform', dc_region=managed_subcloud)
         auth_list.append(managed_sub_auth)
 
     LOG.tc_step("Unmanage {}".format(primary_subcloud))

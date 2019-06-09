@@ -15,7 +15,7 @@ def check_alarms():
 
 @fixture(scope='module')
 def get_host():
-    if system_helper.is_two_node_cpe():
+    if system_helper.is_aio_duplex():
         hostname = system_helper.get_standby_controller_name()
     else:
         hostname = host_helper.get_up_hypervisors()[0]
@@ -46,7 +46,7 @@ def test_modify_memory_when_unlocked_negative(get_host):
 
     LOG.tc_step("Attempt to the modify memory of unlocked host")
     args = "-2M 4 {} 1".format(hostname)
-    exit_code, output = cli.system('host-memory-modify', args, fail_ok=True, rtn_code=True)
+    exit_code, output = cli.system('host-memory-modify', args, fail_ok=True)
 
     LOG.tc_step("Verify host-memory-modify command rejected when host is unlocked")
     assert exit_code == 1, "system host-memory-modify is not rejected when {} is unlocked".format(hostname)
@@ -159,6 +159,6 @@ class TestHugepageNegative:
         # config the page number after lock the compute node
         LOG.tc_step('Attempt to modify host memory with invalid page input and ensure it is rejected')
         args = "{} {} {}".format(host_to_modify, proc, pages)
-        code, output = cli.system('host-memory-modify', args, fail_ok=True, rtn_code=True)
+        code, output = cli.system('host-memory-modify', args, fail_ok=True)
 
         assert 1 == code, "host-memory-modify allows invalid args: {}".format(args)

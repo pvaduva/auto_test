@@ -45,7 +45,7 @@ def pre_configs(request):
     compliance_helper.update_dovetail_mgmt_interface()
 
     controllers = [active, standby]
-    storages = system_helper.get_hostnames(personality='storage', availability=HostAvailState.AVAILABLE)
+    storages = system_helper.get_hosts(personality='storage', availability=HostAvailState.AVAILABLE)
     hosts_dict = {'controller': controllers,
                   'compute': computes,
                   'storage': storages
@@ -86,10 +86,10 @@ def configure_dovetail_server(hosts_per_personality):
     admin_dict = Tenant.get('admin')
     tenant_name = admin_dict['tenant']
     keystone_public_url = keystone_helper.get_endpoints(service_name='keystone', interface='public',
-                                                        region=admin_dict['region'], rtn_val='url')[0]
+                                                        region=admin_dict['region'], field='url')[0]
     env_conf_dict = {
         'OS_PROJECT_NAME': tenant_name,
-        'OS_PROJECT_ID': keystone_helper.get_tenant_ids(tenant_name=tenant_name)[0],
+        'OS_PROJECT_ID': keystone_helper.get_projects(field='ID', name=tenant_name)[0],
         'OS_TENANT_NAME': tenant_name,
         'OS_USERNAME': admin_dict['user'],
         'OS_PASSWORD': admin_dict['password'],

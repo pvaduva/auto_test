@@ -3,10 +3,9 @@ import time
 from pytest import mark, skip, fixture
 
 from utils.tis_log import LOG
-from consts.proj_vars import ProjVar
 from consts.cgcs import PatchState, VMStatus
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import system_helper, host_helper, patching_helper, orchestration_helper, nova_helper, vm_helper, \
+from keywords import system_helper, host_helper, patching_helper, orchestration_helper, vm_helper, \
     cinder_helper
 
 
@@ -36,17 +35,17 @@ def patch_orchestration_setup():
         vm_id = vm_helper.boot_vm(name='patch_{}'.format(source), source=source, cleanup='module')[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
-    controllers, computes, storages = system_helper.get_hostnames_per_personality(rtn_tuple=True)
+    controllers, computes, storages = system_helper.get_hosts_per_personality(rtn_tuple=True)
     return patches, controllers, computes, storages
 
 
 @fixture(scope='function')
 def patch_function_check(request):
-    vms = nova_helper.get_vms(name='patch', strict=False)
+    vms = vm_helper.get_vms(name='patch', strict=False)
     boot_vm = False if len(vms) == 2 else True
     if not boot_vm:
         for vm in vms:
-            if nova_helper.get_vm_status(vm) != VMStatus.ACTIVE or not vm_helper.ping_vms_from_natbox(vm, fail_ok=True):
+            if vm_helper.get_vm_status(vm) != VMStatus.ACTIVE or not vm_helper.ping_vms_from_natbox(vm, fail_ok=True):
                 boot_vm = True
                 break
 
@@ -60,7 +59,7 @@ def patch_function_check(request):
     def remove_on_teardown():
         LOG.info("Check vm status and delete if in bad state")
         for vm_ in vms:
-            if nova_helper.get_vm_status(vm_) != VMStatus.ACTIVE:
+            if vm_helper.get_vm_status(vm_) != VMStatus.ACTIVE:
                 vm_helper.delete_vms(vm_, remove_cleanup='module')
 
         LOG.fixture_step("Remove test patches")
@@ -71,7 +70,11 @@ def patch_function_check(request):
 
 
 def get_test_patches(state=None):
-    test_patch_name = ProjVar.get_var('BUILD_ID') + '_'
+    test_patch_name = system_helper.get_build_info()['BUILD_ID']
+    if not test_patch_name:
+        skip('BUILD ID unknown, unable to find matching test patches')
+
+    test_patch_name += '_'
     test_patches = patching_helper.get_patches_in_state(expected_states=state)
     test_patches = [p.strip() for p in test_patches if p.startswith(test_patch_name)]
     return test_patches
@@ -108,7 +111,7 @@ def remove_test_patches(failure_patch=False):
 
 def check_vms(vms):
     for vm in vms:
-        assert nova_helper.get_vm_status(vm) == VMStatus.ACTIVE
+        assert vm_helper.get_vm_status(vm) == VMStatus.ACTIVE
         vm_helper.ping_vms_from_natbox(fail_ok=False)
 
 
@@ -425,8 +428,7 @@ def test_patch_orch_failure(patch_orchestration_setup, failed_patch_setup, patch
 
     Args:
         patch_orchestration_setup:
-        del_test_patch_before_start
-        patch_function_check
+        failed_patch_setup
         patch_type:
 
     Returns:

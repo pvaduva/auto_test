@@ -1,10 +1,12 @@
+import re
+
 from pytest import fixture, mark
 
 from consts import horizon
-from keywords import host_helper, system_helper
 from utils import table_parser, cli
 from utils.tis_log import LOG
 from utils.horizon.pages.admin.platform import hostinventorypage
+from keywords import system_helper
 
 
 @fixture(scope='function')
@@ -38,7 +40,7 @@ def format_uptime(uptime):
 
     uptime_months = uptime // month
     uptime_weeks = uptime % month // week
-    uptime_days = uptime % month % week//day
+    uptime_days = uptime % month % week // day
     uptime_hours = uptime % month % week % day // hour
     uptime_mins = uptime % month % week % day % hour // min_
 
@@ -75,28 +77,27 @@ def test_horizon_host_inventory_display(host_inventory_pg):
     """
     LOG.tc_step('Test host inventory display')
     host_inventory_pg.go_to_hosts_tab()
-    host_list = system_helper.get_hostnames()
+    host_list = system_helper.get_hosts()
     for host_name in host_list:
+        LOG.info("Checking {}...".format(host_name))
+        headers_map = host_inventory_pg.hosts_table(host_name).get_cli_horizon_mapping()
+        fields = list(headers_map.keys())
+        cli_values = system_helper.get_host_values(host_name, fields, rtn_dict=True)
+        cli_values['uptime'] = format_uptime(cli_values['uptime'])
+        if cli_values.get('peers'):
+            cli_values['peers'] = cli_values.get('peers').get('name')
 
-        fields = list(host_inventory_pg.hosts_table(host_name).HOST_TABLE_HEADERS_MAP.keys())
-        expt_values = host_helper.get_hostshow_values(host_name, fields)
-        expt_values['uptime'] = format_uptime(expt_values['uptime'])
-        if expt_values.get('peers') is not None:
-            expt_values['peers'] = eval(expt_values.get('peers')).get('name')
         horizon_vals = host_inventory_pg.horizon_vals(host_name)
-        headers_map = host_inventory_pg.hosts_table(host_name).HOST_TABLE_HEADERS_MAP
-        for field in headers_map:
-            expt_val = expt_values[field]
-            horizon_header = headers_map[field]
-            horizon_val = horizon_vals[horizon_header]
-            if field == 'uptime':
-                # Extract the time value(int) from time string, eg: '2 days, 8 hours' --> [2, 8]
-                horizon_t = [int(s) for s in horizon_val.split() if s.isdigit()][0]
-                cli_t = [int(s) for s in expt_val.split() if s.isdigit() and int(s) != 0][0]
-                assert horizon_t + 6 >= cli_t, 'Uptime display incorrectly'
+        for cli_field in fields:
+            cli_val = cli_values[cli_field]
+            horizon_field = headers_map[cli_field]
+            horizon_val = horizon_vals[horizon_field]
+            if cli_field == 'uptime':
+                assert re.match(r'\d+ [dhm]', horizon_val)
             else:
-                assert expt_val.upper() in horizon_val.upper(),\
-                    '{} display incorrectly, expect: {} actual: {}'.format(horizon_header, expt_val, horizon_val)
+                assert str(cli_val).lower() in horizon_val.lower(), \
+                    '{} {} display incorrectly, expect: {} actual: {}'.\
+                    format(host_name, horizon_field, cli_val, horizon_val)
 
     horizon.test_result = True
 
@@ -131,7 +132,7 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
     host_details_pg.go_to_overview_tab()
     horizon_vals = host_details_pg.host_detail_overview(host_table.driver).get_content()
     fields_map = host_details_pg.host_detail_overview(host_table.driver).OVERVIEW_INFO_HEADERS_MAP
-    cli_host_vals = host_helper.get_hostshow_values(host_name, fields_map.keys())
+    cli_host_vals = system_helper.get_host_values(host_name, fields_map.keys(), rtn_dict=True)
     for field in fields_map:
         horizon_header = fields_map[field]
         cli_host_val = cli_host_vals[field]
@@ -146,7 +147,7 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
     # PROCESSOR TAB
     LOG.tc_step('Test host {} processor display'.format(host_name))
     host_details_pg.go_to_processor_tab()
-    cpu_table = table_parser.table(cli.system('host-cpu-list {}'.format(host_name)))
+    cpu_table = table_parser.table(cli.system('host-cpu-list {}'.format(host_name))[1])
     expt_cpu_info = {
         'Processor Model:': table_parser.get_values(cpu_table, 'processor_model')[0],
         'Processors:': str(len(set(table_parser.get_values(cpu_table, 'processor'))))}
@@ -160,7 +161,7 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
     checking_list = ['mem_total(MiB)', 'mem_avail(MiB)']
 
     host_details_pg.go_to_memory_tab()
-    memory_table = table_parser.table(cli.system('host-memory-list {}'.format(host_name)))
+    memory_table = table_parser.table(cli.system('host-memory-list {}'.format(host_name))[1])
     colume_names = host_details_pg.memory_table.column_names
     processor_list = table_parser.get_values(memory_table, colume_names[0])
     cli_memory_table_dict = table_parser.row_dict_table(memory_table, colume_names[0], lower_case=False)
@@ -196,7 +197,7 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
                               host_details_pg.storage_pv_table]
     cli_storage_tables = []
     for cmd in cmd_list:
-        cli_storage_tables.append(table_parser.table(cli.system(cmd)))
+        cli_storage_tables.append(table_parser.table(cli.system(cmd))[1])
 
     for i in range(len(horizon_storage_tables)):
         horizon_table = horizon_storage_tables[i]
@@ -224,7 +225,7 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
     LOG.tc_step('Test host {} port display'.format(host_name))
     host_details_pg.go_to_ports_tab()
     horizon_port_table = host_details_pg.ports_table()
-    cli_port_table = table_parser.table(cli.system('host-ethernet-port-list {}'.format(host_name)))
+    cli_port_table = table_parser.table(cli.system('host-ethernet-port-list {}'.format(host_name))[1])
     horizon_row_dict_port_table = host_details_pg.get_horizon_row_dict(horizon_port_table, key_header_index=0)
 
     cli_row_dict_port_table = table_parser.row_dict_table(cli_port_table, 'name', lower_case=False)
@@ -246,14 +247,14 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
     # LLDP TABLE
     LOG.tc_step('Test host {} lldp display'.format(host_name))
     host_details_pg.go_to_lldp_tab()
-    lldp_list_table = table_parser.table(cli.system('host-lldp-neighbor-list {}'.format(host_name)))
+    lldp_list_table = table_parser.table(cli.system('host-lldp-neighbor-list {}'.format(host_name))[1])
     lldp_uuid_list = table_parser.get_values(lldp_list_table, 'uuid')
     horizon_lldp_table = host_details_pg.lldp_table()
     cli_row_dict_lldp_table = {}
     horizon_row_dict_lldp_table = host_details_pg.get_horizon_row_dict(horizon_lldp_table, key_header_index=1)
     for uuid in lldp_uuid_list:
         cli_row_dict = {}
-        lldp_show_table = table_parser.table(cli.system('lldp-neighbor-show {}'.format(uuid)))
+        lldp_show_table = table_parser.table(cli.system('lldp-neighbor-show {}'.format(uuid))[1])
         row_dict_key = table_parser.get_value_two_col_table(lldp_show_table, 'port_identifier')
         for cli_header in horizon_lldp_table.HEADERS_MAP:
             horizon_header = horizon_lldp_table.HEADERS_MAP[cli_header]

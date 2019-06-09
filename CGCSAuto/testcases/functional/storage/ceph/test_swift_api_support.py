@@ -29,7 +29,7 @@ SWIFT_POOLS = ['.rgw.root', 'default.rgw.buckets.data', 'default.rgw.control', '
 
 def get_ceph_backend_info():
     if 'ceph' in storage_helper.get_storage_backends():
-        ceph_info = storage_helper.get_storage_backend_info('ceph')
+        ceph_info = storage_helper.get_storage_backend_values('ceph', rtn_dict=True)
         LOG.info('Ceph backend info: {}'.format(ceph_info))
         return ceph_info
     else:
@@ -132,7 +132,7 @@ def get_large_img_file():
 
     obj_dir = get_obj_dir()
     dest_dir = '{}/{}'.format(obj_dir, TEST_OBJ_DIR)
-    glance_helper._scp_guest_image(img_os='win_2012', dest_dir=dest_dir, timeout=300, con_ssh=client)
+    glance_helper.scp_guest_image(img_os='win_2012', dest_dir=dest_dir, timeout=300, con_ssh=client)
     large_filename = GuestImages.IMAGE_FILES['win_2012'][2]
     large_file_info = get_test_obj_file_names(pattern=large_filename)
     return large_file_info
@@ -193,7 +193,7 @@ def _test_basic_swift_provisioning(pool_size, pre_swift_check):
     LOG.info("Swift object gateway is enabled.")
 
     LOG.info("Verifying ceph task ...")
-    state = storage_helper.get_storage_backend_state('ceph')
+    state = storage_helper.get_storage_backends(backend='ceph', field='state')[0]
     if system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=10, fail_ok=True,
                                     entity_id='controller-')[0]:
         LOG.info("Verifying ceph task is set to 'add-object-gateway'...")
@@ -806,7 +806,7 @@ def verify_swift_object_setup():
 
     LOG.info("Verifying  swift endpoints...")
     port = '7480'
-    endpoints_url = keystone_helper.get_endpoints(rtn_val='URL', service_name='swift', interface='public')[0]
+    endpoints_url = keystone_helper.get_endpoints(field='URL', service_name='swift', interface='public')[0]
     LOG.info("Swift  public endpoint url: {}".format(endpoints_url))
     url_port = endpoints_url.split(':')[2].split('/')[0].strip()
     if url_port != port:

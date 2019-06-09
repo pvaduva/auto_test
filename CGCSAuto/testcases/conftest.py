@@ -22,33 +22,32 @@ def setup_test_session(global_setup, request):
     LOG.fixture_step("(session) Setting up test session...")
     setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
 
-    # set up natbox connection and copy keyfile
-    global natbox_ssh
-    try:
-        natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('NATBOX'))
-    except:
-        if ProjVar.get_var('COLLECT_SYS_NET_INFO'):
-            setups.collect_sys_net_info(lab=ProjVar.get_var('LAB'))
-        raise
-    # setups.boot_vms(ProjVar.get_var('BOOT_VMS'))
-
-    con_ssh = ControllerClient.get_active_controller()
+    global con_ssh
+    if not con_ssh:
+        con_ssh = ControllerClient.get_active_controller()
     # set build id to be used to upload/write test results
     setups.set_build_info(con_ssh)
 
-    # Enable keystone debug
-    if ProjVar.get_var('KEYSTONE_DEBUG'):
-        setups.enable_disable_keystone_debug(enable=True, con_ssh=con_ssh)
 
     # Set global vars
     setups.set_session(con_ssh=con_ssh)
 
-    # Ensure tis and natbox still connected
+    # Ensure tis and natbox (if applicable) ssh are connected
     con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
-    natbox_ssh.flush()
-    natbox_ssh.connect(retry=True)
-    # copy private key to natbox and public key to localhost (if remote cli)
-    setups.setup_keypair(nat_ssh=natbox_ssh, con_ssh=con_ssh)
+
+    # set up natbox connection and copy keyfile
+    natbox_dict = ProjVar.get_var('NATBOX')
+    global natbox_ssh
+    try:
+        natbox_ssh = setups.setup_natbox_ssh(natbox_dict, con_ssh=con_ssh)
+    except:
+        if ProjVar.get_var('COLLECT_SYS_NET_INFO'):
+            setups.collect_sys_net_info(lab=ProjVar.get_var('LAB'))
+        raise
+
+    # Enable keystone debug
+    if ProjVar.get_var('KEYSTONE_DEBUG'):
+        setups.enable_disable_keystone_debug(enable=True, con_ssh=con_ssh)
 
     # collect telnet logs for all hosts
     if ProjVar.get_var('COLLECT_TELNET'):
@@ -94,17 +93,14 @@ def pytest_collectstart():
             CliAuth.set_vars(HTTPS=True)
 
         auth_url = CliAuth.get_var('OS_AUTH_URL')
-        Tenant.set_url(auth_url)
+        Tenant.set_platform_url(auth_url)
         setups.set_region(region=None)
         if ProjVar.get_var('IS_DC'):
-            Tenant.set_url(url=auth_url, central_region=True)
+            Tenant.set_platform_url(url=auth_url, central_region=True)
         initialized = True
 
 
-def pytest_runtest_teardown(item):
-    # print('')
-    # message = 'Teardown started:'
-    # testcase_log(message, item.nodeid, log_type='tc_teardown')
+def pytest_runtest_teardown():
     for con_ssh_ in ControllerClient.get_active_controllers(current_thread_only=True):
         con_ssh_.flush()
         con_ssh_.connect(retry=True, retry_interval=3, retry_timeout=300)

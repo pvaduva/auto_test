@@ -262,7 +262,7 @@ def test_non_wrsroot_not_propagating(user, password, host):
         skip('User name "wrsroot" is dedicated to the special Local Linux Account used by Administrator.')
         return
 
-    hosts = system_helper.get_hostnames(availability=[HostAvailState.AVAILABLE])
+    hosts = system_helper.get_hosts(availability=[HostAvailState.AVAILABLE])
     if len(hosts) < 2:
         LOG.info('Only 1 host: {}\n'.format(hosts))
         skip('Only 1 host: {}, needs 2+ hosts to test\n'.format(hosts))
@@ -359,7 +359,7 @@ def test_wrsroot_password_propagation():
 
     LOG.tc_step('Verify the new password populated to other hosts by logging to them')
     LOG.info('Select another host to login')
-    hosts = [ch for ch in system_helper.get_hostnames(availability=[HostAvailState.AVAILABLE]) if current_host != ch]
+    hosts = [ch for ch in system_helper.get_hosts(availability=[HostAvailState.AVAILABLE]) if current_host != ch]
 
     if len(hosts) < 1:
         skip('No other host can test wrsroot with new password')
@@ -430,9 +430,6 @@ def execute_sudo_cmd(connect, cmd, password, expecting_fail=False, prompt=Prompt
             index = connect.expect([prompt])
 
         LOG.info('get result: index:{}\n'.format(index))
-        # output = (connect._session.before + connect._session.after).decode('utf-8')
-        # LOG.info('output:{}'.format(connect.before + connect.after))
-
         output = connect.before + connect.after
         LOG.info('got output:{}, index:{}\n'.format(output, index))
     except Exception as e:

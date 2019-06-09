@@ -1,15 +1,15 @@
 import time
 from pytest import mark, skip, fixture
 
-from keywords import host_helper, nova_helper, vm_helper, network_helper
+import keywords.host_helper
 from consts.kpi_vars import VmStartup, LiveMigrate, ColdMigrate, Rebuild
 from consts.reasons import SkipStorageBacking
 from consts.cgcs import FlavorSpec
 from consts.proj_vars import ProjVar
 from consts.auth import Tenant
-
 from utils.kpi import kpi_log_parser
 from utils.tis_log import LOG
+from keywords import host_helper, nova_helper, vm_helper, network_helper, storage_helper
 from testfixtures.resource_mgmt import ResourceCleanup
 
 
@@ -25,7 +25,7 @@ def hosts_per_backing(add_admin_role_module):
     'local_image',
     'remote'
 ])
-def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_backing, boot_from):
+def test_kpi_vm_launch_migrate_rebuild(ixia_required, collect_kpi, hosts_per_backing, boot_from):
     """
     KPI test  - vm startup time.
     Args:
@@ -51,7 +51,7 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
 
         target_host = hosts[0]
         LOG.tc_step("Clear local storage cache on {}".format(target_host))
-        host_helper.clear_local_storage_cache(host=target_host)
+        storage_helper.clear_local_storage_cache(host=target_host)
 
         LOG.tc_step("Create a flavor with 2 vcpus, dedicated cpu policy, and {} storage".format(storage_backing))
         boot_source = 'image'
@@ -59,7 +59,7 @@ def test_kpi_vm_launch_migrate_rebuild(ixia_supported, collect_kpi, hosts_per_ba
     else:
         target_host = None
         boot_source = 'volume'
-        storage_backing = nova_helper.get_storage_backing_with_max_hosts()[0]
+        storage_backing = keywords.host_helper.get_storage_backing_with_max_hosts()[0]
         LOG.tc_step("Create a flavor with 2 vcpus, and dedicated cpu policy and {} storage".format(storage_backing))
         flavor = nova_helper.create_flavor(vcpus=2, storage_backing=storage_backing)[1]
 
@@ -168,7 +168,7 @@ def check_for_qemu_process(host_ssh):
 
 
 def get_compute_free_disk_gb(host):
-    free_disk_space = host_helper.get_hypervisor_info(hosts=host, rtn_val='free_disk_gb')[host]
+    free_disk_space = host_helper.get_hypervisor_info(hosts=host, field='free_disk_gb')[host]
     return free_disk_space
 
 
@@ -229,7 +229,7 @@ def _test_check_vm_disk_on_compute(storage, hosts_per_backing):
     ResourceCleanup.add('flavor', flavor, scope='function')
     vm = vm_helper.boot_vm(source='image', flavor=flavor, cleanup='function')[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm)
-    vm_host = nova_helper.get_vm_host(vm)
+    vm_host = vm_helper.get_vm_host(vm)
 
     with host_helper.ssh_to_host(vm_host) as compute_ssh:
         LOG.tc_step("Look for qemu process")

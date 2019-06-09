@@ -42,7 +42,7 @@ def base_vm():
     ('tis-centos-guest', 'port_id', [('avp', 8), ('rtl8139', 7)]),
     ('vxworks', 'net_id', [('e1000', 0)])
 ], ids=id_gen)
-def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_for_ovs, base_vm):
+def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, check_avs_pattern, base_vm):
     """
     Sample test case for interface attach/detach to maximum vnics
 
@@ -161,8 +161,8 @@ def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_f
 
             vm_ports_count = len(network_helper.get_ports(server=vm_under_test))
             assert prev_port_count == vm_ports_count, "VM ports still listed after interface-detach"
-            res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
-                                             net_types=['data'])[0]
+            res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, net_types=['data'],
+                                             retry=0)[0]
             assert not res, "Detached interface still works"
 
 
@@ -170,7 +170,7 @@ def test_interface_attach_detach_max_vnics(guest_os, if_attach_arg, vifs, skip_f
     ('tis-centos-guest', 'image', [('avp', 14)]),
     ('tis-centos-guest', 'volume', [('avp', 1), ('virtio', 1)])
 ], ids=id_gen)
-def test_interface_attach_detach_on_paused_vm(guest_os, boot_source, vifs, skip_for_ovs, base_vm):
+def test_interface_attach_detach_on_paused_vm(guest_os, boot_source, vifs, check_avs_pattern, base_vm):
     """
     Sample test case for interface attach/detach on stopped vm
 
@@ -255,8 +255,8 @@ def test_interface_attach_detach_on_paused_vm(guest_os, boot_source, vifs, skip_
         vm_helper.detach_interface(vm_id=vm_under_test, port_id=tenant_port_id)
         new_vnics -= 1
 
-    res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, retry=0,
-                                     net_types=['data'])[0]
+    res = vm_helper.ping_vms_from_vm(to_vms=base_vm_id, from_vm=vm_under_test, fail_ok=True, net_types=['data'],
+                                     retry=0)[0]
     assert not res, "Ping from base_vm to vm via detached interface still works"
 
     LOG.tc_step("Attach single interface with tenant id {}".format(tenant_net_id))
@@ -374,7 +374,7 @@ def _bring_up_attached_interface(vm_id, ports, guest_os, base_vm, action='attach
     Args:
         vm_id (str):
     """
-    vm_macs = network_helper.get_ports(rtn_val='MAC Address', server=vm_id, port_id=ports)
+    vm_macs = network_helper.get_ports(field='MAC Address', server=vm_id, port_id=ports)
     prompt = Prompt.VXWORKS_PROMPT if guest_os == 'vxworks' else None
     vm_helper.add_ifcfg_scripts(vm_id=vm_id, vm_prompt=prompt, mac_addrs=vm_macs, reboot=False)
     vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_id, ports=ports, vm_prompt=prompt, reboot=True)

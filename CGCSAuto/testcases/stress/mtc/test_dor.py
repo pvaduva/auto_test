@@ -42,8 +42,8 @@ def test_dead_office_recovery(reserve_unreserve_all_hosts_module):
     LOG.tc_step("Boot 5 vms with various boot_source, disks, etc")
     vms = vm_helper.boot_vms_various_types()
 
-    hosts = system_helper.get_hostnames()
-    hosts_to_check = system_helper.get_hostnames(availability=['available', 'online'])
+    hosts = system_helper.get_hosts()
+    hosts_to_check = system_helper.get_hosts(availability=['available', 'online'])
 
     LOG.info("Online or Available hosts before power-off: {}".format(hosts_to_check))
     LOG.tc_step("Powering off hosts in multi-processes to simulate power outage: {}".format(hosts))

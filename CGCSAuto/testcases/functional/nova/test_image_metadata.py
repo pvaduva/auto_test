@@ -1,18 +1,17 @@
 import random
-from pytest import fixture, mark
+from pytest import mark, param
 from utils.tis_log import LOG
 from consts.cgcs import ImageMetadata
-from keywords import nova_helper, glance_helper
-from testfixtures.fixture_resources import ResourceCleanup
+from keywords import glance_helper
 
 
 @mark.parametrize(('property_key', 'values', 'disk_format', 'container_format'), [
-    mark.p2((ImageMetadata.AUTO_RECOVERY, [random.choice(['true', 'false']), random.choice(['True', 'False']),
-                                           random.choice(['TRUE', 'FALSE']), random.choice(['TruE', 'faLSe'])],
-             'qcow2', 'bare')),
-    mark.p2((ImageMetadata.AUTO_RECOVERY, [random.choice(['true', 'false']), random.choice(['True', 'False']),
-                                           random.choice(['TRUE', 'FALSE']), random.choice(['TruE', 'faLSe'])],
-             'raw', 'bare')),
+    param(ImageMetadata.AUTO_RECOVERY, [random.choice(['true', 'false']), random.choice(['True', 'False']),
+                                        random.choice(['TRUE', 'FALSE']), random.choice(['TruE', 'faLSe'])],
+          'qcow2', 'bare', marks=mark.p3),
+    param(ImageMetadata.AUTO_RECOVERY, [random.choice(['true', 'false']), random.choice(['True', 'False']),
+                                        random.choice(['TRUE', 'FALSE']), random.choice(['TruE', 'faLSe'])],
+          'raw', 'bare', marks=mark.p3),
 ])
 def test_create_image_with_metadata(property_key, values, disk_format, container_format):
     """

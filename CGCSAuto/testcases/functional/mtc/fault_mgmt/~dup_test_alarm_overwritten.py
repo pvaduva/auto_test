@@ -19,7 +19,7 @@ def test_alarm_overwritten():
     1. Query the alarm table
     2. Verify the list is shown most recent alarm to oldest (based on timestamp) [REQ-14]
     """
-    output = cli.fm('event-list', '--limit 10 --nowrap --nopaging --uuid')
+    output = cli.fm('event-list', '--limit 10 --nowrap --nopaging --uuid')[1]
     alarm_table = table_parser.table(output, combine_multiline_entry=True)
     size = len(alarm_table['values'])
 

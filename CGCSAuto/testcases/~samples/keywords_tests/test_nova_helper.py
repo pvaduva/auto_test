@@ -1,7 +1,6 @@
-from pytest import fixture, mark
+from pytest import fixture
 
 from keywords import vm_helper, nova_helper, host_helper
-from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
@@ -22,7 +21,7 @@ def test_boot_vm_on_host(add_host_to_zone):
 
     vm_id = vm_helper.boot_vm(name='cgcsauto_zone', avail_zone='cgcsauto', vm_host=target_host, cleanup='function')[1]
 
-    assert target_host == nova_helper.get_vm_host(vm_id=vm_id)
+    assert target_host == vm_helper.get_vm_host(vm_id=vm_id)
 
     res, msg = vm_helper.cold_migrate_vm(vm_id=vm_id, fail_ok=True)
 

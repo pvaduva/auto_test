@@ -36,9 +36,9 @@ def pre_check(request):
 
     def list_status():
         LOG.fixture_step("Listing heat resources and nova migrations")
-        stacks = heat_helper.get_stacks(auth_info=Tenant.ADMIN)
+        stacks = heat_helper.get_stacks(auth_info=Tenant.get('admin'))
         for stack in stacks:
-            heat_helper.get_stack_resources(stack=stack, auth_info=Tenant.ADMIN)
+            heat_helper.get_stack_resources(stack=stack, auth_info=Tenant.get('admin'))
 
         nova_helper.get_migration_list_table()
         # system_test_helper.delete_lab_setup_tenants_vms()

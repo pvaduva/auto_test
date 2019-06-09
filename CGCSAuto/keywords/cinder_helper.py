@@ -14,7 +14,7 @@ from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
 
-def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=None, new_name=None):
+def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=None, new_name=None, cleanup=None):
     """
     Get an id of any volume that meets the criteria. Create one if none exists.
 
@@ -24,6 +24,7 @@ def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=No
         auth_info (dict):
         con_ssh (SSHClient):
         new_name (str): This is only used if no existing volume found and new volume needs to be created
+        cleanup (str|None)
 
     Returns:
         str: volume id
@@ -33,12 +34,13 @@ def get_any_volume(status='available', bootable=True, auth_info=None, con_ssh=No
     if volumes:
         return 0, random.choice(volumes)
     else:
-        return 1, create_volume(name=new_name, bootable=bootable, auth_info=auth_info, con_ssh=con_ssh)[1]
+        return 1, create_volume(name=new_name, bootable=bootable, auth_info=auth_info, con_ssh=con_ssh,
+                                cleanup=cleanup)[1]
 
 
 def get_volumes(vols=None, full_name=None, project=None, project_domain=None, user=None, user_domain=None, all_=True,
                 long=True, name=None, name_strict=False, vol_type=None, size=None, status=None, attached_vm=None,
-                bootable=None, rtn_val='ID', auth_info=Tenant.get('admin'), con_ssh=None):
+                bootable=None, field='ID', auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Return a list of volume ids based on the given criteria
 
@@ -58,8 +60,8 @@ def get_volumes(vols=None, full_name=None, project=None, project_domain=None, us
         status:(str|list|tuple)
         attached_vm (str):
         bootable (str|bool): true or false
-        rtn_val
-        auth_info (dict): could be Tenant.get('admin'),Tenant.TENANT1,Tenant.TENANT2
+        field (str)
+        auth_info (dict): could be Tenant.get('admin'),Tenant.get('tenant1'),Tenant.get('tenant2')
         con_ssh (str):
 
     Returns (list): a list of volume ids based on the given criteria
@@ -74,7 +76,7 @@ def get_volumes(vols=None, full_name=None, project=None, project_domain=None, us
         '--user-domain': user_domain,
     }
     args = common.parse_args(args_dict)
-    table_ = table_parser.table(cli.openstack('volume list', args, auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.openstack('volume list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
 
     if name is not None:
         table_ = table_parser.filter_table(table_, strict=name_strict, **{'Name': name})
@@ -92,7 +94,7 @@ def get_volumes(vols=None, full_name=None, project=None, project_domain=None, us
     if filters:
         table_ = table_parser.filter_table(table_, **filters)
 
-    return table_parser.get_column(table_, rtn_val)
+    return table_parser.get_column(table_, field)
 
 
 def get_volume_snapshot_values(vol_snapshot, fields, strict=True, con_ssh=None, auth_info=None):
@@ -112,8 +114,8 @@ def get_volume_snapshot_values(vol_snapshot, fields, strict=True, con_ssh=None, 
     if isinstance(fields, str):
         fields = [fields]
 
-    table_ = table_parser.table(cli.openstack('volume snapshot show', vol_snapshot, ssh_client=con_ssh,
-                                              auth_info=auth_info))
+    table_ = table_parser.table(
+        cli.openstack('volume snapshot show', vol_snapshot, ssh_client=con_ssh, auth_info=auth_info)[1])
     vals = []
     for field in fields:
         vals.append(table_parser.get_value_two_col_table(table_, field, strict=strict))
@@ -121,8 +123,8 @@ def get_volume_snapshot_values(vol_snapshot, fields, strict=True, con_ssh=None, 
     return vals
 
 
-def get_volume_snapshot_list(vol_snaps=None, name=None, name_strict=False,  size=None, status=None, volume=None,
-                             rtn_val='ID', auth_info=Tenant.get('admin'), con_ssh=None):
+def get_volume_snapshot_list(vol_snaps=None, name=None, name_strict=False, size=None, status=None, volume=None,
+                             field='ID', auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Return a list of volume ids based on the given criteria
 
@@ -133,7 +135,7 @@ def get_volume_snapshot_list(vol_snaps=None, name=None, name_strict=False,  size
         size (str):
         status:(str)
         volume (str):
-        rtn_val
+        field
         auth_info (dict): could be Tenant.get('admin'),Tenant.TENANT1,Tenant.TENANT2
         con_ssh (str):
 
@@ -152,13 +154,13 @@ def get_volume_snapshot_list(vol_snaps=None, name=None, name_strict=False,  size
         if value is not None:
             criteria[key] = value
 
-    table_ = table_parser.table(cli.openstack('volume snapshot list --a --long', auth_info=auth_info,
-                                              ssh_client=con_ssh))
+    table_ = table_parser.table(
+        cli.openstack('volume snapshot list --a --long', ssh_client=con_ssh, auth_info=auth_info)[1])
 
     if name:
         table_ = table_parser.filter_table(table_, strict=name_strict, **{'Name': name})
 
-    return table_parser.get_values(table_, rtn_val, **criteria)
+    return table_parser.get_values(table_, field, **criteria)
 
 
 def get_volumes_attached_to_vms(volumes=None, vms=None, header='ID', con_ssh=None, auth_info=Tenant.get('admin')):
@@ -174,7 +176,7 @@ def get_volumes_attached_to_vms(volumes=None, vms=None, header='ID', con_ssh=Non
     Returns (list): a list of values from the column specified or [] if no match found
 
     """
-    table_ = table_parser.table(cli.openstack('volume list --a', auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.openstack('volume list --a', ssh_client=con_ssh, auth_info=auth_info)[1])
 
     # Filter from given volumes if provided
     if volumes is not None:
@@ -206,9 +208,10 @@ def create_volume(name=None, description=None, source_type='image', source_id=No
         size (int|None): volume size in GBs
         avail_zone (str|None): availability zone
         properties (str|list|tuple|dict|None): metadata key and value pairs '[<key=value> [<key=value> ...]]'
-        bootable (bool|None): When False, the source id params will be ignored. i.e., a un-bootable volume will be created.
+        bootable (bool|None): When False, the source id params will be ignored and non-bootable volume will be created
         read_only (bool|None)
         hints (str|list|tuple|dict|None)
+        multi_attach
         consistency_group (str|None)
         fail_ok (bool):
         auth_info (dict):
@@ -240,7 +243,7 @@ def create_volume(name=None, description=None, source_type='image', source_id=No
             raise ValueError("source_id has to be provided for {}".format(source_type))
 
         # Get glance image id as source_id based on guest_image value
-        guest_image = guest_image if guest_image else GuestImages.DEFAULT_GUEST
+        guest_image = guest_image if guest_image else GuestImages.DEFAULT['guest']
         source_id = glance_helper.get_image_id_from_name(guest_image, strict=True, auth_info=auth_info, con_ssh=con_ssh)
         if size is None:
             size = GuestImages.IMAGE_FILES[guest_image][1]
@@ -254,15 +257,15 @@ def create_volume(name=None, description=None, source_type='image', source_id=No
                 size = GuestImages.IMAGE_FILES[guest_image][1]
             else:
                 # check glance image size via openstack image show to determine the volume size
-                image_size = glance_helper.get_image_show_values(source_id, 'size', auth_info=auth_info,
-                                                                 con_ssh=con_ssh)[0]
+                image_size = glance_helper.get_image_values(source_id, 'size', auth_info=auth_info,
+                                                            con_ssh=con_ssh)[0]
                 size = max(2, math.ceil(image_size/math.pow(1024, 3)))
 
     if not name:
         if not auth_info:
             auth_info = Tenant.get_primary()
         name = 'vol-{}'.format(auth_info['tenant'])
-    existing_volumes = get_volumes(rtn_val='Name', auth_info=auth_info, con_ssh=con_ssh)
+    existing_volumes = get_volumes(field='Name', auth_info=auth_info, con_ssh=con_ssh)
     name = common.get_unique_name(name, resource_type='volume', existing_names=existing_volumes)
 
     optional_args = {'--size': size,
@@ -284,8 +287,8 @@ def create_volume(name=None, description=None, source_type='image', source_id=No
 
     args = '{} {}'.format(common.parse_args(optional_args, repeat_arg=True), name)
     LOG.info("Creating Volume with args: {}".format(args))
-    exit_code, cmd_output = cli.openstack('volume create', args, ssh_client=con_ssh, auth_info=auth_info,
-                                          fail_ok=fail_ok, rtn_code=True)
+    exit_code, cmd_output = cli.openstack('volume create', args, ssh_client=con_ssh, fail_ok=fail_ok,
+                                          auth_info=auth_info)
 
     table_ = table_parser.table(cmd_output)
     volume_id = table_parser.get_value_two_col_table(table_, 'id')
@@ -323,7 +326,7 @@ def get_volume_show_values(volume, fields, con_ssh=None, auth_info=Tenant.get('a
     if isinstance(fields, str):
         fields = (fields, )
 
-    table_ = table_parser.table(cli.openstack('volume show', volume, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('volume show', volume, ssh_client=con_ssh, auth_info=auth_info)[1])
     vals = []
     for field in fields:
         field = field.lower()
@@ -334,7 +337,7 @@ def get_volume_show_values(volume, fields, con_ssh=None, auth_info=Tenant.get('a
             try:
                 LOG.info('val: {}'.format(val))
                 val = eval(val.replace('true', 'True').replace('none', 'None').replace('false', 'False'))
-            except NameError:
+            except (NameError, SyntaxError):
                 pass
         vals.append(val)
 
@@ -422,7 +425,7 @@ def __wait_for_vol_status(volume, is_snapshot=False, status='available', timeout
         raise exceptions.TimeoutException(msg)
 
 
-def get_vol_snapshots(status='available', volume=None, vol_id=None, name=None, size=None, rtn_val='ID',
+def get_vol_snapshots(status='available', volume=None, vol_id=None, name=None, size=None, field='ID',
                       con_ssh=None, auth_info=None):
     """
     Get one volume snapshot id that matches the given criteria.
@@ -433,7 +436,7 @@ def get_vol_snapshots(status='available', volume=None, vol_id=None, name=None, s
         vol_id (str): volume id the snapshot was created from
         name (str): snapshot name
         size (int):
-        rtn_val (str)
+        field (str)
         con_ssh (SSHClient):
         auth_info (dict):
 
@@ -441,12 +444,12 @@ def get_vol_snapshots(status='available', volume=None, vol_id=None, name=None, s
         A string of snapshot id. Return None if no matching snapshot found.
 
     """
-    table_ = table_parser.table(cli.openstack('snapshot list', ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('snapshot list', ssh_client=con_ssh, auth_info=auth_info)[1])
     if size is not None:
         size = str(size)
 
     if vol_id and not volume:
-        volume = get_volumes(vols=vol_id, rtn_val='Name')[0]
+        volume = get_volumes(vols=vol_id, field='Name')[0]
 
     possible_args = {
         'status': status,
@@ -461,7 +464,7 @@ def get_vol_snapshots(status='available', volume=None, vol_id=None, name=None, s
         if val:
             args_[key] = val
 
-    return table_parser.get_values(table_, rtn_val, **args_)
+    return table_parser.get_values(table_, field, **args_)
 
 
 def _wait_for_volumes_deleted(volumes, timeout=VolumeTimeout.DELETE, fail_ok=True,
@@ -554,7 +557,7 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
 
     LOG.debug("Volumes to delete: {}".format(vols_to_del))
     exit_code, cmd_output = cli.openstack('volume delete', vols_to_del_str, ssh_client=con_ssh, fail_ok=fail_ok,
-                                          rtn_code=True, auth_info=auth_info, timeout=timeout)
+                                          auth_info=auth_info, timeout=timeout)
 
     vols_to_check = []
     if exit_code == 1:
@@ -626,8 +629,7 @@ def delete_volume_snapshots(snapshots=None, force=False, check_first=True, fail_
         return -1, msg
 
     args_ = '{}{}'.format('--force ' if force else '', ' '.join(snapshots_to_del))
-    code, output = cli.openstack('snapshot delete', args_, fail_ok=fail_ok, ssh_client=con_ssh,
-                                 auth_info=auth_info, rtn_code=True)
+    code, output = cli.openstack('snapshot delete', args_, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     if code == 1:
         return code, output
@@ -647,7 +649,7 @@ def delete_volume_snapshots(snapshots=None, force=False, check_first=True, fail_
     return 0, succ_msg
 
 
-def create_volume_qos(qos_name=None, consumer=None, rtn_val='id', fail_ok=False,
+def create_volume_qos(qos_name=None, consumer=None, field='id', fail_ok=False,
                       auth_info=Tenant.get('admin'), con_ssh=None, **specs):
     """
     Create volume QoS with given name and specs
@@ -656,7 +658,7 @@ def create_volume_qos(qos_name=None, consumer=None, rtn_val='id', fail_ok=False,
         qos_name (str):
         fail_ok (bool):
         consumer (str): Valid consumer of QoS specs are: ['front-end', 'back-end', 'both']
-        rtn_val (str)
+        field (str)
         auth_info (dict):
         con_ssh (SSHClient):
         **specs: QoS specs
@@ -670,7 +672,7 @@ def create_volume_qos(qos_name=None, consumer=None, rtn_val='id', fail_ok=False,
     if not qos_name:
         qos_name = 'vol_qos'
 
-    qos_name = common.get_unique_name(qos_name, get_volume_qos_list(rtn_val='name'), resource_type='qos')
+    qos_name = common.get_unique_name(qos_name, get_volume_qos_list(field='name'), resource_type='qos')
     args_dict = {
         '--consumer': consumer,
         '--property': specs,
@@ -679,14 +681,13 @@ def create_volume_qos(qos_name=None, consumer=None, rtn_val='id', fail_ok=False,
 
     LOG.info("Creating QoS {} with args: {}".format(qos_name, args_))
     args_ += ' {}'.format(qos_name)
-    code, output = cli.openstack('volume qos create', args_, ssh_client=con_ssh, auth_info=auth_info, rtn_code=True,
-                                 fail_ok=fail_ok)
+    code, output = cli.openstack('volume qos create', args_, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
     if code > 0:
         return 1, output
 
     qos_tab = table_parser.table(output)
-    qos_value = table_parser.get_value_two_col_table(qos_tab, rtn_val)
+    qos_value = table_parser.get_value_two_col_table(qos_tab, field)
 
     LOG.info("QoS {} created successfully with specs: {}".format(qos_name, specs))
     return 0, qos_value
@@ -723,8 +724,8 @@ def delete_volume_qos(qos_ids, force=False, check_first=True, fail_ok=False, aut
     rejected_list = []
     for qos in qos_ids_to_del:
         args = qos if force is None else '--force {} {}'.format(force, qos)
-        code, output = cli.openstack('volume qos delete', args, fail_ok=fail_ok, ssh_client=con_ssh,
-                                     auth_info=auth_info, rtn_code=True)
+        code, output = cli.openstack('volume qos delete', args, ssh_client=con_ssh, fail_ok=fail_ok,
+                                     auth_info=auth_info)
         if code > 0:
             rejected_list.append(qos)
 
@@ -793,7 +794,7 @@ def wait_for_qos_deleted(qos_ids, timeout=10, check_interval=1, fail_ok=False, a
         raise exceptions.CinderError(err_msg)
 
 
-def create_volume_type(name=None, public=None, project=None, project_domain=None, rtn_val='id', fail_ok=False,
+def create_volume_type(name=None, public=None, project=None, project_domain=None, field='id', fail_ok=False,
                        auth_info=Tenant.get('admin'), con_ssh=None, **properties):
     """
     Create a volume type with given name
@@ -803,7 +804,7 @@ def create_volume_type(name=None, public=None, project=None, project_domain=None
         public (bool|None):
         project (str|None)
         project_domain (str|None)
-        rtn_val (str): 'id' or 'name'
+        field (str): 'id' or 'name'
         fail_ok (bool):
         auth_info (dict):
         con_ssh (SSHClient):
@@ -817,7 +818,7 @@ def create_volume_type(name=None, public=None, project=None, project_domain=None
 
     if not name:
         name = 'vol_type'
-    name = common.get_unique_name(name, get_volume_types(rtn_val='Name'))
+    name = common.get_unique_name(name, get_volume_types(field='Name'))
     LOG.info("Creating volume type {}".format(name))
 
     args_dict = {
@@ -829,13 +830,12 @@ def create_volume_type(name=None, public=None, project=None, project_domain=None
     }
 
     args_ = ' '.join((common.parse_args(args_dict, repeat_arg=True), name))
-    code, output = cli.openstack('volume type create', args_, ssh_client=con_ssh, auth_info=auth_info,
-                                 fail_ok=fail_ok, rtn_code=True)
+    code, output = cli.openstack('volume type create', args_, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code == 1:
         return 1, output
 
     table_ = table_parser.table(output)
-    vol_type = table_parser.get_value_two_col_table(table_, rtn_val)
+    vol_type = table_parser.get_value_two_col_table(table_, field)
 
     LOG.info("Volume type {} is created successfully".format(vol_type))
     return 0, vol_type
@@ -874,8 +874,7 @@ def delete_volume_types(vol_types, check_first=True, fail_ok=False, auth_info=Te
             return -1, msg
 
     args = ' '.join(vol_types_to_del)
-    code, output = cli.openstack('volume type delete', args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
-                                 rtn_code=True)
+    code, output = cli.openstack('volume type delete', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
     if code > 1:
         return 1, output
 
@@ -896,17 +895,17 @@ def delete_volume_types(vol_types, check_first=True, fail_ok=False, auth_info=Te
     return 0, succ_msg
 
 
-def get_volume_types(long=False, ids=None, public=None, name=None, strict=True, rtn_val='ID', con_ssh=None,
+def get_volume_types(long=False, ids=None, public=None, name=None, strict=True, field='ID', con_ssh=None,
                      auth_info=Tenant.get('admin')):
     """
-    Get cinder volume types
+    Get cinder volume types via openstack volume type list
     Args:
         long (bool)
         ids (str|list|tuple|None):
         public:
         name:
         strict:
-        rtn_val:
+        field (str|list|tuple):
         con_ssh:
         auth_info:
 
@@ -914,7 +913,7 @@ def get_volume_types(long=False, ids=None, public=None, name=None, strict=True, 
 
     """
     args = '--long' if long else ''
-    table_ = table_parser.table(cli.openstack('volume type list', args, ssh_client=con_ssh, auth_info=auth_info))
+    table_ = table_parser.table(cli.openstack('volume type list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
 
     filters = {}
     if ids:
@@ -928,18 +927,16 @@ def get_volume_types(long=False, ids=None, public=None, name=None, strict=True, 
     if name is not None:
         table_ = table_parser.filter_table(table_, strict=strict, **{'Name': name})
 
-    vol_types = table_parser.get_column(table_, rtn_val)
-
-    return vol_types
+    return table_parser.get_multi_values(table_, field)
 
 
-def get_volume_qos_list(rtn_val='id', qos_id=None, name=None, consumer=None, strict=True, con_ssh=None,
+def get_volume_qos_list(field='id', qos_id=None, name=None, consumer=None, strict=True, con_ssh=None,
                         auth_info=Tenant.get('admin')):
     """
     Get qos list based on given filters
 
     Args:
-        rtn_val (str): 'id', 'name', 'associations', etc...
+        field (str|list|tuple): 'id', 'name', 'associations', etc...
         qos_id (list|str|None): volume qos id(s) to filter out from
         name (str|None): name of the qos' to filter for
         consumer (str): consumer of the qos' to filter for
@@ -962,10 +959,9 @@ def get_volume_qos_list(rtn_val='id', qos_id=None, name=None, consumer=None, str
         if val is not None:
             kwargs[key] = val
 
-    table_ = table_parser.table(cli.openstack('volume qos list', ssh_client=con_ssh, auth_info=auth_info))
-    vol_qos_list = table_parser.get_values(table_, rtn_val, strict=strict, **kwargs)
+    table_ = table_parser.table(cli.openstack('volume qos list', ssh_client=con_ssh, auth_info=auth_info)[1])
 
-    return vol_qos_list
+    return table_parser.get_multi_values(table_, field, strict=strict, **kwargs)
 
 
 def associate_volume_qos(volume_qos, volume_type, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
@@ -986,8 +982,8 @@ def associate_volume_qos(volume_qos, volume_type, fail_ok=False, auth_info=Tenan
     args_ = '{} {}'.format(volume_qos, volume_type)
 
     LOG.info("Associate volume qos {} to type {}".format(volume_qos, volume_type))
-    code, output = cli.openstack('volume qos associate', args_, fail_ok=fail_ok, ssh_client=con_ssh,
-                                 rtn_code=True, auth_info=auth_info)
+    code, output = cli.openstack('volume qos associate', args_, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -1022,7 +1018,7 @@ def disassociate_volume_qos(volume_qos, volume_type=None, all_vol_types=False, f
 
     LOG.info("Disassociating volume qos {} from: {}".format(volume_qos, args_))
     args_ = '{} {}'.format(args_, volume_qos)
-    code, output = cli.openstack('volume qos disassociate', args_, fail_ok=fail_ok, ssh_client=con_ssh, rtn_code=True,
+    code, output = cli.openstack('volume qos disassociate', args_, ssh_client=con_ssh, fail_ok=fail_ok,
                                  auth_info=auth_info)
 
     if code > 0:
@@ -1047,7 +1043,7 @@ def get_qos_associations(volume_qos, qos_val='ID', con_ssh=None, auth_info=Tenan
     """
     key = 'qos_id' if qos_val.lower() == 'id'else 'name'
 
-    associations = get_volume_qos_list(rtn_val='associations', con_ssh=con_ssh, auth_info=auth_info,
+    associations = get_volume_qos_list(field='associations', con_ssh=con_ssh, auth_info=auth_info,
                                        **{key: volume_qos})[0]
     associations = [i.strip() for i in associations.split(sep=',')]
 
@@ -1110,8 +1106,8 @@ def create_volume_snapshot(name, volume=None, description=None, force=False, pro
 
     vol = volume if volume else name
     LOG.info('Creating snapshot for volume: {}'.format(vol))
-    code, output = cli.openstack('volume snapshot create', arg_str, auth_info=auth_info, ssh_client=con_ssh,
-                                 fail_ok=fail_ok, rtn_code=True)
+    code, output = cli.openstack('volume snapshot create', arg_str, ssh_client=con_ssh, fail_ok=fail_ok,
+                                 auth_info=auth_info)
     if code > 0:
         return 1, output
 
@@ -1180,8 +1176,7 @@ def import_volume(cinder_volume_backup, vol_id=None,  con_ssh=None, fail_ok=Fals
     # we just have to try again
     for retry in range(retries if 2 <= retries <= 10 else 2):
         con_ssh.set_prompt(prompt=controller_prompt)
-        rc, output = cli.cinder('import', vol_backup, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info,
-                                rtn_code=True)
+        rc, output = cli.cinder('import', vol_backup, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
         if rc == 1:
             LOG.warn('Failed to import volume for the:{} time'.format(retry+1))
 
@@ -1217,8 +1212,8 @@ def export_free_volume_using_cinder_backup(vol_id=None, container='cinder', name
         name = 'free_vol_backup_' + str(vol_id)[0:2] + '_' + str(vol_id)[-5:]
 
     arg = '--container {} --name {} {}'.format(container, name, vol_id)
-    output = table_parser.table(cli.cinder('backup-create', arg, fail_ok=fail_ok, auth_info=auth_info,
-                                           ssh_client=con_ssh))
+    output = table_parser.table(
+        cli.cinder('backup-create', arg, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)[1])
 
     backup_id = table_parser.get_value_two_col_table(output, 'id')
     backup_name = table_parser.get_value_two_col_table(output, 'name')
@@ -1276,7 +1271,7 @@ def export_busy_volume_using_cinder_backup(vol_id=None,
     snp_id = create_volume_snapshot('snp_' + name, volume=vol_id, con_ssh=con_ssh, fail_ok=fail_ok,
                                     force=True, auth_info=auth_info)[1]
     arg = '--container {} --name {} --snapshot-id {} {}'.format(container, name, snp_id, vol_id)
-    output = table_parser.table(cli.cinder('backup-create', arg, fail_ok=fail_ok, auth_info=auth_info))
+    output = table_parser.table(cli.cinder('backup-create', arg, fail_ok=fail_ok, auth_info=auth_info)[1])
 
     backup_id = table_parser.get_value_two_col_table(output, 'id')
     backup_name = table_parser.get_value_two_col_table(output, 'name')
@@ -1336,7 +1331,7 @@ def get_backup_ids(searching_status='available', con_ssh=None, fail_ok=False, au
     if not auth_info:
         auth_info = Tenant.get('admin')
 
-    table_ = table_parser.table(cli.cinder('backup-list', fail_ok=fail_ok, auth_info=auth_info, ssh_client=con_ssh))
+    table_ = table_parser.table(cli.cinder('backup-list', ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)[1])
 
     if searching_status and searching_status.strip():
         kwargs = {'Status': searching_status.strip()}
@@ -1356,8 +1351,8 @@ def get_backup_ids(searching_status='available', con_ssh=None, fail_ok=False, au
 
 
 def get_cinder_backup_status(backup_id, con_ssh=None, fail_ok=False, auth_info=Tenant.get('admin')):
-    states = table_parser.table(cli.cinder('backup-show', backup_id, auth_info=auth_info, fail_ok=fail_ok,
-                                           ssh_client=con_ssh))
+    states = table_parser.table(
+        cli.cinder('backup-show', backup_id, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)[1])
     return table_parser.get_value_two_col_table(states, 'status')
 
 
@@ -1394,8 +1389,7 @@ def export_volumes(vol_ids=None, con_ssh=None, fail_ok=False, auth_info=Tenant.g
         if get_volume_show_values(vol_id, 'status', con_ssh=con_ssh, auth_info=auth_info)[0] == 'available':
             # export available volume to ~/opt/backups
             LOG.tc_step("export available volume {} ".format(vol_id))
-            code, out = cli.cinder('export', vol_id, auth_info=auth_info, ssh_client=con_ssh,
-                                   fail_ok=fail_ok, rtn_code=True)
+            code, out = cli.cinder('export', vol_id, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
 
             if code > 0:
                 return 1, out
@@ -1437,7 +1431,7 @@ def export_volumes(vol_ids=None, con_ssh=None, fail_ok=False, auth_info=Tenant.g
                     raise exceptions.CinderError(err_msg)
 
             LOG.info("Exporting in-use Volume snapshot {} ".format(snap_shot_id))
-            cli.cinder('snapshot-export', snap_shot_id, auth_info=auth_info, ssh_client=con_ssh)
+            cli.cinder('snapshot-export', snap_shot_id, ssh_client=con_ssh, auth_info=auth_info)
             if not wait_for_vol_snapshot_status(snap_shot_id, fail_ok=fail_ok, auth_info=auth_info,
                                                 con_ssh=con_ssh):
                 err_msg = "cinder snapshot volume {} failed to reach available status after export".format(snap_shot_id)
@@ -1445,7 +1439,7 @@ def export_volumes(vol_ids=None, con_ssh=None, fail_ok=False, auth_info=Tenant.g
 
             # delete the snapshot after export
             LOG.info("Deleting snapshot Volume snapshot {} after export ".format(snap_shot_id))
-            cli.cinder('snapshot-delete', snap_shot_id, auth_info=auth_info, ssh_client=con_ssh)
+            cli.cinder('snapshot-delete', snap_shot_id, ssh_client=con_ssh, auth_info=auth_info)
 
             LOG.info("Exported 'in-use' Volumes {} successfully ".format(vol_id))
             volume_exported.append(vol_id)

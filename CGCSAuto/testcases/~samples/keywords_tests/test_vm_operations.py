@@ -1,10 +1,8 @@
 from pytest import mark, skip
 
-import keywords.cinder_helper
-import keywords.glance_helper
 from consts.auth import Tenant
 from utils.tis_log import LOG
-from keywords import nova_helper, vm_helper
+from keywords import nova_helper, vm_helper, glance_helper, cinder_helper
 
 _skip = False
 
@@ -26,7 +24,7 @@ def test_boot_vm(name, flavor, source, source_name):
     # cli.nova('delete', vm_id)
 
 
-@mark.parametrize(('name', 'swap', 'ephemeral', 'storage', 'cpu_policy'),[
+@mark.parametrize(('name', 'swap', 'ephemeral', 'storage', 'cpu_policy'), [
     (None, None, None, 'local_image', 'shared'),
     (None, 0, 1, 'local_image', 'shared'),
     ('test', 512, 1, 'local_lvm', 'dedicated'),
@@ -79,14 +77,14 @@ def test_ping_vms_from_vm_1(vm_count):
     'tis-centos-guest',
 ])
 def test_ping_vms_from_vm_various_images(vm_image):
-    image_id = keywords.glance_helper.get_image_id_from_name(name=vm_image, strict=False)
+    image_id = glance_helper.get_image_id_from_name(name=vm_image, strict=False)
     if not image_id:
         skip("No image name has substring: {}.".format(vm_image))
 
     vol_size = 1
     if vm_image in ['ubuntu', 'centos']:
         vol_size = 8
-    vol_id = keywords.cinder_helper.create_volume(name='vol_' + vm_image, source_id=image_id, size=vol_size)[1]
+    vol_id = cinder_helper.create_volume(name='vol_' + vm_image, source_id=image_id, size=vol_size)[1]
     vm_id = vm_helper.boot_vm(source='volume', source_id=vol_id)[1]
 
     vm_helper.ping_vms_from_vm(from_vm=vm_id)
@@ -95,4 +93,4 @@ def test_ping_vms_from_vm_various_images(vm_image):
 def test_ping_vms_from_vm_2():
     to_vms = vm_helper.get_any_vms(auth_info=Tenant.get('admin'), all_tenants=True)
     for vm in vm_helper.get_any_vms():
-        vm_helper.ping_vms_from_vm(from_vm=vm, to_vms=to_vms)
+        vm_helper.ping_vms_from_vm(to_vms=to_vms, from_vm=vm)

@@ -72,7 +72,7 @@ def create_strategy(orchestration, controller_apply_type=None, storage_apply_typ
             args += ' {} {}'.format(key, val)
 
     LOG.info("Creating {} orchestration strategy with arguments: {} {}".format(orchestration, cmd, args))
-    rc, output = cli.sw_manager(cmd, args, ssh_client=conn_ssh, fail_ok=fail_ok, rtn_code=True)
+    rc, output = cli.sw_manager(cmd, args, ssh_client=conn_ssh, fail_ok=fail_ok)
     LOG.info("Verifying if the {} orchestration strategy is created".format(orchestration))
     if rc != 0:
         msg = "Create {} strategy failed: {}".format(orchestration, output)
@@ -152,7 +152,7 @@ def apply_strategy(orchestration, timeout=OrchestrationPhaseTimeout.APPLY, conn_
     else:
         cmd = "upgrade-strategy apply"
 
-    rc, output = cli.sw_manager(cmd, ssh_client=conn_ssh, fail_ok=fail_ok, rtn_code=True)
+    rc, output = cli.sw_manager(cmd, ssh_client=conn_ssh, fail_ok=fail_ok)
 
     if rc != 0:
         return 1, output
@@ -223,7 +223,7 @@ def delete_strategy(orchestration, check_first=True, fail_ok=False, conn_ssh=Non
             elif strategy_state == OrchStrategyState.ABORTING:
                 wait_strategy_phase_completion(orchestration, OrchestStrategyPhase.ABORT)
 
-    rc, output = cli.sw_manager(cmd, 'delete', ssh_client=conn_ssh, fail_ok=fail_ok, rtn_code=True)
+    rc, output = cli.sw_manager(cmd, 'delete', ssh_client=conn_ssh, fail_ok=fail_ok)
 
     if rc != 0:
         return 1, output
@@ -261,12 +261,12 @@ def get_current_strategy_info(orchestration, conn_ssh=None):
     else:
         cmd += "upgrade-strategy show"
     try:
-        output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=False)
+        output = cli.sw_manager(cmd, ssh_client=conn_ssh, fail_ok=False)[1]
     except:
         time.sleep(20)
-        if not conn_ssh._is_connected(fail_ok=True):
+        if not conn_ssh.is_connected():
             conn_ssh.connect(retry=True)
-        output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=False)
+        output = cli.sw_manager(cmd, ssh_client=conn_ssh, fail_ok=False)[1]
 
     rtn = {}
     if 'No strategy available' in output:
@@ -326,7 +326,7 @@ def wait_strategy_phase_completion(orchestration, current_phase, timeout=None, c
         conn_ssh = ControllerClient.get_active_controller()
 
     while time.time() < end_time:
-        if not conn_ssh._is_connected(fail_ok=True):
+        if not conn_ssh.is_connected():
             # ssh connection is lost. Controllers may swact in path application.
             time.sleep(30)
             conn_ssh.connect(retry=True, retry_timeout=HostTimeout.SWACT-30)
@@ -456,14 +456,14 @@ def get_current_strategy_details(orchestration, conn_ssh=None):
     else:
         cmd += "upgrade-strategy show --details"
     try:
-        rc,  output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=True)
+        rc,  output = cli.sw_manager(cmd, ssh_client=conn_ssh, fail_ok=True)
     except:
         time.sleep(20)
-        if not conn_ssh._is_connected(fail_ok=True):
+        if not conn_ssh.is_connected():
             conn_ssh.connect(retry=True)
             ControllerClient.set_active_controller(ssh_client=conn_ssh)
 
-        rc,  output = cli.sw_manager(cmd,  ssh_client=conn_ssh, fail_ok=True)
+        rc,  output = cli.sw_manager(cmd, ssh_client=conn_ssh, fail_ok=True)
 
     rtn = {}
     if rc == 0 and output is not None and ('strategy-uuid' in [tr.strip() for tr in output.split(':')]):

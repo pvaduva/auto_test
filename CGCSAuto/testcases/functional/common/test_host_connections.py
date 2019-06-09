@@ -11,7 +11,7 @@ def test_ping_hosts():
     con_ssh = ControllerClient.get_active_controller()
 
     ping_failed_list = []
-    for hostname in system_helper.get_hostnames():
+    for hostname in system_helper.get_hosts():
         LOG.tc_step("Send 100 pings to {} from Active Controller".format(hostname))
         ploss_rate, untran_p = network_helper.ping_server(hostname, con_ssh, num_pings=100, timeout=300, fail_ok=True)
         if ploss_rate > 0:
@@ -35,7 +35,7 @@ def test_ssh_to_hosts():
     Test ssh to every host on system from active controller
 
     """
-    hosts_to_ssh = system_helper.get_hostnames(availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE])
+    hosts_to_ssh = system_helper.get_hosts(availability=[HostAvailState.AVAILABLE, HostAvailState.ONLINE])
     failed_list = []
     for hostname in hosts_to_ssh:
         LOG.tc_step("Attempt SSH to {}".format(hostname))

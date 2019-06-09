@@ -8,6 +8,8 @@ from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import HostOperState, HostAvailState, Prompt, HostAdminState
 from consts.timeout import HostTimeout, InstallTimeout
 from keywords import system_helper, host_helper, install_helper, orchestration_helper, storage_helper
+from keywords.host_helper import swact_host, lock_host, unlock_host
+from keywords.system_helper import wait_for_host_values
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -16,8 +18,8 @@ from consts.kpi_vars import UpgradeActivate, UpgradeComplete, UpgradeStart, Upgr
     UpgradeController0
 
 
-def upgrade_host(host, timeout=InstallTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
-                 lock=False, unlock=False):
+def upgrade_host(host, timeout=InstallTimeout.UPGRADE, fail_ok=False, con_ssh=None,
+                 auth_info=Tenant.get('admin_platform'), lock=False, unlock=False):
     """
     Upgrade given host
     Args:
@@ -44,7 +46,7 @@ def upgrade_host(host, timeout=InstallTimeout.UPGRADE, fail_ok=False, con_ssh=No
     LOG.info("Upgrading host {}...".format(host))
 
     if lock:
-        if host_helper.get_hostshow_value(host, 'administrative', con_ssh=con_ssh) == HostAdminState.UNLOCKED:
+        if system_helper.get_host_values(host, 'administrative', con_ssh=con_ssh)[0] == HostAdminState.UNLOCKED:
             message = "Host is not locked. Locking host  before starting upgrade"
             LOG.info(message)
             rc, output = host_helper.lock_host(host, con_ssh=con_ssh, fail_ok=True)
@@ -54,12 +56,12 @@ def upgrade_host(host, timeout=InstallTimeout.UPGRADE, fail_ok=False, con_ssh=No
                     return 4, err_msg
                 else:
                     raise exceptions.HostError(err_msg)
-    if system_helper.is_simplex():
+    if system_helper.is_aio_simplex():
         exitcode, output = simplex_host_upgrade(con_ssh=con_ssh)
         return exitcode, output
 
-    exitcode, output = cli.system('host-upgrade', host, ssh_client=con_ssh, auth_info=auth_info,
-                                  rtn_code=True, fail_ok=True, timeout=timeout)
+    exitcode, output = cli.system('host-upgrade', host, ssh_client=con_ssh, fail_ok=True, auth_info=auth_info,
+                                  timeout=timeout)
     if exitcode == 1:
         err_msg = "Host {} cli upgrade host failed: {}".format(host, output)
         if fail_ok:
@@ -70,9 +72,9 @@ def upgrade_host(host, timeout=InstallTimeout.UPGRADE, fail_ok=False, con_ssh=No
     # sleep for 180 seconds to let host be re-installed with upgrade release
     time.sleep(180)
 
-    if not host_helper.wait_for_host_values(host, timeout=timeout, check_interval=60,
-                                            availability=HostAvailState.ONLINE, con_ssh=con_ssh,
-                                            fail_ok=fail_ok):
+    if not system_helper.wait_for_host_values(host, timeout=timeout, check_interval=60,
+                                                       availability=HostAvailState.ONLINE, con_ssh=con_ssh,
+                                                       fail_ok=fail_ok):
         err_msg = "Host {} did not become online  after upgrade".format(host)
         if fail_ok:
             return 3, err_msg
@@ -110,8 +112,8 @@ def upgrade_host(host, timeout=InstallTimeout.UPGRADE, fail_ok=False, con_ssh=No
     return 0, None
 
 
-def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin'),
-                  lock=False, unlock=False):
+def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
+                  auth_info=Tenant.get('admin_platform'), lock=False, unlock=False):
     """
     Upgrade given hosts list one by one
     Args:
@@ -160,7 +162,7 @@ def upgrade_hosts(hosts, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=Non
     return 0, "hosts {} upgrade done ".format(hosts_to_upgrade)
 
 
-def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=60, auth_info=Tenant.get('admin'),
+def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=60, auth_info=Tenant.get('admin_platform'),
                                               fail_ok=False, con_ssh=None):
     """
     Waits until upgrade data migration is complete or fail
@@ -180,7 +182,8 @@ def _wait_for_upgrade_data_migration_complete(timeout=1800, check_interval=60, a
 
     endtime = time.time() + timeout
     while time.time() < endtime:
-        upgrade_progress_tab = table_parser.table(cli.system('upgrade-show', ssh_client=con_ssh, auth_info=auth_info))
+        upgrade_progress_tab = table_parser.table(
+            cli.system('upgrade-show', ssh_client=con_ssh, auth_info=auth_info)[1])
         upgrade_progress_tab = table_parser.filter_table(upgrade_progress_tab, Property="state")
         if "data-migration-complete" in table_parser.get_column(upgrade_progress_tab, 'Value'):
             LOG.info("Upgrade data migration is complete")
@@ -216,7 +219,7 @@ def get_hosts_upgrade_target_release(hostnames, con_ssh=None):
     if isinstance(hostnames, str):
         hostnames = [hostnames]
 
-    table_ = table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh))
+    table_ = table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh)[1])
     table_ = table_parser.filter_table(table_, hostname=hostnames)
     return table_parser.get_column(table_, "target_release")
 
@@ -234,7 +237,7 @@ def get_hosts_upgrade_running_release(hostnames, con_ssh=None):
     if isinstance(hostnames, str):
         hostnames = [hostnames]
 
-    table_ = table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh))
+    table_ = table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh)[1])
     table_ = table_parser.filter_table(hostname=hostnames, table_=table_)
     return table_parser.get_column(table_, "running_release")
 
@@ -254,7 +257,7 @@ def get_system_health_query_upgrade(con_ssh=None):
 
     """
 
-    output = (cli.system('health-query-upgrade', ssh_client=con_ssh)).splitlines()
+    output = (cli.system('health-query-upgrade', ssh_client=con_ssh)[1]).splitlines()
     failed = {}
     ok = {}
 
@@ -294,7 +297,7 @@ def get_system_health_query_upgrade(con_ssh=None):
 
     if alarms:
         # Check if it alarm
-        table_ = table_parser.table(cli.fm('alarm-list'))
+        table_ = table_parser.table(cli.fm('alarm-list')[1])
         alarm_severity_list = table_parser.get_column(table_, "Severity")
         if len(alarm_severity_list) > 0 and \
                 ("major" not in alarm_severity_list and "critical" not in alarm_severity_list):
@@ -332,7 +335,7 @@ def get_system_health_query_upgrade_2(con_ssh=None):
 
     """
 
-    output = (cli.system('health-query-upgrade', ssh_client=con_ssh)).splitlines()
+    output = (cli.system('health-query-upgrade', ssh_client=con_ssh)[1]).splitlines()
     failed = {}
     ok = {}
 
@@ -367,7 +370,7 @@ def get_system_health_query_upgrade_2(con_ssh=None):
 
     for k, v in failed.items():
         if "No alarms" in k:
-            table_ = table_parser.table(cli.fm('alarm-list --uuid'))
+            table_ = table_parser.table(cli.fm('alarm-list --uuid')[1])
             alarm_severity_list = table_parser.get_column(table_, "Severity")
             if len(alarm_severity_list) > 0 \
                     and "major" not in alarm_severity_list \
@@ -436,9 +439,9 @@ def system_upgrade_start(con_ssh=None, force=False, fail_ok=False):
     """
 
     if force:
-        rc, output = cli.system("upgrade-start", positional_args='--force', fail_ok=True, ssh_client=con_ssh)
+        rc, output = cli.system("upgrade-start", positional_args='--force', ssh_client=con_ssh, fail_ok=True)
     else:
-        rc, output = cli.system("upgrade-start", fail_ok=True, ssh_client=con_ssh)
+        rc, output = cli.system("upgrade-start", ssh_client=con_ssh, fail_ok=True)
 
     if rc == 0:
         LOG.info("system upgrade-start ran successfully.")
@@ -474,7 +477,7 @@ def system_upgrade_show(con_ssh=None):
 
     """
 
-    rc, output = cli.system("upgrade-show", fail_ok=True, ssh_client=con_ssh)
+    rc, output = cli.system("upgrade-show", ssh_client=con_ssh, fail_ok=True)
 
     if rc == 0:
         return rc, table_parser.table(output)
@@ -494,7 +497,7 @@ def activate_upgrade(con_ssh=None, fail_ok=False):
         (1, <stderr>)   # cli returns stderr, applicable if fail_ok is true
 
     """
-    rc, output = cli.system('upgrade-activate', ssh_client=con_ssh, fail_ok=True, rtn_code=True)
+    rc, output = cli.system('upgrade-activate', ssh_client=con_ssh, fail_ok=True)
     if rc != 0:
         err_msg = "CLI system upgrade-activate failed: {}".format(output)
         LOG.warning(err_msg)
@@ -526,12 +529,12 @@ def activate_upgrade(con_ssh=None, fail_ok=False):
 
 
 def get_hosts_upgrade_status(con_ssh=None):
-    return table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh))
+    return table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh)[1])
 
 
 def get_upgrade_state(con_ssh=None):
 
-    output = cli.system('upgrade-show', ssh_client=con_ssh)
+    output = cli.system('upgrade-show', ssh_client=con_ssh)[1]
 
     if ("+" and "-" and "|") in output:
         table_ = table_parser.table(output)
@@ -572,7 +575,7 @@ def complete_upgrade(con_ssh=None, fail_ok=False):
         (1, <stderr>)   # cli returns stderr, applicable if fail_ok is true
 
     """
-    rc, output = cli.system('upgrade-complete', ssh_client=con_ssh, fail_ok=True, rtn_code=True)
+    rc, output = cli.system('upgrade-complete', ssh_client=con_ssh, fail_ok=True)
     if rc != 0:
         err_msg = "CLI system upgrade-complete rejected: {}".format(output)
         LOG.warning(err_msg)
@@ -684,7 +687,7 @@ def upgrade_controller0():
 
     controller0 = 'controller-0'
     LOG.info("Ensure controller-0 is provisioned before upgrade.....")
-    host_helper.ensure_host_provisioned(controller0)
+    ensure_host_provisioned(controller0)
     LOG.info("Host {} is provisioned for upgrade.....".format(controller0))
 
     # open vlm console for controller-0 for boot through mgmt interface
@@ -723,7 +726,7 @@ def upgrade_controller(controller_host, con_ssh=None, fail_ok=False):
 
     LOG.info("Upgrading Host {}".format(controller_host))
     if controller_host == 'controller-0':
-        host_helper.ensure_host_provisioned(controller_host, con_ssh=con_ssh)
+        ensure_host_provisioned(controller_host, con_ssh=con_ssh)
         LOG.info("Host {} is provisioned for upgrade.....".format(controller_host))
 
         # # open vlm console for controller-0 for boot through mgmt interface
@@ -864,9 +867,9 @@ def upgrade_host_lock_unlock(host, con_ssh=None):
     if swact_back:
         time.sleep(60)
 
-        if not host_helper.wait_for_host_values(host, timeout=360, fail_ok=True,
-                                                operational=HostOperState.ENABLED,
-                                                availability=HostAvailState.AVAILABLE):
+        if not system_helper.wait_for_host_values(host, timeout=360, fail_ok=True,
+                                                           operational=HostOperState.ENABLED,
+                                                           availability=HostAvailState.AVAILABLE):
             err_msg = " Swacting to standby is not possible because {} is not in available state " \
                   "within  the specified timeout".format(host)
             assert False, err_msg
@@ -879,25 +882,6 @@ def upgrade_host_lock_unlock(host, con_ssh=None):
         LOG.info("Swacted and  {}  has become active......".format(host))
 
     return 0, "Host {} is  locked and unlocked successfully".format(host)
-
-
-def get_upgraded_hosts(upgrade_version, con_ssh=None, fail_ok=False, source_creden_=None):
-    """
-    Gets the upgraded hosts in the current upgrade process.
-    Args:
-        upgrade_version(str): - specifies the upgrade version
-        con_ssh:
-        fail_ok:
-        source_creden_:
-
-    Returns:
-
-    """
-
-    table_ = table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh, fail_ok=fail_ok,
-                                           source_openrc=source_creden_))
-    table_ = table_parser.filter_table(table_, **{'running_release': upgrade_version})
-    return table_parser.get_values(table_, 'hostname')
 
 
 def wait_for_upgrade_states(states, timeout=60, check_interval=6, fail_ok=False):
@@ -963,14 +947,9 @@ def simplex_host_upgrade(con_ssh=None, fail_ok=False):
         return 0, "host upgrade success"
 
 
-def collect_upgrade_start_kpi(lab, collect_kpi ):
-    """
+def collect_upgrade_start_kpi(lab, collect_kpi):
 
-    Returns:
-
-    """
-
-    lab_name =  lab['short_name']
+    lab_name = lab['short_name']
     log_path = UpgradeStart.LOG_PATH
     kpi_name = UpgradeStart.NAME
     host = "controller-0"
@@ -994,6 +973,7 @@ def collected_upgrade_controller1_kpi(lab, collect_kpi, init_time=None):
     Args:
         lab:
         collect_kpi:
+        init_time
 
     Returns:
 
@@ -1023,6 +1003,7 @@ def collected_upgrade_controller0_kpi(lab, collect_kpi, init_time=None):
     Args:
         lab:
         collect_kpi:
+        init_time
 
     Returns:
 
@@ -1061,7 +1042,6 @@ def collect_upgrade_orchestration_kpi(lab, collect_kpi):
 
     lab_name = lab['short_name']
     print("Upgrade host: {}".format(upgrade_host))
-    host = "controller-1"
 
     kpi_name = UpgradeOrchestration.NAME.format(upgrade_host)
 
@@ -1088,10 +1068,9 @@ def collect_upgrade_activate_kpi(lab, collect_kpi):
     end_pattern = UpgradeActivate.END
 
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
-                          log_path=log_path, lab_name=lab_name, host=host,
-                          start_pattern=start_pattern,
-                          end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
-
+                              log_path=log_path, lab_name=lab_name, host=host,
+                              start_pattern=start_pattern,
+                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
 
 
 def collect_upgrade_complete_kpi(lab, collect_kpi):
@@ -1111,7 +1090,252 @@ def collect_upgrade_complete_kpi(lab, collect_kpi):
     end_pattern = UpgradeComplete.END
 
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
-                          log_path=log_path, lab_name=lab_name, host=host,
-                          start_pattern=start_pattern,
-                          end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
+                              log_path=log_path, lab_name=lab_name, host=host,
+                              start_pattern=start_pattern,
+                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15)
 
+
+def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, upgrade_ver=None):
+    # TODO: Need to support remote_cli. i.e., no hardcoded load_path, etc
+    if upgrade_ver >= '17.07':
+        load_path = '/home/wrsroot/bootimage.sig'
+        rc, output = cli.system('load-import /home/wrsroot/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True)
+    else:
+        rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True)
+    if rc == 0:
+        table_ = table_parser.table(output)
+        id_ = (table_parser.get_values(table_, "Value", Property='id')).pop()
+        soft_ver = (table_parser.get_values(table_, "Value", Property='software_version')).pop()
+        LOG.info('Waiting to finish importing  load id {} version {}'.format(id_, soft_ver))
+
+        end_time = time.time() + timeout
+
+        while time.time() < end_time:
+
+            state = get_imported_load_state(id_, load_version=soft_ver, con_ssh=con_ssh)
+            LOG.info("Import state {}".format(state))
+            if "imported" in state:
+                LOG.info("Importing load {} is completed".format(soft_ver))
+                return [rc, id_, soft_ver]
+
+            time.sleep(3)
+
+        err_msg = "Timeout waiting to complete importing load {}".format(soft_ver)
+        LOG.warning(err_msg)
+        if fail_ok:
+            return [1, err_msg]
+        else:
+            raise exceptions.TimeoutException(err_msg)
+    else:
+        err_msg = "CLI command rejected: {}".format(output)
+        if fail_ok:
+            return [1, err_msg]
+        else:
+            raise exceptions.CLIRejected(err_msg)
+
+
+def get_imported_load_id(load_version=None, con_ssh=None):
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh)[1])
+    if load_version:
+        table_ = table_parser.filter_table(table_, state='imported', software_version=load_version)
+    else:
+        table_ = table_parser.filter_table(table_, state='imported')
+
+    return table_parser.get_values(table_, 'id')[0]
+
+
+def get_imported_load_state(load_id, load_version=None, con_ssh=None):
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh)[1])
+    if load_version:
+        table_ = table_parser.filter_table(table_, id=load_id, software_version=load_version)
+    else:
+        table_ = table_parser.filter_table(table_, id=load_id)
+
+    return (table_parser.get_values(table_, 'state')).pop()
+
+
+def get_imported_load_version(con_ssh=None):
+    table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh)[1])
+    table_ = table_parser.filter_table(table_, state='imported')
+
+    return table_parser.get_values(table_, 'software_version')
+
+
+def delete_imported_load(load_version=None, con_ssh=None, fail_ok=False):
+    load_id = get_imported_load_id(load_version=load_version, con_ssh=con_ssh)
+
+    rc, output = cli.system('load-delete', load_id, ssh_client=con_ssh, fail_ok=True)
+    if rc == 1:
+        return 1, output
+
+    if not wait_for_delete_imported_load(load_id, con_ssh=con_ssh, fail_ok=True):
+        err_msg = "Unable to delete imported load {}".format(load_id)
+        LOG.warning(err_msg)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
+
+
+def wait_for_delete_imported_load(load_id, timeout=120, check_interval=5, fail_ok=False, con_ssh=None,
+                                  auth_info=Tenant.get('admin_platform')):
+    LOG.info("Waiting for imported load  {} to be deleted from the load-list ".format(load_id))
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        table_ = table_parser.table(cli.system('load-list', ssh_client=con_ssh, auth_info=auth_info)[1])
+
+        table_ = table_parser.filter_table(table_, **{'id': load_id})
+        if len(table_parser.get_values(table_, 'id')) == 0:
+            return True
+        else:
+            if 'deleting' in table_parser.get_column(table_, 'state'):
+                cli.system('load-delete', load_id, ssh_client=con_ssh, fail_ok=True)
+        time.sleep(check_interval)
+
+    else:
+        err_msg = "Timed out waiting for load {} to get deleted".format(load_id)
+        if fail_ok:
+            LOG.warning(err_msg)
+            return False
+        else:
+            raise exceptions.TimeoutException(err_msg)
+
+
+def ensure_host_provisioned(host, con_ssh=None):
+    """
+    check if host is provisioned.
+
+    Args:
+        host (str): hostname or id in string format
+        con_ssh (SSHClient):
+
+    Returns: (return_code(int), msg(str))   # 1, 2, 3, 4, 5 only returns when fail_ok=True
+        (0, "Host is host is provisioned)
+    """
+    LOG.info("Checking if host {} is already provisioned ....".format(host))
+    if is_host_provisioned(host, con_ssh=None):
+        return 0, "Host {} is provisioned"
+    active_controller = system_helper.get_active_controller_name()
+    conter_swact_back = False
+    if active_controller == host:
+        LOG.tc_step("Swact active controller and ensure active controller is changed")
+        exit_code, output = swact_host(hostname=active_controller)
+        assert 0 == exit_code, "{} is not recognized as active controller".format(active_controller)
+        active_controller = system_helper.get_active_controller_name()
+        conter_swact_back = True
+
+    LOG.info("Host {} not provisioned ; doing lock/unlock to provision the host ....".format(host))
+    rc, output = lock_host(host, con_ssh=con_ssh)
+    if rc != 0 and rc != -1:
+        err_msg = "Lock host {} rejected".format(host)
+        raise exceptions.HostError(err_msg)
+
+    rc, output = unlock_host(host, available_only=True, con_ssh=con_ssh)
+    if rc != 0:
+        err_msg = "Unlock host {} failed: {}".format(host, output)
+        raise exceptions.HostError(err_msg)
+    if conter_swact_back:
+        LOG.tc_step("Swact active controller back and ensure active controller is changed")
+        exit_code, output = swact_host(hostname=active_controller)
+        assert 0 == exit_code, "{} is not recognized as active controller".format(active_controller)
+
+    LOG.info("Checking if host {} is provisioned after lock/unlock ....".format(host))
+    if not is_host_provisioned(host, con_ssh=None):
+        raise exceptions.HostError("Failed to provision host {}")
+    # Delay for the alarm to clear . Could be improved.
+    time.sleep(120)
+    return 0, "Host {} is provisioned after lock/unlock".format(host)
+
+
+def is_host_provisioned(host, con_ssh=None):
+    invprovisioned = system_helper.get_host_values(host, "invprovision", con_ssh=con_ssh)[0]
+    LOG.info("Host {} is {}".format(host, invprovisioned))
+    return "provisioned" == invprovisioned.strip()
+
+
+def get_upgraded_host_names(upgrade_release, con_ssh=None):
+
+    table_ = table_parser.table(cli.system('host-upgrade-list', ssh_client=con_ssh)[1])
+    table_ = table_parser.filter_table(table_, target_release=upgrade_release)
+    return table_parser.get_column(table_, "hostname")
+
+
+def downgrade_host(host, timeout=HostTimeout.UPGRADE, fail_ok=False, con_ssh=None,
+                   auth_info=Tenant.get('admin_platform'),
+                   lock=False, unlock=False):
+    """
+    Downgrade given host
+    Args:
+        host (str):
+        timeout (int): MAX seconds to wait for host to become online after unlocking
+        fail_ok (bool):
+        con_ssh (SSHClient):
+        auth_info (str):
+        unlock (bool):
+        lock (bool)
+
+
+    Returns (tuple):
+        (0, "Host is downgraded and in online state.")
+        (1, "Cli host downgrade rejected. Applicable only if ail_ok")
+        (2, "Host did not come online after downgrade. Applicable if fail_ok ")
+        (3, "Host fail lock before starting downgrade". Applicable if lock arg is True and fail_ok")
+        (4, "Host fail to unlock after host downgrade.  Applicable if unlock arg is True and fail_ok")
+        (5, "Host unlocked after downgrade, but alarms are not cleared after 120 seconds.
+        Applicable if unlock arg is True and fail_ok")
+
+    """
+    LOG.info("Downgrading host {}...".format(host))
+
+    if lock:
+        if system_helper.get_host_values(host, 'administrative', con_ssh=con_ssh)[0] == HostAdminState.UNLOCKED:
+            message = "Host is not locked. Locking host  before starting downgrade"
+            LOG.info(message)
+            rc, output = lock_host(host, con_ssh=con_ssh, fail_ok=True)
+
+            if rc != 0 and rc != -1:
+                err_msg = "Host {} fail on lock before starting downgrade: {}".format(host, output)
+                if fail_ok:
+                    return 3, err_msg
+                else:
+                    raise exceptions.HostError(err_msg)
+
+    exitcode, output = cli.system('host-downgrade', host, ssh_client=con_ssh, fail_ok=True, auth_info=auth_info,
+                                  timeout=timeout)
+    if exitcode == 1:
+        err_msg = "Host {} cli downgrade host failed: {}".format(host, output)
+        if fail_ok:
+            return 1, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
+
+    # sleep for 180 seconds to let host be re-installed with previous release
+    time.sleep(180)
+
+    if not wait_for_host_values(host, timeout=timeout, check_interval=60, availability=HostAvailState.ONLINE,
+                                con_ssh=con_ssh, fail_ok=fail_ok):
+        err_msg = "Host {} did not become online  after downgrade".format(host)
+        if fail_ok:
+            return 2, err_msg
+        else:
+            raise exceptions.HostError(err_msg)
+
+    if unlock:
+        rc, output = unlock_host(host, fail_ok=True, available_only=True)
+        if rc != 0:
+            err_msg = "Host {} fail to unlock after host downgrade: ".format(host, output)
+            if fail_ok:
+                return 4, err_msg
+            else:
+                raise exceptions.HostError(err_msg)
+
+        # wait until  400.001  alarms get cleared
+        if not system_helper.wait_for_alarm_gone("400.001", fail_ok=True):
+            err_msg = "Alarms did not clear after host {} downgrade and unlock: ".format(host)
+            if fail_ok:
+                return 5, err_msg
+            else:
+                raise exceptions.HostError(err_msg)
+
+    LOG.info("Downgrading host {} complete ...".format(host))
+    return 0, None

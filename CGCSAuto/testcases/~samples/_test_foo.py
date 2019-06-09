@@ -1,6 +1,6 @@
 from pytest import mark, skip, fixture
 
-from keywords import nova_helper
+from keywords import vm_helper
 from setup_consts import P1, P2
 from utils.tis_log import LOG
 from utils import exceptions
@@ -16,7 +16,7 @@ _skip = True
 ])
 def test_dummy1(param1, param2, param3):
     LOG.tc_step("test dummy 1 step~~ \nparam1: {}, param2:{}".format(param1, param2))
-    res = nova_helper.get_all_vms()
+    res = vm_helper.get_all_vms()
     if not param3:
         skip("param3 is : {}".format(param3))
     LOG.info("All VMs: {}".format(res))

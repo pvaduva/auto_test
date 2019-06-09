@@ -9,11 +9,11 @@ from consts.proj_vars import ProjVar
 
 @fixture(scope='module')
 def revert_https(request):
-    central_auth = Tenant.get('admin', dc_region='RegionOne')
-    sub_auth = Tenant.get('admin')
+    central_auth = Tenant.get('admin_platform', dc_region='RegionOne')
+    sub_auth = Tenant.get('admin_platform')
 
-    origin_https_sub = keystone_helper.is_https_lab(auth_info=sub_auth)
-    origin_https_central = keystone_helper.is_https_lab(auth_info=central_auth)
+    origin_https_sub = keystone_helper.is_https_enabled(auth_info=sub_auth)
+    origin_https_central = keystone_helper.is_https_enabled(auth_info=central_auth)
 
     def _revert():
         LOG.fixture_step("Revert central https config to {}.".format(origin_https_central))
@@ -56,7 +56,7 @@ def test_dc_modify_https(revert_https):
 
     LOG.tc_step("Wait for subcloud sync audit and ensure {} https is not changed".format(subcloud))
     dc_helper.wait_for_sync_audit(subclouds=subcloud)
-    assert origin_https_sub == keystone_helper.is_https_lab(auth_info=sub_auth), "HTTPS config changed in subcloud"
+    assert origin_https_sub == keystone_helper.is_https_enabled(auth_info=sub_auth), "HTTPS config changed in subcloud"
 
     LOG.tc_step("Verify cli's in {} and central region".format(subcloud))
     verify_cli(sub_auth, central_auth)
@@ -77,15 +77,15 @@ def verify_cli(sub_auth=None, central_auth=None):
     auths = [auth for auth in auths if auth]
 
     for auth in auths:
-        cli.system('host-list', auth_info=auth, fail_ok=False)
-        cli.fm('alarm-list', auth_info=auth, fail_ok=False)
-        cli.openstack('server list --a', auth_info=auth, fail_ok=False)
-        cli.openstack('image list', auth_info=auth, fail_ok=False)
-        cli.openstack('volume list --a', auth_info=auth, fail_ok=False)
-        cli.openstack('user list', auth_info=auth, fail_ok=False)
-        cli.openstack('router list', auth_info=auth, fail_ok=False)
+        cli.system('host-list', fail_ok=False, auth_info=auth)
+        cli.fm('alarm-list', fail_ok=False, auth_info=auth)
+        cli.openstack('server list --a', fail_ok=False, auth_info=auth)
+        cli.openstack('image list', fail_ok=False, auth_info=auth)
+        cli.openstack('volume list --a', fail_ok=False, auth_info=auth)
+        cli.openstack('user list', fail_ok=False, auth_info=auth)
+        cli.openstack('router list', fail_ok=False, auth_info=auth)
 
     if sub_auth:
-        cli.openstack('stack list', auth_info=sub_auth, fail_ok=False)
-        cli.openstack('alarm list', auth_info=sub_auth, fail_ok=False)
-        cli.openstack('metric status', auth_info=sub_auth, fail_ok=False)
+        cli.openstack('stack list', fail_ok=False, auth_info=sub_auth)
+        cli.openstack('alarm list', fail_ok=False, auth_info=sub_auth)
+        cli.openstack('metric status', fail_ok=False, auth_info=sub_auth)

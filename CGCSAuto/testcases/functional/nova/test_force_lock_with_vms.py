@@ -1,5 +1,6 @@
 from pytest import skip, fixture
 
+import keywords.host_helper
 from utils.tis_log import LOG
 from consts.timeout import VMTimeout
 from testfixtures.recover_hosts import HostsToRecover
@@ -8,11 +9,11 @@ from keywords import nova_helper, vm_helper, host_helper, system_helper
 
 @fixture(scope='module')
 def get_hosts_with_backing(add_admin_role_module):
-    storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
     if len(hosts) < 2:
         skip("Minimum of two hypervisors must support the same storage_backing.")
 
-    if not system_helper.is_small_footprint():
+    if not system_helper.is_aio_system():
         host_under_test = hosts[0]
     else:
         host_under_test = system_helper.get_standby_controller_name()

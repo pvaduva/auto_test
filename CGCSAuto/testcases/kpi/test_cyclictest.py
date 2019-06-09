@@ -2,8 +2,8 @@ import os
 import random
 import re
 import time
+import pexpect
 
-from pexpect import exceptions
 from pytest import fixture, skip, mark
 
 from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
@@ -12,12 +12,12 @@ from consts.cgcs import FlavorSpec, GuestImages
 from consts.filepaths import WRSROOT_HOME
 from consts.kpi_vars import CyclicTest
 from consts.proj_vars import ProjVar
-from keywords import common, host_helper, system_helper, patching_helper, glance_helper, nova_helper, vm_helper
-from utils import cli, table_parser
+from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
-from utils.clients.local import LocalHostClient
 from utils.kpi import kpi_log_parser
 from utils.tis_log import LOG
+from keywords import common, host_helper, system_helper, glance_helper, nova_helper, vm_helper
+
 
 CYCLICTEST_EXE = '/folk/svc-cgcsauto/cyclictest/cyclictest'
 CYCLICTEST_DIR = '/home/wrsroot/cyclictest/'
@@ -84,7 +84,8 @@ def prepare_test_session():
 def get_rt_guest_image():
     LOG.info('Scp guest image from the build server')
     con_ssh = ControllerClient.get_active_controller()
-    img_path_on_tis = '{}/{}'.format(GuestImages.IMAGE_DIR, GuestImages.IMAGE_FILES['tis-centos-guest-rt'][2])
+    img_path_on_tis = '{}/{}'.format(GuestImages.DEFAULT['image_dir'],
+                                     GuestImages.IMAGE_FILES['tis-centos-guest-rt'][2])
 
     if not con_ssh.file_exists(img_path_on_tis):
         con_ssh.scp_on_dest(source_user=SvcCgcsAuto.USER, source_ip=BUILD_SERVER, source_path=RT_GUEST_PATH,
@@ -110,11 +111,11 @@ def get_hypervisor():
 
 
 def get_cpu_info(hypervisor):
-    output = cli.openstack('hypervisor show ' + hypervisor, auth_info=Tenant.get('admin'))
+    output = cli.openstack('hypervisor show ' + hypervisor, auth_info=Tenant.get('admin'))[1]
     table = table_parser.table(output)
     cpu_info = table_parser.get_value_two_col_table(table, 'cpu_info')
 
-    cpu_table = system_helper.get_host_cpu_list_table(hypervisor)
+    cpu_table = host_helper.get_host_cpu_list_table(hypervisor)
     thread_ids = table_parser.get_columns(cpu_table, ['thread'])
     num_threads = len(set(ids[0] for ids in thread_ids))
     LOG.info('per_core_threads:{}'.format(num_threads))
@@ -156,8 +157,7 @@ def get_suitable_hypervisors():
     hypervisors = host_helper.get_hypervisors()
 
     for hypervisor in hypervisors:
-        personality, subfunc = host_helper.get_hostshow_values(hypervisor, ('personality', 'subfunctions'),
-                                                               rtn_list=True)
+        personality, subfunc = system_helper.get_host_values(hypervisor, ('personality', 'subfunctions'))
         personalities = subfunc + personality
         if not personalities or 'lowlatency' not in personalities:
             continue
@@ -394,10 +394,8 @@ def _wait_for_results(con_target, run_log=None, hist_file=None, duration=60, sta
                 LOG.info('Running ... on ' + con_target.host)
                 output = con_target.exec_cmd('tail {}; echo'.format(run_log), expect_timeout=cmd_timeout)[1]
                 LOG.info('\n{}\n'.format(output))
-        except pexpect.exceptions.EOF as e:
-            LOG.debug('ignore pexpect exception:{}'.format(e))
-        except Except as e:
-            LOG.debug('ignore unknown exception:{}'.format(e))
+        except (pexpect.ExceptionPexpect, exceptions.TiSError) as e:
+            LOG.debug('ignore exception:{}'.format(e.__str__()))
 
         time.sleep(wait_per_checking)
 
@@ -436,8 +434,7 @@ def _normalize_cpu_list(cpus):
     return ','.join(normalized)
 
 
-def run_cyclictest(target_ssh, program, target_hypervisor, cpu_info=None, 
-    settings=None, cyclictest_dir=CYCLICTEST_DIR):
+def run_cyclictest(target_ssh, program, target_hypervisor, cpu_info=None, settings=None, cyclictest_dir=CYCLICTEST_DIR):
 
     LOG.tc_step('On target: {}, run program: {}'.format(target_hypervisor, program))
 
@@ -586,7 +583,7 @@ def test_kpi_cyclictest_vm(collect_kpi, prepare_test_session, get_rt_guest_image
     program = os.path.join(os.path.normpath(cyclictest_dir), os.path.basename(CYCLICTEST_EXE))
     program_active_con = os.path.join(os.path.normpath(CYCLICTEST_DIR), os.path.basename(CYCLICTEST_EXE))
 
-    cpu_info = {'vm_cores': [id for id in range(vcpu_count) if id != non_rt_core]}
+    cpu_info = {'vm_cores': [id_ for id_ in range(vcpu_count) if id_ != non_rt_core]}
 
     with vm_helper.ssh_to_vm_from_natbox(vm_id) as vm_ssh:
         prep_test_on_host(vm_ssh, vm_id, program_active_con, ControllerClient.get_active_controller().host,

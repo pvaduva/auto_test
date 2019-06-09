@@ -66,7 +66,7 @@ def test_swact_100_times():
                         format(iter_str))
             time.sleep(60)
             for j in range(3):
-                code, vm_new, msg, vol = vm_helper.boot_vm(name='post_swact', fail_ok=True, cleanup='function')
+                code, vm_new, msg = vm_helper.boot_vm(name='post_swact', fail_ok=True, cleanup='function')
 
                 if code == 0:
                     break

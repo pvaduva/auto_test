@@ -683,7 +683,7 @@ def get_expected_hosts_states(action, patch_ids, pre_hosts_states, pre_patches_s
                 impacted_host_types += ['COMPUTE', 'CONTROLLER', 'STORAGE']
 
         impacted_host_types = list(set(impacted_host_types))
-        controllers, computes, storages = system_helper.get_hostnames_per_personality(con_ssh=con_ssh, rtn_tuple=True)
+        controllers, computes, storages = system_helper.get_hosts_per_personality(con_ssh=con_ssh, rtn_tuple=True)
         hosts_per_types = {'CONTROLLER': controllers, 'COMPUTE': computes, 'STORAGE': storages}
 
         expected_states = {}
@@ -1195,7 +1195,7 @@ def install_patches(async_=False, remove=False, fail_ok=False, force_lock=False,
     installed_hosts = []
     cmd = 'host-install-async' if async_ else 'host-install'
     active = system_helper.get_active_controller_name(con_ssh=con_ssh)
-    hosts = system_helper.get_hostnames(con_ssh=con_ssh)
+    hosts = system_helper.get_hosts(con_ssh=con_ssh)
     hosts.remove(active)
     hosts.append(active)
     cmd_timeout = 120 if async_ else 1200
@@ -1426,7 +1426,7 @@ def check_system_health(check_patch_ignored_alarms=True, fail_on_disallowed_fail
 
     if 'No alarms' in failed_items and check_patch_ignored_alarms:
         rtn = ('Alarm ID',)
-        current_alarms_ids = system_helper.get_alarms(rtn_vals=rtn, mgmt_affecting=True)
+        current_alarms_ids = system_helper.get_alarms(fields=rtn, mgmt_affecting=True)
         affecting_alarms = [id_ for id_ in current_alarms_ids if id_ not in
                             orchestration_helper.IGNORED_ALARM_IDS]
         if not fail_on_disallowed_failure:
@@ -1451,8 +1451,9 @@ def download_test_patches(build_server=None, patch_dir=None, tis_dir=None, con_s
     if not tis_dir:
         tis_dir = WRSROOT_HOME + 'test_patches'
 
+    build_info = system_helper.get_build_info(con_ssh=con_ssh)
     if not build_server:
-        build_server = ProjVar.get_var('BUILD_SERVER')
+        build_server = build_info['BUILD_SERVER']
 
     build_path = ProjVar.get_var('BUILD_PATH')
     if not patch_dir:
@@ -1517,7 +1518,7 @@ def parse_test_patches(patch_ids, search_str, failure_patch=False, prefix_build_
 
     """
     if prefix_build_id:
-        prefix = ProjVar.get_var('BUILD_ID') + ('_' if not search_str.startswith('_') else '')
+        prefix = system_helper.get_build_info()['BUILD_ID'] + ('_' if not search_str.startswith('_') else '')
         search_str = prefix + search_str
     if end_with_search_str:
         search_str += '$'
@@ -1553,3 +1554,13 @@ def wait_for_affecting_alarms_gone(fail_ok=False):
             time.sleep(30)
 
     return res, affecting_alarms
+
+
+def is_patch_current(con_ssh=None):
+    if con_ssh is None:
+        con_ssh = ControllerClient.get_active_controller()
+
+    output = con_ssh.exec_cmd('system health-query')[1]
+
+    patch_line = [l for l in output.splitlines() if "patch" in l]
+    return 'OK' in patch_line.pop()

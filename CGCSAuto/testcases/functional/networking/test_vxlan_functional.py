@@ -1,4 +1,5 @@
 from pytest import fixture, mark, skip
+
 from utils import table_parser
 from utils.tis_log import LOG
 from consts.auth import Tenant
@@ -13,8 +14,7 @@ def add_admin_role(request):
         skip("vshell commands unsupported by OVS")
 
     primary_tenant = Tenant.get_primary()
-    primary_tenant_name = common.get_tenant_name(primary_tenant)
-    other_tenant = Tenant.TENANT2 if 'tenant1' in primary_tenant_name else Tenant.TENANT1
+    other_tenant = Tenant.get_secondary()
     tenants = [primary_tenant, other_tenant]
     res = []
     for auth_info in tenants:
@@ -32,12 +32,12 @@ def add_admin_role(request):
     request.addfinalizer(remove_admin_role)
 
 
-def get_vxlan_endpoint_stats(compute, rtn_val='packets-unicast'):
+def get_vxlan_endpoint_stats(compute, field='packets-unicast'):
     """
     Get the stats from vshell for vxlan-endpoint-stats-list
     Args:
         compute
-        rtn_val (str): Filter to use to parse packets
+        field (str): Filter to use to parse packets
 
         Returns:
             list
@@ -47,7 +47,7 @@ def get_vxlan_endpoint_stats(compute, rtn_val='packets-unicast'):
     LOG.info("Getting vshell vxlan-endpoint-stats-list")
     with host_helper.ssh_to_host(compute) as host_ssh:
         table_ = table_parser.table(host_ssh.exec_cmd('vshell vxlan-endpoint-stats-list', fail_ok=False)[1])
-        packets = table_parser.get_values(table_, rtn_val, regex=True)
+        packets = table_parser.get_values(table_, field, regex=True)
 
     return packets
 
@@ -96,13 +96,13 @@ def test_dynamic_vxlan_functional(version, mode):
     """
     vxlan_provider_name = 'group0-data0b'
     vif_model = 'avp'
-    providernets = system_helper.get_data_networks(rtn_val='name', network_type='vxlan')
+    providernets = system_helper.get_data_networks(field='name', network_type='vxlan')
     if not providernets or (len(providernets) > 1) or (vxlan_provider_name not in providernets):
         skip("Vxlan provider-net not configured or Vxlan provider-net configured on more than one provider net\
          or not configurd on internal net")
 
     # get the id of the providr net
-    vxlan_provider_net_id = system_helper.get_data_networks(rtn_val='id', type='vxlan')
+    vxlan_provider_net_id = system_helper.get_data_networks(field='id', type='vxlan')
     vm_ids = []
 
     # get 2 computes so we can create the aggregate and force vm-ccupancy
@@ -125,15 +125,14 @@ def test_dynamic_vxlan_functional(version, mode):
         assert 0 == clear_vxlan_endpoint_stats(compute), "clear stats failed"
 
     LOG.tc_step("Getting Internal net ids.")
-    internal_net_ids = network_helper.get_internal_net_ids_on_vxlan_v4_v6(vxlan_provider_net_id=vxlan_provider_net_id,
-                                                                          ip_version=version, mode=mode)
+    internal_net_ids = network_helper.get_internal_net_ids_on_vxlan(vxlan_provider_net_id=vxlan_provider_net_id,
+                                                                    ip_version=version, mode=mode)
     if not internal_net_ids:
         skip("No networks found for ip version {} on the vxlan provider net".format(version))
 
     LOG.tc_step("Creating vms for both tenants.")
     primary_tenant = Tenant.get_primary()
-    primary_tenant_name = common.get_tenant_name(primary_tenant)
-    other_tenant = Tenant.TENANT2 if primary_tenant_name == 'tenant1' else Tenant.TENANT1
+    other_tenant = Tenant.get_secondary()
 
     for auth_info, vm_host in zip([primary_tenant, other_tenant], vxlan_computes):
         mgmt_net_id = network_helper.get_mgmt_net_id(auth_info=auth_info)
@@ -144,7 +143,7 @@ def test_dynamic_vxlan_functional(version, mode):
                                         auth_info=auth_info, cleanup='function')[1])
 
     # make sure VMS are not in the same compute, I don;t need it but just in case (double checking):
-    if nova_helper.get_vm_host(vm_id=vm_ids[0]) == nova_helper.get_vm_host(vm_id=vm_ids[1]):
+    if vm_helper.get_vm_host(vm_id=vm_ids[0]) == vm_helper.get_vm_host(vm_id=vm_ids[1]):
         vm_helper.cold_migrate_vm(vm_id=vm_ids[0])
 
     filter_known_vtep = 'packets-unicast'
@@ -157,7 +156,7 @@ def test_dynamic_vxlan_functional(version, mode):
 
     LOG.tc_step("Checking stats on computes after vms are launched.")
     for compute in computes:
-        stats_after_boot_vm = get_vxlan_endpoint_stats(compute, rtn_val=filter_stat_at_boot)
+        stats_after_boot_vm = get_vxlan_endpoint_stats(compute, field=filter_stat_at_boot)
         if len(stats_after_boot_vm) is 3:
             stats = int(stats_after_boot_vm[1]) + int(stats_after_boot_vm[2])
             LOG.info("Got the stats for packets {} after vm launched is {}".format(filter_stat_at_boot, stats))
@@ -177,7 +176,7 @@ def test_dynamic_vxlan_functional(version, mode):
     LOG.tc_step("Ping between two vms over internal network")
     vm_helper.ping_vms_from_vm(to_vms=vm_ids[0], from_vm=vm_ids[1], net_types=['internal'])
 
-    stats_after_ping = get_vxlan_endpoint_stats(computes[0], rtn_val=filter_known_vtep)
+    stats_after_ping = get_vxlan_endpoint_stats(computes[0], field=filter_known_vtep)
     if not stats_after_ping:
         assert "Compute stats are empty"
 
@@ -207,7 +206,7 @@ def test_dynamic_vxlan_functional(version, mode):
         assert int(code) > 0, "Expected to see 100% ping failure"
 
     LOG.tc_step("Checking stats on computes after vm ping on unknown IP.")
-    stats_after_ping_unknown_vtep = get_vxlan_endpoint_stats(computes[1], rtn_val=filter_unknown_vtep)
+    stats_after_ping_unknown_vtep = get_vxlan_endpoint_stats(computes[1], field=filter_unknown_vtep)
     if not stats_after_ping_unknown_vtep:
         assert 0, "Compute stats are empty"
 

@@ -3,6 +3,7 @@ import random
 
 from pytest import fixture, mark, skip
 
+import keywords.host_helper
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.kpi_vars import HostLock, KPI_DATE_FORMAT
@@ -69,7 +70,7 @@ class TestLockWithVMs:
         to target host before test start.
         """
 
-        storage_backing, target_hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, target_hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
         if len(target_hosts) < 2:
             skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 
@@ -131,7 +132,7 @@ class TestLockWithVMs:
         LOG.tc_step("Verify lock succeeded and vms still in good state")
         vm_helper.wait_for_vms_values(vms=vms, fail_ok=False)
         for vm in vms:
-            vm_host = nova_helper.get_vm_host(vm_id=vm)
+            vm_host = vm_helper.get_vm_host(vm_id=vm)
             assert vm_host != host, "VM is still on {} after lock".format(host)
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm, timeout=VMTimeout.DHCP_RETRY)
@@ -192,7 +193,7 @@ class TestLockWithVMsNegative:
             vms_to_test, flavors_created = _boot_migrable_vms(storage_backing)
             all_new_flavors += flavors_created
             for vm in vms_to_test:
-                target_hosts.append(nova_helper.get_vm_host(vm[0]))
+                target_hosts.append(vm_helper.get_vm_host(vm[0]))
                 all_vms.append(vm[0])
 
         def teardown():
@@ -234,7 +235,7 @@ class TestLockWithVMsNegative:
         target_hosts, storages_to_test = target_hosts_negative
         LOG.info("Negative test: host-lock attempt on host(s) with {} storage backing(s). \n"
                  "Host(s) to attempt lock: {}".format(storages_to_test, target_hosts_negative))
-        vms_per_host = nova_helper.get_vms_per_host()
+        vms_per_host = vm_helper.get_vms_per_host()
         for host in target_hosts:
             if system_helper.get_active_controller_name() == host:
                 host_helper.swact_host(hostname=host)
@@ -242,7 +243,7 @@ class TestLockWithVMsNegative:
                 host_helper.wait_for_webservice_up(host)
 
             vms_on_host = vms_per_host[host]
-            pre_vms_status = nova_helper.get_vms_info(vms=vms_on_host, fields='Status')
+            pre_vms_status = vm_helper.get_vms_info(vms=vms_on_host, fields='Status')
 
             LOG.tc_step("Lock target host {}...".format(host))
             lock_code, lock_output = host_helper.lock_host(host=host, check_first=False, fail_ok=True, swact=True)
@@ -251,7 +252,7 @@ class TestLockWithVMsNegative:
             if lock_code in [0, 3]:
                 self.hosts_locked.append(host)
 
-            post_vms_status = nova_helper.get_vms_info(vms=vms_on_host, fields='Status')
+            post_vms_status = vm_helper.get_vms_info(vms=vms_on_host, fields='Status')
 
             LOG.tc_step("Verify lock rejected and vms status unchanged.")
             assert lock_code in [1, 2, 4, 5], "Unexpected result: {}".format(lock_output)

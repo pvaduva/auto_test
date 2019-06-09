@@ -68,12 +68,12 @@ def orphan_audit_setup(request):
         con_ssh.exec_sudo_cmd("sed -i 's/kvm/qemu/g' orphan_guest.xml")
         con_ssh.exec_sudo_cmd("sed -i 's/qemu-qemu/qemu-kvm/g' orphan_guest.xml")
 
-    if GuestImages.DEFAULT_GUEST != 'tis-centos-guest':
+    if GuestImages.DEFAULT['guest'] != 'tis-centos-guest':
         LOG.info("Update xml files to use default image")
-        con_ssh.exec_sudo_cmd("sed -i 's/tis-centos-guest/{}/g' orphan_guest.xml".format(GuestImages.DEFAULT_GUEST))
+        con_ssh.exec_sudo_cmd("sed -i 's/tis-centos-guest/{}/g' orphan_guest.xml".format(GuestImages.DEFAULT['guest']))
 
     # Check if system is AIO, skip scp to computes if it is
-    if not system_helper.is_small_footprint():
+    if not system_helper.is_aio_system():
         LOG.fixture_step("Non-AIO system detected, SCP files to compute")
         with host_helper.ssh_to_host(vm_host) as host_ssh:
             LOG.info("Create images dir in compute host")
@@ -82,12 +82,12 @@ def orphan_audit_setup(request):
         def teardown():
             LOG.fixture_step("Delete all files scp'd over")
             with host_helper.ssh_to_host(vm_host) as host_ssh_:
-                host_ssh_.exec_cmd('rm -rf images/{}.img'.format(GuestImages.DEFAULT_GUEST))
+                host_ssh_.exec_cmd('rm -rf images/{}.img'.format(GuestImages.DEFAULT['guest']))
                 host_ssh_.exec_cmd('rm orphan_guest.xml')
         request.addfinalizer(teardown)
 
         # copy Default guest img and XML file over to compute
-        img_path = TiSPath.IMAGES + GuestImages.IMAGE_FILES.get(GuestImages.DEFAULT_GUEST)[2]
+        img_path = TiSPath.IMAGES + GuestImages.IMAGE_FILES.get(GuestImages.DEFAULT['guest'])[2]
         con_ssh.scp_on_source(WRSROOT_HOME + 'orphan_guest.xml', HostLinuxCreds.get_user(), vm_host, WRSROOT_HOME,
                               HostLinuxCreds.get_password(), timeout=60)
         con_ssh.scp_on_source(img_path, HostLinuxCreds.get_user(), vm_host, TiSPath.IMAGES,

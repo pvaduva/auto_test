@@ -1,5 +1,6 @@
 from pytest import fixture, skip, mark
 
+import keywords.host_helper
 from utils.tis_log import LOG
 from consts.timeout import VMTimeout
 from consts.cgcs import FlavorSpec, VMStatus
@@ -187,7 +188,7 @@ class TestDefaultGuest:
                          'disks': vm_helper.get_vm_devices_via_virsh(vm5)}
 
         LOG.tc_step("Check all VMs are booted on {}".format(target_host))
-        vms_on_host = nova_helper.get_vms_on_host(hostname=target_host)
+        vms_on_host = vm_helper.get_vms_on_host(hostname=target_host)
         vms = [vm1, vm2, vm3, vm4, vm5]
         assert set(vms) <= set(vms_on_host), "VMs booted on host: {}. Current vms on host: {}".format(vms, vms_on_host)
 
@@ -209,7 +210,7 @@ class TestDefaultGuest:
 
     @fixture(scope='function')
     def check_hosts(self):
-        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
         if len(hosts) < 2:
             skip("at least two hosts with the same storage backing are required")
 
@@ -230,35 +231,34 @@ class TestDefaultGuest:
     # TC6500
     def _test_evacuate_numa_setting(self, check_hosts):
         """
-            Test evacuate vms with various vm numa node settings
+        Test evacuate vms with various vm numa node settings
 
-            Skip conditions:
-                - Less than two hosts with common storage backing with 2 numa nodes
+        Skip conditions:
+            - Less than two hosts with common storage backing with 2 numa nodes
 
-            Setups:
-                - Check if there are enough hosts with a common backing and 2 numa nodes to execute test
-                - Add admin role to primary tenant (module)
+        Setups:
+            - Check if there are enough hosts with a common backing and 2 numa nodes to execute test
+            - Add admin role to primary tenant (module)
 
-            Test Steps:
-                - Create three flavors:
-                    - First flavor has a dedicated cpu policy, 1 vcpu set on 1 numa node and the vm's numa_node0 is set
-                      to host's numa_node0
-                    - Second flavor has a dedicated cpu policy, 1 vcpu set on 1 numa node and the vm's numa_node0 is set
-                      to host's numa_node1
-                    - Third flavor has a dedicated cpu policy, 2 vcpus split between 2 different numa nodes and the vm's
-                      numa_node0 is set to host's numa_node0 and vm's numa_node1 is set to host's numa_node1
-                - Boot vms from each flavor on same host and wait for them to be pingable from NatBox
-                - Check that the vm's topology is correct
-                - sudo reboot -f on vms host
-                - Ensure evacuation for all 5 vms are successful (vm host changed, active state, pingable from NatBox)
-                - Check that the vm's topology is still correct following the evacuation
+        Test Steps:
+            - Create three flavors:
+                - First flavor has a dedicated cpu policy, 1 vcpu set on 1 numa node and the vm's numa_node0 is set
+                  to host's numa_node0
+                - Second flavor has a dedicated cpu policy, 1 vcpu set on 1 numa node and the vm's numa_node0 is set
+                  to host's numa_node1
+                - Third flavor has a dedicated cpu policy, 2 vcpus split between 2 different numa nodes and the vm's
+                  numa_node0 is set to host's numa_node0 and vm's numa_node1 is set to host's numa_node1
+            - Boot vms from each flavor on same host and wait for them to be pingable from NatBox
+            - Check that the vm's topology is correct
+            - sudo reboot -f on vms host
+            - Ensure evacuation for all 5 vms are successful (vm host changed, active state, pingable from NatBox)
+            - Check that the vm's topology is still correct following the evacuation
 
-            Teardown:
-                - Delete created vms, volumes, flavors
-                - Remove admin role from primary tenant (module)
+        Teardown:
+            - Delete created vms, volumes, flavors
+            - Remove admin role from primary tenant (module)
 
-            """
-
+        """
         target_host = check_hosts
 
         LOG.tc_step("Create flavor with 1 vcpu, set on host numa node 0")
@@ -305,7 +305,7 @@ class TestDefaultGuest:
         check_vm_numa_topology(vm3, 2, 1, 0)
 
         LOG.tc_step("Check all VMs are booted on {}".format(target_host))
-        vms_on_host = nova_helper.get_vms_on_host(hostname=target_host)
+        vms_on_host = vm_helper.get_vms_on_host(hostname=target_host)
         vms = [vm1, vm2, vm3]
         assert set(vms) <= set(vms_on_host), "VMs booted on host: {}. Current vms on host: {}".format(vms, vms_on_host)
 
@@ -319,12 +319,12 @@ class TestDefaultGuest:
 class TestOneHostAvail:
     @fixture(scope='class')
     def get_zone(self, request, add_cgcsauto_zone):
-        if system_helper.is_simplex():
+        if system_helper.is_aio_simplex():
             zone = 'nova'
             return zone
 
         zone = 'cgcsauto'
-        storage_backing, hosts, up_hypervisors = nova_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
         host = hosts[0]
         LOG.fixture_step('Select host {} with backing {}'.format(host, storage_backing))
         nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=[host])
@@ -360,9 +360,9 @@ class TestOneHostAvail:
 
         LOG.tc_step("Launch 5 vms in {} zone".format(zone))
         vms = vm_helper.boot_vms_various_types(avail_zone=zone, cleanup='function')
-        target_host = nova_helper.get_vm_host(vm_id=vms[0])
+        target_host = vm_helper.get_vm_host(vm_id=vms[0])
         for vm in vms[1:]:
-            vm_host = nova_helper.get_vm_host(vm)
+            vm_host = vm_helper.get_vm_host(vm)
             assert target_host == vm_host, "VMs are not booted on same host"
 
         LOG.tc_step("Reboot -f from target host {}".format(target_host))
@@ -374,7 +374,7 @@ class TestOneHostAvail:
 
         vms_host_err = []
         for vm in vms:
-            if nova_helper.get_vm_host(vm) != target_host:
+            if vm_helper.get_vm_host(vm) != target_host:
                 vms_host_err.append(vm)
 
         assert not vms_host_err, "Following VMs are not on the same host {}: {}\nVMs did not reach Active state: {}". \

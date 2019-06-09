@@ -1,6 +1,6 @@
 import time
 
-from pytest import fixture, mark, skip
+from pytest import fixture, mark, skip, param
 
 from consts.auth import Tenant
 from consts.cgcs import FlavorSpec
@@ -17,8 +17,7 @@ def snat_setups(request):
     find_dvr = 'True' if request.param == 'distributed' else 'False'
 
     primary_tenant = Tenant.get_primary()
-    primary_tenant_name = common.get_tenant_name(primary_tenant)
-    other_tenant = Tenant.TENANT2 if primary_tenant_name == 'tenant1' else Tenant.TENANT1
+    other_tenant = Tenant.get_secondary()
 
     for auth_info in [primary_tenant, other_tenant]:
         tenant_router = network_helper.get_tenant_router(auth_info=auth_info)
@@ -38,7 +37,7 @@ def snat_setups(request):
         try:
             network_helper.set_router_gateway(enable_snat=False)
         finally:
-            LOG.fixture_step("Revert primary tenant to {}".format(primary_tenant_name))
+            LOG.fixture_step("Revert primary tenant to {}".format(primary_tenant['tenant']))
             Tenant.set_primary(primary_tenant)
     request.addfinalizer(disable_snat)
 
@@ -69,8 +68,8 @@ def enable_snat_as_teardown(request):
 
 @mark.usefixtures('enable_snat_as_teardown')
 @mark.parametrize('snat', [
-    mark.p3('snat_disabled'),
-    mark.domain_sanity('snat_enabled'),
+    param('snat_disabled', marks=mark.p3),
+    param('snat_enabled', marks=mark.domain_sanity),
 ])
 def test_snat_vm_actions(snat_setups, snat):
     """
@@ -122,8 +121,8 @@ def test_snat_vm_actions(snat_setups, snat):
     LOG.tc_step("scp from NatBox to VM {}".format(vm_))
     vm_fip = network_helper.get_external_ips_for_vms(vms=vm_)[0]
     natbox_ssh = NATBoxClient.get_natbox_client()
-    natbox_ssh.scp_files(source_file='test', dest_file='/tmp/', dest_server=vm_fip,
-                         dest_password='root', dest_user='root', timeout=30, fail_ok=False)
+    natbox_ssh.scp_on_source(source_path='test', dest_user='root', dest_ip=vm_fip, dest_path='/tmp/',
+                             dest_password='root', timeout=30)
 
     LOG.tc_step("Live-migrate the VM and verify ping from VM")
     vm_helper.live_migrate_vm(vm_)
@@ -172,8 +171,8 @@ def test_snat_vm_actions(snat_setups, snat):
 @mark.slow
 @mark.usefixtures('enable_snat_as_teardown')
 @mark.parametrize('snat', [
-    mark.p3('snat_disabled'),
-    mark.domain_sanity('snat_enabled'),
+    param('snat_disabled'),
+    param('snat_enabled', marks=mark.domain_sanity),
 ])
 def test_snat_evacuate_vm(snat_setups, snat):
     """
@@ -209,7 +208,7 @@ def test_snat_evacuate_vm(snat_setups, snat):
     time.sleep(30)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=True)
 
-    host = nova_helper.get_vm_host(vm_)
+    host = vm_helper.get_vm_host(vm_)
 
     LOG.tc_step("Ping VM from NatBox".format(vm_))
     vm_helper.ping_vms_from_natbox(vm_, use_fip=False)
@@ -267,12 +266,12 @@ def test_snat_computes_lock_reboot(snat_setups):
     LOG.tc_step("Ping VM {} from NatBox".format(vm_))
     vm_helper.wait_for_vm_pingable_from_natbox(vm_, timeout=60, use_fip=True)
 
-    vm_host = nova_helper.get_vm_host(vm_)
+    vm_host = vm_helper.get_vm_host(vm_)
     LOG.info("VM host is {}".format(vm_host))
     assert vm_host in hypervisors, "vm host is not in nova hypervisor-list"
 
     hosts_should_lock = set(hypervisors) - {vm_host}
-    hosts_already_locked = set(system_helper.get_hostnames(administrative='locked'))
+    hosts_already_locked = set(system_helper.get_hosts(administrative='locked'))
     hosts_to_lock = list(hosts_should_lock - hosts_already_locked)
     LOG.tc_step("Lock all compute hosts {} except vm host {}".format(hosts_to_lock, vm_host))
     for host_ in hosts_to_lock:

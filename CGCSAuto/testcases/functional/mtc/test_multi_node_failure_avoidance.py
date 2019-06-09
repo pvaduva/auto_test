@@ -14,7 +14,7 @@ def revert(request):
     """ Revert to pre-test mnfa parameters after test """
     skip("Force reboot hosts not ready to test")
 
-    if system_helper.is_small_footprint():
+    if system_helper.is_aio_system():
         skip("Not applicable on small systems")
 
     mnfa_threshold_default_val = system_helper.get_service_parameter_values(service='platform', section='maintenance',
@@ -70,7 +70,7 @@ def test_multi_node_failure_avoidance(reserve_unreserve_all_hosts_module, mnfa_t
 
     """
 
-    hosts_to_check = system_helper.get_hostnames(availability=(HostAvailState.AVAILABLE, HostAvailState.ONLINE))
+    hosts_to_check = system_helper.get_hosts(availability=(HostAvailState.AVAILABLE, HostAvailState.ONLINE))
     hosts_to_test = [host for host in hosts_to_check if 'controller' not in host]
 
     if len(hosts_to_test) < mnfa_threshold:
@@ -91,7 +91,7 @@ def test_multi_node_failure_avoidance(reserve_unreserve_all_hosts_module, mnfa_t
         LOG.tc_step("Power off hosts and check for degraded state: {}".format(hosts_to_test))
         vlm_helper.power_off_hosts_simultaneously(hosts=hosts_to_test)
         time.sleep(20)
-        degraded_hosts = system_helper.get_hostnames(availability=HostAvailState.DEGRADED, hosts=hosts_to_check)
+        degraded_hosts = system_helper.get_hosts(availability=HostAvailState.DEGRADED, hostname=hosts_to_check)
     finally:
         LOG.tc_step("Power on hosts and ensure they are recovered: {}".format(hosts_to_test))
         vlm_helper.power_on_hosts(hosts=hosts_to_test, reserve=False, hosts_to_check=hosts_to_check, check_interval=20)
@@ -102,11 +102,11 @@ def test_multi_node_failure_avoidance(reserve_unreserve_all_hosts_module, mnfa_t
     active_con = system_helper.get_active_controller_name()
     entity_instance_id = 'host={}.event=mnfa_enter'.format(active_con)
     first_event = system_helper.wait_for_events(num=1, timeout=70, start=start_time, fail_ok=True, strict=False,
-                                                event_log_id=EventLogID.MNFA_MODE, rtn_val='Time Stamp',
+                                                event_log_id=EventLogID.MNFA_MODE, field='Time Stamp',
                                                 entity_instance_id=entity_instance_id)
     entity_instance_id = 'host={}.event=mnfa_exit'.format(active_con)
     second_event = system_helper.wait_for_events(num=1, timeout=70, start=start_time, fail_ok=False, strict=False,
-                                                 event_log_id=EventLogID.MNFA_MODE, rtn_val='Time Stamp',
+                                                 event_log_id=EventLogID.MNFA_MODE, field='Time Stamp',
                                                  entity_instance_id=entity_instance_id)
     pattern = '%Y-%m-%dT%H:%M:%S'
     event_duration = datetime.strptime(second_event[0][:-7], pattern) - datetime.strptime(first_event[0][:-7], pattern)

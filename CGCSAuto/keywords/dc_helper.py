@@ -11,12 +11,12 @@ from consts.filepaths import SysLogPath
 from keywords import system_helper, nova_helper
 
 
-def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
-                  auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None, source_openrc=None):
+def get_subclouds(field='name', name=None, avail=None, sync=None, mgmt=None,
+                  auth_info=Tenant.get('admin_platform', 'RegionOne'), con_ssh=None, source_openrc=None):
     """
     Getting subclouds info
     Args:
-        rtn_val:
+        field:
         name:
         avail:
         sync:
@@ -31,16 +31,16 @@ def get_subclouds(rtn_val='name', name=None, avail=None, sync=None, mgmt=None,
 
     # auth_info = Tenant.get('admin', 'SystemController')
     LOG.info("Auth_info: {}".format(auth_info))
-    table_ = table_parser.table(cli.dcmanager('subcloud list', auth_info=auth_info, ssh_client=con_ssh,
-                                              source_openrc=source_openrc))
+    table_ = table_parser.table(
+        cli.dcmanager('subcloud list', ssh_client=con_ssh, auth_info=auth_info, source_openrc=source_openrc)[1])
     arg_dict = {'name': name, 'availability': avail, 'sync': sync, 'management': mgmt}
     kwargs = {key: val for key, val in arg_dict.items() if val is not None}
-    subclouds = table_parser.get_values(table_, target_header=rtn_val, **kwargs)
+    subclouds = table_parser.get_values(table_, target_header=field, **kwargs)
     return subclouds
 
 
 def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fail_ok=False, con_ssh=None,
-                              auth_info=Tenant.get('admin', 'RegionOne'), source_openrc=False):
+                              auth_info=Tenant.get('admin_platform', 'RegionOne'), source_openrc=False):
 
     """
     Manage/Unmanage given subcloud(s)
@@ -71,8 +71,8 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
     LOG.info("Attempt to {}: {}".format(operation, subclouds_to_update))
     failed_subclouds = []
     for subcloud_ in subclouds_to_update:
-        code, out = cli.dcmanager('subcloud ' + operation, subcloud_, fail_ok=True, rtn_code=True,
-                                  auth_info=auth_info, ssh_client=con_ssh, source_openrc=source_openrc)
+        code, out = cli.dcmanager('subcloud ' + operation, subcloud_, ssh_client=con_ssh, fail_ok=True,
+                                  auth_info=auth_info, source_openrc=source_openrc)
 
         if code > 0:
             failed_subclouds.append(subcloud_)
@@ -85,7 +85,7 @@ def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fai
         raise exceptions.DCError(err)
 
     LOG.info("Check management status for {} after dcmanager subcloud {}".format(subclouds_to_update, operation))
-    mgmt_states = get_subclouds(rtn_val='management', name=subclouds_to_update, auth_info=auth_info, con_ssh=con_ssh)
+    mgmt_states = get_subclouds(field='management', name=subclouds_to_update, auth_info=auth_info, con_ssh=con_ssh)
     failed_subclouds = [subclouds_to_update[i] for i in range(len(mgmt_states)) if mgmt_states[i] != expt_state]
     if failed_subclouds:
         raise exceptions.DCError("{} not {} after dcmanger subcloud {}".format(failed_subclouds, expt_state, operation))
@@ -131,9 +131,9 @@ def unmanage_subcloud(subcloud=None, check_first=True, fail_ok=False, con_ssh=No
                                      con_ssh=con_ssh)
 
 
-def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, expected_value=None, auth_name='admin',
-                             fail_ok=False, timeout=DCTimeout.SYNC, check_interval=30, strict_order=True,
-                             **func_kwargs):
+def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, expected_value=None,
+                             auth_name='admin_platform', fail_ok=False, timeout=DCTimeout.SYNC,
+                             check_interval=30, strict_order=True, **func_kwargs):
     """
     Wait for subcloud configuration to reach expected value
     Args:
@@ -142,7 +142,7 @@ def wait_for_subcloud_config(func, *func_args, subcloud=None, config_name=None, 
         *func_args: positional args for above func. Should NOT include auth_info or con_ssh.
         config_name (str): such as dns, keypair, etc
         expected_value (None|str|list):
-        auth_name (str): auth dict name. e.g., admin, tenant1, TENANT2, etc
+        auth_name (str): auth dict name. e.g., admin_platform, admin, tenant1, TENANT2, etc
         fail_ok (bool):
         timeout (int):
         check_interval (int):
@@ -397,7 +397,7 @@ def wait_for_subcloud_ntp_config(subcloud=None, subcloud_ssh=None, expected_ntp=
     """
     if not subcloud:
         subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
-    func_kwargs = {'auth_info': Tenant.get('admin', subcloud)}
+    func_kwargs = {'auth_info': Tenant.get('admin_platform', subcloud)}
     if subcloud_ssh:
         func_kwargs['con_ssh'] = subcloud_ssh
 
@@ -412,7 +412,7 @@ def wait_for_subcloud_ntp_config(subcloud=None, subcloud_ssh=None, expected_ntp=
 
 
 def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout=DCTimeout.SUBCLOUD_AUDIT,
-                             check_interval=30, auth_info=Tenant.get('admin', 'RegionOne'), con_ssh=None,
+                             check_interval=30, auth_info=Tenant.get('admin_platform', 'RegionOne'), con_ssh=None,
                              source_openrc=None, fail_ok=False):
     """
     Wait for subcloud status
@@ -449,7 +449,7 @@ def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout
     LOG.info("Wait for {} status: {}".format(subcloud, expt_status))
     end_time = time.time() + timeout + check_interval
     while time.time() < end_time:
-        if get_subclouds(rtn_val='name', name=subcloud, con_ssh=con_ssh, source_openrc=source_openrc,
+        if get_subclouds(field='name', name=subcloud, con_ssh=con_ssh, source_openrc=source_openrc,
                          auth_info=auth_info, **expt_status):
             return 0, subcloud
         LOG.info("Not in expected states yet...")

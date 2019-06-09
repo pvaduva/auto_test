@@ -528,7 +528,7 @@ class LdapUserManager(object, metaclass=Singleton):
         """
         if not host:
             host = 'controller-1'
-            if system_helper.is_simplex():
+            if system_helper.is_aio_simplex():
                 host = 'controller-0'
 
         prompt_keystone_user_name = 'Enter Keystone username \[{}\]: '.format(user_name)
@@ -874,9 +874,10 @@ def gen_invalid_password(invalid_type='shorter', previous_passwords=None, minimu
     return ''.join(invalid_password)
 
 
-def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Tenant.get('admin'), fail_ok=False):
+def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Tenant.get('admin_platform'),
+                 fail_ok=False):
     """
-    Modify the state of the lab from HTTP/HTTPS through 'system modify https_enable=<bool>'
+    Modify platform https via 'system modify https_enable=<bool>'
 
     Args:
         enable_https (bool): True/False to enable https or not
@@ -892,7 +893,7 @@ def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Te
 
     """
     if check_first:
-        is_https = keystone_helper.is_https_lab(source_openrc=False, auth_info=auth_info, con_ssh=con_ssh)
+        is_https = keystone_helper.is_https_enabled(source_openrc=False, auth_info=auth_info, con_ssh=con_ssh)
         if (is_https and enable_https) or (not is_https and not enable_https):
             msg = "Https is already {}. Do nothing.".format('enabled' if enable_https else 'disabled')
             LOG.info(msg)
@@ -916,7 +917,7 @@ def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Te
     expt_status = 'enabled' if enable_https else 'disabled'
     end_time = time.time() + 300
     while time.time() < end_time:
-        if keystone_helper.is_https_lab(con_ssh=con_ssh, source_openrc=False, auth_info=auth_info) == enable_https:
+        if keystone_helper.is_https_enabled(con_ssh=con_ssh, source_openrc=False, auth_info=auth_info) == enable_https:
             break
         time.sleep(10)
     else:
@@ -994,15 +995,16 @@ def fetch_cert_file(cert='ca-cert', scp_to_local=True, con_ssh=None, bld_server=
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
+    build_info = system_helper.get_build_info(con_ssh=con_ssh)
     from keywords import common, host_helper
     if not con_ssh.file_exists(cert_on_tis):
         if not bld_server:
-            bld_server = ProjVar.get_var('BUILD_SERVER')
+            bld_server = build_info('BUILD_SERVER')
         with host_helper.ssh_to_build_server(bld_srv=bld_server) as bs_ssh:
             if not search_dir:
                 search_dir = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE,
-                                          ProjVar.get_var('JOB'),
-                                          ProjVar.get_var('BUILD_ID'),
+                                          build_info['JOB'],
+                                          build_info['BUILD_ID'],
                                           BuildServerPath.LAB_CONF_DIR_PREV,
                                           'yow')
             if not bs_ssh.file_exists(search_dir):

@@ -5,7 +5,6 @@ from consts.auth import CliAuth, Tenant
 from consts import build_server as build_server_consts
 from consts.proj_vars import PatchingVars
 from consts.proj_vars import ProjVar
-from utils.clients.ssh import SSHClient
 from keywords import system_helper
 
 
@@ -47,7 +46,7 @@ def setup_test_session():
     patch_dir = PatchingVars.get_patching_var('PATCH_DIR')
     if not patch_dir:
         patch_base_dir = PatchingVars.get_patching_var('PATCH_BASE_DIR')
-        build_id = system_helper.get_system_build_id()
+        build_id = system_helper.get_build_info()['BUILD_ID']
         if build_id:
             patch_dir = patch_base_dir + '/' + build_id
         else:
@@ -55,17 +54,14 @@ def setup_test_session():
 
         PatchingVars.set_patching_var(PATCH_DIR=patch_dir)
 
-    ProjVar.set_var(PRIMARY_TENANT=Tenant.get('admin'))
-    setups.setup_primary_tenant(ProjVar.get_var('PRIMARY_TENANT'))
+    ProjVar.set_var(SOURCE_OPENRC=True)
     setups.copy_test_files()
 
-    global natbox_ssh
-    natbox_ssh = setups.setup_natbox_ssh(ProjVar.get_var('NATBOX'))
-    setups.setup_keypair(nat_ssh=natbox_ssh, con_ssh=con_ssh)
+    global natbox_client
+    natbox_client = setups.setup_natbox_ssh(ProjVar.get_var('NATBOX'), con_ssh=con_ssh)
 
     # set build id to be used to upload/write test results
     setups.set_build_info(con_ssh)
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.get('admin'))
     setups.set_session(con_ssh=con_ssh)
 
 
@@ -81,14 +77,14 @@ def pytest_collectstart():
         con_ssh = setups.setup_tis_ssh(lab)
     ProjVar.set_var(con_ssh=con_ssh)
     CliAuth.set_vars(**setups.get_auth_via_openrc(con_ssh))
-    Tenant.set_url(CliAuth.get_var('OS_AUTH_URL'))
+    Tenant.set_platform_url(CliAuth.get_var('OS_AUTH_URL'))
     Tenant.set_region(CliAuth.get_var('OS_REGION_NAME'))
 
 
 def pytest_runtest_teardown():
-    if not con_ssh._is_connected():
+    if not con_ssh.is_connected():
         con_ssh.connect(retry=True, retry_interval=3, retry_timeout=300)
     con_ssh.flush()
-    if natbox_ssh:
-        natbox_ssh.flush()
-        natbox_ssh.connect(retry=False)
+    if natbox_client:
+        natbox_client.flush()
+        natbox_client.connect(retry=False)

@@ -12,8 +12,7 @@ from consts.auth import HostLinuxCreds, Tenant
 from consts.cgcs import GuestImages
 from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
 from consts.timeout import HostTimeout, VMTimeout
-from keywords import nova_helper, vm_helper, heat_helper, host_helper, html_helper, system_helper, vlm_helper, \
-    network_helper
+from keywords import vm_helper, heat_helper, host_helper, html_helper, system_helper, vlm_helper, network_helper
 
 
 def get_all_vms():
@@ -22,7 +21,7 @@ def get_all_vms():
     :return:  list of all VMs in the system
     """
     # Getting the vms on each compute node
-    vms_by_compute_dic = nova_helper.get_vms_per_host()
+    vms_by_compute_dic = vm_helper.get_vms_per_host()
     vms_to_check = vms_by_compute_dic.values()
     # compute_to_lock = []
     # vms_to_check = []
@@ -129,13 +128,13 @@ def launch_heat_stack():
     stack_id_pre_req = heat_helper.get_stacks(name=pre_req_stack_name, auth_info=Tenant.get('admin'))
     if not stack_id_pre_req:
         LOG.tc_step("Creating pre-request heat stack to create images and flavors")
-        default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT_GUEST][2]
-        image_file_path = "file://{}/{}".format(GuestImages.IMAGE_DIR, default_guest_img)
+        default_guest_img = GuestImages.IMAGE_FILES[GuestImages.DEFAULT['guest']][2]
+        image_file_path = "file://{}/{}".format(GuestImages.DEFAULT['image_dir'], default_guest_img)
         pre_req_template_path = heat_template_file + "pre_req.yaml"
 
-        pre_req_params = '-f {} -P LOCATION={} {}'.format(pre_req_template_path, image_file_path, pre_req_stack_name)
         LOG.info("Creating heat stack for pre-req, images and flavors")
-        heat_helper.create_stack(stack_name=pre_req_stack_name, params_string=pre_req_params,
+        heat_helper.create_stack(stack_name=pre_req_stack_name, template=pre_req_template_path,
+                                 parameters={'LOCATION': image_file_path},
                                  auth_info=Tenant.get('admin'), cleanup=None)
 
     keypair_stack_name = 'Tenant1_Keypair'
@@ -144,16 +143,14 @@ def launch_heat_stack():
         LOG.tc_step("Creating Tenant key via heat stack")
         keypair_template = 'Tenant1_Keypair.yaml'
         keypair_template = '{}/{}'.format(heat_template_file, keypair_template)
-        keypair_params = '-f {} {}'.format(keypair_template, keypair_stack_name)
-        heat_helper.create_stack(stack_name=keypair_stack_name, params_string=keypair_params, cleanup=None)
+        heat_helper.create_stack(stack_name=keypair_stack_name, template=keypair_template, cleanup=None)
 
     # Now create the large-stack
     LOG.tc_step("Creating heat stack to launch networks, ports, volumes, and vms")
     large_heat_template = heat_template_file + "/templates/rnc/" + "rnc_heat.yaml"
     env_file = heat_template_file + "/templates/rnc/" + "rnc_heat.env"
-    large_heat_params = '-e {} -f {} {}'.format(env_file, large_heat_template, HeatTemplate.SYSTEM_TEST_HEAT_NAME)
-    heat_helper.create_stack(stack_name=HeatTemplate.SYSTEM_TEST_HEAT_NAME, params_string=large_heat_params,
-                             timeout=1800, cleanup=None)
+    heat_helper.create_stack(stack_name=HeatTemplate.SYSTEM_TEST_HEAT_NAME, template=large_heat_template,
+                             environments=env_file, timeout=1800, cleanup=None)
 
 
 def sys_lock_unlock_hosts(number_of_hosts_to_lock):
@@ -162,7 +159,7 @@ def sys_lock_unlock_hosts(number_of_hosts_to_lock):
     :return:
     """
     # identify a host with atleast 5 vms
-    vms_by_compute_dic = nova_helper.get_vms_per_host()
+    vms_by_compute_dic = vm_helper.get_vms_per_host()
     compute_to_lock = []
     vms_to_check = []
     hosts_threads = []
@@ -196,7 +193,7 @@ def sys_lock_unlock_hosts(number_of_hosts_to_lock):
 
     for host, vms in zip(compute_to_lock, vms_to_check):
         for vm in vms:
-            vm_host = nova_helper.get_vm_host(vm_id=vm)
+            vm_host = vm_helper.get_vm_host(vm_id=vm)
             assert vm_host != host, "VM is still on {} after lock".format(host)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm, timeout=VMTimeout.DHCP_RETRY)
 
@@ -216,7 +213,7 @@ def sys_evacuate_from_hosts(number_of_hosts_to_evac):
     :return:
     """
     # identify a host with atleast 5 vms
-    vms_by_compute_dic = nova_helper.get_vms_per_host()
+    vms_by_compute_dic = vm_helper.get_vms_per_host()
     computes_to_reboot = []
     vms_to_check = []
     hosts_threads = []
@@ -250,7 +247,7 @@ def sys_evacuate_from_hosts(number_of_hosts_to_evac):
 
     for host, vms in zip(computes_to_reboot, vms_to_check):
         for vm in vms:
-            vm_host = nova_helper.get_vm_host(vm_id=vm)
+            vm_host = vm_helper.get_vm_host(vm_id=vm)
             assert vm_host != host, "VM is still on {} after lock".format(host)
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm, timeout=VMTimeout.DHCP_RETRY)
 
@@ -260,7 +257,7 @@ def sys_reboot_storage():
     This is to identify the storage nodes and turn them off and on via vlm
     :return:
     """
-    controllers, computes, storages = system_helper.get_hostnames_per_personality(rtn_tuple=True)
+    controllers, computes, storages = system_helper.get_hosts_per_personality(rtn_tuple=True)
 
     LOG.info("Online or Available hosts before power-off: {}".format(storages))
     LOG.tc_step("Powering off hosts in multi-processes to simulate power outage: {}".format(storages))
@@ -297,13 +294,11 @@ def launch_lab_setup_tenants_vms():
     stack_id_t1 = heat_helper.get_stacks(name=stack1_name, auth_info=Tenant.TENANT1)
     # may be better to delete all tenant stacks if any
     if not stack_id_t1:
-        stack_params = '-f {} {}'.format(stack1, stack1_name)
-        heat_helper.create_stack(stack_name=stack1_name, params_string=stack_params, auth_info=Tenant.TENANT1,
+        heat_helper.create_stack(stack_name=stack1_name, template=stack1, auth_info=Tenant.TENANT1,
                                  timeout=1000, cleanup=None)
     stack_id_t2 = heat_helper.get_stacks(name=stack2_name, auth_info=Tenant.TENANT2)
     if not stack_id_t2:
-        stack_params = '-f {} {}'.format(stack2, stack2_name)
-        heat_helper.create_stack(stack_name=stack2_name, params_string=stack_params, auth_info=Tenant.TENANT2,
+        heat_helper.create_stack(stack_name=stack2_name, template=stack2, auth_info=Tenant.TENANT2,
                                  timeout=1000, cleanup=None)
 
     LOG.info("Checking all VMs are in active state")
@@ -318,11 +313,11 @@ def delete_lab_setup_tenants_vms():
     stack_id_t1 = heat_helper.get_stacks(name=stack1_name, auth_info=Tenant.TENANT1)
     # may be better to delete all tenant stacks if any
     if stack_id_t1:
-        heat_helper.delete_stack(stack_name=stack1_name, auth_info=Tenant.TENANT1)
+        heat_helper.delete_stack(stack=stack1_name, auth_info=Tenant.TENANT1)
 
     stack_id_t2 = heat_helper.get_stacks(name=stack2_name, auth_info=Tenant.TENANT2)
     if stack_id_t2:
-        heat_helper.delete_stack(stack_name=stack2_name, auth_info=Tenant.TENANT2)
+        heat_helper.delete_stack(stack=stack2_name, auth_info=Tenant.TENANT2)
 
     LOG.info("Checking all VMs are Deleted")
     vms = get_all_vms()
@@ -340,7 +335,7 @@ def traffic_with_preset_configs(ixncfg, ixia_session=None):
 
         ixia_session.load_config(ixncfg)
 
-        subnet_table = table_parser.table(cli.openstack('subnet list', auth_info=Tenant.ADMIN))
+        subnet_table = table_parser.table(cli.openstack('subnet list', auth_info=Tenant.get('admin'))[1])
         cidrs = list(map(ipaddress.ip_network, table_parser.get_column(subnet_table, 'Subnet')))
         for vport in ixia_session.getList(ixia_session.getRoot(), 'vport'):
             for interface in ixia_session.getList(vport, 'interface'):
@@ -352,7 +347,7 @@ def traffic_with_preset_configs(ixncfg, ixia_session=None):
                         if gw in cidr:
                             net_id = table_parser.get_values(subnet_table, 'Network', cidr=cidr)[0]
                             table = table_parser.table(
-                                cli.openstack('network show', net_id, auth_info=Tenant.ADMIN))
+                                cli.openstack('network show', net_id, auth_info=Tenant.get('admin')))
                             seg_id = table_parser.get_value_two_col_table(table, "provider:segmentation_id")
                             ixia_session.configure(vlan_interface, vlanEnable=True, vlanId=str(seg_id))
                             LOG.info("vport {} interface {} gw {} vlan updated to {}".format(vport, interface, gw,
@@ -364,7 +359,7 @@ def sys_reboot_standby(number_of_times=1):
     This is to identify the storage nodes and turn them off and on via vlm
     :return:
     """
-    timeout = VMTimeout.DHCP_RETRY if system_helper.is_small_footprint() else VMTimeout.PING_VM
+    timeout = VMTimeout.DHCP_RETRY if system_helper.is_aio_system() else VMTimeout.PING_VM
     for i in range(0, number_of_times):
         active, standby = system_helper.get_active_standby_controllers()
         LOG.tc_step("Doing iteration of {} of total iteration {}".format(i, number_of_times))
@@ -422,7 +417,7 @@ def sys_lock_unlock_standby(number_of_times=1):
     This is to identify the storage nodes and turn them off and on via vlm
     :return:
     """
-    timeout = VMTimeout.DHCP_RETRY if system_helper.is_small_footprint() else VMTimeout.PING_VM
+    timeout = VMTimeout.DHCP_RETRY if system_helper.is_aio_system() else VMTimeout.PING_VM
     for i in range(0, number_of_times):
         active, standby = system_helper.get_active_standby_controllers()
         LOG.tc_step("Doing iteration of {} of total iteration {}".format(i, number_of_times))

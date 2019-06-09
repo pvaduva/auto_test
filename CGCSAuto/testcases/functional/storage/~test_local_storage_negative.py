@@ -6,8 +6,7 @@
 
 from pytest import fixture, skip, mark
 
-from consts.auth import Tenant
-from keywords import host_helper, system_helper, local_storage_helper, storage_helper
+from keywords import host_helper, system_helper, storage_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli
 
@@ -34,8 +33,8 @@ def create_storage_profile(request):
 
     profile_name = 'storage_test_profile'
     host_name = 'storage-0'
-    system_helper.create_storage_profile(host_name, profile_name=profile_name)
-    disks_num = len(local_storage_helper.get_host_disks_values(host_name, 'device_node'))
+    storage_helper.create_storage_profile(host_name, profile_name=profile_name)
+    disks_num = len(storage_helper.get_host_disks(host_name, 'device_node'))
 
     storage_profile = {
         'profile_name': profile_name,
@@ -44,7 +43,7 @@ def create_storage_profile(request):
     }
 
     def teardown():
-        system_helper.delete_storage_profile(profile_name)
+        storage_helper.delete_storage_profile(profile_name)
 
     request.addfinalizer(teardown)
 
@@ -72,7 +71,7 @@ def test_apply_storage_profile_negative(create_storage_profile, personality):
 
     profile_name = create_storage_profile['profile_name']
     origin_disk_num = create_storage_profile['disk_num']
-    disks_num = len(local_storage_helper.get_host_disks_values(host_name, 'device_node'))
+    disks_num = len(storage_helper.get_host_disks(host_name, 'device_node'))
 
     expt_err = 'profile has more disks than host does' if disks_num < origin_disk_num -1 \
         else "Please check if host's disks match profile criteria"
@@ -86,9 +85,7 @@ def test_apply_storage_profile_negative(create_storage_profile, personality):
 
     HostsToRecover.add(host_name)
     host_helper.lock_host(host_name, swact=True)
-    exitcode, output = cli.system('host-apply-storprofile', positional_arg, fail_ok=True,
-                                  auth_info=Tenant.get('admin'), rtn_code=True)
+    exitcode, output = cli.system('host-apply-storprofile', positional_arg, fail_ok=True)
     host_helper.unlock_host(host_name)
 
     assert exitcode == 1 and any(expt in output for expt in expt_err_list)
-

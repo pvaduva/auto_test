@@ -6,8 +6,8 @@ from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import Server, get_build_server_info
 from consts.cgcs import Prompt, SUPPORTED_UPGRADES, BackupRestore
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
-from consts.proj_vars import ProjVar, InstallVars, UpgradeVars, BackupVars
-from keywords import install_helper,  patching_helper, upgrade_helper
+from consts.proj_vars import InstallVars, UpgradeVars, BackupVars
+from keywords import install_helper, patching_helper, upgrade_helper
 from testfixtures.pre_checks_and_configs import *
 from utils import table_parser, cli
 from utils.clients.ssh import SSHClient, ControllerClient
@@ -17,7 +17,6 @@ con_ssh = None
 
 
 def pytest_configure(config):
-
     upgrade_version = config.getoption('upgrade_version')
     upgrade_license = config.getoption('upgrade_license')
     build_server = config.getoption('build_server')
@@ -65,24 +64,24 @@ def pytest_configure(config):
 def pre_check_upgrade():
     # con_ssh = ControllerClient.get_active_controller()
 
-    ProjVar.set_var(SOURCE_CREDENTIAL=Tenant.ADMIN)
-    is_simplex = system_helper.is_simplex()
+    ProjVar.set_var(SOURCE_OPENRC=True)
+    is_simplex = system_helper.is_aio_simplex()
     # check if all nodes are unlocked
-    assert system_helper.are_hosts_unlocked(con_ssh), \
-        'All nodes must be unlocked. Upgrade cannot be started when there ' \
-        'are locked nodes.'
+
+    admin_states = system_helper.get_hosts(field='administrative')
+    assert set(admin_states) == {'unlocked'}
 
     # check no active alarms in system
 
-    table_ = table_parser.table(cli.system('alarm-list'))
+    table_ = table_parser.table(cli.system('alarm-list')[1])
     alarm_severity_list = table_parser.get_column(table_, "Severity")
 
     LOG.info("Alarm Severity List: {}".format(alarm_severity_list))
-    assert "major" or "critical" not in alarm_severity_list,\
+    assert "major" or "critical" not in alarm_severity_list, \
         "Active alarms in system. Clear alarms before beginning upgrade"
 
     # check if system is patch current
-    assert system_helper.is_patch_current(con_ssh), "System is not patch current"
+    assert patching_helper.is_patch_current(con_ssh), "System is not patch current"
 
     # check if Controller-0 is the active
     active_controller = system_helper.get_active_controller_name(con_ssh=con_ssh)
@@ -92,7 +91,7 @@ def pre_check_upgrade():
                                                 "active controller is {}".format(active_controller)
 
     # check if upgrade version is supported
-    current_version = system_helper.get_system_software_version()
+    current_version = system_helper.get_sw_version()
     upgrade_version = UpgradeVars.get_upgrade_var('upgrade_version')
     backup_dest_path = BackupVars.get_backup_var('BACKUP_DEST_PATH')
 
@@ -109,8 +108,8 @@ def pre_check_upgrade():
     assert [current_version, upgrade_version] in SUPPORTED_UPGRADES, "Upgrade from {} to {} is not supported"
 
     if is_simplex:
-       assert backup_dest_path is not None ,"Simplex Upgrade need backup destianation path please add " \
-                                                      "--backup_path=< >"
+        assert backup_dest_path is not None, "Simplex Upgrade need backup destianation path please add " \
+                                             "--backup_path=< >"
 
 
 @pytest.fixture(scope='session')
@@ -118,15 +117,15 @@ def upgrade_setup(pre_check_upgrade):
     lab = InstallVars.get_install_var('LAB')
     col_kpi = ProjVar.get_var('COLLECT_KPI')
     collect_kpi_path = None
-    if  col_kpi:
+    if col_kpi:
         collect_kpi_path = ProjVar.get_var('KPI_PATH')
 
     # establish ssh connection with controller-0
     controller0_conn = ControllerClient.get_active_controller()
-    cpe = system_helper.is_small_footprint(controller0_conn)
+    cpe = system_helper.is_aio_system(controller0_conn)
     upgrade_version = UpgradeVars.get_upgrade_var('UPGRADE_VERSION')
     license_path = UpgradeVars.get_upgrade_var('UPGRADE_LICENSE')
-    is_simplex = system_helper.is_simplex()
+    is_simplex = system_helper.is_aio_simplex()
     if license_path is None:
         if cpe:
             license_path = BuildServerPath.TIS_LICENSE_PATHS[upgrade_version][1]
@@ -141,7 +140,7 @@ def upgrade_setup(pre_check_upgrade):
     output_dir = ProjVar.get_var('LOG_DIR')
     patch_dir = UpgradeVars.get_upgrade_var('PATCH_DIR')
 
-    current_version = install_helper.get_current_system_version()
+    current_version = system_helper.get_sw_version(use_existing=False)
 
     bld_server_attr = dict()
     bld_server_attr['name'] = bld_server['name']
@@ -170,25 +169,25 @@ def upgrade_setup(pre_check_upgrade):
 
     # Install the license file for release
     LOG.fixture_step("Installing the target release {} license file".format(upgrade_version))
-    rc = system_helper.install_upgrade_license(os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
-                                               con_ssh=controller0_conn)
+    rc = upgrade_helper.install_upgrade_license(os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+                                                con_ssh=controller0_conn)
     assert rc == 0, "Unable to install upgrade license file in Controller-0"
     LOG.info("Target release license installed......")
 
     # Check load already imported if not  get upgrade load iso file
     # Run the load_import command to import the new release iso image build
-    if not system_helper.get_imported_load_version():
+    if not upgrade_helper.get_imported_load_version():
         LOG.fixture_step("Downloading the {} target release  load iso image file {}:{}"
-                    .format(upgrade_version, bld_server_obj.name, load_path))
+                         .format(upgrade_version, bld_server_obj.name, load_path))
         install_helper.download_upgrade_load(lab, bld_server_obj, load_path, upgrade_ver=upgrade_version)
         upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
 
         cmd = "test -e {}".format(upgrade_load_path)
-        assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade build iso image file {} not present in Controller-0"\
+        assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade build iso image file {} not present in Controller-0" \
             .format(upgrade_load_path)
         LOG.info("Target release load {} download complete.".format(upgrade_load_path))
         LOG.fixture_step("Importing Target release  load iso file from".format(upgrade_load_path))
-        system_helper.import_load(upgrade_load_path,upgrade_ver=upgrade_version)
+        upgrade_helper.import_load(upgrade_load_path, upgrade_ver=upgrade_version)
 
         # download and apply patches if patches are available in patch directory
         if patch_dir and upgrade_version < "18.07":
@@ -212,10 +211,10 @@ def upgrade_setup(pre_check_upgrade):
                                   'build_server': bld_server_obj,
                                   'load_path': load_path,
                                   'backup_dest_path': backup_dest_path,
-                                   'delete_backups' : delete_backups
+                                  'delete_backups': delete_backups
                                   }
         return _upgrade_setup_simplex
-            # check which nodes are upgraded using orchestration
+        # check which nodes are upgraded using orchestration
 
     orchestration_after = UpgradeVars.get_upgrade_var('ORCHESTRATION_AFTER')
     storage_apply_strategy = UpgradeVars.get_upgrade_var('STORAGE_APPLY_TYPE')
@@ -234,7 +233,7 @@ def upgrade_setup(pre_check_upgrade):
     if alarm_restrictions:
         LOG.info("Alarm restriction option: {}".format(alarm_restrictions))
 
-    controller_ndoes, compute_nodes, storage_nodes = system_helper.get_hostnames_per_personality(rtn_tuple=True)
+    controller_ndoes, compute_nodes, storage_nodes = system_helper.get_hosts_per_personality(rtn_tuple=True)
     system_nodes = controller_ndoes + compute_nodes + storage_nodes
     orchestration_nodes = []
     cpe = False if (compute_nodes or storage_nodes) else True
@@ -286,7 +285,7 @@ def upgrade_setup(pre_check_upgrade):
                       'alarm_restrictions': alarm_restrictions,
                       'col_kpi': collect_kpi_path,
                       }
-    ver = (system_helper.get_imported_load_version()).pop()
+    ver = (upgrade_helper.get_imported_load_version()).pop()
     assert upgrade_version in ver, "Import error. Expected " \
                                    "version {} not found in imported load list" \
                                    "{}".format(upgrade_version, ver)
@@ -298,7 +297,7 @@ def upgrade_setup(pre_check_upgrade):
 def check_system_health_query_upgrade():
     # Check system health for upgrade
     LOG.fixture_step("Checking if system health is OK to start upgrade......")
-    #rc, health = upgrade_helper.get_system_health_query_upgrade()
+    # rc, health = upgrade_helper.get_system_health_query_upgrade()
     rc, health, actions = upgrade_helper.get_system_health_query_upgrade_2()
     print("HEALTH: {}, {} Action: {}".format(rc, health, actions))
     return rc, health, actions
@@ -364,8 +363,8 @@ def apply_patches(lab, server, patch_dir):
                 temp_path = '/tmp/upgrade_patches/'
                 local_pre_opts = 'sshpass -p "{0}"'.format(lab['local_password'])
                 server.ssh_conn.rsync(patch_dir + "/*.patch", local_ip,
-                                  temp_path, dest_user=lab['local_user'],
-                                  dest_password=lab['local_password'], pre_opts=local_pre_opts)
+                                      temp_path, dest_user=lab['local_user'],
+                                      dest_password=lab['local_password'], pre_opts=local_pre_opts)
 
                 common.scp_from_localhost_to_active_controller(temp_path,
                                                                dest_path=patch_dest_dir, is_dir=True)
@@ -393,7 +392,6 @@ def apply_patches(lab, server, patch_dir):
 
 
 def check_controller_filesystem(con_ssh=None):
-
     LOG.info("Checking controller root fs size ... ")
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
@@ -401,7 +399,7 @@ def check_controller_filesystem(con_ssh=None):
     patch_dest_dir1 = WRSROOT_HOME + "patches/"
     patch_dest_dir2 = WRSROOT_HOME + "upgrade_patches/"
     upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
-    current_version = install_helper.get_current_system_version()
+    current_version = system_helper.get_sw_version(use_existing=False)
     cmd = "df | grep /dev/root | awk ' { print $5}'"
     rc, output = con_ssh.exec_cmd(cmd)
     if rc == 0 and output:
@@ -422,4 +420,3 @@ def check_controller_filesystem(con_ssh=None):
                 entity_id = 'host=controller-0.filesystem=/'
                 system_helper.wait_for_alarms_gone([(EventLogID.FS_THRESHOLD_EXCEEDED, entity_id)], check_interval=10,
                                                    fail_ok=True, timeout=180)
-

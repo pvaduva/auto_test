@@ -1,13 +1,14 @@
 from utils.tis_log import LOG
 from utils import cli, table_parser
 from consts.cgcs import NtpPool
-from keywords import host_helper, system_helper
+from keywords import system_helper
 
 
 def test_ntp_alarm_in_sync_with_ntpq_stats():
     for host in system_helper.get_controllers():
         LOG.tc_step("Check ntp alarm and 'ntpq -pn'")
-        host_helper.wait_for_ntp_sync(host=host, fail_ok=False)
+        system_helper.wait_for_ntp_sync(host=host, fail_ok=False)
+
 
 # This test was removed temporily due to https://bugs.launchpad.net/starlingx/+bug/1824814
 def test_system_ntp_modify():
@@ -23,7 +24,7 @@ def test_system_ntp_modify():
     """
 
     LOG.tc_step("Check 'system ntp-show' contains expected fields")
-    table_ = table_parser.table(cli.system('ntp-show'))
+    table_ = table_parser.table(cli.system('ntp-show')[1])
     expt_sub_fields = ['uuid', 'ntpservers', 'isystem_uuid', 'created_at', 'updated_at']
 
     actual_fields = table_parser.get_column(table_, 'Property')
@@ -32,7 +33,7 @@ def test_system_ntp_modify():
 
     LOG.tc_step("Modify 'system ntp-modify' and verify that it contains expected fields")
     ntp_pool = NtpPool.NTP_POOL_1
-    if sorted(system_helper.get_ntp_vals(rtn_val='ntpservers')[0].split(',')) == sorted(ntp_pool.split(',')):
+    if sorted(system_helper.get_ntp_values(fields='ntpservers')[0].split(',')) == sorted(ntp_pool.split(',')):
         ntp_pool = NtpPool.NTP_POOL_2
 
     system_helper.modify_ntp(ntp_servers=ntp_pool)

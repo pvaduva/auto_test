@@ -1,3 +1,5 @@
+import re
+
 from pytest import mark, skip
 
 from keywords import kube_helper, system_helper, host_helper
@@ -36,38 +38,36 @@ def test_kube_system_services(controller):
     host = check_host(controller=controller)
 
     with host_helper.ssh_to_host(hostname=host) as con_ssh:
-        kube_system_info = kube_helper.get_pods_info(namespace='kube-system', con_ssh=con_ssh,
-                                                     type_names=('pod', 'service', 'deployment.apps'),
-                                                     keep_type_prefix=False)
+
+        kube_sys_pods_values = kube_helper.get_resources(field=('NAME', 'STATUS'), resource_type='pod',
+                                                         namespace='kube-system', con_ssh=con_ssh)
+        kube_sys_services = kube_helper.get_resources(resource_type='service', namespace='kube-system', con_ssh=con_ssh)
+        kube_sys_deployments = kube_helper.get_resources(resource_type='deployment.apps', namespace='kube-system',
+                                                         con_ssh=con_ssh)
+
         LOG.tc_step("Check kube-system pods status on {}".format(controller))
         # allow max 1 coredns pending on aio-sx
-        coredns_pending = False if system_helper.is_simplex() else True
-        for pod_info in kube_system_info['pod']:
-            pod_status = pod_info['status']
-            pod_name = pod_info['name']
+        coredns_pending = False if system_helper.is_aio_simplex() else True
+        for pod_info in kube_sys_pods_values:
+            pod_name, pod_status = pod_info
             if not coredns_pending and 'coredns-' in pod_name and pod_status == PodStatus.PENDING:
                 coredns_pending = True
                 continue
 
-            valid_status = [PodStatus.RUNNING]
-            if 'audit-' in pod_name:
-                valid_status.append(PodStatus.COMPLETED)
-            elif 'init-' in pod_name:
-                valid_status = [PodStatus.COMPLETED]
+            valid_status = PodStatus.RUNNING
+            if re.search('audit-|init-', pod_name):
+                valid_status = PodStatus.COMPLETED
 
-            assert pod_status in valid_status, "Pod {} status is {} instead of {}".\
-                format(pod_name, pod_status, valid_status)
+            if pod_status not in valid_status:
+                kube_helper.wait_for_pods_status(pod_names=pod_name, status=valid_status, namespace='kube-system',
+                                                 con_ssh=con_ssh, timeout=300)
 
         services = ('kube-dns', 'tiller-deploy')
         LOG.tc_step("Check kube-system services on {}: {}".format(controller, services))
-        existing_services = kube_system_info['service']
-        existing_services = [service['name'] for service in existing_services]
         for service in services:
-            assert service in existing_services, "{} not in kube-system service table".format(service)
+            assert service in kube_sys_services, "{} not in kube-system service table".format(service)
 
         deployments = ('calico-kube-controllers', 'coredns', 'tiller-deploy')
         LOG.tc_step("Check kube-system deployments on {}: {}".format(controller, deployments))
-        existing_deployments = kube_system_info['deployment.apps']
-        existing_deployments = [deployment['name'] for deployment in existing_deployments]
         for deployment in deployments:
-            assert deployment in existing_deployments, "{} not in kube-system deployment.apps table".format(deployment)
+            assert deployment in kube_sys_deployments, "{} not in kube-system deployment.apps table".format(deployment)

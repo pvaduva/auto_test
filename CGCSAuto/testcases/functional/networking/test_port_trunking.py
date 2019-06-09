@@ -1,7 +1,7 @@
 from pytest import fixture, skip
 
 from utils.tis_log import LOG
-from keywords import vm_helper, network_helper, nova_helper, system_helper
+from keywords import vm_helper, network_helper, system_helper
 
 
 @fixture(scope='module', autouse=True)
@@ -90,7 +90,7 @@ def test_port_trunking():
     LOG.tc_step("Create Parent port for trunk 1")
     t1_parent_port_id = network_helper.create_port(net_ids[0], trunk1_parent_port, wrs_vif=vif_model,
                                                    cleanup='function')[1]
-    t1_parent_port_mac = network_helper.get_ports(rtn_val='mac address', port_name=trunk1_parent_port)[0]
+    t1_parent_port_mac = network_helper.get_ports(field='mac address', port_name=trunk1_parent_port)[0]
 
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 1")
     t1_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk1_subport_1, mac_addr=t1_parent_port_mac,
@@ -120,7 +120,7 @@ def test_port_trunking():
     LOG.tc_step("Create Parent port for trunk 2")
     t2_parent_port_id = network_helper.create_port(net_ids[0], trunk2_parent_port, wrs_vif=vif_model,
                                                    cleanup='function')[1]
-    t2_parent_port_mac = network_helper.get_ports(rtn_val='mac address', port_name=trunk2_parent_port)[0]
+    t2_parent_port_mac = network_helper.get_ports(field='mac address', port_name=trunk2_parent_port)[0]
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 2")
     t2_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk2_subport_1, mac_addr=t2_parent_port_mac,
                                                  wrs_vif=vif_model, cleanup='function')[1]
@@ -199,9 +199,9 @@ def test_port_trunking():
             LOG.tc_step("Ping on vlan interface from guest after action {}".format(vm_actions))
             network_helper.ping_server(ip_addr, ssh_client=vm2_ssh, num_pings=20, fail_ok=False)
 
-        vm_host = nova_helper.get_vm_host(vm2_id)
+        vm_host = vm_helper.get_vm_host(vm2_id)
 
-        vm_on_target_host = nova_helper.get_vms_on_host(vm_host)
+        vm_on_target_host = vm_helper.get_vms_on_host(vm_host)
 
     LOG.tc_step("Reboot VMs host {} and ensure vms are evacuated to other host".format(vm_host))
     vm_helper.evacuate_vms(host=vm_host, vms_to_check=vm2_id, ping_vms=True)
@@ -266,7 +266,7 @@ def test_port_trunking_basic():
     # Create Trunks
     LOG.tc_step("Create Parent port for trunk 1")
     t1_parent_port_id = network_helper.create_port(net_ids[0], trunk1_parent_port, cleanup='function')[1]
-    t1_parent_port_mac = network_helper.get_ports(rtn_val='mac address', port_name=trunk1_parent_port)[0]
+    t1_parent_port_mac = network_helper.get_ports(field='mac address', port_name=trunk1_parent_port)[0]
 
     LOG.tc_step("Create Subport with parent port mac to be used by trunk 1")
     t1_sub_port1_id = network_helper.create_port(net_ids[1], name=trunk1_subport_1, mac_addr=t1_parent_port_mac,

@@ -1,17 +1,20 @@
 """
-This module provides helper functions for storage based testing, with a focus
-on CEPH-related helper functions.
+This module provides helper functions for storage based testing
+
+Including:
+- system commands for system/host storage configs
+- CEPH related helper functions that are not using system commands
+
 """
 
 import re
 import time
 
 from consts.auth import Tenant
-from consts.proj_vars import ProjVar
-from consts.cgcs import EventLogID, BackendState, BackendTask
-from consts.timeout import HostTimeout
+from consts.cgcs import EventLogID, BackendState, BackendTask, GuestImages, PartitionStatus
+from consts.timeout import HostTimeout, SysInvTimeout
 
-from keywords import system_helper, host_helper, keystone_helper
+from keywords import system_helper, host_helper, keystone_helper, common
 
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient, get_cli_client
@@ -32,76 +35,80 @@ def is_ceph_healthy(con_ssh=None):
     """
 
     health_ok = 'HEALTH_OK'
-    health_warn = 'HEALTH_WARN'
-    health_err = "HEALTH_ERR"
-    cmd = 'ceph -s'
-
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    rtn_code, out = con_ssh.exec_cmd(cmd)
+    rtn_code, out = con_ssh.exec_cmd('ceph -s')
+    if rtn_code > 0:
+        LOG.warning('ceph -s failed to execute.')
+        return False
 
-    if health_ok in out:
-        msg = 'CEPH cluster is healthy'
-        LOG.info(msg)
-        return True, msg
-    elif health_warn in out:
-        msg = 'CEPH cluster is in health warn state'
-        LOG.info(msg)
-        return False, msg
-    elif health_err in out:
-        msg = 'CEPH cluster is in health error state'
-        return False, msg
+    health_state = re.findall('health: (.*)\n', out)
+    if not health_state:
+        LOG.warning('Unable to determine ceph health state')
+        return False
 
-    msg = 'Cannot determine CEPH health state'
-    LOG.info(msg)
-    return False, msg
+    health_state = health_state[0]
+    if health_ok in health_state:
+        LOG.info('CEPH cluster is healthy')
+        return True
+
+    msg = 'CEPH unhealthy. State: {}'.format(health_state)
+    LOG.warning(msg)
+    return False
 
 
-def get_num_osds(con_ssh=None):
+def get_ceph_osd_count(fail_ok=False, con_ssh=None):
     """
     Return the number of OSDs on a CEPH system"
     Args:
+        fail_ok
         con_ssh(SSHClient):
 
-    Returns (numeric): Return the number of OSDs on the system,
+    Returns (int): Return the number of OSDs on the system,
     """
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    cmd = 'ceph -s'
+    rtn_code, out = con_ssh.exec_cmd('ceph -s', fail_ok=fail_ok)
+    if rtn_code > 0:
+        return 0
 
-    rtn_code, out = con_ssh.exec_cmd(cmd)
     osds = re.search(r'(\d+) osds', out)
-    if osds.group(1):
+    if osds:
         LOG.info('There are {} OSDs on the system'.format(osds.group(1)))
         return int(osds.group(1))
 
-    LOG.info('There are no OSDs on the system')
-    return 0
+    msg = 'There are no OSDs on the system'
+    LOG.info(msg)
+    if fail_ok:
+        return 0
+    else:
+        raise exceptions.StorageError(msg)
 
 
-def get_osd_host(osd_id, con_ssh=None):
+def get_osd_host(osd_id, fail_ok=False, con_ssh=None):
     """
     Return the host associated with the provided OSD ID
     Args:
         con_ssh(SSHClient):
+        fail_ok
         osd_id (int): an OSD number, e.g. 0, 1, 2, 3...
 
-    Returns:
-        - Return hostname or -1 if not found
-        - Return message
+    Returns (str|None): hostname is found else None
     """
     storage_hosts = system_helper.get_storage_nodes(con_ssh=con_ssh)
     for host in storage_hosts:
-        table_ = table_parser.table(cli.system('host-stor-list', host, ssh_client=con_ssh))
-        osd_list = table_parser.get_values(table_, 'osdid')
-        if str(osd_id) in osd_list:
+        osd_list = get_host_stors(host, 'osdid')
+        if int(osd_id) in osd_list:
             msg = 'OSD ID {} is on host {}'.format(osd_id, host)
-            return host, msg
+            LOG.info(msg)
+            return host
 
     msg = 'Could not find host for OSD ID {}'.format(osd_id)
-    return -1, msg
+    LOG.warning(msg)
+    if not fail_ok:
+        raise exceptions.StorageError(msg)
 
 
 def kill_process(host, pid):
@@ -133,57 +140,51 @@ def kill_process(host, pid):
     return True, msg
 
 
-# TODO: get_osd_pid and get_mon_pid are good candidates for combining
-def get_osd_pid(osd_host, osd_id):
+def get_osd_pid(osd_host, osd_id, con_ssh=None, fail_ok=False):
     """
     Given the id of an OSD, return the pid.
     Args:
         osd_host (string) - the host to ssh into, e.g. 'storage-0'
         osd_id (int|str) - osd_id to get the pid of, e.g. '0'
-    Returns:
-        - (integer) pid if found, or -1 if pid not found
-        - (string) message
+        con_ssh
+        fail_ok
+
+    Returns (int|None):
+
     """
-
-    cmd = 'cat /var/run/ceph/osd.{}.pid'.format(osd_id)
-
-    with host_helper.ssh_to_host(osd_host) as storage_ssh:
-        LOG.info(cmd)
-        rtn_code, out = storage_ssh.exec_cmd(cmd, expect_timeout=60)
-        osd_match = r'(\d+)'
-        pid = re.match(osd_match, out)
-        if pid:
-            msg = 'Corresponding pid for OSD ID {} is {}'.format(osd_id, pid.group(1))
-            return pid.group(1), msg
-
-    msg = 'Corresponding pid for OSD ID {} was not found'.format(osd_id)
-    return -1, msg
+    pid_file = '/var/run/ceph/osd.{}.pid'.format(osd_id)
+    return __get_pid_from_file(osd_host, pid_file=pid_file, con_ssh=con_ssh, fail_ok=fail_ok)
 
 
-# TODO: get_osd_pid and get_mon_pid are good candidates for combining
-def get_mon_pid(mon_host):
+def get_mon_pid(mon_host, con_ssh=None, fail_ok=False):
     """
     Given the host name of a monitor, return the pid of the ceph-mon process
     Args:
         mon_host (string) - the host to get the pid of, e.g. 'storage-1'
-    Returns:
-        - (integer) pid if found, or -1 if pid not found
-        - (string) message
+        con_ssh (SSHClient)
+        fail_ok
+
+    Returns (int|None)
+
     """
+    pid_file = '/var/run/ceph/mon.{}.pid'.format('controller' if system_helper.is_aio_duplex() else mon_host)
+    return __get_pid_from_file(mon_host, pid_file=pid_file, con_ssh=con_ssh, fail_ok=fail_ok)
 
-    cmd = 'cat /var/run/ceph/mon.{}.pid'.format(mon_host)
 
-    with host_helper.ssh_to_host(mon_host) as mon_ssh:
-        LOG.info(cmd)
-        rtn_code, out = mon_ssh.exec_cmd(cmd, expect_timeout=60)
+def __get_pid_from_file(host, pid_file, con_ssh=None, fail_ok=False):
+    with host_helper.ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+        rtn_code, out = host_ssh.exec_cmd('cat {}'.format(pid_file), expect_timeout=10, fail_ok=fail_ok)
         mon_match = r'(\d+)'
         pid = re.match(mon_match, out)
         if pid:
-            msg = 'Corresponding ceph-mon pid for {} is {}'.format(mon_host, pid.group(1))
-            return pid.group(1), msg
-    # FIXME
-    msg = 'Corresponding ceph-mon pid for {} was not found'.format(mon_host)
+            msg = '{} for {} is {}'.format(pid_file, host, pid.group(1))
+            LOG.info(msg)
+            return pid.group(1)
+
+    msg = '{} for {} was not found'.format(pid_file, host)
     LOG.warning(msg)
+    if not fail_ok:
+        raise exceptions.StorageError(msg)
 
 
 def get_osds(host=None, con_ssh=None):
@@ -197,30 +198,14 @@ def get_osds(host=None, con_ssh=None):
         (list) List of OSDs on the host.  Empty list if none.
     """
 
-    def _get_osds_per_host(host_, osd_list_, con_ssh_=None):
-        """
-        Return the OSDs on a system.
-
-        Args:
-            host - the host to query
-
-        Returns:
-            Nothing.  Update osd_list by side-effect.
-        """
-
-        table_ = table_parser.table(cli.system('host-stor-list', host_, ssh_client=con_ssh_))
-        osd_list_ = osd_list_ + table_parser.get_values(table_, 'osdid', function='osd')
-
-        return osd_list_
-
     osd_list = []
 
     if host:
-        osd_list = _get_osds_per_host(host, osd_list, con_ssh)
+        osd_list += get_host_stors(host, 'osdid', con_ssh)
     else:
         storage_hosts = system_helper.get_storage_nodes()
         for host in storage_hosts:
-            osd_list = _get_osds_per_host(host, osd_list, con_ssh)
+            osd_list += get_host_stors(host, 'osdid', con_ssh)
 
     return osd_list
 
@@ -277,9 +262,8 @@ def get_storage_group(host):
         storage_group (string) - group name, e.g. 'group-0'
         msg (string) - log message
     """
+    peers = system_helper.get_host_values(host, fields='peers')[0]
 
-    host_table = table_parser.table(cli.system('host-show', host))
-    peers = table_parser.get_value_two_col_table(host_table, 'peers', merge_lines=True)
     storage_group = re.search(r'(group-\d+)', peers)
     msg = 'Unable to determine replication group for {}'.format(host)
     assert storage_group, msg
@@ -360,7 +344,7 @@ def find_images(con_ssh=None, image_type='qcow2', image_name=None, location=None
 
     image_names = []
     if not location:
-        location = '{}/images'.format(ProjVar.get_var('USER_FILE_DIR'))
+        location = GuestImages.DEFAULT['image_dir']
     if not con_ssh:
         con_ssh = get_cli_client()
 
@@ -414,86 +398,6 @@ def find_image_size(con_ssh, image_name='cgcs-guest.img', location='~/images'):
     return image_size
 
 
-def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, object_gib=None, object_gateway=None,
-                           services=None, lock_unlock=False, fail_ok=False, con_ssh=None):
-    """
-    Modify ceph storage backend pool allocation
-
-    Args:
-        backend (str): storage backend to modify (e.g. ceph)
-        cinder:
-        glance:
-        ephemeral:
-        object_gib:
-        object_gateway (bool|None)
-        services (str|list|tuple):
-        lock_unlock (bool): whether to wait for config out-of-date alarms against controllers and lock/unlock them
-        fail_ok:
-        con_ssh:
-
-    Returns:
-        0, dict of new allocation
-        1, cli err message
-
-    """
-    if 'ceph' in backend:
-        backend = 'ceph-store'
-    elif 'lvm' in backend:
-        backend = 'lvm-store'
-    elif 'file' in backend:
-        backend = 'file-store'
-
-    args = ''
-    if services:
-        if isinstance(services, (list, tuple)):
-            services = ','.join(services)
-        args = '-s {} '.format(services)
-    args += backend
-
-    get_storage_backend_info(backend)
-
-    if cinder:
-        args += ' cinder_pool_gib={}'.format(cinder)
-
-    if 'ceph' in backend:
-        if glance:
-            args += ' glance_pool_gib={}'.format(glance)
-        if ephemeral:
-            args += ' ephemeral_pool_gib={}'.format(ephemeral)
-        if object_gateway is not None:
-            args += ' object_gateway={}'.format(object_gateway)
-        if object_gib:
-            args += ' object_pool_gib={}'.format(object_gib)
-
-    code, out = cli.system('storage-backend-modify', args, con_ssh, fail_ok=fail_ok, rtn_code=True)
-    if code > 0:
-        return 1, out
-
-    if lock_unlock:
-        from testfixtures.recover_hosts import HostsToRecover
-        LOG.info("Lock unlock controllers and ensure config out-of-date alarms clear")
-        system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=30, fail_ok=False,
-                                     entity_id='controller-')
-
-        active_controller, standby_controller = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
-        for controller in [standby_controller, active_controller]:
-            if not controller:
-                continue
-            HostsToRecover.add(controller)
-            host_helper.lock_host(controller, swact=True, con_ssh=con_ssh)
-            wait_for_storage_backend_vals(backend=backend,
-                                          **{'task': BackendTask.RECONFIG_CONTROLLER,   # TODO is this right?
-                                             'state': BackendState.CONFIGURING})
-
-            host_helper.unlock_host(controller, con_ssh=con_ssh)
-
-        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, fail_ok=False)
-
-    # TODO return new values of storage allocation and check they are the right values
-    updated_backend_info = get_storage_backend_info(backend)
-    return 0, updated_backend_info
-
-
 def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_interval=5):
     end_time = time.time() + timeout
     output = None
@@ -512,76 +416,60 @@ def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_inte
             raise exceptions.TimeoutException(err_msg)
 
 
-def _get_storage_backend_show_table(backend, con_ssh=None, auth_info=Tenant.get('admin')):
-    # valid_backends = ['ceph-store', 'lvm-store', 'file-store', 'ceph-external']
-    if 'external' in backend:
-        backend = 'ceph-external'
-    elif 'ceph' in backend:
-        backend = 'ceph-store'
-    elif 'lvm' in backend:
-        backend = 'lvm-store'
-    elif 'file' in backend:
-        backend = 'file-store'
-
-    table_ = table_parser.table(cli.system('storage-backend-show', backend, ssh_client=con_ssh, auth_info=auth_info),
-                                combine_multiline_entry=True)
-    return table_
-
-
-def get_storage_backend_info(backend, keys=None, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_storage_backends(field='backend', con_ssh=None, auth_info=Tenant.get('admin_platform'), **filters):
     """
-    Get storage backend pool allocation info
+    Get storage backends values from system storage-backend-list
+    Args:
+        field (str|list|tuple):
+        con_ssh:
+        auth_info:
+        **filters:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.system('storage-backend-list', ssh_client=con_ssh, auth_info=auth_info)[1],
+                                combine_multiline_entry=True)
+    return table_parser.get_multi_values(table_, field, **filters)
+
+
+def get_storage_backend_values(backend, fields=None, rtn_dict=False, con_ssh=None,
+                               auth_info=Tenant.get('admin_platform'), **kwargs):
+    """
+    Get storage backend values for given backend via system storage-backend-show
 
     Args:
         backend (str): storage backend to get info (e.g. ceph)
-        keys (list|str): keys to return, e.g., ['name', 'backend', 'task']
+        fields (list|tuple|str|None): keys to return, e.g., ['name', 'backend', 'task']
+        rtn_dict (bool)
         con_ssh:
         auth_info
 
-    Returns: dict  {'cinder_pool_gib': 202, 'glance_pool_gib': 20, 'ephemeral_pool_gib': 0,
-                    'object_pool_gib': 0, 'ceph_total_space_gib': 222,  'object_gateway': False}
-
+    Returns (list|dict):
+      Examples:
+           Input: ('cinder_pool_gib', 'glance_pool_gib', 'ephemeral_pool_gib', 'object_pool_gib',
+                   'ceph_total_space_gib', 'object_gateway')
+          Output:
+            if rtn_dict: {'cinder_pool_gib': 202, 'glance_pool_gib': 20, 'ephemeral_pool_gib': 0,
+                              'object_pool_gib': 0, 'ceph_total_space_gib': 222,  'object_gateway': False}
+            if list: [202, 20, 0, 0, 222, False]
     """
-    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh, auth_info=auth_info)
+    # valid_backends = ['ceph-store', 'lvm-store', 'file-store', 'shared_services]
+    backend = backend.lower()
+    if re.fullmatch('ceph|lvm|file', backend):
+        backend += '-store'
+    elif backend == 'external':
+        backend = 'shared_services'
 
-    values = table_['values']
-    backend_info = {}
-    for line in values:
-        field = line[0]
-        value = line[1]
-        if field in ('task', 'capabilities', 'object_gateway') or field.endswith('_gib'):
-            try:
-                value = eval(value)
-            except:
-                pass
-        backend_info[field] = value
-
-    if keys:
-        if isinstance(keys, str):
-            keys = [keys]
-        backend_info = {key_: backend_info[key_] for key_ in keys}
-
-    return backend_info
+    table_ = table_parser.table(cli.system('storage-backend-show', backend, ssh_client=con_ssh, auth_info=auth_info)[1],
+                                combine_multiline_entry=True)
+    if not fields:
+        fields = table_parser.get_column(table_, 'Property')
+    return table_parser.get_multi_values_two_col_table(table_, fields, evaluate=True, rtn_dict=rtn_dict, **kwargs)
 
 
-def get_storage_backend_show_vals(backend, fields, con_ssh=None, auth_info=Tenant.get('admin')):
-    table_ = _get_storage_backend_show_table(backend=backend, con_ssh=con_ssh, auth_info=auth_info)
-    vals = []
-    if isinstance(fields, str):
-        fields = (fields, )
-
-    for field in fields:
-        val = table_parser.get_value_two_col_table(table_, field)
-        if field in ('task', 'capabilities', 'object_gateway') or field.endswith('_gib'):
-            try:
-                val = eval(val)
-            except:
-                pass
-        vals.append(val)
-    return vals
-
-
-def wait_for_storage_backend_vals(backend, timeout=300, fail_ok=False, con_ssh=None, **expt_values):
+def wait_for_storage_backend_vals(backend, timeout=300, fail_ok=False, con_ssh=None,
+                                  auth_info=Tenant.get('admin_platform'), **expt_values):
     if not expt_values:
         raise ValueError("At least one key/value pair has to be provided via expt_values")
 
@@ -590,7 +478,8 @@ def wait_for_storage_backend_vals(backend, timeout=300, fail_ok=False, con_ssh=N
     dict_to_check = expt_values.copy()
     stor_backend_info = None
     while time.time() < end_time:
-        stor_backend_info = get_storage_backend_info(backend=backend, keys=list(dict_to_check.keys()), con_ssh=con_ssh)
+        stor_backend_info = get_storage_backend_values(backend=backend, fields=list(dict_to_check.keys()),
+                                                       rtn_dict=True, con_ssh=con_ssh, auth_info=auth_info)
         dict_to_iter = dict_to_check.copy()
         for key, expt_val in dict_to_iter.items():
             actual_val = stor_backend_info[key]
@@ -604,48 +493,6 @@ def wait_for_storage_backend_vals(backend, timeout=300, fail_ok=False, con_ssh=N
         return False, stor_backend_info
     raise exceptions.StorageError("Storage backend show field(s) did not reach expected value(s). "
                                   "Expected: {}; Actual: {}".format(dict_to_check, stor_backend_info))
-
-
-def get_storage_backends(rtn_val='backend', con_ssh=None, **filters):
-    backends = []
-    table_ = _get_storage_backend_list_table(con_ssh=con_ssh)
-    if table_:
-        if filters:
-            table_ = table_parser.filter_table(table_, **filters)
-        backends = table_parser.get_column(table_, rtn_val)
-    return backends
-
-
-def get_storage_backend_state(backend, con_ssh=None):
-    return get_storage_backend_list_vals(backend=backend, headers=('state',), con_ssh=con_ssh)[0]
-
-
-def get_storage_backend_task(backend, con_ssh=None):
-    return get_storage_backend_list_vals(backend=backend, headers=('task',), con_ssh=con_ssh)[0]
-
-
-def _get_storage_backend_list_table(con_ssh=None):
-    return table_parser.table(cli.system('storage-backend-list', ssh_client=con_ssh), combine_multiline_entry=True)
-
-
-def get_storage_backend_list_vals(backend, headers=('state', 'task'), con_ssh=None, **filters):
-    table_ = _get_storage_backend_list_table(con_ssh=con_ssh)
-    vals = []
-    if table_:
-        table_ = table_parser.filter_table(table_, backend=backend, **filters)
-        if isinstance(headers, str):
-            headers = (headers, )
-        for header in headers:
-            val = table_parser.get_values(table_, header)[0]
-            if header in ('task', 'capabilities'):
-                # convert to dictionary or None type. e.g.,  {u'min_replication': u'1', u'replication': u'2'}
-                try:
-                    val = eval(val)
-                except:
-                    pass
-            vals.append(val)
-
-    return vals
 
 
 def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ceph_mon_dev_controller_0_uuid=None,
@@ -702,6 +549,83 @@ def add_storage_backend(backend='ceph', ceph_mon_gib='20', ceph_mon_dev=None, ce
         return rc, output
 
 
+def modify_storage_backend(backend, cinder=None, glance=None, ephemeral=None, object_gib=None, object_gateway=None,
+                           services=None, lock_unlock=False, fail_ok=False, con_ssh=None):
+    """
+    Modify ceph storage backend pool allocation
+
+    Args:
+        backend (str): storage backend to modify (e.g. ceph)
+        cinder:
+        glance:
+        ephemeral:
+        object_gib:
+        object_gateway (bool|None)
+        services (str|list|tuple):
+        lock_unlock (bool): whether to wait for config out-of-date alarms against controllers and lock/unlock them
+        fail_ok:
+        con_ssh:
+
+    Returns:
+        0, dict of new allocation
+        1, cli err message
+
+    """
+    if re.fullmatch('ceph|lvm|file', backend):
+        backend += '-store'
+    backend = backend.lower()
+
+    args = ''
+    if services:
+        if isinstance(services, (list, tuple)):
+            services = ','.join(services)
+        args = '-s {} '.format(services)
+    args += backend
+
+    get_storage_backend_values(backend, fields='backend')
+
+    if cinder:
+        args += ' cinder_pool_gib={}'.format(cinder)
+
+    if 'ceph' in backend:
+        if glance:
+            args += ' glance_pool_gib={}'.format(glance)
+        if ephemeral:
+            args += ' ephemeral_pool_gib={}'.format(ephemeral)
+        if object_gateway is not None:
+            args += ' object_gateway={}'.format(object_gateway)
+        if object_gib:
+            args += ' object_pool_gib={}'.format(object_gib)
+
+    code, out = cli.system('storage-backend-modify', args, con_ssh, fail_ok=fail_ok)
+    if code > 0:
+        return 1, out
+
+    if lock_unlock:
+        from testfixtures.recover_hosts import HostsToRecover
+        LOG.info("Lock unlock controllers and ensure config out-of-date alarms clear")
+        system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, timeout=30, fail_ok=False,
+                                     entity_id='controller-')
+
+        active_controller, standby_controller = system_helper.get_active_standby_controllers(con_ssh=con_ssh)
+        for controller in [standby_controller, active_controller]:
+            if not controller:
+                continue
+            HostsToRecover.add(controller)
+            host_helper.lock_host(controller, swact=True, con_ssh=con_ssh)
+            wait_for_storage_backend_vals(backend=backend,
+                                          **{'task': BackendTask.RECONFIG_CONTROLLER,  # TODO is this right?
+                                             'state': BackendState.CONFIGURING})
+
+            host_helper.unlock_host(controller, con_ssh=con_ssh)
+
+        system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, fail_ok=False)
+
+    # TODO return new values of storage allocation and check they are the right values
+    updated_backend_info = get_storage_backend_values(backend, rtn_dict=True)
+    return 0, updated_backend_info
+
+
 def add_ceph_mon(host, con_ssh=None, fail_ok=False):
     """
 
@@ -752,7 +676,7 @@ def add_ceph_mon(host, con_ssh=None, fail_ok=False):
 
     cmd = 'ceph-mon-add'.format(host)
 
-    rc, output = cli.system(cmd, host, ssh_client=con_ssh, rtn_code=True, fail_ok=fail_ok)
+    rc, output = cli.system(cmd, host, ssh_client=con_ssh, fail_ok=fail_ok)
     if rc != 0:
         msg = "CLI command {} failed to add ceph mon in host {}: {}".format(cmd, host, output)
         LOG.warning(msg)
@@ -789,11 +713,11 @@ def wait_for_ceph_mon_configured(host, state=None, timeout=HostTimeout.CEPH_MON_
         raise exceptions.StorageError(msg)
 
 
-def get_ceph_mon_values(rtn_val='hostname', hostname=None, uuid=None, state=None, task=None, con_ssh=None):
+def get_ceph_mon_values(field='hostname', hostname=None, uuid=None, state=None, task=None, con_ssh=None):
     """
 
     Args:
-        rtn_val:
+        field:
         hostname:
         uuid:
         state:
@@ -804,7 +728,7 @@ def get_ceph_mon_values(rtn_val='hostname', hostname=None, uuid=None, state=None
 
     """
     ceph_mons = []
-    table_ = table_parser.table(cli.system('ceph-mon-list', ssh_client=con_ssh), combine_multiline_entry=True)
+    table_ = table_parser.table(cli.system('ceph-mon-list', ssh_client=con_ssh)[1], combine_multiline_entry=True)
 
     filters = {}
     if table_:
@@ -818,28 +742,12 @@ def get_ceph_mon_values(rtn_val='hostname', hostname=None, uuid=None, state=None
             filters['task'] = task
 
         table_ = table_parser.filter_table(table_, **filters)
-        ceph_mons = table_parser.get_column(table_, rtn_val)
+        ceph_mons = table_parser.get_column(table_, field)
     return ceph_mons
 
 
 def get_ceph_mon_state(hostname, con_ssh=None):
-    return get_ceph_mon_values(rtn_val='state', hostname=hostname, con_ssh=con_ssh)[0]
-
-
-def get_controllerfs_value(fs_name, rtn_val='Size in GiB', con_ssh=None, auth_info=Tenant.get('admin'), **filters):
-    table_ = table_parser.table(cli.system('controllerfs-list --nowrap', ssh_client=con_ssh, auth_info=auth_info))
-
-    filters['FS Name'] = fs_name
-    vals = table_parser.get_values(table_, rtn_val, **filters)
-    if not vals:
-        LOG.warning('No value found via controllerfs-list with: {}'.format(filters))
-        return None
-
-    val = vals[0]
-    if rtn_val.lower() == 'size in gib':
-        val = int(val)
-
-    return val
+    return get_ceph_mon_values(field='state', hostname=hostname, con_ssh=con_ssh)[0]
 
 
 def get_fs_mount_path(ssh_client, fs):
@@ -1047,12 +955,477 @@ def convert_image_format(src_image_filename, dest_image_filename, dest_format, s
             raise exceptions.CommonError(msg)
 
 
-def get_storage_tier_values(cluster, rtn_val='uuid', con_ssh=None, auth_info=Tenant.get('admin'), **filters):
+def check_controllerfs(**kwargs):
+    """
+    This validates that the underlying controller filesystem aligns with the
+    expected values.
+
+    Arguments:
+    - kwargs - dict of name:value pair(s)
+    """
+
+    con_ssh = ControllerClient.get_active_controller()
+
+    for fs in kwargs:
+        if fs == "database":
+            fs_name = "pgsql-lv"
+            expected_size = int(kwargs[fs]) * 2
+        elif fs == "glance":
+            fs_name = "cgcs-lv"
+            expected_size = int(kwargs[fs])
+        else:
+            fs_name = fs + "-lv"
+            expected_size = int(kwargs[fs])
+
+        cmd = "lvs --units g --noheadings -o lv_size -S lv_name={}".format(fs_name)
+        rc, out = con_ssh.exec_sudo_cmd(cmd)
+
+        actual_size = re.match(r'[\d]+', out.lstrip())
+        assert actual_size, "Unable to determine actual filesystem size"
+        assert int(actual_size.group(0)) == expected_size, "{} should be {} but was {}".format(fs, expected_size,
+                                                                                               actual_size)
+
+
+def get_storage_monitors_count():
+    # Only 2 storage monitor available. At least 2 unlocked and enabled hosts with monitors are required.
+    # Please ensure hosts with monitors are unlocked and enabled - candidates: controller-0, controller-1,
+    raise NotImplementedError
+
+
+def create_storage_profile(host, profile_name='', con_ssh=None, auth_info=Tenant.get('admin_platform')):
+    """
+    Create a storage profile
+
+    Args:
+        host (str): hostname or id
+        profile_name (str): name of the profile to create
+        con_ssh (SSHClient):
+        auth_info
+
+    Returns (str): uuid of the profile created if success, '' otherwise
+
+    """
+    if not profile_name:
+        profile_name = time.strftime('storprof_%Y%m%d_%H%M%S_', time.localtime())
+
+    cmd = 'storprofile-add {} {}'.format(profile_name, host)
+
+    table_ = table_parser.table(cli.system(cmd, ssh_client=con_ssh, fail_ok=False, auth_info=auth_info)[1])
+    uuid = table_parser.get_value_two_col_table(table_, 'uuid')
+
+    return uuid
+
+
+def delete_storage_profile(profile='', con_ssh=None, auth_info=Tenant.get('admin_platform')):
+    """
+    Delete a storage profile
+
+    Args:
+        profile (str): name of the profile to create
+        con_ssh (SSHClient):
+        auth_info
+
+    Returns (): no return if success, will raise exception otherwise
+
+    """
+    if not profile:
+        raise ValueError('Name or uuid must be provided to delete the storage-profile')
+
+    cmd = 'storprofile-delete {}'.format(profile)
+
+    cli.system(cmd, ssh_client=con_ssh, fail_ok=False, auth_info=auth_info)
+
+
+def get_host_partitions(host, state=None, disk=None, field='uuid', con_ssh=None,
+                        auth_info=Tenant.get('admin_platform')):
+    """
+    Return partitions based on their state.
+
+    Arguments:
+        host(str|list|tuple) - list of host names
+        state(str|None) - partition state, i.e. Creating, Ready, In-use, Deleting,
+        disk (str|None)
+        field (str|list|tuple)
+        con_ssh
+        auth_info
+
+    Return (list):
+
+    """
+    args = '--disk {} {}'.format(disk, host) if disk else host
+    table_ = table_parser.table(cli.system('host-disk-partition-list --nowrap', args, ssh_client=con_ssh,
+                                           auth_info=auth_info)[1])
+    kwargs = {'state': state} if state else {}
+    values = table_parser.get_multi_values(table_, field, **kwargs)
+
+    return values
+
+
+def get_host_partition_values(host, uuid, fields, con_ssh=None, auth_info=Tenant.get('admin_platform')):
+    """
+    Return requested information about a partition on a given host.
+
+    Args:
+        host(str) - hostname, e.g. controller-0
+        uuid(str) - uuid of partition
+        fields(str|list|tuple) - the parameter wanted, e.g. size_gib
+        con_ssh
+        auth_info
+
+    Returns:
+    * param_value(list) - the value of the desired parameter
+    """
+
+    args = "{} {}".format(host, uuid)
+    rc, out = cli.system('host-disk-partition-show', args, fail_ok=True, ssh_client=con_ssh, auth_info=auth_info)
+    if rc > 0:
+        return None
+
+    table_ = table_parser.table(out)
+    values = []
+    for field in fields:
+        convert_to_gib = False
+        if field == 'size_gib':
+            field = 'size_mib'
+            convert_to_gib = True
+
+        param_value = table_parser.get_value_two_col_table(table_, field)
+        if '_mib' in field:
+            param_value = float(param_value)
+        if convert_to_gib:
+            param_value = float(param_value) / 1024
+
+        values.append(param_value)
+
+    return values
+
+
+def delete_host_partition(host, uuid, fail_ok=False, timeout=SysInvTimeout.PARTITION_DELETE, con_ssh=None,
+                          auth_info=Tenant.get('admin_platform')):
+    """
+    Delete a partition from a specific host.
+
+    Arguments:
+    * host(str) - hostname, e.g. controller-0
+    * uuid(str) - uuid of partition
+    * timeout(int) - how long to wait for partition deletion (sec)
+
+    Returns:
+    * rc, out - return code and output of the host-disk-partition-delete
+    """
+
+    rc, out = cli.system('host-disk-partition-delete {} {}'.format(host, uuid), fail_ok=fail_ok, ssh_client=con_ssh,
+                         auth_info=auth_info)
+    if rc > 0:
+        return 1, out
+
+    wait_for_host_partition_status(host=host, uuid=uuid, timeout=timeout, final_status=None,
+                                   interim_status=PartitionStatus.DELETING, con_ssh=con_ssh, auth_info=auth_info)
+    return 0, "Partition successfully deleted"
+
+
+def create_host_partition(host, device_node, size_gib, fail_ok=False, wait=True, timeout=SysInvTimeout.PARTITION_CREATE,
+                          con_ssh=None, auth_info=Tenant.get('admin_platform')):
+    """
+    Create a partition on host.
+
+    Arguments:
+    * host(str) - hostname, e.g. controller-0
+    * device_node(str) - device, e.g. /dev/sdh
+    * size_gib(str) - size of partition in gib
+    * wait(bool) - if True, wait for partition creation.  False, return
+    * immediately.
+    * timeout(int) - how long to wait for partition creation (sec)
+
+    Returns:
+    * rc, out - return code and output of the host-disk-partition-command
+    """
+    args = '{} {} {}'.format(host, device_node, size_gib)
+    rc, out = cli.system('host-disk-partition-add', args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    if rc > 0 or not wait:
+        return rc, out
+
+    uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+    wait_for_host_partition_status(host=host, uuid=uuid, timeout=timeout, con_ssh=con_ssh, auth_info=auth_info)
+    return 0, uuid
+
+
+def modify_host_partition(host, uuid, size_gib, fail_ok=False, timeout=SysInvTimeout.PARTITION_MODIFY,
+                          final_status=PartitionStatus.READY, con_ssh=None, auth_info=Tenant.get('admin_platform')):
+    """
+    This test modifies the size of a partition.
+
+    Args:
+        host(str) - hostname, e.g. controller-0
+        uuid(str) - uuid of the partition
+        size_gib(str) - new partition size in gib
+        fail_ok
+        timeout(int) - how long to wait for partition creation (sec)
+        final_status (str|list)
+        con_ssh
+        auth_info
+
+    Returns:
+    * rc, out - return code and output of the host-disk-partition-command
+    """
+
+    args = '-s {} {} {}'.format(size_gib, host, uuid)
+    rc, out = cli.system('host-disk-partition-modify', args, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    if rc > 0:
+        return 1, out
+
+    uuid = table_parser.get_value_two_col_table(table_parser.table(out), "uuid")
+    wait_for_host_partition_status(host=host, uuid=uuid, timeout=timeout, interim_status=PartitionStatus.MODIFYING,
+                                   final_status=final_status, con_ssh=con_ssh, auth_info=auth_info)
+
+    msg = "{} partition successfully modified".format(host)
+    LOG.info(msg)
+    return 0, msg
+
+
+def wait_for_host_partition_status(host, uuid, final_status=PartitionStatus.READY,
+                                   interim_status=PartitionStatus.CREATING, timeout=120, fail_ok=False,
+                                   con_ssh=None, auth_info=Tenant.get('admin_platform')):
+    """
+    Wait for host partition to reach given status
+    Args:
+        host:
+        uuid:
+        final_status (str|list|None|tuple):
+        interim_status:
+        timeout:
+        fail_ok:
+        con_ssh
+        auth_info
+
+    Returns (bool):
+
+    """
+    if not final_status:
+        final_status = [None]
+    elif isinstance(final_status, str):
+        final_status = (final_status, )
+
+    valid_status = list(final_status)
+    if isinstance(interim_status, str):
+        interim_status = (interim_status,)
+    for status_ in interim_status:
+        valid_status.append(status_)
+
+    end_time = time.time() + timeout
+    prev_status = ''
+    while time.time() < end_time:
+        status = get_host_partition_values(host, uuid, "status", con_ssh=con_ssh, auth_info=auth_info)[0]
+        assert status in valid_status, "Partition has unexpected state {}".format(status)
+
+        if status in final_status:
+            LOG.info("Partition {} on host {} has reached state: {}".format(uuid, host, status))
+            return True
+        elif status != prev_status:
+            prev_status = status
+            LOG.info("Partition {} on host {} is in {} state".format(uuid, host, status))
+
+        time.sleep(5)
+
+    msg = "Partition {} on host {} not in {} state within {} seconds".format(uuid, host, final_status, timeout)
+    LOG.warning(msg)
+    if fail_ok:
+        return False
+    else:
+        raise exceptions.StorageError(msg)
+
+
+def get_host_disks(host, field='uuid', auth_info=Tenant.get('admin_platform'), con_ssh=None,
+                   use_telnet=False, con_telnet=None, **kwargs):
+    """
+    Get values from system host-disk-list
+    Args:
+        host (str):
+        field (str|list|tuple)
+        con_ssh (SSHClient):
+        use_telnet
+        con_telnet
+        auth_info (dict):
+
+    Returns (dict):
+
+    """
+    table_ = table_parser.table(
+        cli.system('host-disk-list --nowrap', host, ssh_client=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                   auth_info=auth_info)[1])
+    return table_parser.get_multi_values(table_, field, evalute=True, **kwargs)
+
+
+def get_host_disk_values(host, disk, fields, auth_info=Tenant.get('admin_platform'), con_ssh=None):
+    """
+    Get host disk values via system host-disk-show
+    Args:
+        host:
+        disk:
+        fields:
+        auth_info:
+        con_ssh:
+
+    Returns:
+
+    """
+    table_ = table_parser.table(cli.system('host-disk-show', '{} {}'.format(host, disk), ssh_client=con_ssh,
+                                           auth_info=auth_info)[1])
+    return table_parser.get_multi_values_two_col_table(table_, fields, evaluate=True)
+
+
+def get_host_disks_with_free_space(host, disk_list, auth_info=Tenant.get('admin_platform'), con_ssh=None):
+    """
+    Given a list of disks, return the ones with free space.
+
+    Arguments:
+        host(str) - hostname, e.g. ocntroller-0
+        disk_list (list) - list of disks
+        auth_info
+        con_ssh
+
+    Returns (dict): disks that have usable space.
+    """
+
+    free_disks = {}
+    for disk in disk_list:
+        LOG.info("Querying disk {} on host {}".format(disk, host))
+        available_space = float(get_host_disk_values(host, disk, fields='available_gib', auth_info=auth_info,
+                                                     con_ssh=con_ssh)[0])
+        LOG.info("{} has disk {} with {} gib available".format(host, disk, available_space))
+        if available_space <= 0:
+            LOG.info("Removing disk {} from host {} due to insufficient space".format(disk, host))
+        else:
+            free_disks[disk] = available_space
+
+    return free_disks
+
+
+def get_hosts_rootfs(hosts, auth_info=Tenant.get('admin_platform'), con_ssh=None):
+    """
+    This returns the rootfs disks of each node.
+
+    Arguments:
+    * hosts(list) - e.g. controller-0, controller-1, etc.
+
+    Returns:
+    * Dict of host mapped to rootfs disk
+    """
+
+    rootfs_uuid = {}
+    for host in hosts:
+        rootfs_device = system_helper.get_host_values(host, 'rootfs_device', auth_info=auth_info, con_ssh=con_ssh)[0]
+        LOG.debug("{} is using rootfs disk: {}".format(host, rootfs_device))
+        key = 'device_path'
+        if '/dev/disk' not in rootfs_device:
+            key = 'device_node'
+            rootfs_device = '/dev/{}'.format(rootfs_device)
+
+        disk_uuids = get_host_disks(host, 'uuid', auth_info=auth_info, con_ssh=con_ssh, **{key: rootfs_device})
+        rootfs_uuid[host] = disk_uuids
+
+    LOG.info("Root disk UUIDS: {}".format(rootfs_uuid))
+    return rootfs_uuid
+
+
+def get_controllerfs_list(field='Size in GiB', fs_name=None, con_ssh=None, auth_info=Tenant.get('admin_platform'),
+                          **filters):
+    table_ = table_parser.table(cli.system('controllerfs-list --nowrap', ssh_client=con_ssh, auth_info=auth_info)[1])
+
+    if fs_name:
+        filters['FS Name'] = fs_name
+
+    return table_parser.get_multi_values(table_, field, evaluate=True, **filters)
+
+
+def get_controllerfs_values(filesystem, fields='size', rtn_dict=False, auth_info=Tenant.get('admin_platform'),
+                            con_ssh=None):
+    """
+    Returns the value of a particular filesystem.
+
+    Arguments:
+    - fields (str|list|tuple) - what value to get, e.g. size
+    - filesystem(str) - e.g. scratch, database, etc.
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.system('controllerfs-show', filesystem, ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.get_multi_values_two_col_table(table_, fields, rtn_dict=rtn_dict, evaluate=True)
+
+
+def get_controller_fs_values(con_ssh=None, auth_info=Tenant.get('admin_platform')):
+    table_ = table_parser.table(cli.system('controllerfs-show', ssh_client=con_ssh, auth_info=auth_info)[1])
+
+    rows = table_parser.get_all_rows(table_)
+    values = {}
+    for row in rows:
+        values[row[0].strip()] = row[1].strip()
+    return values
+
+
+def modify_controllerfs(fail_ok=False, auth_info=Tenant.get('admin_platform'), con_ssh=None, **kwargs):
+    """
+    Modifies the specified controller filesystem, e.g. scratch, database, etc.
+
+    Arguments:
+    - kwargs - dict of name:value pair(s)
+    - fail_ok(bool) - True if failure is expected.  False if not.
+    """
+
+    attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
+    args_ = ' '.join(attr_values_)
+
+    rc, out = cli.system("controllerfs-modify", args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    if rc > 0:
+        return 1, out
+
+    msg = "Filesystem update succeeded"
+    LOG.info(msg)
+    return 0, msg
+
+
+def get_host_stors(host, field='uuid', auth_info=Tenant.get('admin_platform'), con_ssh=None):
+    """
+    Get host storage values from system host-stor-list
+    Args:
+        host:
+        field (str|tuple|list):
+        auth_info:
+        con_ssh:
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.system('host-stor-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.get_multi_values(table_, field, evaluate=True)
+
+
+def get_host_stor_values(host, stor_uuid, fields="size", auth_info=Tenant.get('admin_platform'), con_ssh=None):
+    """
+    Returns the value of a particular filesystem.
+
+    Arguments:
+        host
+        stor_uuid
+        fields (str|list|tuple)
+        auth_info
+        con_ssh
+
+    Returns (list):
+
+    """
+    args = '{} {}'.format(host, stor_uuid)
+    table_ = table_parser.table(cli.system('host-stor-show', args, ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.get_multi_values_two_col_table(table_, fields, evaluate=True)
+
+
+def get_storage_tiers(cluster, field='uuid', con_ssh=None, auth_info=Tenant.get('admin_platform'), **filters):
     """
 
     Args:
         cluster:
-        rtn_val:
+        field (str|tuple|list):
         con_ssh:
         auth_info:
         **filters:
@@ -1060,16 +1433,15 @@ def get_storage_tier_values(cluster, rtn_val='uuid', con_ssh=None, auth_info=Ten
     Returns:
 
     """
-
     table_ = table_parser.table(cli.system('storage-tier-list {}'.format(cluster), ssh_client=con_ssh,
                                            auth_info=auth_info), combine_multiline_entry=True)
-    return table_parser.get_values(table_, **filters)
+    return table_parser.get_multi_values(table_, field, **filters)
 
 
-def add_storage_ceph_osd(host, disk_uuid, journal_location=None, journal_size=None, function=None, tier_uuid=None,
-                         auth_info=Tenant.get('admin'), con_ssh=None, fail_ok=False):
+def add_host_storage(host, disk_uuid, journal_location=None, journal_size=None, function=None, tier_uuid=None,
+                     auth_info=Tenant.get('admin_platform'), con_ssh=None, fail_ok=False):
     """
-
+    Add storage to host
     Args:
         host:
         disk_uuid:
@@ -1081,30 +1453,34 @@ def add_storage_ceph_osd(host, disk_uuid, journal_location=None, journal_size=No
         con_ssh:
         fail_ok:
 
-    Returns:
+    Returns (tuple):
 
     """
     if not host or not disk_uuid:
         raise ValueError("host name and disk uuid must be specified")
 
-    cmd = "host-stor-add"
+    args_dict = {
+        '--journal-location': journal_location,
+        '--journal-size': journal_size,
+        '--tier-uuid': tier_uuid
+    }
+    args = common.parse_args(args_dict)
 
-    args = ""
-    if journal_location:
-        args += " --journal-location {}".format(journal_location)
-    if journal_size:
-        args += " --journal-size {}".format(journal_size)
-    if tier_uuid:
-        args += " --tier-uuid {}".format(tier_uuid)
+    function = ' {}'.format(function) if function else ''
+    args += " {} {}{}".format(host, function, disk_uuid)
+    LOG.info("Adding storage to {}".format(host))
+    rc, output = cli.system('host-stor-add', ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    if rc > 0:
+        return 1, output
 
-    cmd += " {} {}{} {}".format(args, host, function if function else '', disk_uuid)
-    rc, output = cli.system(cmd, ssh_client=con_ssh, auth_info=auth_info, fail_ok=fail_ok, rtn_code=True)
-    if rc != 0:
-        msg = "Fail to add ceph osd to host {} disk {}".format(host, disk_uuid)
-        LOG.warning(msg)
-        if fail_ok:
-            return 1, msg
-        else:
-            raise exceptions.StorageError(msg)
+    table_ = table_parser.table(output)
+    uuid = table_parser.get_value_two_col_table(table_, 'uuid')
+    LOG.info("Storage added to {} successfully: {}".format(host, uuid))
+    return 0, uuid
 
-    return 0, None
+
+def clear_local_storage_cache(host, con_ssh=None):
+    with host_helper.ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
+        with host_ssh.login_as_root() as root_ssh:
+            root_ssh.exec_cmd('rm -rf /var/lib/nova/instances/_base/*', fail_ok=True)
+            root_ssh.exec_cmd('sync;echo 3 > /proc/sys/vm/drop_caches', fail_ok=True)
