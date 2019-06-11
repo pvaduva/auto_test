@@ -65,11 +65,11 @@ def pytest_configure(config):
     else:
         raise ValueError("Lab name must be provided")
 
-    vswitch_types = [VSWITCH_TYPES.OVS, VSWITCH_TYPES.OVS_DPDK, VSWITCH_TYPES.AVS]
+    vswitch_types = [VSWITCH_TYPES.OVS, VSWITCH_TYPES.OVS_DPDK, VSWITCH_TYPES.AVS, VSWITCH_TYPES.NONE]
     if vswitch_type not in vswitch_types:
         raise ValueError("Invalid vswitch type {}; Valid types are: {} ".format(vswitch_type, vswitch_types))
     if vswitch_type == VSWITCH_TYPES.OVS_DPDK and no_openstack:
-        raise ValueError("Invalid vswitch type; For platform only or no openstack install the vswitch type must be ovs"
+        raise ValueError("Invalid vswitch type = {}; For platform only or no openstack install the vswitch type must be ovs"
                          " or none.".format(vswitch_type))
 
     is_subcloud, sublcoud_name, dc_float_ip = setups.is_lab_subcloud(lab_dict)

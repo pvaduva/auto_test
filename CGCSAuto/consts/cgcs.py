@@ -768,3 +768,4 @@ class VSWITCH_TYPES:
     OVS = 'ovs'
     OVS_DPDK = 'ovs-dpdk'
     AVS = 'avs'
+    NONE = 'none'
