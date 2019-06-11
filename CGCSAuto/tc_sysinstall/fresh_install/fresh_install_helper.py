@@ -6,14 +6,14 @@ from pytest import skip
 
 import setups
 from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \
-    keystone_helper, common
+    keystone_helper
 from utils import cli
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
 from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto
 from consts.timeout import InstallTimeout, HostTimeout
-from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState
+from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState, VSWITCH_TYPES
 from consts.filepaths import BuildServerPath, WRSROOT_HOME, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
 
@@ -592,24 +592,41 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def run_lab_setup(con_ssh, conf_file=None, final_step=None, ovs=None, repeat=1, last_run=False):
+def run_lab_setup(con_ssh, conf_file=None, final_step=None, repeat=1, last_run=False):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
-    ovs = InstallVars.get_install_var("OVS") if ovs is None else ovs
+    vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
+    deploy_openstack = InstallVars.get_install_var("DEPLOY_OPENSTACK")
     if conf_file is None:
         conf_file = 'lab_setup'
-    if ovs and lab_setup_count == 0:
+
+    vswitch_type_none = True if not deploy_openstack else False
+
+    if(vswitch_type in [VSWITCH_TYPES.OVS, VSWITCH_TYPES.OVS_DPDK]) and lab_setup_count == 0:
         if con_ssh.exec_cmd("test -f {}_ovs.conf".format(conf_file))[0] == 0:
             LOG.debug("setting up ovs lab_setup configuration")
             con_ssh.exec_cmd("rm {}.conf; mv {}_ovs.conf {}.conf".format(conf_file, conf_file, conf_file))
-        vswitch_type_none = InstallVars.get_install_var("VSWITCH_TYPE_NONE")
-        if vswitch_type_none:
-            con_ssh.exec_cmd("sed -i \'s/VSWITCH_TYPE=\"ovs-dpdk\"/VSWITCH_TYPE=\"none\"/g\' {}.conf"
-                             .format(conf_file))
+
+        rc, output = con_ssh.exec_cmd("grep \'VSWITCH_TYPE=\' {}.conf".format(conf_file), fail_ok=True)
+        if rc == 0:
+            vswitch_type_from_config = output.strip().split('"')[1]
+        else:
+            vswitch_type_from_config = None
+
+        if vswitch_type in [VSWITCH_TYPES.OVS, "none"] and vswitch_type_none:
+            con_ssh.exec_cmd("sed -i \'s/VSWITCH_TYPE=\"{}\"/VSWITCH_TYPE=\"none\"/g\' {}.conf"
+                             .format(vswitch_type_from_config, conf_file))
             rc, output = con_ssh.exec_cmd("grep \'VSWITCH_PCPU=\' {}.conf".format(conf_file), fail_ok=True)
             if rc == 0:
                 con_ssh.exec_cmd("sed -i \"s/{}/VSWITCH_PCPU=0/g\" {}.conf".format(output.strip(), conf_file))
             else:
                 con_ssh.exec_cmd("echo \'VSWITCH_PCPU=0\' >> {}.conf".format(conf_file))
+
+        if not vswitch_type_none:
+            if vswitch_type_from_config and vswitch_type != vswitch_type_from_config:
+                con_ssh.exec_cmd("sed -i \'s/VSWITCH_TYPE=\"{}\"/VSWITCH_TYPE=\"{}\"/g\' {}.conf"
+                                 .format(vswitch_type_from_config, vswitch_type, conf_file))
+            elif not vswitch_type_from_config:
+                con_ssh.exec_cmd("echo \'VSWITCH_TYPE=\"{}\"\' >> {}.conf".format(vswitch_type, conf_file))
 
     test_step = "Run lab setup"
     LOG.tc_step(test_step)

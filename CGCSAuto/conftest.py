@@ -588,7 +588,6 @@ def pytest_addoption(parser):
     helm_chart_path_help = 'Full path to Helm charts files. Default is <build-dir>/std/build-helm/stx'
     unmanaged_install_help = 'flag to leave subcloud as unmanaged after install.'
     extract_deploy_help = "flag whether to extract deployment yaml files"
-    vswitch_type_none_help = "flag to reset the vswitch type to none type before running labsetup."
     vswitch_type_help = 'Select the vswitch type to install. Default is pxe. Options are: \n' \
                         'ovs \n' \
                         'ovs-dpdk: a default value \n' \
@@ -609,7 +608,6 @@ def pytest_addoption(parser):
                      default=None, help=heat_help)
     parser.addoption('--iso-path', '--isopath', '--iso_path', dest='iso_path', action='store', default=None,
                      help=iso_path_help)
-    parser.addoption('--ovs', '--OVS', dest='ovs_config', action='store_true', help=ovs_help)
     parser.addoption('--kubernetes', '--kuber', '--kub', dest='kubernetes_config', action='store_true', help=kuber_help)
     parser.addoption('--dc-float-ip', '--dc_float_ip', '--dcfip', dest='dc_float_ip', action='store', default=None,
                      help=dcfloatip_help)
@@ -625,10 +623,9 @@ def pytest_addoption(parser):
                      help=unmanaged_install_help)
     parser.addoption('--extract-deploy-config', '--extract-deploy', '--ext-deploy',  dest='extract_deploy_config',
                      action='store_true', default=False, help=extract_deploy_help)
-    parser.addoption('--vswitch-type', dest='vswitch_type_list', action='store', default='ovs-dpdk',
+    parser.addoption('--vswitch-type', '--vswitch', dest='vswitch_type', action='store', default='ovs-dpdk',
                      help=vswitch_type_help)
-    parser.addoption('--vswitch-type-none',  '--vswitch-none',  dest='vswitch_type_none',
-                     action='store_true', default=False, help=vswitch_type_none_help)
+
 
     # Note --lab is also a lab fresh_install option, when config file is not provided.
 

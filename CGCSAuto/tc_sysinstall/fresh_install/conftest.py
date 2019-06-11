@@ -7,6 +7,7 @@ from utils.node import Node
 from utils.jenkins_utils import build_info
 from consts.proj_vars import InstallVars, ProjVar
 from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.cgcs import VSWITCH_TYPES
 from tc_sysinstall.fresh_install import fresh_install_helper
 from keywords import host_helper
 
@@ -44,7 +45,6 @@ def pytest_configure(config):
     stop_step = config.getoption('stop_step')
     drop_num = config.getoption('drop_num')
     patch_dir = config.getoption('patch_dir')
-    ovs = config.getoption('ovs_config')
     kubernetes = config.getoption('kubernetes_config')
     no_openstack = config.getoption('no_openstack')
     deploy_openstack_from_controller_1 = config.getoption('deploy_openstack_from_controller_1')
@@ -52,8 +52,7 @@ def pytest_configure(config):
     helm_chart_path = config.getoption('helm_chart_path')
     no_manage = config.getoption('no_manage')
     extract_deploy_config = config.getoption('extract_deploy_config')
-    vswitch_type_none = config.getoption('vswitch_type_none')
-    vswitch_type = config.getoption('vswitch_type_list')
+    vswitch_type = config.getoption('vswitch_type')
 
     if lab_arg:
         lab_dict = setups.get_lab_dict(lab_arg)
@@ -65,6 +64,13 @@ def pytest_configure(config):
             lab_name = None
     else:
         raise ValueError("Lab name must be provided")
+
+    vswitch_types = [VSWITCH_TYPES.OVS, VSWITCH_TYPES.OVS_DPDK, VSWITCH_TYPES.AVS]
+    if vswitch_type not in vswitch_types:
+        raise ValueError("Invalid vswitch type {}; Valid types are: {} ".format(vswitch_type, vswitch_types))
+    if vswitch_type == VSWITCH_TYPES.OVS_DPDK and no_openstack:
+        raise ValueError("Invalid vswitch type; For platform only or no openstack install the vswitch type must be ovs"
+                         " or none.".format(vswitch_type))
 
     is_subcloud, sublcoud_name, dc_float_ip = setups.is_lab_subcloud(lab_dict)
 
@@ -133,7 +139,7 @@ def pytest_configure(config):
             build_server=build_server, files_server=files_server,
             license_path=install_license, guest_image=guest_image,
             heat_templates=heat_templates, boot=boot_type, iso_path=iso_path,
-            security=security, low_latency=low_lat, stop=stop_step, ovs=ovs, vswitch_type=vswitch_type,
+            security=security, low_latency=low_lat, stop=stop_step, vswitch_type=vswitch_type,
             boot_server=boot_server, resume=resume_install, skip=skiplist,
             kubernetes=kubernetes, helm_chart_path=helm_chart_path)
 
@@ -142,12 +148,12 @@ def pytest_configure(config):
             installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
             controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
             boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
-            patch_dir=patch_dir, ovs=ovs, vswitch_type=vswitch_type, boot_server=boot_server, dc_float_ip=dc_float_ip,
+            patch_dir=patch_dir, vswitch_type=vswitch_type, boot_server=boot_server, dc_float_ip=dc_float_ip,
             install_subcloud=sublcoud_name, kubernetes=kubernetes,
             no_openstack=no_openstack, ipv6_config=ipv6_config,
             helm_chart_path=helm_chart_path, no_manage=no_manage,
             deploy_openstack_from_controller_1=deploy_openstack_from_controller_1,
-            extract_deploy_config=extract_deploy_config, vswitch_type_none=vswitch_type_none)
+            extract_deploy_config=extract_deploy_config)
 
     frame_str = '*'*len('Install Arguments:')
     print("\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str))

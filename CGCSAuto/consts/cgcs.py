@@ -763,3 +763,8 @@ class AppStatus:
     APPLY_FAILED = 'apply-failed'
     REMOVE_FAILED = 'remove-failed'
     DELETE_FAILED = 'delete-failed'
+
+class VSWITCH_TYPES:
+    OVS = 'ovs'
+    OVS_DPDK = 'ovs-dpdk'
+    AVS = 'avs'

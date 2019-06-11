@@ -123,7 +123,6 @@ class InstallVars:
                          patch_dir=None,
                          multi_region=False,
                          dist_cloud=False,
-                         ovs=False,
                          vswitch_type="ovs-dpdk",
                          kubernetes=False,
                          resume=False,
@@ -137,8 +136,7 @@ class InstallVars:
                          helm_chart_path=None,
                          helm_chart_server=None,
                          no_manage=False,
-                         extract_deploy_config=False,
-                         vswitch_type_none=False):
+                         extract_deploy_config=False):
 
         cls.__var_dict = {
             'LAB': lab,
@@ -149,7 +147,6 @@ class InstallVars:
             'WIPEDISK': wipedisk,
             'MULTI_REGION': multi_region,
             'DISTRIBUTED_CLOUD': dist_cloud,
-            'OVS': ovs,
             'VSWITCH_TYPE': vswitch_type,
             "KUBERNETES": kubernetes,
             "DEPLOY_OPENSTACK": deploy_openstack,
@@ -192,8 +189,7 @@ class InstallVars:
             'CONTROLLER0_CEPH_MON_DEVICE': controller0_ceph_mon_device,
             'CONTROLLER1_CEPH_MON_DEVICE': controller1_ceph_mon_device,
             'CEPH_MON_GIB': ceph_mon_gib,
-            'EXTRACT_DEPLOY_CONFIG': extract_deploy_config,
-            'VSWITCH_TYPE_NONE': vswitch_type_none
+            'EXTRACT_DEPLOY_CONFIG': extract_deploy_config
         }
 
     @classmethod
