@@ -13,7 +13,7 @@ from consts.cgcs import Networks, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RA
 from consts.filepaths import UserData, WRSROOT_HOME
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
-from keywords import common, keystone_helper, host_helper, system_helper, vm_helper
+from keywords import common, keystone_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import NATBoxClient, get_cli_client, ControllerClient
@@ -2849,6 +2849,7 @@ def get_tenant_routers_for_vms(vms, con_ssh=None, auth_info=Tenant.get('admin'))
 
     router_ids, router_projects = get_routers(auth_info=auth_info, con_ssh=con_ssh, field=('ID', 'Project'))
     vms_routers = []
+    from keywords import vm_helper
     for i in range(len(router_ids)):
         router_project = router_projects[i]
         vms_with_router = vm_helper.get_vms(vms=vms, project=router_project, all_projects=False,
