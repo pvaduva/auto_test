@@ -11,7 +11,7 @@ def setup_port_security():
 
     LOG.fixture_step("Copy userdata files from test server to active controller")
     for i in (1, 2):
-        source = "{}/port_security/vm{}-userdata.txt".format(TestServerPath.USER_DATA, i)
+        source = "{}/port_security/vm{}-userdata.txt".format(TestServerPath.TEST_FILES, i)
         common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=TiSPath.USERDATA)
 
     LOG.fixture_step("Enable port security ml2 extension driver on system")

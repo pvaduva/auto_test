@@ -279,7 +279,6 @@ class SvcCgcsAuto:
     USER = 'svc-cgcsauto'
     PASSWORD = ')OKM0okm'
     VLM_PASSWORD = 'wrssvc-cgcsauto'
-    HOME = '/home/svc-cgcsauto'
     SANDBOX = '/sandbox'
     HOSTNAME = 'yow-cgcs-test'
     PROMPT = r'[\[]?svc-cgcsauto@.*\$[ ]?'

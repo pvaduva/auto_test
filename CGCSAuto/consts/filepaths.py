@@ -47,8 +47,7 @@ class HeatTemplate:
 
 
 class TestServerPath:
-    USER_DATA = '/home/svc-cgcsauto/userdata/'
-    TEST_SCRIPT = '/home/svc-cgcsauto/test_scripts/'
+    TEST_FILES = '/sandbox/test_files/'
     CUSTOM_HEAT_TEMPLATES = '/sandbox/custom_heat_templates/'
     CUSTOM_APPS = '/sandbox/custom_apps/'
 

@@ -69,7 +69,7 @@
 #     the test.
 #
 #     A script lab_infra_post_install_setup,sh is required to run this testcase. The script is saved in Test Server
-#     /home/svc-cgcsauto/test_scripts and is downloaded during the test. An  infra interface configuration file
+#     /sandbox/test_files/test_scripts and is downloaded during the test. An  infra interface configuration file
 #     ( lab_infra_post_install_setup.conf) specific  to a lab is also required and must be saved in sysadmin home
 #     directory. The conf file should contain:
 #        -  First line:

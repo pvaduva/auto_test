@@ -124,7 +124,7 @@ def _check_ports_with_netstat(con_ssh, active_controller, ports):
 @fixture(scope='module')
 def get_custom_firewall_rule():
     custom_name = 'iptables.rules'
-    source = TestServerPath.TEST_SCRIPT + custom_name
+    source = TestServerPath.TEST_FILES + custom_name
     user_file_dir = ProjVar.get_var('USER_FILE_DIR')
     custom_path = common.scp_from_test_server_to_user_file_dir(source_path=source, dest_dir=user_file_dir,
                                                                dest_name=custom_name, central_region=True)

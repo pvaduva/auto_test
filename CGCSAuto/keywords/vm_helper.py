@@ -3483,7 +3483,7 @@ def _scp_net_config_cloud_init(guest_os):
     # cmd = 'wget {} --no-check-certificate -P {} -O {}'.format(img_url, img_dest, new_name)
     # con_ssh.exec_cmd(cmd, expect_timeout=7200, fail_ok=False)
 
-    source_path = '{}/userdata/{}'.format(SvcCgcsAuto.HOME, dest_name)
+    source_path = os.path.join(TestServerPath.TEST_FILES, dest_name)
     LOG.info('scp image from test server to active controller')
 
     scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}@{}:{} {}'.format(
@@ -3608,7 +3608,7 @@ def _get_cloud_config_add_user(con_ssh=None):
         LOG.info('userdata {} already exists. Return existing path'.format(file_path))
         return file_path
 
-    source_file = TestServerPath.USER_DATA + file_name
+    source_file = os.path.join(TestServerPath.TEST_FILES, file_name)
     dest_path = common.scp_from_test_server_to_user_file_dir(source_path=source_file, dest_dir=file_dir,
                                                              dest_name=file_name, con_ssh=con_ssh)
     if dest_path is None:

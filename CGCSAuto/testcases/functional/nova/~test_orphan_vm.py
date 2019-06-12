@@ -55,7 +55,7 @@ def orphan_audit_setup(request):
     vm_host = host_helper.get_up_hypervisors()[0]
 
     LOG.fixture_step("SCP orphan_guest.xml to active controller")
-    source_file = TestServerPath.USER_DATA + 'orphan_guest.xml'
+    source_file = TestServerPath.TEST_FILES + 'orphan_guest.xml'
     common.scp_from_test_server_to_active_controller(source_file, dest_dir=SYSADMIN_HOME, dest_name='orphan_guest.xml',
                                                      timeout=120, con_ssh=None)
 

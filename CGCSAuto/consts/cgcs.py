@@ -225,10 +225,9 @@ class Prompt:
     VXWORKS_PROMPT = '-> '
 
     ADMIN_PROMPT = r'\[sysadmin@controller\-[01].*\(keystone_admin\)\]\$'
-    # ADMIN_PROMPT = r'\[sysadmin@controller\-[01] .*\(keystone_admin\)\]\$ |.*@controller-0.*backups.*\$ '
     TENANT1_PROMPT = r'\[sysadmin@controller\-[01] .*\(keystone_tenant1\)\]\$ '
     TENANT2_PROMPT = r'\[sysadmin@controller\-[01] .*\(keystone_tenant2\)\]\$ '
-    TENANT_PROMPT = r'\[sysadmin@controller\-[01] .*\(keystone_{}\)\]\$ '   # general prompt. Need to fill in tenant name
+    TENANT_PROMPT = r'\[sysadmin@controller\-[01] .*\(keystone_{}\)\]\$ '  # general prompt. Need to fill in tenant name
     REMOTE_CLI_PROMPT = r'\(keystone_{}\)\]\$ '     # remote cli prompt
 
     COMPUTE_PROMPT = r'.*compute\-([0-9]){1,}\:~\$'
