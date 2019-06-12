@@ -926,7 +926,7 @@ def get_default_keypair(auth_info=None, con_ssh=None):
     # Assume that public key file already exists since it should have been set up in session config.
     # In the case of public key file does not exist, there should be existing nova keypair, so it should not
     # reach this step. Config done via setups.setup_keypair()
-    keyfile_stx_final = ProjVar.get_var('STX_KEYFILE_WRS_HOME')
+    keyfile_stx_final = ProjVar.get_var('STX_KEYFILE_SYS_HOME')
     public_key_stx = '{}.pub'.format(keyfile_stx_final)
     LOG.info("Create nova keypair {} using public key {}".format(keypair_name, public_key_stx))
     nova_helper.create_keypair(keypair_name, public_key=public_key_stx, auth_info=auth_info, con_ssh=con_ssh)
@@ -3590,7 +3590,7 @@ def _create_cloud_init_if_conf(guest_os, nics_num):
 def _get_cloud_config_add_user(con_ssh=None):
     """
     copy the cloud-config userdata to TiS server.
-    This userdata adds wrsroot/li69nux user to guest
+    This userdata adds sysadmin/li69nux user to guest
 
     Args:
         con_ssh (SSHClient):
@@ -3599,7 +3599,7 @@ def _get_cloud_config_add_user(con_ssh=None):
 
     """
     file_dir = ProjVar.get_var('USER_FILE_DIR')
-    file_name = UserData.ADDUSER_WRSROOT
+    file_name = UserData.ADDUSER_SYSADMIN
     file_path = file_dir + file_name
 
     if con_ssh is None:

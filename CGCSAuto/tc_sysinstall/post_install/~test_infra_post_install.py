@@ -1,6 +1,6 @@
 # from pytest import fixture, skip
 #
-# from consts.filepaths import WRSROOT_HOME, TestServerPath
+# from consts.filepaths import SYSADMIN_HOME, TestServerPath
 # from consts.proj_vars import ProjVar
 # from keywords import install_helper, host_helper, system_helper, common
 # from utils.clients.ssh import ControllerClient
@@ -31,13 +31,13 @@
 #          skip("infra network is already configured  in the system {}".format(lab['name']))
 #
 #     LOG.fixture_step('Verify if lab infra post install script and config file exist')
-#     cmd = "test -f {}".format(WRSROOT_HOME + INFRA_POST_INSTALL_SCRIPT)
+#     cmd = "test -f {}".format(SYSADMIN_HOME + INFRA_POST_INSTALL_SCRIPT)
 #     con_ssh = ControllerClient.get_active_controller()
 #     rc,  output = con_ssh.exec_cmd(cmd)
 #     if rc != 0:
 #         LOG.info("Down load infra post install script from test server")
 #         source_file = TestServerPath.TEST_SCRIPT + INFRA_POST_INSTALL_SCRIPT
-#         common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=WRSROOT_HOME)
+#         common.scp_from_test_server_to_active_controller(source_path=source_file, dest_dir=SYSADMIN_HOME)
 #         rc,  output = con_ssh.exec_cmd(cmd)
 #         if rc != 0:
 #             msg = "The {} script file is required to configure infra post initial installation: {}".\
@@ -45,7 +45,7 @@
 #             LOG.info(msg)
 #             return False, lab_type
 #
-#     cmd = "test -f {}".format(WRSROOT_HOME + INFRA_POST_INSTALL_CONFIG)
+#     cmd = "test -f {}".format(SYSADMIN_HOME + INFRA_POST_INSTALL_CONFIG)
 #     rc,  output = con_ssh.exec_cmd(cmd)
 #     if rc != 0:
 #         msg = "The {}  file is required to configure infra post initial installation: {}".\
@@ -70,7 +70,7 @@
 #
 #     A script lab_infra_post_install_setup,sh is required to run this testcase. The script is saved in Test Server
 #     /home/svc-cgcsauto/test_scripts and is downloaded during the test. An  infra interface configuration file
-#     ( lab_infra_post_install_setup.conf) specific  to a lab is also required and must be saved in wrsroot home
+#     ( lab_infra_post_install_setup.conf) specific  to a lab is also required and must be saved in sysadmin home
 #     directory. The conf file should contain:
 #        -  First line:
 #               source ${HOME}/lab_setup.conf

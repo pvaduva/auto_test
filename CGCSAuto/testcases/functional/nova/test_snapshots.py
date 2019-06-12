@@ -43,7 +43,7 @@ def test_create_snapshot_using_boot_from_image_vm():
     LOG.tc_step("Create a snapshot based on that VM")
     image_id = vm_helper.create_image_from_vm(vm_id, cleanup='function')[1]
 
-    image_filename = '/home/wrsroot/images/temp'
+    image_filename = '/home/sysadmin/images/temp'
     LOG.tc_step("Download the image snapshot")
     glance_cmd = "image save --file {} {}".format(image_filename, image_id)
     # Throw exception if glance cmd rejected
@@ -141,7 +141,7 @@ def test_create_snapshot_using_boot_from_volume_vm():
     image_name = "cinder_upload"
     glance_helper.create_image(name=image_name, volume=snapshot_vol_id, auth_info=None, cleanup='function')
 
-    image_filename = '/home/wrsroot/images/temp'
+    image_filename = '/home/sysadmin/images/temp'
     LOG.tc_step("Download the image snapshot")
     cmd = "image save --file {} {}".format(image_filename, image_id)
     cli.openstack(cmd, ssh_client=con_ssh, fail_ok=False)

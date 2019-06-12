@@ -161,7 +161,7 @@ def test_configure_external_ceph(ceph_lab, ceph_services):
     source_lab_name = ceph_lab['short_name']
 
     source_filepath = "/etc/ceph/ceph.conf"
-    dest_filepath = "/home/wrsroot/ceph_{}.conf".format(source_lab_name)
+    dest_filepath = "/home/sysadmin/ceph_{}.conf".format(source_lab_name)
 
     con_ssh.scp_on_dest(source_user=HostLinuxCreds.get_user(), source_ip=source_server,
                         source_pswd=HostLinuxCreds.get_password(), source_path=source_filepath,

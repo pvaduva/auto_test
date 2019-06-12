@@ -279,11 +279,11 @@ def sys_reboot_storage():
 
 
 def launch_lab_setup_tenants_vms():
-    stack1 = "/home/wrsroot/lab_setup-tenant1-resources.yaml"
+    stack1 = "/home/sysadmin/lab_setup-tenant1-resources.yaml"
     stack1_name = "lab_setup-tenant1-resources"
-    stack2 = "/home/wrsroot/lab_setup-tenant2-resources.yaml"
+    stack2 = "/home/sysadmin/lab_setup-tenant2-resources.yaml"
     stack2_name = "lab_setup-tenant2-resources"
-    script_name = "/home/wrsroot/create_resource_stacks.sh"
+    script_name = "/home/sysadmin/create_resource_stacks.sh"
 
     con_ssh = ControllerClient.get_active_controller()
     if con_ssh.file_exists(file_path=script_name):

@@ -20,7 +20,7 @@ from consts.proj_vars import ProjVar
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout, CMDTimeout
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
     EventLogID, HostTask, TrafficControl, PLATFORM_NET_TYPES, AppStatus, PLATFORM_AFFINE_INCOMPLETE, \
     FlavorSpec, STORAGE_AGGREGATE
@@ -2776,7 +2776,7 @@ def get_coredumps_and_crashreports(move=True):
     core_dumps_and_reports = {}
     active_con = system_helper.get_active_controller_name()
     con_ssh = ControllerClient.get_active_controller()
-    con_dir = '{}/coredumps_and_crashreports/'.format(WRSROOT_HOME)
+    con_dir = '{}/coredumps_and_crashreports/'.format(SYSADMIN_HOME)
     con_ssh.exec_cmd('mkdir -p {}'.format(con_dir))
     scp_to_local = False
     ls_cmd = 'ls -l --time-style=+%Y-%m-%d_%H-%M-%S {} | grep --color=never -v total'

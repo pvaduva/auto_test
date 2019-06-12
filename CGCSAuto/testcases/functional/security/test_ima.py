@@ -190,7 +190,7 @@ def test_ima_no_event(operation, file_path):
         - create symlink of a monitored file
         - copy a root file with the proper IMA signature, the nexcute it
         - make file attribute changes, include: chgrp, chown, chmod
-        - create and execute a files as wrsroot
+        - create and execute a files as sysadmin
 
     Test Steps:
         - Perform specified operation on given file
@@ -236,10 +236,10 @@ def test_ima_no_event(operation, file_path):
         LOG.info("Changing group ownership of file")
         chgrp_file(dest_file, "wrs")
         LOG.info("Changing file ownership")
-        chown_file(dest_file, "wrsroot:wrs")
+        chown_file(dest_file, "sysadmin:wrs")
 
     elif operation == 'create_and_execute':
-        dest_file = "/home/wrsroot/TEMP"
+        dest_file = "/home/sysadmin/TEMP"
         create_and_execute(file_path=dest_file, sudo=False)
 
     LOG.tc_step("Ensure no IMA events are raised")
@@ -272,7 +272,7 @@ def test_ima_event_generation(operation, file_path):
     Following IMA violation scenarios are covered:
         - append/edit data to/of a monitored file, result in changing of the hash
         - dynamic library changes
-        - create and execute a files as wrsroot
+        - create and execute a files as sysadmin
 
     Test Steps:
     - Perform specified file operations
@@ -324,7 +324,7 @@ def test_ima_event_generation(operation, file_path):
         move_file(dest_file_nocsum, source_file)
 
     elif operation == 'create_and_execute':
-        dest_file = "/home/wrsroot/TEMP"
+        dest_file = "/home/sysadmin/TEMP"
         create_and_execute(file_path=dest_file, sudo=True)
 
     LOG.tc_step("Check for IMA event")

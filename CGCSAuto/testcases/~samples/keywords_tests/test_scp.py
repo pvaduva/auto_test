@@ -9,7 +9,7 @@ def test_scp_from_local():
     srcfile = os.path.join(os.path.expanduser('~'),
                                 'TiS_config.ini')
 
-    destfile = os.path.join('/home/wrsroot',
+    destfile = os.path.join('/home/sysadmin',
                                  'TiS_config.ini')
 
     destip = ControllerClient.get_active_controller().host
@@ -19,7 +19,7 @@ def test_scp_from_local():
 
 
 def test_scp_to_local():
-    srcdir = '/home/wrsroot/instances'
+    srcdir = '/home/sysadmin/instances'
 
     destdir = os.path.join(os.path.expanduser('~'))
 

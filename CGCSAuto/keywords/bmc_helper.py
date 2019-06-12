@@ -15,7 +15,7 @@ import re
 import ast
 
 from consts.auth import Tenant
-from consts.filepaths import WRSROOT_HOME, BMCPath
+from consts.filepaths import SYSADMIN_HOME, BMCPath
 from keywords import system_helper
 from utils import table_parser, cli, exceptions
 from utils.clients.ssh import ControllerClient
@@ -426,7 +426,7 @@ def clear_events(host):
     sensor_data_file = '/var/run/ipmitool/hwmond_{}_sensor_data'.format(host)
 
     # original_sensor_datafile = "/var/run/ipmitool/nokia_sensor_data.ok"
-    original_sensor_datafile = "{}/hwmond_{}_sensor_data".format(WRSROOT_HOME, host)
+    original_sensor_datafile = "{}/hwmond_{}_sensor_data".format(SYSADMIN_HOME, host)
 
     con_ssh = ControllerClient.get_active_controller()
 
@@ -440,12 +440,12 @@ def backup_sensor_data_files(hosts=None, con_ssh=None):
     elif isinstance(hosts, str):
         hosts = [hosts]
 
-    LOG.info("Check and ensure sensor data files for {} are copied to {} if available".format(hosts, WRSROOT_HOME))
+    LOG.info("Check and ensure sensor data files for {} are copied to {} if available".format(hosts, SYSADMIN_HOME))
 
     hosts_with_file = []
     con_ssh = ControllerClient.get_active_controller() if not con_ssh else con_ssh
     for host in hosts:
-        dest_path = "{}/hwmond_{}_sensor_data".format(WRSROOT_HOME, host)
+        dest_path = "{}/hwmond_{}_sensor_data".format(SYSADMIN_HOME, host)
         if con_ssh.file_exists(dest_path):
             hosts_with_file.append(host)
         else:
@@ -454,5 +454,5 @@ def backup_sensor_data_files(hosts=None, con_ssh=None):
                 con_ssh.exec_sudo_cmd('cp {} {}'.format(source_path, dest_path), fail_ok=False)
                 hosts_with_file.append(host)
 
-    LOG.info("Sensor data files for {} are copied to {}".format(hosts, WRSROOT_HOME))
+    LOG.info("Sensor data files for {} are copied to {}".format(hosts, SYSADMIN_HOME))
     return hosts

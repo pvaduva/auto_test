@@ -104,7 +104,7 @@ class TestVariousGuests:
             actions:
 
         Setups:
-            - scp various guest images from test server to /home/wrsroot/images     (session)
+            - scp various guest images from test server to /home/sysadmin/images     (session)
             - create glance image from it    (session)
 
         Test Steps:

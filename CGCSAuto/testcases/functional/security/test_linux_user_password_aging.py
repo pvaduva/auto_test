@@ -80,13 +80,13 @@ def change_password(connect, password, new_password, expecting_fail=False):
     return False
 
 
-def restore_wrsroot_password(current_password=None, target_password=None):
+def restore_sysadmin_password(current_password=None, target_password=None):
     global _host_users
-    old_passwords = _host_users[('active-controller', 'wrsroot')]
-    LOG.info('Restoring password for wrsroot, old_passwords:{}\n'.format(old_passwords))
+    old_passwords = _host_users[('active-controller', 'sysadmin')]
+    LOG.info('Restoring password for sysadmin, old_passwords:{}\n'.format(old_passwords))
 
     if not old_passwords or len(old_passwords) <= 1 or current_password == target_password:
-        LOG.info('Password for wrsroot did not change, no need to restore')
+        LOG.info('Password for sysadmin did not change, no need to restore')
         return
 
     current_password = old_passwords[-1] if current_password is None else current_password
@@ -102,22 +102,22 @@ def restore_wrsroot_password(current_password=None, target_password=None):
         current_password = new_password
         exclude_list.append(new_password)
 
-        LOG.info('wait after chaning password of wrsroot\n')
-        wait_after_change_wrsroot_password()
+        LOG.info('wait after chaning password of sysadmin\n')
+        wait_after_change_sysadmin_password()
 
     # original_password = old_passwords[0] if old_passwords else 'Li69nux*'
     original_password = 'Li69nux*' if target_password is None else target_password
 
-    LOG.info('Restore password of wrsroot to:{}'.format(original_password))
+    LOG.info('Restore password of sysadmin to:{}'.format(original_password))
 
-    security_helper.change_linux_user_password(current_password, original_password, user='wrsroot', host=current_host)
+    security_helper.change_linux_user_password(current_password, original_password, user='sysadmin', host=current_host)
     HostLinuxCreds.set_password(original_password)
-    LOG.info('Password for wrsroot is restored to:{}'.format(original_password))
+    LOG.info('Password for sysadmin is restored to:{}'.format(original_password))
 
     return original_password
 
 
-def restore_wrsroot_password_raw(connect, current_password, original_password, exclude_list):
+def restore_sysadmin_password_raw(connect, current_password, original_password, exclude_list):
     if current_password == original_password:
         LOG.info('Current password is the same as the original password?!, do nothing')
         return
@@ -131,11 +131,11 @@ def restore_wrsroot_password_raw(connect, current_password, original_password, e
         HostLinuxCreds.set_password(new_password)
         current_password = new_password
 
-    LOG.info('Restore password of wrsroot to:{}'.format(original_password))
+    LOG.info('Restore password of sysadmin to:{}'.format(original_password))
     change_password(connect, current_password, original_password)
 
     HostLinuxCreds.set_password(original_password)
-    LOG.info('Password for wrsroot is restored to:{}'.format(original_password))
+    LOG.info('Password for sysadmin is restored to:{}'.format(original_password))
 
 
 @fixture(scope="function", autouse=True)
@@ -144,13 +144,13 @@ def cleanup_test_users(request):
     def delete_test_users():
         global _host_users
 
-        restore_wrsroot_password(target_password=TARGET_PASSWORD)
+        restore_sysadmin_password(target_password=TARGET_PASSWORD)
 
         LOG.info('Deleting users created for testing\n')
         conn_to_ac = ControllerClient.get_active_controller()
         count = 0
         for (host, user), _ in _host_users.items():
-            if user == 'wrsroot' or user == HostLinuxCreds.get_user():
+            if user == 'sysadmin' or user == HostLinuxCreds.get_user():
                 LOG.info('-do not delete user:{} on host:{}\n'.format(user, host))
                 continue
 
@@ -184,12 +184,12 @@ def login_as_linux_user(user, password, host, cmd='whoami', expecting_fail=False
                  'host:{}, user:{}'.format(host, user))
             return False, ''
 
-    if user == 'wrsroot':
-        LOG.info('Login to the host:{} as "wrsroot"!\n'.format(host))
+    if user == 'sysadmin':
+        LOG.info('Login to the host:{} as "sysadmin"!\n'.format(host))
 
     LOG.info('Attempt to login to host:{}, user:{}, password:{}\n'.format(host, user, password))
     # todo: if host is the active-controller, ssh_to_host will ignore username
-    # and using 'wrsroot', which leads to error
+    # and using 'sysadmin', which leads to error
 
     cmd = '(date; uuid; hostname; {}) 2>/dev/null'.format(cmd)
     try:
@@ -253,13 +253,13 @@ def update_host_user(host, user, password):
     ('testuser02', 'Li69nux*', 'controller-1'),
     ('testuser03', 'Li69nux*', 'compute-0'),
 ))
-def test_non_wrsroot_not_propagating(user, password, host):
-    '''create only non wrsroot users'''
+def test_non_sysadmin_not_propagating(user, password, host):
+    '''create only non sysadmin users'''
 
     LOG.tc_step('Create user for test, user:{}, password:"{}", host:{}\n'.format(user, password, host))
 
-    if user == 'wrsroot':
-        skip('User name "wrsroot" is dedicated to the special Local Linux Account used by Administrator.')
+    if user == 'sysadmin':
+        skip('User name "sysadmin" is dedicated to the special Local Linux Account used by Administrator.')
         return
 
     hosts = system_helper.get_hosts(availability=[HostAvailState.AVAILABLE])
@@ -298,7 +298,7 @@ def test_non_wrsroot_not_propagating(user, password, host):
                      'other host:{}, user:{}, password:{}\n'.format(host, other_host, user, password))
 
 
-def wait_after_change_wrsroot_password():
+def wait_after_change_sysadmin_password():
     total_wait_time = MAX_WAIT_FOR_ALARM
     each_wait_time = 60
     waited_time = 0
@@ -322,15 +322,15 @@ def wait_after_change_wrsroot_password():
     return True
 
 
-def test_wrsroot_password_propagation():
+def test_sysadmin_password_propagation():
     global _host_users
 
-    LOG.tc_step('Attemp to change the password for wrsroot')
+    LOG.tc_step('Attemp to change the password for sysadmin')
 
-    user = 'wrsroot'
+    user = 'sysadmin'
     if user != HostLinuxCreds.get_user():
-        LOG.error('HostLinuxCreds.get_user() is NOT wrsroot')
-        skip('HostLinuxCreds.get_user() is NOT wrsroot')
+        LOG.error('HostLinuxCreds.get_user() is NOT sysadmin')
+        skip('HostLinuxCreds.get_user() is NOT sysadmin')
         return
 
     password = HostLinuxCreds.get_password()
@@ -341,12 +341,12 @@ def test_wrsroot_password_propagation():
     current_host = system_helper.get_active_controller_name()
 
     changed, changed_password = security_helper.change_linux_user_password(
-        password, new_password, user='wrsroot', host=current_host)
+        password, new_password, user='sysadmin', host=current_host)
 
     assert changed, \
-        'Failed to change wrsroot password, from {} to {} on host {}'.format(password, new_password, current_host)
+        'Failed to change sysadmin password, from {} to {} on host {}'.format(password, new_password, current_host)
 
-    LOG.info('OK, password changed for wrsroot, new password:{}, old password:{} on host:{}\n'.format(
+    LOG.info('OK, password changed for sysadmin, new password:{}, old password:{} on host:{}\n'.format(
         new_password, password, current_host))
 
     HostLinuxCreds.set_password(new_password)
@@ -354,7 +354,7 @@ def test_wrsroot_password_propagation():
 
     LOG.tc_step('Wait alarms for password changed raised and cleared')
 
-    wait_after_change_wrsroot_password()
+    wait_after_change_sysadmin_password()
     LOG.info('OK, alarms raised and cleared after previous password change')
 
     LOG.tc_step('Verify the new password populated to other hosts by logging to them')
@@ -362,7 +362,7 @@ def test_wrsroot_password_propagation():
     hosts = [ch for ch in system_helper.get_hosts(availability=[HostAvailState.AVAILABLE]) if current_host != ch]
 
     if len(hosts) < 1:
-        skip('No other host can test wrsroot with new password')
+        skip('No other host can test sysadmin with new password')
         return
 
     hosts = random.sample(hosts, min(len(hosts), 2))
@@ -375,21 +375,21 @@ def test_wrsroot_password_propagation():
     # try to change the password again using the original password
     LOG.info('Change password from  {} to {} again should not be successful'.format(password, new_password))
     changed, changed_password = security_helper.change_linux_user_password(
-        password, new_password, user='wrsroot', host=current_host)
+        password, new_password, user='sysadmin', host=current_host)
 
     assert not changed, \
         'Password change from {} to {} on host {} should fail'.format(password, new_password, current_host)
 
 
 
-def swact_host_after_reset_wrsroot_raw(connect, active_controller_name):
+def swact_host_after_reset_sysadmin_raw(connect, active_controller_name):
     cmd = 'source /etc/platform/openrc; system host-swact {}'.format(active_controller_name)
     prompt = r'controller-[01] \~\(keystone_admin\)'
     index, output = execute_cmd(connect, cmd, allow_fail=True, prompt=prompt)
     LOG.info('returned: index:{}, output:{}, cmd:{}\n'.format(index, output, cmd))
 
 
-def swact_host_after_reset_wrsroot(active_controller):
+def swact_host_after_reset_sysadmin(active_controller):
 
     current_host = system_helper.get_active_controller_name()
     LOG.info('swact host:{}'.format(current_host))
@@ -474,7 +474,7 @@ def execute_cmd(connect, cmd, allow_fail=False, prompt=Prompt.CONTROLLER_PROMPT)
     ('swact'),
     ('no-swact'),
 ))
-def test_wrsroot_aging_and_swact(swact):
+def test_sysadmin_aging_and_swact(swact):
     """
     Test password aging.
 
@@ -489,17 +489,17 @@ def test_wrsroot_aging_and_swact(swact):
     """
     global _host_users
 
-    LOG.tc_step('Change the aging settings of wrsroot')
-    if 'wrsroot' != HostLinuxCreds.get_user():
-        skip('Current User:{} is not wrsroot'.format(HostLinuxCreds.get_user()))
+    LOG.tc_step('Change the aging settings of sysadmin')
+    if 'sysadmin' != HostLinuxCreds.get_user():
+        skip('Current User:{} is not sysadmin'.format(HostLinuxCreds.get_user()))
         return
 
-    user = 'wrsroot'
+    user = 'sysadmin'
     original_password = HostLinuxCreds.get_password()
     active_controller = ControllerClient.get_active_controller()
     active_controller_name = system_helper.get_active_controller_name()
     host = lab_info.get_lab_floating_ip()
-    _host_users[('active-controller', 'wrsroot')] = [original_password]
+    _host_users[('active-controller', 'sysadmin')] = [original_password]
 
     LOG.info('Closing ssh connection to the active controller\n')
     active_controller.flush()
@@ -509,16 +509,16 @@ def test_wrsroot_aging_and_swact(swact):
     LOG.info('wait for {} seconds after closing the ssh connect to the active-controller'.format(wait_time))
     time.sleep(wait_time)
 
-    # command = 'chage -d 0 -M 0 wrsroot'
+    # command = 'chage -d 0 -M 0 sysadmin'
     # this is from the test plan
-    # sudo passwd -e wrsroot
-    command = 'sudo passwd -e wrsroot'
+    # sudo passwd -e sysadmin
+    command = 'sudo passwd -e sysadmin'
     LOG.info('changing password aging using command:\n{}'.format(command))
     connect = log_in_raw(host, user, original_password)
     LOG.info('sudo execute:{}\n'.format(command))
     code, output = execute_sudo_cmd(connect, command, original_password, expecting_fail=False)
     # code, output = active_controller.exec_sudo_cmd(command)
-    LOG.info('OK, aging settings of wrsroot was successfully changed with command:\n{}\ncode:{}, output:{}'.format(
+    LOG.info('OK, aging settings of sysadmin was successfully changed with command:\n{}\ncode:{}, output:{}'.format(
         command, code, output))
 
 
@@ -537,7 +537,7 @@ def test_wrsroot_aging_and_swact(swact):
     # and reset with new password
     new_password = set_password
     if new_password != original_password:
-        _host_users[('active-controller', 'wrsroot')].append(new_password)
+        _host_users[('active-controller', 'sysadmin')].append(new_password)
 
     HostLinuxCreds.set_password(new_password)
     exclude_list.append(new_password)
@@ -561,7 +561,7 @@ def test_wrsroot_aging_and_swact(swact):
 
     if swact == 'swact':
         LOG.tc_step('Swact host')
-        swact_host_after_reset_wrsroot_raw(connect, active_controller_name)
+        swact_host_after_reset_sysadmin_raw(connect, active_controller_name)
         LOG.info('OK, host swact')
 
     LOG.info('Closing raw ssh connection to the active controller\n')
@@ -578,8 +578,8 @@ def test_wrsroot_aging_and_swact(swact):
 
     LOG.tc_step('Restore the password ')
 
-    # restore_wrsroot_password_raw(connect, new_password, original_password, exclude_list=exclude_list)
-    restore_wrsroot_password_raw(connect, current_password=new_password, original_password="Li69nux*", exclude_list=exclude_list)
+    # restore_sysadmin_password_raw(connect, new_password, original_password, exclude_list=exclude_list)
+    restore_sysadmin_password_raw(connect, current_password=new_password, original_password="Li69nux*", exclude_list=exclude_list)
 
     HostLinuxCreds.set_password(original_password)
     LOG.info('Close the connection to {} as user:{} with password:{}'.format(host, user, original_password))
@@ -692,7 +692,7 @@ def login_host_first_time(host, user, password, new_password, expect_fail=False,
             LOG.info('got error when closing connection:{}\n'.format(e))
 
         wait_time = 180
-        LOG.info('Wait {} seconds after change/reset the password of wrsroot'.format(wait_time))
+        LOG.info('Wait {} seconds after change/reset the password of sysadmin'.format(wait_time))
         time.sleep(wait_time)
 
         return True, new_password
@@ -766,16 +766,16 @@ def test_linux_user_lockout():
     Verify linux user account will be lockout after 5? failed attempts
 
     Test Steps:
-        - attempt to login with invalid password as wrsroot 5 times
-        - verify cannot login as wrsroot anymore
+        - attempt to login with invalid password as sysadmin 5 times
+        - verify cannot login as sysadmin anymore
     Returns:
 
     """
 
-    LOG.tc_step('Attempt to login with WRONG password as wrsroot {} times'.format(MAX_FAILED_LOGINS))
-    user = 'wrsroot'
+    LOG.tc_step('Attempt to login with WRONG password as sysadmin {} times'.format(MAX_FAILED_LOGINS))
+    user = 'sysadmin'
     if HostLinuxCreds.get_user() != user:
-        skip('Error: user name from HostLinuxCreds.get_user() != wrsroot, it is:{}'.format(HostLinuxCreds.get_user()))
+        skip('Error: user name from HostLinuxCreds.get_user() != sysadmin, it is:{}'.format(HostLinuxCreds.get_user()))
         return
 
     password = HostLinuxCreds.get_password()

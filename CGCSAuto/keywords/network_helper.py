@@ -10,7 +10,7 @@ import pexpect
 
 from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import Networks, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE, DevClassID, UUID
-from consts.filepaths import UserData, WRSROOT_HOME
+from consts.filepaths import UserData, SYSADMIN_HOME
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
 from keywords import common, keystone_helper, host_helper, system_helper
@@ -2979,7 +2979,7 @@ def collect_vswitch_info_on_host(host, vswitch_type, time_stamp, collect_extra_o
         # create log file for host under home dir
         # time_stamp = common.get_date_in_format(ssh_client=host_ssh, date_format='%Y%m%d_%H-%M')
         test_name = ProjVar.get_var("TEST_NAME").split(sep='[')[0]
-        file_name = os.path.join(WRSROOT_HOME, '{}-{}-{}-vswitch.log'.format(time_stamp, test_name, host))
+        file_name = os.path.join(SYSADMIN_HOME, '{}-{}-{}-vswitch.log'.format(time_stamp, test_name, host))
         host_ssh.exec_cmd('touch {}'.format(file_name))
 
         # Collect vswitch logs using collect tool
@@ -4245,7 +4245,7 @@ def get_internal_net_ids_on_vxlan(vxlan_provider_net_id, ip_version=4, mode='dyn
 def get_dpdk_user_data(con_ssh=None):
     """
     copy the cloud-config userdata to TiS server.
-    This userdata adds wrsroot/li69nux user to guest
+    This userdata adds sysadmin/li69nux user to guest
 
     Args:
         con_ssh (SSHClient):

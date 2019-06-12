@@ -8,7 +8,7 @@ from pytest import skip
 from consts.auth import Tenant
 from consts.cgcs import GuestImages, ImageMetadata
 from consts.proj_vars import ProjVar
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 from consts.timeout import ImageTimeout
 from keywords import common, system_helper, host_helper, dc_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -95,7 +95,7 @@ def is_image_storage_sufficient(img_file_path=None, guest_os=None, min_diff=0.05
     """
     Check if glance image storage disk is sufficient to create new glance image from specified image
     Args:
-        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        img_file_path (str): e.g., /home/sysadmin/images/tis-centos-guest.img
         guest_os (str): used if img_file_path is not provided. e,g., ubuntu_14, ge_edge, cgcs-guest, etc
         min_diff: minimum difference required between available space and specifiec size. e.g., 0.1G
         con_ssh (SSHClient): tis active controller ssh client
@@ -124,7 +124,7 @@ def get_image_file_info(img_file_path=None, guest_os=None, ssh_client=None):
     """
     Get image file info as dictionary
     Args:
-        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        img_file_path (str): e.g., /home/sysadmin/images/tis-centos-guest.img
         guest_os (str): has to be specified if img_file_path is unspecified. e.g., 'tis-centos-guest'
         ssh_client (SSHClient): e.g.,  test server ssh
 
@@ -167,7 +167,7 @@ def get_image_size(img_file_path=None, guest_os=None, virtual_size=False, ssh_cl
     """
     Get image virtual or actual size in GB via qemu-img info
     Args:
-        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        img_file_path (str): e.g., /home/sysadmin/images/tis-centos-guest.img
         guest_os (str): has to be specified if img_file_path is unspecified. e.g., 'tis-centos-guest'
         virtual_size:
         ssh_client:
@@ -198,7 +198,7 @@ def is_image_conversion_sufficient(img_file_path=None, guest_os=None, min_diff=0
     """
     Check if image conversion space is sufficient to convert given image to raw format
     Args:
-        img_file_path (str): e.g., /home/wrsroot/images/tis-centos-guest.img
+        img_file_path (str): e.g., /home/sysadmin/images/tis-centos-guest.img
         guest_os (str): has to be specified if img_file_path is unspecified. e.g., 'tis-centos-guest'
         min_diff (int): in GB
         con_ssh:
@@ -692,7 +692,7 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None, use
     Args:
         guest_os (str): valid values: ubuntu_12, ubuntu_14, centos_6, centos_7, opensuse_11, tis-centos-guest,
                 cgcs-guest, vxworks-guest, debian-8-m-agent
-        rm_image (bool): whether or not to rm image from /home/wrsroot/images after creating glance image
+        rm_image (bool): whether or not to rm image from /home/sysadmin/images after creating glance image
         check_disk (bool): whether to check if image storage disk is sufficient to create new glance image
         cleanup (str|None)
         use_existing (bool): whether to use existing guest image if exists
@@ -735,13 +735,13 @@ def get_guest_image(guest_os, rm_image=True, check_disk=False, cleanup=None, use
         # copy non-default img from test server
         dest_dir = GuestImages.DEFAULT['image_dir']
 
-        if check_disk and os.path.normpath(WRSROOT_HOME) in os.path.abspath(dest_dir):
+        if check_disk and os.path.normpath(SYSADMIN_HOME) in os.path.abspath(dest_dir):
             # Assume image file should not be present on system since large image file should get removed
             if not con_ssh:
                 con_ssh = ControllerClient.get_active_controller()
-            avail_wrsroot_home = get_avail_image_space(con_ssh=con_ssh, path=WRSROOT_HOME)
-            if avail_wrsroot_home < img_file_size:
-                skip("Insufficient space in {} for {} image to be copied to".format(WRSROOT_HOME, guest_os))
+            avail_sysadmin_home = get_avail_image_space(con_ssh=con_ssh, path=SYSADMIN_HOME)
+            if avail_sysadmin_home < img_file_size:
+                skip("Insufficient space in {} for {} image to be copied to".format(SYSADMIN_HOME, guest_os))
 
         image_path = scp_guest_image(img_os=guest_os, dest_dir=dest_dir)
 

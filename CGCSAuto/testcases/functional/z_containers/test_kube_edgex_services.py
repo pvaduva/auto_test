@@ -3,7 +3,7 @@ import os
 from pytest import fixture, mark, skip
 
 from keywords import kube_helper, system_helper, host_helper
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 from consts.cgcs import PodStatus, HostAvailState
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
@@ -11,8 +11,8 @@ from utils.clients.ssh import ControllerClient
 EDGEX_URL = 'https://github.com/rohitsardesai83/edgex-on-kubernetes/archive/master.zip'
 EDGEX_ARCHIVE = 'master.zip'
 EDGEX_HOME = 'edgex-on-kubernetes-master'
-EDGEX_START = '/home/wrsroot/edgex-on-kubernetes-master/hack/edgex-up.sh'
-EDGEX_STOP = '/home/wrsroot/edgex-on-kubernetes-master/hack/edgex-down.sh'
+EDGEX_START = '/home/sysadmin/edgex-on-kubernetes-master/hack/edgex-up.sh'
+EDGEX_STOP = '/home/sysadmin/edgex-on-kubernetes-master/hack/edgex-down.sh'
 
 
 @fixture(scope='module')
@@ -21,11 +21,11 @@ def deploy_edgex(request):
 
     LOG.fixture_step("Downloading EdgeX-on-Kubernetes")
     con_ssh.exec_cmd('wget {}'.format(EDGEX_URL), fail_ok=False)
-    charts_exist = con_ssh.file_exists(os.path.join(WRSROOT_HOME, EDGEX_ARCHIVE))
+    charts_exist = con_ssh.file_exists(os.path.join(SYSADMIN_HOME, EDGEX_ARCHIVE))
     assert charts_exist, '{} does not exist'.format(EDGEX_ARCHIVE)
 
     LOG.fixture_step("Extracting EdgeX-on-Kubernetes")
-    con_ssh.exec_cmd('unzip {}'.format(os.path.join(WRSROOT_HOME, EDGEX_ARCHIVE)), fail_ok=False)
+    con_ssh.exec_cmd('unzip {}'.format(os.path.join(SYSADMIN_HOME, EDGEX_ARCHIVE)), fail_ok=False)
 
     LOG.fixture_step("Deploying EdgeX-on-Kubernetes")
     con_ssh.exec_cmd(EDGEX_START, 300, fail_ok=False)
@@ -35,8 +35,8 @@ def deploy_edgex(request):
         con_ssh.exec_cmd(EDGEX_STOP, 300, fail_ok=False)
 
         LOG.fixture_step("Removing EdgeX-on-Kubernetes")
-        con_ssh.exec_cmd('rm -rf {} {}'.format(os.path.join(WRSROOT_HOME, EDGEX_ARCHIVE),
-                                               os.path.join(WRSROOT_HOME, EDGEX_HOME)))
+        con_ssh.exec_cmd('rm -rf {} {}'.format(os.path.join(SYSADMIN_HOME, EDGEX_ARCHIVE),
+                                               os.path.join(SYSADMIN_HOME, EDGEX_HOME)))
     request.addfinalizer(delete_edgex)
 
     return

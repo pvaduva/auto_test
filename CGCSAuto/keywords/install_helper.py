@@ -11,7 +11,7 @@ from consts.auth import Tenant, CliAuth
 from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, IMAGE_BACKUP_FILE_PATTERN, \
     CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
     PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH
-from consts.filepaths import WRSROOT_HOME, TiSPath, BuildServerPath, LogPath
+from consts.filepaths import SYSADMIN_HOME, TiSPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
 from consts.vlm import VlmAction
@@ -29,7 +29,7 @@ from utils.tis_log import LOG
 
 UPGRADE_LOAD_ISO_FILE = "bootimage.iso"
 UPGRADE_LOAD_SIG_FILE = "bootimage.sig"
-BACKUP_USB_MOUNT_POINT = '/media/wrsroot'
+BACKUP_USB_MOUNT_POINT = '/media/sysadmin'
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards/"
 CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
 
@@ -68,7 +68,7 @@ def download_upgrade_license(lab, server, license_path):
             external_ip = lab['external_ip']
             external_port = lab['external_port']
             server.ssh_conn.rsync("-L " + license_path, external_ip,
-                                  os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+                                  os.path.join(SYSADMIN_HOME, "upgrade_license.lic"),
                                   pre_opts=pre_opts, ssh_port=external_port)
         else:
             temp_path = '/tmp'
@@ -81,7 +81,7 @@ def download_upgrade_license(lab, server, license_path):
                                   pre_opts=local_pre_opts)
 
             common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
-                                                           dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
+                                                           dest_path=os.path.join(SYSADMIN_HOME, "upgrade_license.lic"))
 
             # server.ssh_conn.rsync("-L " + license_path, external_ip,
             #                       os.path.join(temp_path, "upgrade_license.lic"),
@@ -89,10 +89,10 @@ def download_upgrade_license(lab, server, license_path):
             #                       pre_opts=local_pre_opts)
             #
             # common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
-            #                                 dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
+            #                                 dest_path=os.path.join(SYSADMIN_HOME, "upgrade_license.lic"))
     else:
         server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'],
-                            os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+                            os.path.join(SYSADMIN_HOME, "upgrade_license.lic"),
                             pre_opts=pre_opts)
 
 
@@ -103,7 +103,7 @@ def download_license(lab, server, license_path, dest_name="upgrade_license"):
     assert server.ssh_conn.exec_cmd(cmd)[0] == 0,  '{} file not found in {}:{}'.format(dest_name.capitalize(),
                                                                                        server.name, license_path)
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-    dest_path = os.path.join(WRSROOT_HOME, "{}.lic".format(dest_name))
+    dest_path = os.path.join(SYSADMIN_HOME, "{}.lic".format(dest_name))
 
     if 'vbox' in lab['name']:
         if 'external_ip' in lab.keys():
@@ -122,7 +122,7 @@ def download_license(lab, server, license_path, dest_name="upgrade_license"):
                                   pre_opts=local_pre_opts)
 
             common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, "{}.lic".format(dest_name)),
-                                            dest_path=os.path.join(WRSROOT_HOME, "{}.lic".format(dest_name)))
+                                            dest_path=os.path.join(SYSADMIN_HOME, "{}.lic".format(dest_name)))
 
             # server.ssh_conn.rsync("-L " + license_path, external_ip,
             #                       os.path.join(temp_path, "upgrade_license.lic"),
@@ -130,7 +130,7 @@ def download_license(lab, server, license_path, dest_name="upgrade_license"):
             #                       pre_opts=local_pre_opts)
             #
             # common.scp_to_active_controller(source_path=os.path.join(temp_path, "upgrade_license.lic"),
-            #                                 dest_path=os.path.join(WRSROOT_HOME, "upgrade_license.lic"))
+            #                                 dest_path=os.path.join(SYSADMIN_HOME, "upgrade_license.lic"))
     else:
         server.ssh_conn.rsync("-L " + license_path, lab['controller-0 ip'], dest_path, pre_opts=pre_opts)
 
@@ -154,7 +154,7 @@ def download_upgrade_load(lab, server, load_path, upgrade_ver):
             external_port = lab['external_port']
             server.ssh_conn.rsync(iso_file_path,
                           external_ip,
-                          os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts, ssh_port=external_port)
+                          os.path.join(SYSADMIN_HOME, "bootimage.iso"), pre_opts=pre_opts, ssh_port=external_port)
         else:
             temp_path = '/tmp'
             local_ip = lab['local_ip']
@@ -163,16 +163,16 @@ def download_upgrade_load(lab, server, load_path, upgrade_ver):
                                   os.path.join(temp_path, "bootimage.iso"), dest_user=lab['local_user'],
                                   dest_password=lab['local_password'], pre_opts=local_pre_opts)
             common.scp_from_localhost_to_active_controller(source_path=os.path.join(temp_path, "bootimage.iso"),
-                                                           dest_path=os.path.join(WRSROOT_HOME, "bootimage.iso"))
+                                                           dest_path=os.path.join(SYSADMIN_HOME, "bootimage.iso"))
 
     else:
         server.ssh_conn.rsync(iso_file_path,
                               lab['controller-0 ip'],
-                              os.path.join(WRSROOT_HOME, "bootimage.iso"), pre_opts=pre_opts)
+                              os.path.join(SYSADMIN_HOME, "bootimage.iso"), pre_opts=pre_opts)
         if upgrade_ver >= '17.07':
            server.ssh_conn.rsync(sig_file_path,
                                lab['controller-0 ip'],
-                               os.path.join(WRSROOT_HOME, "bootimage.sig"), pre_opts=pre_opts)
+                               os.path.join(SYSADMIN_HOME, "bootimage.sig"), pre_opts=pre_opts)
 
 
 def get_mgmt_boot_device(node):
@@ -356,7 +356,7 @@ def wipe_disk_hosts(hosts, lab=None, close_telnet_conn=True):
 
     if controller0_node.telnet_conn:
         # Run the wipedisk_via_helper utility if the nodes are accessible
-        cmd = "test -f " + "/home/wrsroot/wipedisk_helper "
+        cmd = "test -f " + "/home/sysadmin/wipedisk_helper "
         if controller0_node.telnet_conn.exec_cmd(cmd, blob=controller0_node.telnet_conn.prompt, fail_ok=True)[0] == 0:
             cmd = "chmod 755 wipedisk_helper"
             controller0_node.telnet_conn.exec_cmd(cmd)
@@ -628,13 +628,13 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
     server.ssh_conn.rsync(script_path + "/*",
                                lab['controller-0 ip'],
-                               WRSROOT_HOME, pre_opts=pre_opts)
+                               SYSADMIN_HOME, pre_opts=pre_opts)
 
     cmd = "test -e " + lab_file_dir
     conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
     conf_server.ssh_conn.rsync(lab_file_dir + "/*",
                                lab['controller-0 ip'],
-                               WRSROOT_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
+                               SYSADMIN_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
 
     openstack_lab_files_dir = os.path.split(script_path)[0] + "/yow/openstack"
 
@@ -642,7 +642,7 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
         conf_server.ssh_conn.rsync(openstack_lab_files_dir + "/*",
                                lab['controller-0 ip'],
-                               WRSROOT_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
+                               SYSADMIN_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
     else:
         LOG.warning("Openstack lab config file path: {} does not exist".format(openstack_lab_files_dir))
 
@@ -666,7 +666,7 @@ def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     server.ssh_conn.rsync(config_path,
                           lab['floating ip'],
-                          WRSROOT_HOME, pre_opts=pre_opts)
+                          SYSADMIN_HOME, pre_opts=pre_opts)
 
 
 def bulk_add_hosts(lab, hosts_xml_file, con_ssh=None):
@@ -675,7 +675,7 @@ def bulk_add_hosts(lab, hosts_xml_file, con_ssh=None):
     else:
         controller_ssh=con_ssh
 
-    cmd = "test -f {}/{}".format(WRSROOT_HOME, hosts_xml_file)
+    cmd = "test -f {}/{}".format(SYSADMIN_HOME, hosts_xml_file)
     if controller_ssh.exec_cmd(cmd)[0] == 0:
         rc, output = cli.system("host-bulk-add", hosts_xml_file, ssh_client=con_ssh, fail_ok=True)
         if rc != 0 or "Configuration failed" in output:
@@ -684,7 +684,7 @@ def bulk_add_hosts(lab, hosts_xml_file, con_ssh=None):
         hosts = system_helper.get_hosts_per_personality(con_ssh=con_ssh, rtn_tuple=True)
         return 0, hosts, ''
     else:
-        msg = "{} file not found in {}".format(hosts_xml_file, WRSROOT_HOME)
+        msg = "{} file not found in {}".format(hosts_xml_file, SYSADMIN_HOME)
         LOG.warning(msg)
         return 1, None, msg
 
@@ -701,7 +701,7 @@ def download_hosts_bulk_add_xml_file(lab, server, file_path):
 
     server.ssh_conn.rsync(file_path + "/hosts_bulk_add.xml",
                           lab['controller-0 ip'],
-                          WRSROOT_HOME, pre_opts=pre_opts)
+                          SYSADMIN_HOME, pre_opts=pre_opts)
 
 
 
@@ -717,7 +717,7 @@ def add_storages(lab, server, load_path):
     download_lab_config_files(lab, server, load_path)
 
     controller_ssh = ControllerClient.get_active_controller(lab['short_name'])
-    cmd = "test -e {}/hosts_bulk_add.xml".format(WRSROOT_HOME )
+    cmd = "test -e {}/hosts_bulk_add.xml".format(SYSADMIN_HOME )
     rc = controller_ssh.exec_cmd(cmd)[0]
 
     if rc != 0:
@@ -725,7 +725,7 @@ def add_storages(lab, server, load_path):
         return rc, msg
 
     # check if the hosts_bulk_add.xml contains storages in mujltiple of 2
-    cmd = "grep storage {}/hosts_bulk_add.xml".format(WRSROOT_HOME)
+    cmd = "grep storage {}/hosts_bulk_add.xml".format(SYSADMIN_HOME)
     rc, output = controller_ssh.exec_cmd(cmd)
     if rc == 0:
         output = output.split('\n')
@@ -795,7 +795,7 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
              if os.path.splitext(conf_file)[1] == '':
                 conf_file += '.conf'
 
-        cmd = "test -e {}".format(WRSROOT_HOME + conf_file)
+        cmd = "test -e {}".format(SYSADMIN_HOME + conf_file)
         rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
 
         if rc != 0:
@@ -806,7 +806,7 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
                 raise exceptions.InstallError(msg)
 
     attempts = repeat
-    cmd = "test -e {}/{}.sh".format(WRSROOT_HOME, script)
+    cmd = "test -e {}/{}.sh".format(SYSADMIN_HOME, script)
     rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
     if rc != 0:
         msg = "The {}.sh file missing from active controller".format(script)
@@ -873,7 +873,7 @@ def launch_vms_post_install():
     else:
         # check if vm launch scripts exist in the lab
         active_controller = ControllerClient.get_active_controller()
-        cmd = "test -e {}/instances_group0/launch_instances.sh".format(WRSROOT_HOME)
+        cmd = "test -e {}/instances_group0/launch_instances.sh".format(SYSADMIN_HOME)
         rc = active_controller.exec_cmd(cmd)[0]
         if rc != 0:
             LOG.info("VM Launching scripts do not exist in lab..... ")
@@ -1348,7 +1348,7 @@ def is_usb_mounted(usb_device, con_ssh=None):
 #     usb_info['device'] = usb_device
 #     result, mount_dir = is_usb_mounted(usb_device, con_ssh=con_ssh)
 #     if not result:
-#         # usb not mounted,  mount the usb to /media/wrsroot
+#         # usb not mounted,  mount the usb to /media/sysadmin
 #         mount_dir=BACKUP_USB_MOUNT_POINT
 #         if not mount_usb(usb_device, mount=mount_dir, con_ssh=con_ssh):
 #            LOG.info("Fail to mount the usb /dev/{} to {}".format(usb_device, BACKUP_USB_MOUNT_POINT))
@@ -1399,7 +1399,7 @@ def delete_backup_files_from_usb(usb_device, con_ssh=None):
 
 def mount_usb (usb_device, mount=None, unmount=True, format_=False, con_ssh=None):
     """
-    Mounts USB to a mounting point specified by mount or the default /media/wrsroot
+    Mounts USB to a mounting point specified by mount or the default /media/sysadmin
     Args:
         usb_device(str): the USB device name
         mount(str): is the path to the mount point
@@ -2032,7 +2032,7 @@ def export_cinder_volumes(backup_dest='usb', backup_dest_path=BackupRestore.USB_
         backup_file_prefix(str): The prefix to the generated system backup files. The default is "titanium_backup_"
         backup_dest(str): usb or local - the destination of backup files; choices are usb or local (test server)
         backup_dest_path(str): is the path at destination where the backup files are saved. The defaults are:
-            /media/wrsroot/backups for backup_dest=usb and /sandbox/backups for backup_dest=local.
+            /media/sysadmin/backups for backup_dest=usb and /sandbox/backups for backup_dest=local.
         copy_to_usb(str): usb_device name where the volume backup files are transferred. Default is None
         delete_backup_file(bool): if enabled, deletes the volume backup files after transfer to USB. Default is enabled
         con_ssh:
@@ -2152,7 +2152,7 @@ def backup_system(backup_file_prefix=PREFIX_BACKUP_FILE, backup_dest='usb',
         backup_file_prefix(str): The prefix to the generated system backup files. The default is "titanium_backup_"
         backup_dest(str): usb or local - the destination of backup files; choices are usb or local (test server)
         backup_dest_path(str): is the path at destination where the backup files are saved. The defaults are:
-            /media/wrsroot/backups for backup_dest=usb and /sandbox/backups for backup_dest=local.
+            /media/sysadmin/backups for backup_dest=usb and /sandbox/backups for backup_dest=local.
         lab_system_name(str): is the lab system name
         timeout(inst): is the timeout value the system backup is expected to finish.
         copy_to_usb(str): usb device name, if specified,the backup files are copied to. Applicable when backup_dest=usb
@@ -2290,7 +2290,7 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
         image_id (str): the image id to be backuped up.
         backup_dest(str): usb or local - the destination of backup files; choices are usb or local (test server)
         backup_dest_path(str): is the path at destination where the backup files are saved. The defaults are:
-            /media/wrsroot/backups for backup_dest=usb and /sandbox/backups for backup_dest=local.
+            /media/sysadmin/backups for backup_dest=usb and /sandbox/backups for backup_dest=local.
         copy_to_usb(str): usb device to copy the backups. if specified, the backup_dest_path is compared with the usb
         mount point. This is applicable when usb is specified for backup_dest.   Default is None
         delete_backup_file(bool): if set, deletes the image backup file from /opt/backups after transferring the file
@@ -2653,7 +2653,7 @@ def apply_patches(lab, build_server, patch_dir):
             LOG.info("Found patch named: " + patch_name)
             patch_names.append(patch_name)
 
-        patch_dest_dir = WRSROOT_HOME + "patches/"
+        patch_dest_dir = SYSADMIN_HOME + "patches/"
 
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
         # build_server.ssh_conn.rsync(patch_dir + "/*.patch", lab['controller-0 ip'], patch_dest_dir, pre_opts=pre_opts)
@@ -2682,7 +2682,7 @@ def apply_patches(lab, build_server, patch_dir):
 
 
 def remove_patches(lab):
-    patch_dir = WRSROOT_HOME + "patches/"
+    patch_dir = SYSADMIN_HOME + "patches/"
     controller0_node = lab["controller-0"]
     if controller0_node.ssh_conn:
         con_ssh = controller0_node.ssh_conn
@@ -3199,7 +3199,7 @@ def scp_cloned_image_to_another(lab_dict, boot_lab=True, clone_image_iso_full_pa
 
     if src_lab['short_name'] != dest_lab_name:
         LOG.info("Transferring cloned image iso file to lab: {}".format(dest_lab_name))
-        clone_image_iso_dest_path = WRSROOT_HOME + os.path.basename(clone_image_iso_full_path)
+        clone_image_iso_dest_path = SYSADMIN_HOME + os.path.basename(clone_image_iso_full_path)
         if local_client().ping_server(controller0_node.host_ip, fail_ok=True)[0] == 100:
             msg = "The destination lab {} controller-0 is not reachable.".format(dest_lab_name)
             if boot_lab:
@@ -3321,11 +3321,11 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
 
         con_telnet.exec_cmd("unset TMOUT")
         histime_format_cmd = 'export HISTTIMEFORMAT="%Y-%m-%d %T "'
-        bashrc_path = '{}/.bashrc'.format(WRSROOT_HOME)
+        bashrc_path = '{}/.bashrc'.format(SYSADMIN_HOME)
         if con_telnet.exec_cmd("grep '{}' {}".format(histime_format_cmd, bashrc_path))[0] == 1:
             con_telnet.exec_cmd("""echo '{}'>> {}""".format(histime_format_cmd, bashrc_path))
             con_telnet.exec_cmd("source {}".format(bashrc_path))
-        con_telnet.exec_cmd("export USER=wrsroot")
+        con_telnet.exec_cmd("export USER=sysadmin")
         config_file_found = False
         if ansible:
             config_file = 'localhost.yml'
@@ -3339,7 +3339,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
                     config_file = config_file_
                     config_file_found = True
         if not config_file_found:
-            msg = "The controller configuration file {}  not found in {}".format(config_file, WRSROOT_HOME)
+            msg = "The controller configuration file {}  not found in {}".format(config_file, SYSADMIN_HOME)
             raise exceptions.InstallError(msg)
         if not ansible:
             extra_option = '--force'
@@ -3355,7 +3355,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         else:
             cmd = 'ansible-playbook /usr/share/ansible/stx-ansible/playbooks/bootstrap/bootstrap.yml -e ' \
                          '"override_files_dir={} ansible_become_pass={}"'\
-                .format(WRSROOT_HOME, HostLinuxCreds.get_password())
+                .format(SYSADMIN_HOME, HostLinuxCreds.get_password())
             con_telnet.set_prompt(r'.*:~\$\s?')
 
         os.environ["TERM"] = "xterm"
@@ -3391,7 +3391,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
 
 def apply_banner(telnet_conn, fail_ok=True):
     LOG.info("Applying banner files")
-    banner_dir = "{}/banner/".format(WRSROOT_HOME)
+    banner_dir = "{}/banner/".format(SYSADMIN_HOME)
     rc = telnet_conn.exec_cmd("test -d {}".format(banner_dir), fail_ok=fail_ok)[0]
 
     if rc != 0:
@@ -3411,7 +3411,7 @@ def apply_banner(telnet_conn, fail_ok=True):
 
 def apply_branding(telnet_conn, fail_ok=True):
     LOG.info("Applying branding files")
-    branding_dir = "{}/branding".format(WRSROOT_HOME)
+    branding_dir = "{}/branding".format(SYSADMIN_HOME)
     branding_dest = "/opt/branding"
     rc = telnet_conn.exec_cmd("test -d {}".format(branding_dir), fail_ok=fail_ok)[0]
 
@@ -3452,14 +3452,14 @@ def post_install(controller0_node=None):
     else:
         connection = ControllerClient.get_active_controller()
 
-    rc, msg = connection.exec_cmd("test -d /home/wrsroot/postinstall/")
+    rc, msg = connection.exec_cmd("test -d /home/sysadmin/postinstall/")
     if rc == 0:
-        scripts = connection.exec_cmd('ls -1 --color=none /home/wrsroot/postinstall/')[1].splitlines()
+        scripts = connection.exec_cmd('ls -1 --color=none /home/sysadmin/postinstall/')[1].splitlines()
         if len(scripts) > 0:
             for script in scripts:
                 LOG.info("Attempting to run {}".format(script))
-                connection.exec_cmd("chmod 755 /home/wrsroot/postinstall/{}".format(script))
-                rc = connection.exec_cmd("/home/wrsroot/postinstall/{} {}".format(script, controller0_node.host_name),
+                connection.exec_cmd("chmod 755 /home/sysadmin/postinstall/{}".format(script))
+                rc = connection.exec_cmd("/home/sysadmin/postinstall/{} {}".format(script, controller0_node.host_name),
                                          expect_timeout=InstallTimeout.POST_INSTALL_SCRIPTS)[0]
                 if rc != 0:
                     rc, msg = -1, 'Unable to execute {}'.format(script)
@@ -3737,7 +3737,7 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
     if iso_full_path is None:
         iso_full_path = InstallVars.get_install_var("ISO_PATH")
 
-    iso_dest_path = WRSROOT_HOME + os.path.basename(iso_full_path)
+    iso_dest_path = SYSADMIN_HOME + os.path.basename(iso_full_path)
     dest_lab_name = lab_dict['short_name']
     controller0_node = lab_dict['controller-0']
 
@@ -4062,10 +4062,10 @@ def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True, yaml_files=None):
     else:
         connection = ControllerClient.get_active_controller()
     if yaml_files is None:
-        yaml_files = [WRSROOT_HOME + "lab_setup-admin-resources.yaml",
-                      WRSROOT_HOME + "lab_setup-tenant1-resources.yaml",
-                      WRSROOT_HOME + "lab_setup-tenant2-resources.yaml",]
-    expected_files = [WRSROOT_HOME + ".heat_resources", WRSROOT_HOME + "launch_stacks.sh"] + yaml_files
+        yaml_files = [SYSADMIN_HOME + "lab_setup-admin-resources.yaml",
+                      SYSADMIN_HOME + "lab_setup-tenant1-resources.yaml",
+                      SYSADMIN_HOME + "lab_setup-tenant2-resources.yaml",]
+    expected_files = [SYSADMIN_HOME + ".heat_resources", SYSADMIN_HOME + "launch_stacks.sh"] + yaml_files
 
     for file in expected_files:
         if not connection.file_exists(file):
@@ -4074,15 +4074,15 @@ def setup_heat(con_ssh=None, telnet_conn=None, fail_ok=True, yaml_files=None):
             assert fail_ok, err_msg
             return 1, err_msg
 
-    cmd = WRSROOT_HOME + "./create_resource_stacks.sh"
+    cmd = SYSADMIN_HOME + "./create_resource_stacks.sh"
     rc, output = connection.exec_cmd(cmd, fail_ok=fail_ok)
     if rc != 0:
         err_msg = "Failure when creating resource stacks skipping heat setup"
         LOG.warning(err_msg)
         return 2, err_msg
 
-    connection.exec_cmd("chmod 755 /home/wrsroot/launch_stacks.sh", fail_ok=fail_ok)
-    connection.exec_cmd(WRSROOT_HOME + "launch_stacks.sh lab_setup.conf", fail_ok=fail_ok)
+    connection.exec_cmd("chmod 755 /home/sysadmin/launch_stacks.sh", fail_ok=fail_ok)
+    connection.exec_cmd(SYSADMIN_HOME + "launch_stacks.sh lab_setup.conf", fail_ok=fail_ok)
     rc, output = connection.exec_cmd(cmd)
     if rc != 0:
         err_msg = "Heat stack launch failed"
@@ -4187,9 +4187,9 @@ def copy_files_to_subcloud(subcloud):
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
-    central_controller0_node.ssh_conn.rsync(WRSROOT_HOME + "*.conf",
+    central_controller0_node.ssh_conn.rsync(SYSADMIN_HOME + "*.conf",
                           subcloud_controller_node.host_ip,
-                          WRSROOT_HOME, pre_opts=pre_opts)
+                          SYSADMIN_HOME, pre_opts=pre_opts)
 
 
 
@@ -4209,7 +4209,7 @@ def run_config_subcloud(subcloud, con_ssh=None, lab=None, fail_ok=True):
 
     subcloud_config = subcloud.replace('-', '') + '.config'
 
-    cmd = "test -e {}/{}".format(WRSROOT_HOME, subcloud_config)
+    cmd = "test -e {}/{}".format(SYSADMIN_HOME, subcloud_config)
     rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
     if rc != 0:
         msg = "The subcloud config file {}  missing from active controller".format(subcloud_config)
@@ -4288,7 +4288,7 @@ def download_stx_helm_charts(lab, server, stx_helm_charts_path=None):
         raise ValueError('STX Helm charts path not found in {}:{}'.format(server.name, stx_helm_charts_path))
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-    dest_path = '{}/helm-charts-manifest.tgz'.format(WRSROOT_HOME)
+    dest_path = '{}/helm-charts-manifest.tgz'.format(SYSADMIN_HOME)
     server.ssh_conn.rsync(stx_helm_charts_path,
                           lab['controller-0 ip'],
                           dest_path, pre_opts=pre_opts)

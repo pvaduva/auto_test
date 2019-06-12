@@ -4,7 +4,7 @@ import pytest
 
 import setups
 from consts.auth import CliAuth, Tenant
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
@@ -75,7 +75,7 @@ def setup_test_session(global_setup, request):
             from utils.clients.local import RemoteCLIClient
             RemoteCLIClient.remove_remote_cli_clients()
             ProjVar.set_var(REMOTE_CLI=None)
-            ProjVar.set_var(USER_FILE_DIR=WRSROOT_HOME)
+            ProjVar.set_var(USER_FILE_DIR=SYSADMIN_HOME)
         request.addfinalizer(remove_remote_cli)
 
 

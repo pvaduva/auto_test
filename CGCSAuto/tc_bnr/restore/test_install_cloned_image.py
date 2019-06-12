@@ -198,10 +198,10 @@ def verify_usb(conn_ssh):
         cmd = "mount | grep {}  | awk \' {{ print $3}}\'".format(usb_device_name + " ")
         mount_point = conn_ssh.exec_cmd(cmd)[1]
         if not mount_point:
-            LOG.info("Mounting USB device to /media/wrsroot ....")
-            install_helper.mount_usb(usb_device_name, mount="/media/wrsroot", con_ssh=conn_ssh)
+            LOG.info("Mounting USB device to /media/sysadmin ....")
+            install_helper.mount_usb(usb_device_name, mount="/media/sysadmin", con_ssh=conn_ssh)
 
-        rc, output = conn_ssh.exec_sudo_cmd("ls /media/wrsroot")
+        rc, output = conn_ssh.exec_sudo_cmd("ls /media/sysadmin")
         clone_files = ['boot.cat', 'clone-archive', 'install_clone']
         if rc == 0 and output:
             if all(f in output for f in clone_files):

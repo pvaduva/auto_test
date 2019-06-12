@@ -5,7 +5,7 @@ import pytest
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import Server, get_build_server_info
 from consts.cgcs import Prompt, SUPPORTED_UPGRADES, BackupRestore
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.filepaths import BuildServerPath, SYSADMIN_HOME
 from consts.proj_vars import InstallVars, UpgradeVars, BackupVars
 from keywords import install_helper, patching_helper, upgrade_helper
 from testfixtures.pre_checks_and_configs import *
@@ -163,13 +163,13 @@ def upgrade_setup(pre_check_upgrade):
     install_helper.download_upgrade_license(lab, bld_server_obj, license_path)
 
     LOG.fixture_step("Checking if target release license is downloaded......")
-    cmd = "test -e " + os.path.join(WRSROOT_HOME, "upgrade_license.lic")
+    cmd = "test -e " + os.path.join(SYSADMIN_HOME, "upgrade_license.lic")
     assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade license file not present in Controller-0"
     LOG.info("Upgrade  license {} download complete".format(license_path))
 
     # Install the license file for release
     LOG.fixture_step("Installing the target release {} license file".format(upgrade_version))
-    rc = upgrade_helper.install_upgrade_license(os.path.join(WRSROOT_HOME, "upgrade_license.lic"),
+    rc = upgrade_helper.install_upgrade_license(os.path.join(SYSADMIN_HOME, "upgrade_license.lic"),
                                                 con_ssh=controller0_conn)
     assert rc == 0, "Unable to install upgrade license file in Controller-0"
     LOG.info("Target release license installed......")
@@ -180,7 +180,7 @@ def upgrade_setup(pre_check_upgrade):
         LOG.fixture_step("Downloading the {} target release  load iso image file {}:{}"
                          .format(upgrade_version, bld_server_obj.name, load_path))
         install_helper.download_upgrade_load(lab, bld_server_obj, load_path, upgrade_ver=upgrade_version)
-        upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
+        upgrade_load_path = os.path.join(SYSADMIN_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
 
         cmd = "test -e {}".format(upgrade_load_path)
         assert controller0_conn.exec_cmd(cmd)[0] == 0, "Upgrade build iso image file {} not present in Controller-0" \
@@ -346,7 +346,7 @@ def apply_patches(lab, server, patch_dir):
             LOG.info("Found patch named: " + patch_name)
             patch_names.append(patch_name)
 
-        patch_dest_dir = WRSROOT_HOME + "upgrade_patches/"
+        patch_dest_dir = SYSADMIN_HOME + "upgrade_patches/"
 
         dest_server = lab['controller-0 ip']
         ssh_port = None
@@ -396,9 +396,9 @@ def check_controller_filesystem(con_ssh=None):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    patch_dest_dir1 = WRSROOT_HOME + "patches/"
-    patch_dest_dir2 = WRSROOT_HOME + "upgrade_patches/"
-    upgrade_load_path = os.path.join(WRSROOT_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
+    patch_dest_dir1 = SYSADMIN_HOME + "patches/"
+    patch_dest_dir2 = SYSADMIN_HOME + "upgrade_patches/"
+    upgrade_load_path = os.path.join(SYSADMIN_HOME, install_helper.UPGRADE_LOAD_ISO_FILE)
     current_version = system_helper.get_sw_version(use_existing=False)
     cmd = "df | grep /dev/root | awk ' { print $5}'"
     rc, output = con_ssh.exec_cmd(cmd)

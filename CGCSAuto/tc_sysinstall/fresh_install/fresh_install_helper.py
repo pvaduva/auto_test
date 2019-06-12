@@ -12,14 +12,14 @@ from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto
 from consts.timeout import InstallTimeout, HostTimeout
 from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState, VSwitchType
-from consts.filepaths import BuildServerPath, WRSROOT_HOME, TuxlabServerPath
+from consts.filepaths import BuildServerPath, SYSADMIN_HOME, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
 from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \
     keystone_helper
 
 DEPLOY_TOOL = 'deploy'
 DEPLOY_SOUCE_PATH = '/folk/cgts/lab/bin/'
-DEPLOY_DEST_PATH = '/home/wrsroot/'
+DEPLOY_DEST_PATH = '/home/sysadmin/'
 DEPLOY_RESULTS_DEST_PATH = '/folk/cgts/lab/deployment-manager/generated-configs/'
 DEPLOY_INTITIAL = 'initial'
 DEPLOY_INTERIM = 'interim'
@@ -272,7 +272,7 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
 
-    ansible = True if controller0_node.telnet_conn.exec_cmd("test -f {}localhost.yml".format(WRSROOT_HOME),
+    ansible = True if controller0_node.telnet_conn.exec_cmd("test -f {}localhost.yml".format(SYSADMIN_HOME),
                                                             fail_ok=True)[0] == 0 else False
     test_step = "Configure controller"
     LOG.tc_step(test_step)
@@ -415,7 +415,7 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
                                     check_subfunc=True, check_first=False, con0_install=True)
 
         LOG.info("Installing license file for subcloud {} ... ".format(subcloud))
-        subcloud_license_path = WRSROOT_HOME + "license.lic"
+        subcloud_license_path = SYSADMIN_HOME + "license.lic"
         system_helper.install_license(subcloud_license_path, con_ssh=subcloud_controller0_node.ssh_conn)
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
@@ -520,7 +520,7 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
 
             pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
-            controller0_node.ssh_conn.rsync(WRSROOT_HOME + '*', 'controller-1', WRSROOT_HOME,
+            controller0_node.ssh_conn.rsync(SYSADMIN_HOME + '*', 'controller-1', SYSADMIN_HOME,
                                             dest_user=HostLinuxCreds.get_user(),
                                             dest_password=HostLinuxCreds.get_password(),
                                             pre_opts=pre_opts)
@@ -770,7 +770,7 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     run_lab_setup(con_ssh=subcloud_controller0.ssh_conn, conf_file=lab_setup_filename)
 
     LOG.info("Installing license file for subcloud {} ... ".format(subcloud))
-    subcloud_license_path = WRSROOT_HOME + "license.lic"
+    subcloud_license_path = SYSADMIN_HOME + "license.lic"
     system_helper.install_license(subcloud_license_path, con_ssh=subcloud_controller0.ssh_conn)
 
     LOG.info("Unlocking  active controller for subcloud {} ... ".format(subcloud))
@@ -839,10 +839,10 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
 
     if name is not None and name is not '':
         subclouds_file = "{}_ipv6.txt".format(name) if ip_ver == 6 else "{}.txt".format(name)
-        subclouds_file_path = WRSROOT_HOME + name + '/' + subclouds_file
+        subclouds_file_path = SYSADMIN_HOME + name + '/' + subclouds_file
     else:
         subclouds_file = "subcloud_ipv6.txt" if ip_ver == 6 else "subcloud.txt"
-        subclouds_file_path = WRSROOT_HOME + subclouds_file
+        subclouds_file_path = SYSADMIN_HOME + subclouds_file
 
     cmd = "test -f {}".format(subclouds_file_path)
     cmd2 = "chmod 777 {}".format(subclouds_file_path)
@@ -871,11 +871,11 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
         else:
             subcloud_config = subcloud + ".config"
 
-        rc = controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(WRSROOT_HOME, subcloud_config))[0]
+        rc = controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(SYSADMIN_HOME, subcloud_config))[0]
         if rc == 0:
             config_generated.append(subcloud_config)
-            config_path = WRSROOT_HOME + subcloud
-            controller0_node.ssh_conn.exec_cmd("mv {}{} {}/".format(WRSROOT_HOME, subcloud_config, config_path))
+            config_path = SYSADMIN_HOME + subcloud
+            controller0_node.ssh_conn.exec_cmd("mv {}{} {}/".format(SYSADMIN_HOME, subcloud_config, config_path))
         else:
             msg = "Subcloud {} config file {} not generated or missing".format(subcloud, subcloud_config)
             LOG.warning(msg)
@@ -1350,7 +1350,7 @@ def add_ceph_ceph_mon_to_host(active_controller_node, host, final_step=None):
     if do_step(test_step):
         storage_helper.add_ceph_mon(host, con_ssh=active_controller_node.ssh_conn)
         LOG.info("Added ceph mon to host {} ...".format(host))
-        active_controller_node.ssh_conn.exec_cmd("touch /home/wrsroot/.lab_setup.done.group0.ceph-mon")
+        active_controller_node.ssh_conn.exec_cmd("touch /home/sysadmin/.lab_setup.done.group0.ceph-mon")
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -1531,8 +1531,8 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                     LOG.warning("The deploy command {} failed: {}".format(cmd2, output))
 
             # check if yaml files are generated:
-            yaml_files = "{}{}_*.yaml".format(WRSROOT_HOME, lab_name)
-            last_file = "{}{}.yaml".format(WRSROOT_HOME, lab_name)
+            yaml_files = "{}{}_*.yaml".format(SYSADMIN_HOME, lab_name)
+            last_file = "{}{}.yaml".format(SYSADMIN_HOME, lab_name)
             cmd = "ls {}".format(yaml_files)
             unfiltered_dest_results_path = DEPLOY_RESULTS_DEST_PATH + "unfiltered/"
             if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
@@ -1550,7 +1550,7 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                     LOG.warning("Fail to copy {} to  destination {}:{}".format(yaml_files, server.name,
                                                                                unfiltered_dest_results_path))
                 else:
-                    controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(yaml_files, WRSROOT_HOME))
+                    controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(yaml_files, SYSADMIN_HOME))
             if stage == DEPLOY_LAST:
                 cmd = "ls {}".format(last_file)
                 if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
@@ -1569,7 +1569,7 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                         LOG.warning("Fail to copy {} to  destination {}:{}".format(last_file, server.name,
                                                                                    DEPLOY_RESULTS_DEST_PATH))
                     else:
-                        controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(last_file, WRSROOT_HOME))
+                        controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(last_file, SYSADMIN_HOME))
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -1589,7 +1589,7 @@ def check_ansible_configured_mgmt_interface(controller0_node, lab):
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
 
-    ansible = True if controller0_node.telnet_conn.exec_cmd("test -f {}localhost.yml".format(WRSROOT_HOME),
+    ansible = True if controller0_node.telnet_conn.exec_cmd("test -f {}localhost.yml".format(SYSADMIN_HOME),
                                                             fail_ok=True)[0] == 0 else False
     simplex = install_helper.is_simplex(lab)
     if ansible and not simplex:

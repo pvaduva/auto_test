@@ -73,7 +73,7 @@ def test_auth_log_sudo_cmd():
     LOG.tc_step("Executing sudo command {}".format(cmd))
     con_ssh.exec_sudo_cmd(cmd, fail_ok=True)
 
-    searching_for = ['sudo: notice  wrsroot.*PWD=/home/wrsroot ; USER=root ; COMMAND=/usr/bin/ls -l']
+    searching_for = ['sudo: notice  sysadmin.*PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/ls -l']
     found = wait_for_log(log_path=log_path, ssh_client=con_ssh, patterns=searching_for, start_time=start_time)
 
     assert len(searching_for) == len(found), "FAIL: The sudo command was not logged. " \
@@ -83,8 +83,8 @@ def test_auth_log_sudo_cmd():
     start_time = con_ssh.exec_cmd("tail -1 {} | awk '{{print $1}}'".format(log_path))[1]
     exec_sudo_cmd_fail(con_ssh, cmd)
 
-    searching_for = ['sudo: notice pam_unix\(sudo:auth\): authentication failure; logname=wrsroot .* '
-                     'ruser=wrsroot rhost=  user=wrsroot']
+    searching_for = ['sudo: notice pam_unix\(sudo:auth\): authentication failure; logname=sysadmin .* '
+                     'ruser=sysadmin rhost=  user=sysadmin']
     found = wait_for_log(log_path=log_path, ssh_client=con_ssh, patterns=searching_for, start_time=start_time)
 
     assert len(searching_for) == len(found), "FAIL: The failed sudo command was not logged. " \
@@ -131,10 +131,10 @@ def test_auth_log_sudo_su():
 
     """
     con_ssh = ControllerClient.get_active_controller()
-    searching_for = ['sudo: notice  wrsroot.*PWD=/home/wrsroot ; USER=root ; COMMAND=/usr/bin/su \-',
-                     'su: notice \(to root\) wrsroot on',
+    searching_for = ['sudo: notice  sysadmin.*PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/su \-',
+                     'su: notice \(to root\) sysadmin on',
                      # uses su-l:session because login_as_root calls 'sudo su -'
-                     'su: info pam_unix\(su-l:session\): session opened for user root by wrsroot\(uid=0\)']
+                     'su: info pam_unix\(su-l:session\): session opened for user root by sysadmin\(uid=0\)']
 
     log_path = '/var/log/auth.log'
     start_time = con_ssh.exec_cmd("tail -1 {} | awk '{{print $1}}'".format(log_path))[1]
@@ -150,7 +150,7 @@ def test_auth_log_sudo_su():
     cmd = '-k su'
     LOG.tc_step("Executing sudo command {} with wrong password".format(cmd))
     searching_for = ['sudo: notice pam_unix\(sudo:auth\): authentication failure; '
-                     'logname=wrsroot.*ruser=wrsroot rhost=  user=wrsroot']
+                     'logname=sysadmin.*ruser=sysadmin rhost=  user=sysadmin']
     start_time = con_ssh.exec_cmd("tail -1 {} | awk '{{print $1}}'".format(log_path))[1]
     exec_sudo_cmd_fail(con_ssh, cmd)
     found = wait_for_log(con_ssh, searching_for, log_path=log_path, start_time=start_time)

@@ -876,7 +876,7 @@ class Telnet:
 
         return int(rc), output
 
-    def exec_sudo_cmd(self, cmd, password=WRSROOT_PASSWORD, timeout=TELNET_EXPECT_TIMEOUT,
+    def exec_sudo_cmd(self, cmd, password=SYSADMIN_PASSWORD, timeout=TELNET_EXPECT_TIMEOUT,
                       show_output=True, alt_prompt=None):
 
         cmd = 'sudo ' + cmd
@@ -934,21 +934,21 @@ class Telnet:
 
         return (int(rc), output)
 
-    def login(self, username=WRSROOT_USERNAME, password=WRSROOT_PASSWORD, reset=False):
+    def login(self, username=SYSADMIN_USERNAME, password=SYSADMIN_PASSWORD, reset=False):
         """Waits for login prompt to authenticate user.
 
            Does nothing if user is already logged in.
         """
         if reset:
-            self.write_line(WRSROOT_USERNAME)
+            self.write_line(SYSADMIN_USERNAME)
             self.get_read_until(PASSWORD_PROMPT)
-            self.write_line(WRSROOT_DEFAULT_PASSWORD)
+            self.write_line(SYSADMIN_DEFAULT_PASSWORD)
             self.get_read_until(PASSWORD_PROMPT)
-            self.write_line(WRSROOT_DEFAULT_PASSWORD)
+            self.write_line(SYSADMIN_DEFAULT_PASSWORD)
             self.get_read_until(PASSWORD_PROMPT)
-            self.write_line(WRSROOT_PASSWORD)
+            self.write_line(SYSADMIN_PASSWORD)
             self.get_read_until(PASSWORD_PROMPT)
-            self.write_line(WRSROOT_PASSWORD)
+            self.write_line(SYSADMIN_PASSWORD)
             self.find_prompt()
         else:
             count = 0

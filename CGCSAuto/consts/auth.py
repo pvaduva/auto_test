@@ -177,26 +177,26 @@ class Tenant:
 
 class HostLinuxCreds:
 
-    __WRSROOT = {
-        'user': 'wrsroot',
+    __SYSADMIN = {
+        'user': 'sysadmin',
         'password': 'Li69nux*'
     }
 
     @classmethod
     def get_user(cls):
-        return cls.__WRSROOT['user']
+        return cls.__SYSADMIN['user']
 
     @classmethod
     def get_password(cls):
-        return cls.__WRSROOT['password']
+        return cls.__SYSADMIN['password']
 
     @classmethod
     def set_user(cls, username):
-        cls.__WRSROOT['user'] = username
+        cls.__SYSADMIN['user'] = username
 
     @classmethod
     def set_password(cls, password):
-        cls.__WRSROOT['password'] = password
+        cls.__SYSADMIN['password'] = password
 
 
 class Guest:

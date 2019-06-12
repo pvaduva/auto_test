@@ -5,7 +5,7 @@ from pytest import fixture
 
 from consts.proj_vars import ProjVar
 from consts.cgcs import FlavorSpec
-from consts.filepaths import TiSPath, HeatTemplate, TestServerPath, WRSROOT_HOME
+from consts.filepaths import TiSPath, HeatTemplate, TestServerPath, SYSADMIN_HOME
 from utils import exceptions
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
@@ -17,7 +17,7 @@ from keywords import vm_helper, nova_helper, common, heat_helper, network_helper
 def prefix_remote_cli(request):
     if ProjVar.get_var('REMOTE_CLI'):
         ProjVar.set_var(REMOTE_CLI=False)
-        ProjVar.set_var(USER_FILE_DIR=WRSROOT_HOME)
+        ProjVar.set_var(USER_FILE_DIR=SYSADMIN_HOME)
 
         def revert():
             ProjVar.set_var(REMOTE_CLI=True)
@@ -28,7 +28,7 @@ def prefix_remote_cli(request):
 def _get_stress_ng_heat(con_ssh=None):
     """
     copy the cloud-config userdata to TiS server.
-    This userdata adds wrsroot/li69nux user to guest
+    This userdata adds sysadmin/li69nux user to guest
 
     Args:
         con_ssh (SSHClient):

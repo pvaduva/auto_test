@@ -16,7 +16,7 @@ def check_avs_pattern():
 def _get_dpdk_user_data(con_ssh=None):
     """
     copy the cloud-config userdata to TiS server.
-    This userdata adds wrsroot/li69nux user to guest
+    This userdata adds sysadmin/li69nux user to guest
 
     Args:
         con_ssh (SSHClient):

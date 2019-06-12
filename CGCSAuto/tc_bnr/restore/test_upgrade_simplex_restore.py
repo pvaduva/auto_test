@@ -2,7 +2,7 @@ import time
 
 from consts.auth import SvcCgcsAuto
 from consts.cgcs import Prompt, BackupRestore
-from consts.filepaths import TiSPath, WRSROOT_HOME
+from consts.filepaths import TiSPath, SYSADMIN_HOME
 from consts.proj_vars import RestoreVars
 from tc_bnr.restore.test_restore import restore_volumes  # Don't remove
 from utils.clients.ssh import ControllerClient
@@ -69,7 +69,7 @@ def test_upgrade_restore(restore_setup):
 
         system_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, system_backup_file)
     else:
-        system_backup_path = "{}{}".format(WRSROOT_HOME, system_backup_file)
+        system_backup_path = "{}{}".format(SYSADMIN_HOME, system_backup_file)
 
     LOG.tc_step("Restoring the backup system files ")
     install_helper.upgrade_controller_simplex(system_backup=system_backup_path,
@@ -83,9 +83,9 @@ def test_upgrade_restore(restore_setup):
     ControllerClient.set_active_controller(con_ssh)
 
     if backup_src.lower() == 'local':
-        images_backup_path = "{}{}".format(WRSROOT_HOME, images_backup_file)
+        images_backup_path = "{}{}".format(SYSADMIN_HOME, images_backup_file)
         common.scp_from_test_server_to_active_controller("{}/{}".format(backup_src_path, images_backup_file),
-                                                         WRSROOT_HOME)
+                                                         SYSADMIN_HOME)
     else:
         images_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, images_backup_file)
 

@@ -27,7 +27,7 @@ def test_launch_vms_pre_upgrade():
     current_version = system_helper.get_sw_version()
 
     for tenant in tenants:
-        tenant_cred_file = '/home/wrsroot/openrc.{}'.format(tenant)
+        tenant_cred_file = '/home/sysadmin/openrc.{}'.format(tenant)
         tenant_passwd = Tenant.TENANT1['password'] if tenant == Tenant.TENANT1['user'] else Tenant.TENANT2['password']
         if '*' in tenant_passwd:
             index = tenant_passwd.index('*')

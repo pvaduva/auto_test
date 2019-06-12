@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient, SSHClient
 from consts.cgcs import Prompt, PatchState
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 from consts.build_server import Server, get_build_server_info
 from consts.proj_vars import ProjVar, PatchingVars, InstallVars
 from keywords import system_helper, install_helper, patching_helper, orchestration_helper
@@ -81,7 +81,7 @@ def patch_orchestration_setup():
 
 def clear_patch_dest_dir():
 
-    patch_dest_path = WRSROOT_HOME + "patches/"
+    patch_dest_path = SYSADMIN_HOME + "patches/"
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.exec_cmd("rm {}/*".format(patch_dest_path))
 
@@ -96,7 +96,7 @@ def get_downloaded_patch_files(patch_dest_dir=None, conn_ssh=None):
     if conn_ssh is None:
         conn_ssh = ControllerClient.get_active_controller()
     if not patch_dest_dir:
-        patch_dest_dir = WRSROOT_HOME + "patches/"
+        patch_dest_dir = SYSADMIN_HOME + "patches/"
     patch_names = []
     rc, output = conn_ssh.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dest_dir))
     assert rc == 0, "Failed to list downloaded patch files in directory path {}.".format(patch_dest_dir)
@@ -129,7 +129,7 @@ def download_patches(lab, server, patch_dir, conn_ssh=None):
     assert rc == 0, "Failed to list patch files in directory path {}.".format(patch_dir)
 
     if output is not None:
-        patch_dest_dir = WRSROOT_HOME + "patches/"
+        patch_dest_dir = SYSADMIN_HOME + "patches/"
         active_controller = system_helper.get_active_controller_name()
         dest_server = lab[active_controller + ' ip']
         ssh_port = None
@@ -192,7 +192,7 @@ def test_system_patch_orchestration(patch_orchestration_setup):
 
     LOG.tc_step("Uploading  patches {} ... ".format(patch_ids))
 
-    patch_dest_dir = WRSROOT_HOME + '/patches'
+    patch_dest_dir = SYSADMIN_HOME + '/patches'
     rc = patching_helper.run_patch_cmd('upload-dir', args=patch_dest_dir)[0]
     assert rc in [0, 1], "Fail to upload patches in dir {}".format(patch_dest_dir)
 

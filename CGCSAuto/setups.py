@@ -8,7 +8,7 @@ import configparser
 
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth, Guest
 from consts.cgcs import Prompt, MULTI_REGION_MAP, SUBCLOUD_PATTERN, SysType, DROPS, GuestImages, Networks
-from consts.filepaths import WRSROOT_HOME, BuildServerPath
+from consts.filepaths import SYSADMIN_HOME, BuildServerPath
 from consts.lab import Labs, add_lab_entry, NatBoxes, update_lab
 from consts.proj_vars import ProjVar, InstallVars
 from consts.build_server import Server
@@ -103,8 +103,8 @@ def setup_keypair(con_ssh, natbox_client=None):
     # keyfile path that can be specified in testcase config
     keyfile_stx_origin = os.path.normpath(ProjVar.get_var('STX_KEYFILE_PATH'))
 
-    # keyfile will always be copied to wrsroot home dir first and update file permission
-    keyfile_stx_final = os.path.normpath(ProjVar.get_var('STX_KEYFILE_WRS_HOME'))
+    # keyfile will always be copied to sysadmin home dir first and update file permission
+    keyfile_stx_final = os.path.normpath(ProjVar.get_var('STX_KEYFILE_SYS_HOME'))
     public_key_stx = '{}.pub'.format(keyfile_stx_final)
 
     # keyfile will also be saved to /opt/platform as well, so it won't be lost during system upgrade.
@@ -140,9 +140,9 @@ def setup_keypair(con_ssh, natbox_client=None):
                 con_0_ssh.exec_cmd('cp {}.pub {}'.format(keyfile_stx_origin, public_key_stx), fail_ok=False)
                 con_0_ssh.exec_sudo_cmd('cp {} {}'.format(keyfile_stx_final, keyfile_opt_pform), fail_ok=False)
 
-            # Make sure owner is wrsroot
+            # Make sure owner is sysadmin
             # If private key exists in opt platform, then it must also exist in home dir
-            con_0_ssh.exec_sudo_cmd('chown wrsroot:wrs {}'.format(keyfile_stx_final), fail_ok=False)
+            con_0_ssh.exec_sudo_cmd('chown sysadmin:wrs {}'.format(keyfile_stx_final), fail_ok=False)
 
         # ssh private key should now exists under home dir and opt platform on controller-0
         if con_ssh.get_hostname() != 'controller-0':
@@ -160,7 +160,7 @@ def setup_keypair(con_ssh, natbox_client=None):
                                 source_path=public_key_stx,
                                 source_pswd=HostLinuxCreds.get_password(),
                                 dest_path=public_key_stx, timeout=60)
-            con_ssh.exec_sudo_cmd('chown wrsroot:wrs {}'.format(public_key_stx), fail_ok=False)
+            con_ssh.exec_sudo_cmd('chown sysadmin:wrs {}'.format(public_key_stx), fail_ok=False)
 
         if ProjVar.get_var('REMOTE_CLI'):
             dest_path = os.path.join(ProjVar.get_var('TEMP_DIR'), os.path.basename(public_key_stx))
@@ -293,7 +293,7 @@ def _rsync_files_to_con1(con_ssh=None, central_region=False, file_to_check=None)
 
     LOG.info("rsync test files from controller-0 to controller-1 if not already done")
     if not file_to_check:
-        file_to_check = '/home/wrsroot/images/tis-centos-guest.img'
+        file_to_check = '/home/sysadmin/images/tis-centos-guest.img'
     try:
         with host_helper.ssh_to_host("controller-1", con_ssh=con_ssh) as con_1_ssh:
             if con_1_ssh.file_exists(file_to_check):
@@ -305,7 +305,7 @@ def _rsync_files_to_con1(con_ssh=None, central_region=False, file_to_check=None)
         return
 
     cmd = "rsync -avr -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ' " \
-          "/home/wrsroot/* controller-1:/home/wrsroot/"
+          "/home/sysadmin/* controller-1:/home/sysadmin/"
 
     timeout = 1800
     with host_helper.ssh_to_host("controller-0", con_ssh=con_ssh) as con_0_ssh:
@@ -339,7 +339,7 @@ def copy_test_files():
     central_region = False
     if ProjVar.get_var('IS_DC'):
         _rsync_files_to_con1(con_ssh=ControllerClient.get_active_controller(name=ProjVar.get_var('PRIMARY_SUBCLOUD')),
-                             file_to_check='{}/heat/README'.format(WRSROOT_HOME), central_region=central_region)
+                             file_to_check='{}/heat/README'.format(SYSADMIN_HOME), central_region=central_region)
         con_ssh = ControllerClient.get_active_controller(name='RegionOne')
         central_region = True
 
@@ -1420,7 +1420,7 @@ def setup_remote_cli_client():
     for dir_name in ('images/', 'heat/', 'userdata/'):
         dest_path = '{}/{}'.format(ProjVar.get_var('TEMP_DIR'), dir_name)
         os.makedirs(dest_path, exist_ok=True)
-        common.scp_from_active_controller_to_localhost(source_path='{}/{}/*'.format(WRSROOT_HOME, dir_name),
+        common.scp_from_active_controller_to_localhost(source_path='{}/{}/*'.format(SYSADMIN_HOME, dir_name),
                                                        dest_path=dest_path, is_dir=True)
     return client
 

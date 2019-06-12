@@ -7,7 +7,7 @@
 # from utils.cli import ControllerClient
 # from utils import cli
 #
-# from consts.filepaths import MuranoPath, WRSROOT_HOME
+# from consts.filepaths import MuranoPath, SYSADMIN_HOME
 # from consts.auth import Tenant
 # from consts.cgcs import MuranoEnvStatus
 # from keywords import murano_helper, host_helper, system_helper, glance_helper, common, network_helper
@@ -149,13 +149,13 @@
 #         session_id = murano_helper.create_session(env_id)[1]
 #
 #     demo_app = os.path.basename(MuranoPath.APP_DEMO_PATH)
-#     common.scp_from_test_server_to_active_controller(MuranoPath.APP_DEMO_PATH, WRSROOT_HOME)
+#     common.scp_from_test_server_to_active_controller(MuranoPath.APP_DEMO_PATH, SYSADMIN_HOME)
 #     ssh_conn = ControllerClient.get_active_controller()
-#     rc = ssh_conn.exec_cmd("test -f " + WRSROOT_HOME + demo_app)[0]
-#     assert rc == 0, "The Murano application demo file  {} not found".format(WRSROOT_HOME + demo_app)
+#     rc = ssh_conn.exec_cmd("test -f " + SYSADMIN_HOME + demo_app)[0]
+#     assert rc == 0, "The Murano application demo file  {} not found".format(SYSADMIN_HOME + demo_app)
 #
 #     # Deploy application package
-#     code, pkg_id = murano_helper.import_package(pkg=WRSROOT_HOME + demo_app, fail_ok=True)
+#     code, pkg_id = murano_helper.import_package(pkg=SYSADMIN_HOME + demo_app, fail_ok=True)
 #     LOG.info("Murano Application package {} imported successfully. code = {}".format(pkg_id, code))
 #
 #     demo_app_file = os.path.splitext(demo_app)[0]

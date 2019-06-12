@@ -22,7 +22,7 @@ def heat_precheck():
     Skip test on systems that don't use heat stacks to setup the lab.
     """
     con_ssh = ControllerClient.get_active_controller()
-    cmd = "test -f /home/wrsroot/.heat_resources"
+    cmd = "test -f /home/sysadmin/.heat_resources"
     rc, out = con_ssh.exec_cmd(cmd)
 
     if rc != 0:

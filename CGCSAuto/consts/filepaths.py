@@ -1,17 +1,17 @@
 import os
 
-WRSROOT_HOME = '/home/wrsroot/'
+SYSADMIN_HOME = '/home/sysadmin/'
 
 
 class TiSPath:
-    TIS_UBUNTU_PATH = '/home/wrsroot/userdata/ubuntu_if_config.sh'
-    TIS_CENTOS_PATH = '/home/wrsroot/userdata/centos_if_config.sh'
-    USERDATA = '/home/wrsroot/userdata/'
-    IMAGES = '/home/wrsroot/images/'
-    INSTALL_STATUS = 'home/wrsroot/autoinstall_status.log'
-    HEAT = '/home/wrsroot/heat/'
+    TIS_UBUNTU_PATH = '/home/sysadmin/userdata/ubuntu_if_config.sh'
+    TIS_CENTOS_PATH = '/home/sysadmin/userdata/centos_if_config.sh'
+    USERDATA = '/home/sysadmin/userdata/'
+    IMAGES = '/home/sysadmin/images/'
+    INSTALL_STATUS = 'home/sysadmin/autoinstall_status.log'
+    HEAT = '/home/sysadmin/heat/'
     BACKUPS = '/opt/backups'
-    CUSTOM_HEAT_TEMPLATES = '/home/wrsroot/custom_heat_templates/'
+    CUSTOM_HEAT_TEMPLATES = '/home/sysadmin/custom_heat_templates/'
     HELM_CHARTS_DIR = '/www/pages/helm_charts/'
     DOCKER_CONF = '/etc/docker-distribution/registry/config.yml'
     DOCKER_REPO = '/var/lib/docker-distribution/docker/registry/v2/repositories'
@@ -33,13 +33,13 @@ class VMPath:
 
 
 class UserData:
-    ADDUSER_WRSROOT = 'cloud_config_adduser_wrsroot.txt'
+    ADDUSER_SYSADMIN = 'cloud_config_adduser_sysadmin.txt'
     DPDK_USER_DATA = 'dpdk_user_data.txt'
 
 
 class HeatTemplate:
     STRESS_NG = 'stress_ng.yaml'
-    HEAT_DIR = '{}heat/hot/'.format(WRSROOT_HOME)
+    HEAT_DIR = '{}heat/hot/'.format(SYSADMIN_HOME)
     LARGE_HEAT = 'upgrade_heat_template'
     LARGE_HEAT_NAME = 'upgrade_stack'
     SYSTEM_TEST_HEAT = 'system_test_template'
@@ -55,7 +55,7 @@ class TestServerPath:
 
 class PrivKeyPath:
     OPT_PLATFORM = '/opt/platform/id_rsa'
-    WRS_HOME = '/home/wrsroot/.ssh/id_rsa'
+    SYS_HOME = '/home/sysadmin/.ssh/id_rsa'
 
 
 class BuildDirs:
@@ -194,9 +194,9 @@ class BMCPath:
 
 
 class SecurityPath:
-    DEFAULT_CERT_PATH = '/home/wrsroot/server-with-key.pem'
-    ALT_CERT_PATH = '/home/wrsroot/certificates-files/server-with-key.pem.bk'
-    CA_CERT_PATH = '/home/wrsroot/ca-cert.pem'
+    DEFAULT_CERT_PATH = '/home/sysadmin/server-with-key.pem'
+    ALT_CERT_PATH = '/home/sysadmin/certificates-files/server-with-key.pem.bk'
+    CA_CERT_PATH = '/home/sysadmin/ca-cert.pem'
 
 
 class IxiaPath:
@@ -221,8 +221,8 @@ class TuxlabServerPath:
 
 
 class LogPath:
-    LAB_SETUP_LOG = '/home/wrsroot/lab_setup.group0.log'
-    HEAT_SETUP_LOG = '/home/wrsroot/launch_heat_stacks.log'
+    LAB_SETUP_LOG = '/home/sysadmin/lab_setup.group0.log'
+    HEAT_SETUP_LOG = '/home/sysadmin/launch_heat_stacks.log'
     CONFIG_CONTROLLER_LOG = '/var/log/puppet/latest/puppet.log'
 
 

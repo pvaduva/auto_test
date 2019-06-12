@@ -41,7 +41,7 @@ def test_reconnect_after_swact():
 
 def test_credential_incorrect():
     LOG.tc_func_start()
-    ssh_client1 = SSHClient(host=hostname, user='wrsroot', password='imwrong69')
+    ssh_client1 = SSHClient(host=hostname, user='sysadmin', password='imwrong69')
     try:
         ssh_client1.connect(retry=True)
         fail("Test failed, how can connect pass??")

@@ -13,7 +13,7 @@ from utils.tis_log import LOG
 @fixture(scope='module')
 def get_patch_name():
     """
-    Assumes that the patch has been stored in /home/wrsroot/test_patches on the server
+    Assumes that the patch has been stored in /home/sysadmin/test_patches on the server
     - Change patch_name to whatever the patch's name is before testing
     """
     patch_name = 'TS_16.10_FC_TEST_ALLNODES_RR'
@@ -117,9 +117,9 @@ def test_patch_log_upload_dir(get_patch_name):
                   'sw-patch-controller-daemon.*INFO: Importing patch:.*{}'.format(patch_name)]
     res_2 = check_logs(search_for, lines=20, api=False)
 
-    search_for = ['sw-patch-controller-daemon.*INFO: User: wrsroot/admin Action: Importing patches:.*{}.patch'
+    search_for = ['sw-patch-controller-daemon.*INFO: User: sysadmin/admin Action: Importing patches:.*{}.patch'
                   .format(patch_name),
-                  'sw-patch-controller-daemon.*INFO: User: wrsroot/admin Action: Importing patch:.*{}.patch'
+                  'sw-patch-controller-daemon.*INFO: User: sysadmin/admin Action: Importing patch:.*{}.patch'
                   .format(patch_name)]
     res_3 = check_logs(search_for, lines=10, api=True)
 
@@ -150,7 +150,7 @@ def test_patch_log_what_requires(get_patch_name):
     search_for = ['sw-patch-controller-daemon.*INFO: Querying what requires patches:.*{}'.format(patch_name)]
     res_1 = check_logs(search_for, lines=10, api=False)
 
-    search_for = ['sw-patch-controller-daemon.*INFO: User: wrsroot/admin Action: '
+    search_for = ['sw-patch-controller-daemon.*INFO: User: sysadmin/admin Action: '
                   'Querying what requires patches:.*{}'.format(patch_name)]
     res_2 = check_logs(search_for, lines=10, api=True)
 
@@ -227,7 +227,7 @@ def test_patch_log_host_install(setup_host_install):
     res = check_logs(search_for, lines=50, api=False)
     assert res, "FAIL: uploading patches did not generate the expected logs in patching.log"
 
-    search_for = ['sw-patch-controller-daemon.*INFO: User: wrsroot/admin '
+    search_for = ['sw-patch-controller-daemon.*INFO: User: sysadmin/admin '
                   'Action: Running host-install for {}'.format(host)]
     res = check_logs(search_for, lines=25, api=True)
     assert res, "FAIL: uploading patches did not generate the expected logs in patching-api.log"

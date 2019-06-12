@@ -3,7 +3,7 @@ import time
 from utils.tis_log import LOG
 from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 from consts.auth import Tenant
 from keywords import system_helper, host_helper
 
@@ -580,9 +580,9 @@ def edit_environment_object_mode(env_id, session_id=None, object_model_file=None
     filename = 'object_model_patch.json'
     con_ssh.exec_cmd('cat >{} <<EOL\n{}\nEOL'.format(filename, object_model_file))
 
-    rc = con_ssh.exec_cmd("test -f " + WRSROOT_HOME + filename)[0]
+    rc = con_ssh.exec_cmd("test -f " + SYSADMIN_HOME + filename)[0]
     if rc != 0:
-        msg = "Fail to save the object model file {}".format(WRSROOT_HOME + filename)
+        msg = "Fail to save the object model file {}".format(SYSADMIN_HOME + filename)
         if fail_ok:
             return 1, msg
         else:
@@ -602,6 +602,6 @@ def edit_environment_object_mode(env_id, session_id=None, object_model_file=None
         return 2, msg
 
     if delete_file_after:
-        con_ssh.exec_cmd("rm -f " + WRSROOT_HOME + filename)
+        con_ssh.exec_cmd("rm -f " + SYSADMIN_HOME + filename)
 
     return code, output

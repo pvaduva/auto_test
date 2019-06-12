@@ -9,7 +9,7 @@ from utils.clients.ssh import ControllerClient
 from utils.clients.local import LocalHostClient
 
 from keywords import common, kube_helper, host_helper, system_helper, container_helper, keystone_helper
-from consts.filepaths import TestServerPath, WRSROOT_HOME, TiSPath
+from consts.filepaths import TestServerPath, SYSADMIN_HOME, TiSPath
 from consts.cgcs import HostAvailState, Container
 from consts.proj_vars import ProjVar
 from testfixtures.recover_hosts import HostsToRecover
@@ -40,10 +40,10 @@ def controller_precheck(controller):
 @fixture(scope='module')
 def copy_test_apps():
     con_ssh = ControllerClient.get_active_controller()
-    app_dir = os.path.join(WRSROOT_HOME, 'custom_apps/')
+    app_dir = os.path.join(SYSADMIN_HOME, 'custom_apps/')
     if not con_ssh.file_exists(app_dir + POD_YAML):
         common.scp_from_test_server_to_active_controller(source_path=TestServerPath.CUSTOM_APPS, con_ssh=con_ssh,
-                                                         dest_dir=WRSROOT_HOME, timeout=60, is_dir=True)
+                                                         dest_dir=SYSADMIN_HOME, timeout=60, is_dir=True)
 
     if not system_helper.is_aio_simplex():
         dest_host = 'controller-1' if con_ssh.get_hostname() == 'controller-0' else 'controller-0'

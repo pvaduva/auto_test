@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 from utils.node import Node
 from utils.jenkins_utils import build_info
 from consts.proj_vars import InstallVars, ProjVar
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.filepaths import BuildServerPath, SYSADMIN_HOME
 from consts.cgcs import VSwitchType
 from tc_sysinstall.fresh_install import fresh_install_helper
 from keywords import host_helper
@@ -97,7 +97,7 @@ def pytest_configure(config):
         files_server = build_server
 
         if sublcoud_name and not lab_file_dir:
-            lab_file_dir = "{}:{}{}".format(dc_float_ip, WRSROOT_HOME, sublcoud_name)
+            lab_file_dir = "{}:{}{}".format(dc_float_ip, SYSADMIN_HOME, sublcoud_name)
             files_server = Node(host_ip=dc_float_ip, host_name='controller-0')
 
         if lab_file_dir:

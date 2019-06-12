@@ -1098,8 +1098,8 @@ def collect_upgrade_complete_kpi(lab, collect_kpi):
 def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, upgrade_ver=None):
     # TODO: Need to support remote_cli. i.e., no hardcoded load_path, etc
     if upgrade_ver >= '17.07':
-        load_path = '/home/wrsroot/bootimage.sig'
-        rc, output = cli.system('load-import /home/wrsroot/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True)
+        load_path = '/home/sysadmin/bootimage.sig'
+        rc, output = cli.system('load-import /home/sysadmin/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True)
     else:
         rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True)
     if rc == 0:

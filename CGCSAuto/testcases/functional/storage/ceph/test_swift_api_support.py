@@ -285,7 +285,7 @@ def test_swift_cli_interaction(tc, pre_swift_check):
     if tc == 'large':
         test_objects_info = get_large_img_file()
         if not test_objects_info:
-            skip("Not enough space in /home/wrsroot for 8G large file")
+            skip("Not enough space in /home/sysadmin for 8G large file")
     else:
         test_objects_info = get_test_obj_file_names()
 

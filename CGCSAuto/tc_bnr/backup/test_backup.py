@@ -9,7 +9,7 @@ from pytest import fixture, skip
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import Server
 from consts.cgcs import TIS_BLD_DIR_REGEX, BackupRestore, PREFIX_BACKUP_FILE
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.filepaths import BuildServerPath, SYSADMIN_HOME
 from consts.proj_vars import InstallVars, ProjVar, BackupVars
 from utils.clients.ssh import ControllerClient, NATBoxClient
 from utils.tis_log import LOG
@@ -365,7 +365,7 @@ def backup_load_iso_image(backup_info):
         pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
         # build_server_conn.rsync("-L " + iso_file_path, lab['controller-0 ip'],
         build_server_conn.rsync("-L " + iso_file_path, html_helper.get_ip_addr(),
-                                os.path.join(WRSROOT_HOME, "bootimage.iso"),
+                                os.path.join(SYSADMIN_HOME, "bootimage.iso"),
                                 pre_opts=pre_opts,
                                 timeout=360)
 
@@ -381,13 +381,13 @@ def backup_load_iso_image(backup_info):
 
         # Check if the ISO is uploaded to controller-0
         con_ssh = ControllerClient.get_active_controller()
-        cmd = "test -e " + os.path.join(WRSROOT_HOME, "bootimage.iso")
-        assert con_ssh.exec_cmd(cmd)[0] == 0,  'The bootimage.iso file not found in {}'.format(WRSROOT_HOME)
+        cmd = "test -e " + os.path.join(SYSADMIN_HOME, "bootimage.iso")
+        assert con_ssh.exec_cmd(cmd)[0] == 0,  'The bootimage.iso file not found in {}'.format(SYSADMIN_HOME)
 
         LOG.tc_step("Burning backup load ISO to /dev/{}  ...".format(usb_part1))
         # Write the ISO to USB
         cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync"\
-            .format(HostLinuxCreds.get_password(), os.path.join(WRSROOT_HOME, "bootimage.iso"), usb_part1)
+            .format(HostLinuxCreds.get_password(), os.path.join(SYSADMIN_HOME, "bootimage.iso"), usb_part1)
 
         rc,  output = con_ssh.exec_cmd(cmd, expect_timeout=900)
         if rc == 0:
@@ -399,7 +399,7 @@ def backup_load_iso_image(backup_info):
 
     else:
         LOG.tc_step("Copying  load image ISO to local test server: {} ...".format(backup_dest_path))
-        common.scp_from_active_controller_to_test_server(os.path.join(WRSROOT_HOME, "bootimage.iso"), backup_dest_path)
+        common.scp_from_active_controller_to_test_server(os.path.join(SYSADMIN_HOME, "bootimage.iso"), backup_dest_path)
         LOG.info(" The backup build iso file copied to local test server: {}".format(backup_dest_path))
         return True
 

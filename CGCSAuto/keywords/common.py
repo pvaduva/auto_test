@@ -12,7 +12,7 @@ import pexpect
 
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import Prompt
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 from consts.proj_vars import ProjVar
 from utils import exceptions
 from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, get_cli_client
@@ -214,7 +214,7 @@ def scp_from_active_controller_to_localhost(source_path, dest_path='',
                         timeout=timeout, is_dir=is_dir)
 
 
-def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
+def scp_from_local(source_path, dest_ip, dest_path=SYSADMIN_HOME,
                    dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
                    timeout=900, is_dir=False):
     """
@@ -238,7 +238,7 @@ def scp_from_local(source_path, dest_ip, dest_path=WRSROOT_HOME,
     _scp_base(cmd, remote_password=dest_password, timeout=timeout)
 
 
-def scp_to_local(source_path=None, source_ip=None, dest_path=WRSROOT_HOME,
+def scp_to_local(source_path=None, source_ip=None, dest_path=SYSADMIN_HOME,
                  source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
                  timeout=900, is_dir=False):
     """
@@ -557,7 +557,7 @@ def collect_software_logs(con_ssh=None):
     con_ssh.exec_cmd('source /etc/platform/openrc', get_exit_code=False)
     con_ssh.send('collect all')
 
-    expect_list = ['.*password for wrsroot:', 'collecting data.', con_ssh.prompt]
+    expect_list = ['.*password for sysadmin:', 'collecting data.', con_ssh.prompt]
     index_1 = con_ssh.expect(expect_list, timeout=20)
     if index_1 == 2:
         LOG.error("Something is wrong with collect all. Check ssh console log for detail.")

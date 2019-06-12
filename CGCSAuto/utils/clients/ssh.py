@@ -66,7 +66,7 @@ class SSHClient:
         Initiate an object for connecting to remote host
         Args:
             host: hostname or ip. such as "yow-cgcs-ironpass-1.wrs.com" or "128.224.151.212"
-            user: linux username for login to host. such as "wrsroot"
+            user: linux username for login to host. such as "sysadmin"
             password: password for given user. such as "Li69nux*"
 
         Returns:

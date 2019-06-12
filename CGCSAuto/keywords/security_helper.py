@@ -8,7 +8,7 @@ from string import ascii_lowercase, ascii_uppercase, digits
 from consts.auth import Tenant, HostLinuxCreds, CliAuth
 from consts.cgcs import Prompt, EventLogID
 from consts.proj_vars import ProjVar
-from consts.filepaths import BuildServerPath, WRSROOT_HOME
+from consts.filepaths import BuildServerPath, SYSADMIN_HOME
 from utils.tis_log import LOG
 from utils import exceptions
 from utils.clients.ssh import ControllerClient, SSHClient, SSHFromSSH
@@ -681,7 +681,7 @@ def get_admin_password_in_keyring(con_ssh=None):
     return admin_pswd
 
 
-def change_linux_user_password(password, new_password, user='wrsroot', host=None):
+def change_linux_user_password(password, new_password, user='sysadmin', host=None):
     LOG.info('Attempt to change password, from password:{}, to new-password:{}, on host:{}'.format(
         password, new_password, host))
 
@@ -741,7 +741,7 @@ def change_linux_user_password(password, new_password, user='wrsroot', host=None
     finally:
         pass
         # TODO: close this connection will lead EOF error in ssh.py if invoked in fixture cleanup handler
-        if user != 'wrsroot':
+        if user != 'sysadmin':
             conn.close()
 
     # flush the output to the cli so the next cli is correctly registered
@@ -990,7 +990,7 @@ def fetch_cert_file(cert='ca-cert', scp_to_local=True, con_ssh=None, bld_server=
         raise ValueError("Please set cert to one of the following: {}".format(valid_certs))
 
     cert_name = '{}.pem'.format(cert)
-    cert_on_tis = '{}/{}'.format(WRSROOT_HOME, cert_name)
+    cert_on_tis = '{}/{}'.format(SYSADMIN_HOME, cert_name)
 
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
@@ -1031,7 +1031,7 @@ def fetch_cert_file(cert='ca-cert', scp_to_local=True, con_ssh=None, bld_server=
             cert_file_on_bs))
         common._scp_from_remote_server_to_active_controller(source_server=from_server,
                                                             source_path=cert_file_on_bs,
-                                                            dest_dir=WRSROOT_HOME,
+                                                            dest_dir=SYSADMIN_HOME,
                                                             dest_name=cert_name,
                                                             timeout=120,
                                                             con_ssh=con_ssh)

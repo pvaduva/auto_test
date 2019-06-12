@@ -11,7 +11,7 @@ from testfixtures.resource_mgmt import ResourceCleanup
 # def check_launch_script_exists():
 #     controller = system_helper.get_active_controller_name()
 #     with host_helper.ssh_to_host(controller) as con_ssh:
-#         cmd = "ls -A /home/wrsroot/instances_group0"
+#         cmd = "ls -A /home/sysadmin/instances_group0"
 #         if con_ssh.exec_cmd(cmd)[1] == '':
 #             skip("Lab setup using heat. No VM launch script.")
 #

@@ -8,7 +8,7 @@ from consts.auth import SvcCgcsAuto, HostLinuxCreds, Tenant
 from consts.build_server import Server, get_build_server_info
 from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN, \
     TIS_BLD_DIR_REGEX, TITANIUM_BACKUP_FILE_PATTERN, BackupRestore
-from consts.filepaths import TiSPath, BuildServerPath, WRSROOT_HOME
+from consts.filepaths import TiSPath, BuildServerPath, SYSADMIN_HOME
 from consts.proj_vars import InstallVars, RestoreVars, ProjVar
 from consts.timeout import HostTimeout
 from setups import collect_tis_logs
@@ -321,14 +321,14 @@ def restore_setup(pre_restore_checkup):
     backup_src = RestoreVars.get_restore_var('backup_src'.upper())
     backup_src_path = RestoreVars.get_restore_var('backup_src_path'.upper())
     if backup_src.lower() == 'local':
-        LOG.fixture_step("Transferring system backup file to controller-0 {} ... ".format(WRSROOT_HOME))
+        LOG.fixture_step("Transferring system backup file to controller-0 {} ... ".format(SYSADMIN_HOME))
 
         system_backup_file = [file for file in tis_backup_files if "system.tgz" in file].pop()
         common.scp_from_test_server_to_active_controller("{}/{}".format(backup_src_path, system_backup_file),
-                                                         WRSROOT_HOME)
+                                                         SYSADMIN_HOME)
 
-        assert con_ssh.exec_cmd("ls {}{}".format(WRSROOT_HOME, system_backup_file))[0] == 0, \
-            "Missing backup file {} in dir {}".format(system_backup_file, WRSROOT_HOME)
+        assert con_ssh.exec_cmd("ls {}{}".format(SYSADMIN_HOME, system_backup_file))[0] == 0, \
+            "Missing backup file {} in dir {}".format(system_backup_file, SYSADMIN_HOME)
 
     elif backup_src.lower() == 'usb':
         tis_backup_files = pre_restore_checkup
@@ -704,7 +704,7 @@ def test_restore(restore_setup):
     if backup_src.lower() == 'usb':
         system_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, system_backup_file)
     else:
-        system_backup_path = "{}{}".format(WRSROOT_HOME, system_backup_file)
+        system_backup_path = "{}{}".format(SYSADMIN_HOME, system_backup_file)
 
     compute_configured = install_helper.restore_controller_system_config(
         system_backup=system_backup_path,
@@ -727,9 +727,9 @@ def test_restore(restore_setup):
     make_sure_all_hosts_locked(con_ssh)
 
     if backup_src.lower() == 'local':
-        images_backup_path = "{}{}".format(WRSROOT_HOME, images_backup_file)
+        images_backup_path = "{}{}".format(SYSADMIN_HOME, images_backup_file)
         common.scp_from_test_server_to_active_controller("{}/{}".format(backup_src_path, images_backup_file),
-                                                         WRSROOT_HOME)
+                                                         SYSADMIN_HOME)
     else:
         images_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, images_backup_file)
 
@@ -768,7 +768,7 @@ def test_restore(restore_setup):
             # the customer doc does have wording regarding this situation, continue
             # assert False, 'Node:{} is NOT in Available nor Degraded status'
 
-    # delete the system backup files from wrsroot home
+    # delete the system backup files from sysadmin home
     LOG.tc_step("Copying backup files to /opt/backups ... ")
     if backup_src.lower() == 'local':
         con_ssh.exec_cmd("rm -f {} {}".format(system_backup_path, images_backup_path))

@@ -6,7 +6,7 @@ from pytest import skip, fixture
 
 from consts.cgcs import LocalStorage
 from consts.auth import Tenant
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 
 from utils import cli, table_parser
 from utils.tis_log import LOG
@@ -211,7 +211,7 @@ def parse_storprofiles_from_xml(xml_file=None):
 class TestLocalStorage:
     """test local storage"""
 
-    # DIR_PROFILE_IMPORT_FROM='/home/wrsroot/storage_profiles'
+    # DIR_PROFILE_IMPORT_FROM='/home/sysadmin/storage_profiles'
 
     _cleanup_lists = {
         'profile': [],
@@ -293,7 +293,7 @@ class TestLocalStorage:
         return rtn_list
 
     def get_remote_storprofile_file(self, local_storage_type='image'):
-        remote_file = os.path.join(WRSROOT_HOME, '{}_storage_profile_to_import.xml'.format(local_storage_type))
+        remote_file = os.path.join(SYSADMIN_HOME, '{}_storage_profile_to_import.xml'.format(local_storage_type))
 
         return remote_file
 

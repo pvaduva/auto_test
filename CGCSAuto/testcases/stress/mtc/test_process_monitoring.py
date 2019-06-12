@@ -807,7 +807,7 @@ class MonitoredProcess:
                     retries, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
-        cmd_2 = 'cat >/home/wrsroot/test_process.sh  <<EOL\n{}\nEOL'.format(cmd)
+        cmd_2 = 'cat >/home/sysadmin/test_process.sh  <<EOL\n{}\nEOL'.format(cmd)
 
         wait_time = max(wait_after_each_kill * retries + 60, 60)
 
@@ -946,7 +946,7 @@ class MonitoredProcess:
                 self.pid = -1
                 try:
                     with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
-                        raw_pid = con.exec_cmd('tail /home/wrsroot/results.txt | tail -n1', fail_ok=True)[1]
+                        raw_pid = con.exec_cmd('tail /home/sysadmin/results.txt | tail -n1', fail_ok=True)[1]
                         self.pid = int(raw_pid)
                 except ValueError as e:
                     LOG.warn('Unknown pid:{} from cmd:{}'.format(cmd, e))

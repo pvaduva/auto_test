@@ -731,7 +731,7 @@ def pytest_addoption(parser):
     backup_server_destination_help = "Whether to save/get backupfiles on/from USB. Default is test server." \
                                      "When true, 16G USB  or above must be plugged to controller-0 "
     backup_destination_path_help = "The path the backup files are copied to/taken from if destination is not a USB. " \
-                                   "For USB, the backup files are at mount point: /media/wrsroot/backups. " \
+                                   "For USB, the backup files are at mount point: /media/sysadmin/backups. " \
                                    "For Test Server, the default is /sandbox/backups."
 
     parser.addoption('--usb', '--usb',  dest='use_usb', action='store_true',  help=backup_server_destination_help)

@@ -8,7 +8,7 @@ from pytest import skip
 from consts.auth import Tenant, HostLinuxCreds
 from consts.cgcs import UUID, Prompt, SysType, EventLogID, HostAvailState
 from consts.proj_vars import ProjVar
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 from consts.timeout import SysInvTimeout, MiscTimeout, HostTimeout
 from utils import cli, table_parser, exceptions
 from utils.clients.ssh import ControllerClient
@@ -2333,7 +2333,7 @@ def __update_ml2_extension_drivers(drivers, enable=True, auth_info=Tenant.get('a
               ml2: 
                 extension_drivers: {}
         """.format(new_value)
-        yaml_file = os.path.join(WRSROOT_HOME, 'ml2_drivers.yaml')
+        yaml_file = os.path.join(SYSADMIN_HOME, 'ml2_drivers.yaml')
         if not con_ssh:
             con_ssh = ControllerClient.get_active_controller()
             con_ssh.exec_cmd('rm -f {}'.format(yaml_file), get_exit_code=False)

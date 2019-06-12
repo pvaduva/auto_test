@@ -9,7 +9,7 @@ from pytest import fixture, skip, mark
 from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
 from consts.build_server import DEFAULT_BUILD_SERVER
 from consts.cgcs import FlavorSpec, GuestImages
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 from consts.kpi_vars import CyclicTest
 from consts.proj_vars import ProjVar
 from utils import cli, table_parser, exceptions
@@ -20,7 +20,7 @@ from keywords import common, host_helper, system_helper, glance_helper, nova_hel
 
 
 CYCLICTEST_EXE = '/folk/svc-cgcsauto/cyclictest/cyclictest'
-CYCLICTEST_DIR = '/home/wrsroot/cyclictest/'
+CYCLICTEST_DIR = '/home/sysadmin/cyclictest/'
 HISTOGRAM_FILE = 'hist-file'
 SHELL_FILE = 'runcyclictest.sh'
 RESULT_FILE = 'result'
@@ -59,7 +59,7 @@ testable_hypervisors = {}
 def disable_remote_cli(request):
     if ProjVar.get_var('REMOTE_CLI'):
         ProjVar.set_var(REMOTE_CLI=False)
-        ProjVar.set_var(USER_FILE_DIR=WRSROOT_HOME)
+        ProjVar.set_var(USER_FILE_DIR=SYSADMIN_HOME)
 
         def revert():
             ProjVar.set_var(REMOTE_CLI=True)

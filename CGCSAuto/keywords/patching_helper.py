@@ -10,7 +10,7 @@ from utils import exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from consts.cgcs import PatchState, PatchPattern, EventLogID
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 from consts.proj_vars import ProjVar, PatchingVars
 from consts.auth import HostLinuxCreds
 from testfixtures.recover_hosts import HostsToRecover
@@ -1449,7 +1449,7 @@ def download_test_patches(build_server=None, patch_dir=None, tis_dir=None, con_s
 
     """
     if not tis_dir:
-        tis_dir = WRSROOT_HOME + 'test_patches'
+        tis_dir = SYSADMIN_HOME + 'test_patches'
 
     build_info = system_helper.get_build_info(con_ssh=con_ssh)
     if not build_server:

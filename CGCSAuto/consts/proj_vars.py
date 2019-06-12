@@ -1,4 +1,4 @@
-from consts.filepaths import WRSROOT_HOME
+from consts.filepaths import SYSADMIN_HOME
 
 #
 # Please DO NOT import any CGCSAUTO modules other than consts.filepaths #
@@ -28,7 +28,7 @@ class ProjVar:
                   'IS_VBOX': False,
                   'RELEASE': 'R6',
                   'REMOTE_CLI': False,
-                  'USER_FILE_DIR': WRSROOT_HOME,
+                  'USER_FILE_DIR': SYSADMIN_HOME,
                   'NO_TEARDOWN': False,
                   'VSWITCH_TYPE': None,
                   'IS_DC': False,
@@ -38,7 +38,7 @@ class ProjVar:
                   'INSTANCE_BACKING': {},
                   'OPENSTACK_DEPLOYED': None,
                   'DEFAULT_INSTANCE_BACKING': None,
-                  'STX_KEYFILE_PATH': '{}/.ssh/id_rsa'.format(WRSROOT_HOME)
+                  'STX_KEYFILE_PATH': '{}/.ssh/id_rsa'.format(SYSADMIN_HOME)
                   }
 
     @classmethod
@@ -49,7 +49,7 @@ class ProjVar:
 
         cls.__var_dict.update(**{
             'NATBOX_KEYFILE_PATH': '~/priv_keys/keyfile_{}.pem'.format(labname),
-            'STX_KEYFILE_WRS_HOME': '/home/wrsroot/keyfile_{}.pem'.format(labname),
+            'STX_KEYFILE_SYS_HOME': '/home/sysadmin/keyfile_{}.pem'.format(labname),
             'LOG_DIR': logdir,
             'TCLIST_PATH': logdir + '/test_results.log',
             'PYTESTLOG_PATH': logdir + '/pytestlog.log',
