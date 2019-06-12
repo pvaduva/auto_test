@@ -4,7 +4,7 @@ from utils.tis_log import LOG
 from consts.proj_vars import ProjVar
 from consts.auth import Tenant
 from consts.cgcs import FlavorSpec, GuestImages
-from keywords import host_helper, common
+from keywords import common
 from testfixtures.fixture_resources import ResourceCleanup
 
 
@@ -95,6 +95,7 @@ def create_flavor(name=None, flavor_id=None, vcpus=1, ram=1024, root_disk=None, 
         default_flavor_backing = ProjVar.get_var('DEFAULT_INSTANCE_BACKING')
         sys_inst_backing = ProjVar.get_var('INSTANCE_BACKING')
         if not default_flavor_backing:
+            from keywords import host_helper
             sys_inst_backing = host_helper.get_hosts_per_storage_backing(up_only=False, auth_info=auth_info,
                                                                          con_ssh=con_ssh, refresh=True)
         configured_backings = [backing for backing in sys_inst_backing if sys_inst_backing.get(backing)]
@@ -977,6 +978,7 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
         if remove:
             hosts = hosts_in_aggregate
         else:
+            from keywords import host_helper
             hosts = host_helper.get_hypervisors()
 
     if isinstance(hosts, str):
