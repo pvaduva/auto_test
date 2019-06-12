@@ -186,7 +186,7 @@ def get_app_values(app_name, fields, con_ssh=None, auth_info=Tenant.get('admin_p
     return values
 
 
-def wait_for_apps_status(apps, status, timeout=300, check_interval=5, fail_ok=False, con_ssh=None,
+def wait_for_apps_status(apps, status, timeout=360, check_interval=5, fail_ok=False, con_ssh=None,
                          auth_info=Tenant.get('admin_platform')):
     """
     Wait for applications to reach expected status via system application-list

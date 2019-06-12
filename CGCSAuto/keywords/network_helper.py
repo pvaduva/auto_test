@@ -711,8 +711,8 @@ def delete_security_group_rules(sec_rules, check_first=True, fail_ok=False, con_
     return 0, msg
 
 
-def get_security_group_rules(field='ID', long=True, protocol=None, ingress=None, egress=None, auth_info=None,
-                             con_ssh=None, **filters):
+def get_security_group_rules(field='ID', long=True, protocol=None, ingress=None, egress=None, group=None,
+                             auth_info=None, con_ssh=None, **filters):
     """
     Get security group rules
     Args:
@@ -721,6 +721,7 @@ def get_security_group_rules(field='ID', long=True, protocol=None, ingress=None,
         protocol:
         ingress:
         egress:
+        group (str): security group id
         auth_info:
         con_ssh:
         **filters: header value pairs for security group rules table
@@ -735,12 +736,14 @@ def get_security_group_rules(field='ID', long=True, protocol=None, ingress=None,
         'long': long,
     }
     args = common.parse_args(args_dict)
+    if group:
+        args += ' {}'.format(group)
     output = cli.openstack('security group rule list', args, ssh_client=con_ssh, auth_info=auth_info)[1]
     table_ = table_parser.table(output)
     return table_parser.get_multi_values(table_, field, **filters)
 
 
-def add_icmp_and_tcp_rules(security_group, auth_info=None, con_ssh=None, cleanup=None):
+def add_icmp_and_tcp_rules(security_group, auth_info=Tenant.get('admin'), con_ssh=None, cleanup=None):
     """
     Add icmp and tcp security group rules to given security group to allow ping and ssh
     Args:
@@ -750,8 +753,8 @@ def add_icmp_and_tcp_rules(security_group, auth_info=None, con_ssh=None, cleanup
         cleanup
 
     """
-    security_rules = get_security_group_rules(con_ssh=con_ssh, auth_info=auth_info,
-                                              **{'IP Protocol': ('tcp', 'icmp'), 'Security Group': security_group})
+    security_rules = get_security_group_rules(con_ssh=con_ssh, auth_info=auth_info, group=security_group,
+                                              protocol='ingress', **{'IP Protocol': ('tcp', 'icmp')})
     if len(security_rules) >= 2:
         LOG.info("Security group rules for {} already exist to allow ping and ssh".format(security_group))
         return
