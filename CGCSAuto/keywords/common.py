@@ -14,7 +14,6 @@ from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.cgcs import Prompt
 from consts.filepaths import WRSROOT_HOME
 from consts.proj_vars import ProjVar
-from keywords import security_helper
 from utils import exceptions
 from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, get_cli_client
 from utils.tis_log import LOG
@@ -750,7 +749,8 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None, ssh_clie
         ssh_client = ControllerClient.get_active_controller()
 
     if not use_telnet:
-        default_user, default_password = security_helper.LinuxUser.get_current_user_password()
+        from keywords.security_helper import LinuxUser
+        default_user, default_password = LinuxUser.get_current_user_password()
     else:
         default_user = HostLinuxCreds.get_user()
         default_password = HostLinuxCreds.get_password()
