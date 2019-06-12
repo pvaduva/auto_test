@@ -609,7 +609,7 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None, repeat=1, last_run=F
         elif not vswitch_type_from_config:
             con_ssh.exec_cmd("echo \'VSWITCH_TYPE=\"{}\"\' >> {}.conf".format(vswitch_type, conf_file))
 
-        if vswitch_type == VSwitchType.NONE:
+        if vswitch_type in [VSwitchType.NONE, VSwitchType.OVS]:
             rc, output = con_ssh.exec_cmd("grep \'VSWITCH_PCPU=\' {}.conf".format(conf_file), fail_ok=True)
             if rc == 0:
                 con_ssh.exec_cmd("sed -i \"s/VSWITCH_PCPU=./VSWITCH_PCPU=0/g\" {}.conf".format(conf_file))
