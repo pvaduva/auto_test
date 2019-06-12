@@ -19,7 +19,7 @@ from consts.bios import NODES_WITH_KERNEL_BOOT_OPTION_SPACING, TerminalKeys
 from consts.build_server import Server
 from keywords import system_helper, host_helper, vm_helper, patching_helper, cinder_helper, common, network_helper, \
     vlm_helper
-from utils import telnet as telnetlib, exceptions, cli, table_parser, lab_info, multi_thread, menu
+from utils import exceptions, cli, table_parser, lab_info, multi_thread, menu
 from utils.clients.ssh import SSHClient, ControllerClient
 from utils.clients.telnet import TelnetClient, LOGIN_REGEX
 from utils.clients.local import LocalHostClient
@@ -418,13 +418,14 @@ def wipe_disk(node, install_output_dir, close_telnet_conn=True):
     """
 
     if node.telnet_conn is None:
-        node.telnet_conn = telnetlib.connect(node.telnet_ip,
-                                             int(node.telnet_port),
+
+        node.telnet_conn = TelnetClient(host=node.telnet_ip,
+                                             port=int(node.telnet_port),
                                              negotiate=node.telnet_negotiate,
                                              vt100query=node.telnet_vt100query,
-                                             log_path=install_output_dir + "/"
-                                             + node.name + ".telnet.log",
-                                             debug=False)
+                                             console_log_file=install_output_dir + "/"
+                                             + node.name + ".telnet.log")
+
 
     # Check that the node is accessible for wipedisk_via_helper to run.
     # If we cannot successfully ping the interface of the node, then it is
@@ -440,14 +441,19 @@ def wipe_disk(node, install_output_dir, close_telnet_conn=True):
     # else:
     #     node.telnet_conn.login()
 
-    node.telnet_conn.write_line("sudo -k wipedisk_via_helper")
-    node.telnet_conn.get_read_until(Prompt.PASSWORD_PROMPT)
-    node.telnet_conn.write_line(HostLinuxCreds.get_password())
-    node.telnet_conn.get_read_until("[y/n]")
-    node.telnet_conn.write_line("y")
-    node.telnet_conn.get_read_until("confirm")
-    node.telnet_conn.write_line("wipediskscompletely")
-    node.telnet_conn.get_read_until("The disk(s) have been wiped.", HostTimeout.WIPE_DISK_TIMEOUT)
+    node.telnet_conn.write(b"sudo -k wipedisk_via_helper")
+    node.telnet_conn.write(b"\r\n")
+
+    node.telnet_conn.read_until(Prompt.PASSWORD_PROMPT)
+    node.telnet_conn.write(HostLinuxCreds.get_password())
+    node.telnet_conn.write(b"\r\n")
+    node.telnet_conn.read_until("[y/n]")
+    node.telnet_conn.write("y")
+    node.telnet_conn.write(b"\r\n")
+    node.telnet_conn.read_until("confirm")
+    node.telnet_conn.write("wipediskscompletely")
+    node.telnet_conn.write(b"\r\n")
+    node.telnet_conn.read_until("The disk(s) have been wiped.", HostTimeout.WIPE_DISK_TIMEOUT)
 
     LOG.info("Disk(s) have been wiped on: " + node.name)
     if close_telnet_conn:

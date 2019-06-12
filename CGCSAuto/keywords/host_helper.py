@@ -25,7 +25,7 @@ from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, M
     EventLogID, HostTask, TrafficControl, PLATFORM_NET_TYPES, AppStatus, PLATFORM_AFFINE_INCOMPLETE, \
     FlavorSpec, STORAGE_AGGREGATE
 from utils import cli, exceptions, table_parser
-from utils import telnet as telnetlib
+from utils.clients import telnet as telnetlib
 from utils.clients.ssh import ControllerClient, SSHFromSSH, SSHClient
 from utils.tis_log import LOG
 from keywords import system_helper, common, kube_helper, security_helper, nova_helper
