@@ -690,9 +690,9 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=True
     is_simplex = system_helper.is_aio_simplex(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                               auth_info=auth_info)
 
+    from keywords import kube_helper, container_helper
     check_stx = prev_bad_pods = None
     if check_containers and not use_telnet:
-        from keywords import kube_helper, container_helper
         check_stx = container_helper.is_stx_openstack_deployed(applied_only=True, con_ssh=con_ssh, auth_info=auth_info,
                                                                use_telnet=use_telnet, con_telnet=con_telnet)
         prev_bad_pods = kube_helper.get_unhealthy_pods(node=host, con_ssh=con_ssh, all_namespaces=True)
@@ -733,11 +733,13 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK, available_only=True
         is_compute = bool(re.search('compute|worker', string_total))
 
         if check_hypervisor_up and is_compute:
-            nova_auth = Tenant.get('admin', dc_region=auth_info.get('region') if auth_info else None)
-            if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, auth_info=nova_auth,
-                                           use_telnet=use_telnet, con_telnet=con_telnet,
-                                           timeout=HostTimeout.HYPERVISOR_UP)[0]:
-                return 6, "Host is not up in nova hypervisor-list"
+            if container_helper.is_stx_openstack_deployed(con_ssh=con_ssh, auth_info=auth_info,
+                                                          use_telnet=use_telnet, con_telnet=con_telnet):
+                nova_auth = Tenant.get('admin', dc_region=auth_info.get('region') if auth_info else None)
+                if not wait_for_hypervisors_up(host, fail_ok=fail_ok, con_ssh=con_ssh, auth_info=nova_auth,
+                                               use_telnet=use_telnet, con_telnet=con_telnet,
+                                               timeout=HostTimeout.HYPERVISOR_UP)[0]:
+                    return 6, "Host is not up in nova hypervisor-list"
 
             if not is_simplex:
                 # wait_for_tasks_affined(host, con_ssh=con_ssh)
