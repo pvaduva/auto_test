@@ -1220,12 +1220,8 @@ def get_mgmt_net_id(con_ssh=None, auth_info=None):
     Returns (str): Management network id of a specific tenant.
 
     """
-    if auth_info is None:
-        auth_info = Tenant.get_primary()
-
-    tenant = auth_info['tenant']
-    mgmt_net_name = '-'.join([tenant, 'mgmt', 'net'])
-    mgmt_ids = get_networks(name=mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
+    mgmt_net_name = Networks.get_nenutron_net_patterns(net_type='mgmt')
+    mgmt_ids = get_networks(name=mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info, strict=False, regex=True)
     if not mgmt_ids:
         raise exceptions.TiSError("No network name contains {} in 'openstack network list'".format(mgmt_net_name))
     return mgmt_ids[0]
@@ -1266,8 +1262,7 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, field='id')
 
     """
     if net_names is None:
-        tenant_name = common.get_tenant_name(auth_info=auth_info)
-        net_names = tenant_name + '-net'
+        net_names = Networks.get_nenutron_net_patterns('data')
 
     return get_networks(field=field, con_ssh=con_ssh, auth_info=auth_info, strict=False, name=net_names)
 
@@ -1287,7 +1282,7 @@ def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None,
 
     """
     if net_names is None:
-        net_names = 'internal'
+        net_names = Networks.get_nenutron_net_patterns('internal')
         strict = False
     else:
         if isinstance(net_names, str):
@@ -2597,10 +2592,10 @@ def set_port(port_id, name=None, fixed_ips=None, no_fixed_ip=None, device_id=Non
 def __convert_ip_subnet(line):
     ip_addr = subnet = ''
     if 'ip_address' in line:
-        ip_addrs = re.findall("ip_address='(.*)',", line)
+        ip_addrs = re.findall("ip_address=\'(.*)\',", line)
         if ip_addrs:
             ip_addr = ip_addrs[0]
-        subnets = re.findall("subnet_id='(.*)'", line)[0]
+        subnets = re.findall("subnet_id=\'(.*)\'", line)
         if subnets:
             subnet = subnets[0]
 

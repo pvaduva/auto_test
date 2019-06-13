@@ -272,9 +272,9 @@
 #
 #     vol_name = 'vol_{}'.format(new_img_name)
 #     LOG.info('Creating Volume {} from  image {}  ......'.format(vol_name, new_img_name))
-#     ProjVar.set_var(**{"SOURCE_OPENRC": Tenant.TENANT2})
+#     ProjVar.set_var(**{"SOURCE_OPENRC": Tenant.get('tenant2')})
 #     rc, vol_id = cinder_helper.create_volume(name=vol_name, source_id=image_id_rbd, vol_type='ceph', fail_ok=True,
-#                                              auth_info=Tenant.TENANT2)
+#                                              auth_info=Tenant.get('tenant2'))
 #     if rc != 1:
 #         ResourceCleanup.add("volume", vol_id)
 #     assert rc == 0, "Fail to create volume {}: {} ".format(vol_name, vol_id)
@@ -285,7 +285,7 @@
 #     LOG.info('Creating VM using image {}  ......'.format(new_img_name))
 #     vm_name = 'vm_{}'.format(new_img_name)
 #     rc, vm_id, msg, new_vol_id = vm_helper.boot_vm(name=vm_name, source='volume', source_id=vol_id,
-#                                                    auth_info=Tenant.TENANT2, cleanup='function')
+#                                                    auth_info=Tenant.get('tenant2'), cleanup='function')
 #     assert rc == 0, "VM {} boot failed: {}".format(vm_name, msg)
 #
 #     LOG.info("Created  images, volumes and Vms  successfully  ceph as backend ....")
@@ -303,7 +303,7 @@
 #     # vol_name = 'vol_{}'.format(new_img_name)
 #     # LOG.info('Creating Volume {} from  image {}  ......'.format(vol_name, new_img_name))
 #     # rc, vol_id = cinder_helper.create_volume(name=vol_name, image_id=image_id_file, vol_type='iscsi',
-#     #                                          auth_info=Tenant.TENANT2, fail_ok=True)
+#     #                                          auth_info=Tenant.get('tenant2'), fail_ok=True)
 #     # if rc != 1:
 #     #     ResourceCleanup.add("volume", vol_id)
 #     # assert rc == 0, "Fail to create volume {}: {} ".format(vol_name, vol_id)
@@ -314,7 +314,7 @@
 #     # LOG.info('Creating VM using image {}  ......'.format(new_img_name))
 #     # vm_name = 'vm_{}'.format(new_img_name)
 #     # rc, vm_id, msg, new_vol = vm_helper.boot_vm(name=vm_name, source='volume', source_id=vol_id,
-#     #                                             auth_info=Tenant.TENANT2, cleanup='function')
+#     #                                             auth_info=Tenant.get('tenant2'), cleanup='function')
 #     # assert rc == 0, "VM {} boot failed: {}".format(vm_name,msg)
 #     # LOG.info("Created  images, volumes and Vms  successfully  ceph as backend ....")
 #

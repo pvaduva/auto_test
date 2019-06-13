@@ -22,13 +22,13 @@ def test_launch_vms_pre_upgrade():
     vms = vm_helper.get_any_vms(all_tenants=True)
     exiting_count = len(vms)
     con_ssh = ControllerClient.get_active_controller()
-    tenants = [Tenant.TENANT1['user'], Tenant.TENANT2['user']]
+    tenants = [Tenant.get('tenant1')['user'], Tenant.get('tenant2')['user']]
     openrc = "/etc/nova/openrc"
     current_version = system_helper.get_sw_version()
 
     for tenant in tenants:
         tenant_cred_file = '/home/wrsroot/openrc.{}'.format(tenant)
-        tenant_passwd = Tenant.TENANT1['password'] if tenant == Tenant.TENANT1['user'] else Tenant.TENANT2['password']
+        tenant_passwd = Tenant.get('tenant1')['password'] if tenant == Tenant.get('tenant1')['user'] else Tenant.get('tenant2')['password']
         if '*' in tenant_passwd:
             index = tenant_passwd.index('*')
             tenant_passwd = tenant_passwd[:index] + '\\' + tenant_passwd[index:]

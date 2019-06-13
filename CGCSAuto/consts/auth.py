@@ -7,7 +7,7 @@ class Tenant:
                 'RegionOne': {'region': 'RegionOne', 'auth_url': __URL_PLATFORM}}
 
     # Platform openstack user - admin
-    ADMIN_PLATFORM = {
+    __ADMIN_PLATFORM = {
         'user': 'admin',
         'password': __PASSWORD,
         'tenant': 'admin',
@@ -16,14 +16,14 @@ class Tenant:
     }
 
     # Containerized openstack users - admin, and two test users/tenants
-    ADMIN = {
+    __ADMIN = {
         'user': 'admin',
         'password': __PASSWORD,
         'tenant': 'admin',
         'domain': 'Default'
     }
 
-    TENANT1 = {
+    __TENANT1 = {
         'user': 'tenant1',
         'password': __PASSWORD,
         'tenant': 'tenant1',
@@ -31,13 +31,20 @@ class Tenant:
         'nova_keypair': 'keypair-tenant1'
     }
 
-    TENANT2 = {
+    __TENANT2 = {
         'user': 'tenant2',
         'password': __PASSWORD,
         'tenant': 'tenant2',
         'domain': 'Default',
         'nova_keypair': 'keypair-tenant2'
     }
+
+    __tenants = {
+        'ADMIN_PLATFORM': __ADMIN_PLATFORM,
+        'ADMIN': __ADMIN,
+        'TENANT1': __TENANT1,
+        'TENANT2': __TENANT2}
+
 
     @classmethod
     def add_dc_region(cls, region_info):
@@ -78,8 +85,8 @@ class Tenant:
         if auth_url:
             tenant_dict['auth_url'] = auth_url
 
-        dict_name = dictname.upper() if dictname else tenantname.upper().replace('-', '_')
-        setattr(cls, dict_name, tenant_dict)
+        dictname = dictname.upper() if dictname else tenantname.upper().replace('-', '_')
+        cls.__tenants[dictname] = tenant_dict
         return tenant_dict
 
     __primary = 'TENANT1'
@@ -96,17 +103,16 @@ class Tenant:
         Returns (dict): mutable dictionary. If changed, DC map or tenant dict will update as well.
 
         """
-        import copy
         tenant_dictname = tenant_dictname.upper().replace('-', '_')
-        tenant_dict = getattr(cls, tenant_dictname)
-        tenant_dict = copy.deepcopy(tenant_dict)
-
+        tenant_dict = cls.__tenants.get(tenant_dictname)
         if dc_region:
             region_dict = cls.__DC_MAP.get(dc_region, None)
             if not region_dict:
                 raise ValueError('Distributed cloud region {} is not added to DC_MAP yet. DC_MAP: {}'.
                                  format(dc_region, cls.__DC_MAP))
             tenant_dict.update({'region': region_dict['region']})
+        else:
+            tenant_dict.pop('region', None)
 
         return tenant_dict
 
@@ -129,16 +135,16 @@ class Tenant:
         return auth_region_and_url
 
     @classmethod
-    def set_primary(cls, tenant):
+    def set_primary(cls, tenant_dictname):
         """
         should be called after _set_region and _set_url
         Args:
-            tenant (str): Tenant dict name
+            tenant_dictname (str): Tenant dict name
 
         Returns:
 
         """
-        cls.__primary = tenant.upper()
+        cls.__primary = tenant_dictname.upper()
 
     @classmethod
     def get_primary(cls):
@@ -150,25 +156,24 @@ class Tenant:
         return cls.get(tenant_dictname=secondary)
 
     @classmethod
-    def update(cls, tenant_dictname, username=None, password=None, tenant=None, domain=None):
-        tenant_dictname = tenant_dictname.upper().replace('-', '_')
-        tenant_dict = getattr(cls, tenant_dictname)
+    def update(cls, tenant_dictname, username=None, password=None, tenant=None, **kwargs):
+        tenant_dict = cls.get(tenant_dictname)
 
         if not isinstance(tenant_dict, dict):
             raise ValueError("{} dictionary does not exist in CGCSAuto/consts/auth.py".format(tenant_dictname))
 
-        if not username and not password and not tenant and not domain:
+        if not username and not password and not tenant and not kwargs:
             raise ValueError("Please specify username, password, tenant, and/or domain to update for {} dict".
                              format(tenant_dictname))
 
         if username:
-            tenant_dict['user'] = username
+            kwargs['user'] = username
         if password:
-            tenant_dict['password'] = password
+            kwargs['password'] = password
         if tenant:
-            tenant_dict['tenant'] = tenant
-        if domain:
-            tenant_dict['domain'] = domain
+            kwargs['tenant'] = tenant
+        tenant_dict.update(kwargs)
+        cls.__tenants[tenant_dictname] = tenant_dict
 
     @classmethod
     def get_dc_map(cls):

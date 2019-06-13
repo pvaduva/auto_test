@@ -11,8 +11,8 @@ from utils.tis_log import LOG
 def test_remote_cli():
     LOG.info("Download openrc files from horizon")
     horizon_dir = os.path.join(ProjVar.get_var('LOG_DIR'), 'horizon')
-    tenant1 = Tenant.TENANT1['tenant']
-    tenant2 = Tenant.TENANT2['tenant']
+    tenant1 = Tenant.get('tenant1')['tenant']
+    tenant2 = Tenant.get('tenant2')['tenant']
     admin_openrc = '{}-openrc.sh'.format(Tenant.get('admin')['tenant'])
     tenant1_openrc = '{}-openrc.sh'.format(tenant1)
     tenant2_openrc = '{}-openrc.sh'.format(tenant2)

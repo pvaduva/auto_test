@@ -136,7 +136,7 @@ def get_volume_snapshot_list(vol_snaps=None, name=None, name_strict=False, size=
         status:(str)
         volume (str):
         field
-        auth_info (dict): could be Tenant.get('admin'),Tenant.TENANT1,Tenant.TENANT2
+        auth_info (dict): could be Tenant.get('admin'),Tenant.get('tenant1'),Tenant.get('tenant2')
         con_ssh (str):
 
     Returns (list): a list of volume snapshot ids based on the given criteria

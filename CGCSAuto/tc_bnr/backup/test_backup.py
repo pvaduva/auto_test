@@ -520,7 +520,7 @@ def pb_create_volumes(con_ssh, volume_names=None, volume_sizes=None, backup_info
             break
 
         LOG.info('-OK, attempt to create volume of size:{:05.3f}, free space left:{:05.3f}'.format(size, free_space))
-        volme_id = cinder_helper.create_volume(name=name, size=size, auth_info=Tenant.TENANT1)
+        volme_id = cinder_helper.create_volume(name=name, size=size, auth_info=Tenant.get('tenant1'))
 
         volumes.update({volme_id: {'name': name, 'size': size}})
 
@@ -598,7 +598,7 @@ def pb_launch_vms(con_ssh, image_ids, backup_info=None):
                     vm_type,
                     image=image_id,
                     boot_source='image',
-                    auth_info=Tenant.TENANT1,
+                    auth_info=Tenant.get('tenant1'),
                     con_ssh=con_ssh)[0]
                 LOG.info('-OK, 1 VM from image boot up {}'.format(vms_added[-1]))
                 break
@@ -616,9 +616,9 @@ def pb_launch_vms(con_ssh, image_ids, backup_info=None):
     adjust_vm_quota(vm_count, con_ssh, backup_info=backup_info)
 
     for vm_type in vm_types:
-        vms_added += vm_helper.launch_vms(vm_type, auth_info=Tenant.TENANT1, con_ssh=con_ssh)[0]
+        vms_added += vm_helper.launch_vms(vm_type, auth_info=Tenant.get('tenant1'), con_ssh=con_ssh)[0]
 
-    vms_added.append(vm_helper.boot_vm(auth_info=Tenant.TENANT1, con_ssh=con_ssh)[1])
+    vms_added.append(vm_helper.boot_vm(auth_info=Tenant.get('tenant1'), con_ssh=con_ssh)[1])
 
     return vms_added
 
@@ -638,7 +638,7 @@ def pre_backup_setup(backup_info, con_ssh):
     Return:
          information of created VMs, Volumes, and Images
     """
-    tenant = Tenant.TENANT1
+    tenant = Tenant.get('tenant1')
     backup_info['tenant'] = tenant
 
     tenant_id = keystone_helper.get_projects(field='ID', name=tenant['user'], con_ssh=con_ssh)[0]

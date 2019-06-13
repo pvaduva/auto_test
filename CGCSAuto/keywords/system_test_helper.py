@@ -291,14 +291,14 @@ def launch_lab_setup_tenants_vms():
         con_ssh.exec_cmd(cmd1)
         con_ssh.exec_cmd(script_name, fail_ok=False)
 
-    stack_id_t1 = heat_helper.get_stacks(name=stack1_name, auth_info=Tenant.TENANT1)
+    stack_id_t1 = heat_helper.get_stacks(name=stack1_name, auth_info=Tenant.get('tenant1'))
     # may be better to delete all tenant stacks if any
     if not stack_id_t1:
-        heat_helper.create_stack(stack_name=stack1_name, template=stack1, auth_info=Tenant.TENANT1,
+        heat_helper.create_stack(stack_name=stack1_name, template=stack1, auth_info=Tenant.get('tenant1'),
                                  timeout=1000, cleanup=None)
-    stack_id_t2 = heat_helper.get_stacks(name=stack2_name, auth_info=Tenant.TENANT2)
+    stack_id_t2 = heat_helper.get_stacks(name=stack2_name, auth_info=Tenant.get('tenant2'))
     if not stack_id_t2:
-        heat_helper.create_stack(stack_name=stack2_name, template=stack2, auth_info=Tenant.TENANT2,
+        heat_helper.create_stack(stack_name=stack2_name, template=stack2, auth_info=Tenant.get('tenant2'),
                                  timeout=1000, cleanup=None)
 
     LOG.info("Checking all VMs are in active state")
@@ -310,14 +310,14 @@ def delete_lab_setup_tenants_vms():
     stack1_name = "lab_setup-tenant1-resources"
     stack2_name = "lab_setup-tenant2-resources"
 
-    stack_id_t1 = heat_helper.get_stacks(name=stack1_name, auth_info=Tenant.TENANT1)
+    stack_id_t1 = heat_helper.get_stacks(name=stack1_name, auth_info=Tenant.get('tenant1'))
     # may be better to delete all tenant stacks if any
     if stack_id_t1:
-        heat_helper.delete_stack(stack=stack1_name, auth_info=Tenant.TENANT1)
+        heat_helper.delete_stack(stack=stack1_name, auth_info=Tenant.get('tenant1'))
 
-    stack_id_t2 = heat_helper.get_stacks(name=stack2_name, auth_info=Tenant.TENANT2)
+    stack_id_t2 = heat_helper.get_stacks(name=stack2_name, auth_info=Tenant.get('tenant2'))
     if stack_id_t2:
-        heat_helper.delete_stack(stack=stack2_name, auth_info=Tenant.TENANT2)
+        heat_helper.delete_stack(stack=stack2_name, auth_info=Tenant.get('tenant2'))
 
     LOG.info("Checking all VMs are Deleted")
     vms = get_all_vms()

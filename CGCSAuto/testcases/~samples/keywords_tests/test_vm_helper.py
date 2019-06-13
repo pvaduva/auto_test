@@ -45,8 +45,8 @@ def test_boot_and_ping_vm(guest_os, opensuse11_image, opensuse12_image, opensuse
 
 
 def test_non_primary_tenant():
-    vm_1 = vm_helper.boot_vm(cleanup='function', auth_info=Tenant.TENANT1)[1]
-    vm_2 = vm_helper.launch_vms(vm_type='dpdk', auth_info=Tenant.TENANT1)[0][0]
+    vm_1 = vm_helper.boot_vm(cleanup='function', auth_info=Tenant.get('tenant1'))[1]
+    vm_2 = vm_helper.launch_vms(vm_type='dpdk', auth_info=Tenant.get('tenant1'))[0][0]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_1)
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_2)
     vm_helper.ping_vms_from_natbox(vm_ids=vm_2)

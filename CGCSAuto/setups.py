@@ -1201,14 +1201,7 @@ def set_region(region=None):
             region = local_region
     Tenant.set_region(region=region)
     ProjVar.set_var(REGION=region)
-    if region in MULTI_REGION_MAP:
-        # Multi-region lab
-        for tenant in ('tenant1', 'tenant2'):
-            region_tenant = '{}{}'.format(tenant, MULTI_REGION_MAP[region])
-            Tenant.update(tenant, username=region_tenant, tenant=region_tenant)
-            if region != local_region:
-                keystone_helper.add_or_remove_role(add_=True, role='admin', user=region_tenant, project=region_tenant)
-    elif re.search(SUBCLOUD_PATTERN, region):
+    if re.search(SUBCLOUD_PATTERN, region):
         # Distributed cloud, lab specified is a subcloud.
         urls = keystone_helper.get_endpoints(region=region, field='URL', interface='internal',
                                              service_name='keystone')
@@ -1458,6 +1451,7 @@ def setup_testcase_config(testcase_config, lab=None, natbox=None):
             raise ValueError(fip_error)
         return lab, natbox
 
+    testcase_config = os.path.expanduser(testcase_config)
     auth_section = 'auth'
     guest_image_section = 'guest_image'
     guest_networks_section = 'guest_networks'
@@ -1493,7 +1487,7 @@ def setup_testcase_config(testcase_config, lab=None, natbox=None):
     if config.get(auth_section, 'linux_username', fallback='').strip():
         HostLinuxCreds.set_user(config.get(auth_section, 'linux_username').strip())
     if config.get(auth_section, 'linux_user_password', fallback='').strip():
-        HostLinuxCreds.set_user(config.get(auth_section, 'linux_user_password').strip())
+        HostLinuxCreds.set_password(config.get(auth_section, 'linux_user_password').strip())
 
     # Update openstack keystone user credentials
     auth_dict_map = {
@@ -1507,8 +1501,8 @@ def setup_testcase_config(testcase_config, lab=None, natbox=None):
         default_auth = Tenant.get(dict_name)
         conf_user = config.get(auth_section, '{}_username'.format(conf_prefix), fallback='').strip()
         conf_password = config.get(auth_section, '{}_user_password'.format(conf_prefix), fallback='').strip()
-        conf_project = config.get(auth_section, '{}_project'.format(conf_prefix), fallback='').strip()
-        conf_domain = config.get(auth_section, '{}_domain'.format(conf_prefix), fallback='').strip()
+        conf_project = config.get(auth_section, '{}_project_name'.format(conf_prefix), fallback='').strip()
+        conf_domain = config.get(auth_section, '{}_domain_name'.format(conf_prefix), fallback='').strip()
         conf_keypair = config.get(auth_section, '{}_nova_keypair'.format(conf_prefix), fallback='').strip()
         if conf_user and conf_user != default_auth.get('user'):
             kwargs['username'] = conf_user
