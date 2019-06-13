@@ -1517,7 +1517,7 @@ def _get_vms_ips(vm_ids, net_types='mgmt', exclude_nets=None, con_ssh=None, vshe
         vms_ips += ext_ips
 
     if 'data' in net_types:
-        data_ips = network_helper.get_data_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
+        data_ips = network_helper.get_tenant_ips_for_vms(vms=vm_ids, con_ssh=con_ssh, exclude_nets=exclude_nets)
         if not data_ips:
             raise exceptions.VMNetworkError("Data network ip is not found for vms {}".format(vm_ids))
         if vshell:
@@ -4982,9 +4982,9 @@ def route_vm_pair(vm1, vm2, bidirectional=True, validate=True):
     auth_info = Tenant.get('admin')
     LOG.info("Collecting VMs' networks")
     interfaces = {
-        vm1: {"data": network_helper.get_data_ips_for_vms(vm1, auth_info=auth_info),
+        vm1: {"data": network_helper.get_tenant_ips_for_vms(vm1, auth_info=auth_info),
               "internal": network_helper.get_internal_ips_for_vms(vm1)},
-        vm2: {"data": network_helper.get_data_ips_for_vms(vm2, auth_info=auth_info),
+        vm2: {"data": network_helper.get_tenant_ips_for_vms(vm2, auth_info=auth_info),
               "internal": network_helper.get_internal_ips_for_vms(vm2)},
     }
 
@@ -5090,7 +5090,7 @@ def setup_avr_routing(vm_id, mtu=1500, vm_type='vswitch', **kwargs):
 
     """
     LOG.info("Setting up avr routing for VM {}, kwargs={}".format(vm_id, kwargs))
-    datas = network_helper.get_data_ips_for_vms(vm_id)
+    datas = network_helper.get_tenant_ips_for_vms(vm_id)
     data_dict = dict()
     try:
         internals = network_helper.get_internal_ips_for_vms(vm_id)
@@ -5191,7 +5191,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
             ipaddress.ip_address(ip)     # verify if the IP supplied is legal, raises ValueError
         else:
             vm_id = source
-            ip = network_helper.get_data_ips_for_vms(vm_id)[0]
+            ip = network_helper.get_tenant_ips_for_vms(vm_id)[0]
         src[ip] = vm_id
         LOG.info("src: vm_id={} ip={}".format(vm_id, ip))
         src_ip = ip
@@ -5201,7 +5201,7 @@ def traffic_between_vms(vm_pairs, ixia_session=None, ixncfg=None, bidirectional=
             ipaddress.ip_address(ip)
         else:
             vm_id = destination
-            ip = network_helper.get_data_ips_for_vms(vm_id)[0]
+            ip = network_helper.get_tenant_ips_for_vms(vm_id)[0]
         dest[ip] = vm_id
         LOG.info("dst: vm_id={} ip={}".format(vm_id, ip))
         ip_pairs.append((src_ip, ip))

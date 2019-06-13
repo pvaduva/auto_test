@@ -398,7 +398,7 @@ def test_qos_weight_enforced(request, avs_required, skip_if_25g):
 
             # resolve destination MACs here instead of using ARPs
             # due to unsynchronized starting time, ARP packets could get lost when the vswitch is flooded
-            dst_ip = network_helper.get_data_ips_for_vms(vm2)[0]
+            dst_ip = network_helper.get_tenant_ips_for_vms(vm2)[0]
             dst_mac = None
             for vm_id, info in vm_helper.get_vms_ports_info([vm2], rtn_subnet_id=True).items():
                 for port, ip, subnet_id, mac, net_id in info:
@@ -411,7 +411,7 @@ def test_qos_weight_enforced(request, avs_required, skip_if_25g):
                 DPDKPktgen.configure(
                     vm_ssh,
                     "set 0 dst ip {}".format(dst_ip),
-                    "set 0 src ip {}".format(network_helper.get_data_ips_for_vms(vm1)[0] + '/24'),
+                    "set 0 src ip {}".format(network_helper.get_tenant_ips_for_vms(vm1)[0] + '/24'),
                     "set 0 dst mac {}".format(dst_mac),
                     # "enable mac_from_arp",
                     "enable 0 process",
@@ -452,9 +452,9 @@ def test_qos_weight_enforced(request, avs_required, skip_if_25g):
     iface_stats = con_ssh.exec_cmd("vshell -H {} interface-stats-list".format(compute_b), fail_ok=False)[1]
     nw_stats = con_ssh.exec_cmd("vshell -H {} network-stats-list".format(compute_b), fail_ok=False)[1]
 
-    date_ip_high = network_helper.get_data_ips_for_vms(vms_high[1])[0]
+    date_ip_high = network_helper.get_tenant_ips_for_vms(vms_high[1])[0]
     rx_high_id = network_helper.get_ports(fixed_ips={'ip-address': date_ip_high})[0]
-    date_ip_low = network_helper.get_data_ips_for_vms(vms_low[1])[0]
+    date_ip_low = network_helper.get_tenant_ips_for_vms(vms_low[1])[0]
     rx_low_id = network_helper.get_ports(fixed_ips={'ip-address': date_ip_low})[0]
     iface_stats_table = table_parser.table(iface_stats)
     nw_stats_table = table_parser.table(nw_stats)
@@ -518,8 +518,8 @@ def test_qos_phb_enforced(vm_type, avs_required, skip_if_25g, update_network_quo
         - Delete vms, volumes, flavors, networks, subnets
     """
     vm_test = vm_helper.launch_vm_with_both_providernets(vm_type)
-    nic_test = (network_helper.get_data_ips_for_vms(vm_test)[0], vm_test)
-    nic_observer = (network_helper.get_data_ips_for_vms(vm_test)[1], vm_test)
+    nic_test = (network_helper.get_tenant_ips_for_vms(vm_test)[0], vm_test)
+    nic_observer = (network_helper.get_tenant_ips_for_vms(vm_test)[1], vm_test)
 
     with vm_helper.traffic_between_vms(
             [(nic_test, nic_observer)] * 8,

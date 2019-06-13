@@ -1220,7 +1220,7 @@ def get_mgmt_net_id(con_ssh=None, auth_info=None):
     Returns (str): Management network id of a specific tenant.
 
     """
-    mgmt_net_name = Networks.get_nenutron_net_patterns(net_type='mgmt')
+    mgmt_net_name = Networks.get_nenutron_net_patterns(net_type='mgmt')[0]
     mgmt_ids = get_networks(name=mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info, strict=False, regex=True)
     if not mgmt_ids:
         raise exceptions.TiSError("No network name contains {} in 'openstack network list'".format(mgmt_net_name))
@@ -1248,12 +1248,14 @@ def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
     return net_ids[0]
 
 
-def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, field='id'):
+def get_tenant_net_ids(net_names=None, strict=False, regex=True, con_ssh=None, auth_info=None, field='id'):
     """
     Get a list of tenant network ids that match the given net_names for a specific tenant.
 
     Args:
         net_names (str or list): list of tenant network name(s) to get id(s) for
+        strict (bool): whether to perform a strict search on  given name
+        regex (bool): whether to search using regular expression
         con_ssh (SSHClient):
         auth_info (dict): If None, primary tenant will be used
         field (str): id or name
@@ -1262,9 +1264,11 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, field='id')
 
     """
     if net_names is None:
-        net_names = Networks.get_nenutron_net_patterns('data')
+        net_names = Networks.get_nenutron_net_patterns('data')[0]
+        regex = True
+        strict = False
 
-    return get_networks(field=field, con_ssh=con_ssh, auth_info=auth_info, strict=False, name=net_names)
+    return get_networks(field=field, con_ssh=con_ssh, auth_info=auth_info, strict=strict, regex=regex, name=net_names)
 
 
 def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None, auth_info=None):
@@ -1282,8 +1286,9 @@ def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None,
 
     """
     if net_names is None:
-        net_names = Networks.get_nenutron_net_patterns('internal')
+        net_names = Networks.get_nenutron_net_patterns('internal')[0]
         strict = False
+        regex = True
     else:
         if isinstance(net_names, str):
             net_names = [net_names]
@@ -1296,7 +1301,7 @@ def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None,
     return get_networks(field='ID', con_ssh=con_ssh, auth_info=auth_info, strict=strict, regex=regex, name=net_names)
 
 
-def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
+def get_tenant_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
     """
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
