@@ -12,7 +12,7 @@ from consts.auth import Tenant
 # Please revert to LAB = Labs.NO_LAB after test completed.
 LAB = Labs.NO_LAB
 
-PRIMARY_TENANT = Tenant.TENANT2
+PRIMARY_TENANT = Tenant.get('tenant2')
 NATBOX = NatBoxes.NAT_BOX_HW
 BOOT_VMS = False
 COLLECT_ALL = False

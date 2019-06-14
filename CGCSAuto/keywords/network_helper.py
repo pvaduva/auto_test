@@ -711,8 +711,8 @@ def delete_security_group_rules(sec_rules, check_first=True, fail_ok=False, con_
     return 0, msg
 
 
-def get_security_group_rules(field='ID', long=True, protocol=None, ingress=None, egress=None, auth_info=None,
-                             con_ssh=None, **filters):
+def get_security_group_rules(field='ID', long=True, protocol=None, ingress=None, egress=None, group=None,
+                             auth_info=None, con_ssh=None, **filters):
     """
     Get security group rules
     Args:
@@ -721,6 +721,7 @@ def get_security_group_rules(field='ID', long=True, protocol=None, ingress=None,
         protocol:
         ingress:
         egress:
+        group (str): security group id
         auth_info:
         con_ssh:
         **filters: header value pairs for security group rules table
@@ -735,12 +736,14 @@ def get_security_group_rules(field='ID', long=True, protocol=None, ingress=None,
         'long': long,
     }
     args = common.parse_args(args_dict)
+    if group:
+        args += ' {}'.format(group)
     output = cli.openstack('security group rule list', args, ssh_client=con_ssh, auth_info=auth_info)[1]
     table_ = table_parser.table(output)
     return table_parser.get_multi_values(table_, field, **filters)
 
 
-def add_icmp_and_tcp_rules(security_group, auth_info=None, con_ssh=None, cleanup=None):
+def add_icmp_and_tcp_rules(security_group, auth_info=Tenant.get('admin'), con_ssh=None, cleanup=None):
     """
     Add icmp and tcp security group rules to given security group to allow ping and ssh
     Args:
@@ -750,8 +753,8 @@ def add_icmp_and_tcp_rules(security_group, auth_info=None, con_ssh=None, cleanup
         cleanup
 
     """
-    security_rules = get_security_group_rules(con_ssh=con_ssh, auth_info=auth_info,
-                                              **{'IP Protocol': ('tcp', 'icmp'), 'Security Group': security_group})
+    security_rules = get_security_group_rules(con_ssh=con_ssh, auth_info=auth_info, group=security_group,
+                                              protocol='ingress', **{'IP Protocol': ('tcp', 'icmp')})
     if len(security_rules) >= 2:
         LOG.info("Security group rules for {} already exist to allow ping and ssh".format(security_group))
         return
@@ -1217,12 +1220,8 @@ def get_mgmt_net_id(con_ssh=None, auth_info=None):
     Returns (str): Management network id of a specific tenant.
 
     """
-    if auth_info is None:
-        auth_info = Tenant.get_primary()
-
-    tenant = auth_info['tenant']
-    mgmt_net_name = '-'.join([tenant, 'mgmt', 'net'])
-    mgmt_ids = get_networks(name=mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info, strict=False)
+    mgmt_net_name = Networks.get_nenutron_net_patterns(net_type='mgmt')[0]
+    mgmt_ids = get_networks(name=mgmt_net_name, con_ssh=con_ssh, auth_info=auth_info, strict=False, regex=True)
     if not mgmt_ids:
         raise exceptions.TiSError("No network name contains {} in 'openstack network list'".format(mgmt_net_name))
     return mgmt_ids[0]
@@ -1249,12 +1248,14 @@ def get_tenant_net_id(net_name=None, con_ssh=None, auth_info=None):
     return net_ids[0]
 
 
-def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, field='id'):
+def get_tenant_net_ids(net_names=None, strict=False, regex=True, con_ssh=None, auth_info=None, field='id'):
     """
     Get a list of tenant network ids that match the given net_names for a specific tenant.
 
     Args:
         net_names (str or list): list of tenant network name(s) to get id(s) for
+        strict (bool): whether to perform a strict search on  given name
+        regex (bool): whether to search using regular expression
         con_ssh (SSHClient):
         auth_info (dict): If None, primary tenant will be used
         field (str): id or name
@@ -1263,10 +1264,11 @@ def get_tenant_net_ids(net_names=None, con_ssh=None, auth_info=None, field='id')
 
     """
     if net_names is None:
-        tenant_name = common.get_tenant_name(auth_info=auth_info)
-        net_names = tenant_name + '-net'
+        net_names = Networks.get_nenutron_net_patterns('data')[0]
+        regex = True
+        strict = False
 
-    return get_networks(field=field, con_ssh=con_ssh, auth_info=auth_info, strict=False, name=net_names)
+    return get_networks(field=field, con_ssh=con_ssh, auth_info=auth_info, strict=strict, regex=regex, name=net_names)
 
 
 def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None, auth_info=None):
@@ -1284,8 +1286,9 @@ def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None,
 
     """
     if net_names is None:
-        net_names = 'internal'
+        net_names = Networks.get_nenutron_net_patterns('internal')[0]
         strict = False
+        regex = True
     else:
         if isinstance(net_names, str):
             net_names = [net_names]
@@ -1298,7 +1301,7 @@ def get_internal_net_ids(net_names=None, strict=False, regex=True, con_ssh=None,
     return get_networks(field='ID', con_ssh=con_ssh, auth_info=auth_info, strict=strict, regex=regex, name=net_names)
 
 
-def get_data_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
+def get_tenant_ips_for_vms(vms=None, con_ssh=None, auth_info=Tenant.get('admin'), rtn_dict=False, exclude_nets=None):
     """
     This function returns the management IPs for all VMs on the system.
     We make the assumption that the management IPs start with "192".
@@ -2594,10 +2597,10 @@ def set_port(port_id, name=None, fixed_ips=None, no_fixed_ip=None, device_id=Non
 def __convert_ip_subnet(line):
     ip_addr = subnet = ''
     if 'ip_address' in line:
-        ip_addrs = re.findall("ip_address='(.*)',", line)
+        ip_addrs = re.findall("ip_address=\'(.*)\',", line)
         if ip_addrs:
             ip_addr = ip_addrs[0]
-        subnets = re.findall("subnet_id='(.*)'", line)[0]
+        subnets = re.findall("subnet_id=\'(.*)\'", line)
         if subnets:
             subnet = subnets[0]
 

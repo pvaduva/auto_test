@@ -19,7 +19,7 @@ def setup_tis_ssh():
 
 @pytest.fixture(scope='session', autouse=True)
 def setup_primary_tenant():
-    Tenant.set_primary(Tenant.TENANT1)
+    Tenant.set_primary(Tenant.get('tenant1'))
 
 
 @pytest.fixture(scope='session', autouse=False)

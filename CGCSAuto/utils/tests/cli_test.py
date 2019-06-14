@@ -32,7 +32,7 @@ def test_system():
     cli.system('host-list')
     cli.system('host-show', 1)
     try:
-        cli.system('host-list', auth_info=auth.Tenant.TENANT1)
+        cli.system('host-list', auth_info=auth.Tenant.get('tenant1'))
         raise Exception("you should fail!")
     except CLIRejected:
         LOG.info("nova test passed without authentication")
@@ -44,7 +44,7 @@ def test_system():
 
 def test_auth_tenant():
     LOG.tc_func_start()
-    cli.openstack('server list', auth_info=auth.Tenant.TENANT1)
+    cli.openstack('server list', auth_info=auth.Tenant.get('tenant1'))
     LOG.tc_func_end()
 
 if __name__ == '__main__':

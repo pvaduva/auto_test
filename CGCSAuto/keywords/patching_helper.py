@@ -368,7 +368,7 @@ def upload_patch_dir(patch_dir=None, con_ssh=None):
         con_name = 'RegionOne' if ProjVar.get_var('IS_DC') else None
         con_ssh = ControllerClient.get_active_controller(name=con_name)
 
-    if not patch_dir or not common.is_dir(dirname=patch_dir, ssh_client=con_ssh):
+    if not patch_dir or not common.is_directory(dirname=patch_dir, ssh_client=con_ssh):
         LOG.info('Not a directory:{}'.format(patch_dir))
         return -2, []
 
@@ -1467,7 +1467,7 @@ def download_test_patches(build_server=None, patch_dir=None, tis_dir=None, con_s
     if not con_ssh:
         con_name = 'RegionOne' if ProjVar.get_var('IS_DC') else None
         con_ssh = ControllerClient.get_active_controller(name=con_name)
-        if not common.is_dir(tis_dir, con_ssh):
+        if not common.is_directory(tis_dir, con_ssh):
             con_ssh.exec_cmd('mkdir -p {}'.format(tis_dir))
 
     with host_helper.ssh_to_build_server(bld_srv=build_server) as bs_ssh:
@@ -1494,7 +1494,7 @@ def download_test_patches(build_server=None, patch_dir=None, tis_dir=None, con_s
     other_controller = 'controller-0' if active == 'controller-1' else 'controller-1'
     if 0 == con_ssh.exec_cmd('nslookup {}'.format(other_controller))[0]:
         with host_helper.ssh_to_host(other_controller, con_ssh=con_ssh, timeout=10) as standby_ssh:
-            if not common.is_dir(tis_dir, standby_ssh):
+            if not common.is_directory(tis_dir, standby_ssh):
                 standby_ssh.exec_cmd('mkdir -p {}'.format(tis_dir))
 
         LOG.info("rsync patch files from {} to {} with best effort".format(active, other_controller))

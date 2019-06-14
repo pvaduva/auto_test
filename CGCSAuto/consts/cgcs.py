@@ -314,11 +314,6 @@ class VMMetaData:
     EVACUATION_PRIORITY = 'sw:wrs:recovery_priority'
 
 
-class ServerGroupMetadata:
-    BEST_EFFORT = "wrs-sg:best_effort"
-    GROUP_SIZE = "wrs-sg:group_size"
-
-
 class InstanceTopology:
     NODE = r'node:(\d),'
     PGSIZE = r'pgsize:(\d{1,3}),'
@@ -456,11 +451,6 @@ class HTTPPort:
     PATCHING_VER = "v1"
 
 
-class CeilometerSample:
-    VSWITCH_PORT_TRANSMIT_UTIL = "vswitch.port.transmit.util"
-    VSWITCH_ENGINE_UTIL = "vswitch.engine.util"
-
-
 class QoSSpec:
     READ_BYTES = 'read_bytes_sec'
     WRITE_BYTES = 'write_bytes_sec'
@@ -475,13 +465,6 @@ class OrchestStrategyPhase:
     BUILD = 'build'
     ABORT = 'abort'
     APPLY = 'apply'
-
-    # PHASE_COMPLETION_TIMOUT = {
-    #     INITIAL: 20,
-    #     BUILD: 60,
-    #     ABORT: 7200,
-    #     APPLY: 7200,
-    # }
 
     @staticmethod
     def validate(phase):

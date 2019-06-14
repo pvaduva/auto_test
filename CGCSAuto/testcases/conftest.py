@@ -28,7 +28,6 @@ def setup_test_session(global_setup, request):
     # set build id to be used to upload/write test results
     setups.set_build_info(con_ssh)
 
-
     # Set global vars
     setups.set_session(con_ssh=con_ssh)
 
@@ -107,18 +106,3 @@ def pytest_runtest_teardown():
     if natbox_ssh:
         natbox_ssh.flush()
         natbox_ssh.connect(retry=False)
-
-#
-# def pytest_unconfigure():
-#
-#     tc_res_path = ProjVar.get_var('LOG_DIR') + '/test_results.log'
-#     build_id = setups.get_build_id(con_ssh)
-#
-#     with open(tc_res_path, mode='a') as f:
-#         f.write('\n\nLab: {}\n'
-#                 'Build ID:{}\n'
-#                 'Automation LOGs DIR: {}\n'.format(ProjVar.get_var('LAB_NAME'), build_id, ProjVar.get_var('LOG_DIR')))
-#
-#     LOG.info("Test Results saved to: {}".format(tc_res_path))
-#     with open(tc_res_path, 'r') as fin:
-#         print(fin.read())

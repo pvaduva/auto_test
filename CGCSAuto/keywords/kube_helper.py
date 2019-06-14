@@ -763,7 +763,7 @@ def get_unready_running_pods(pod_names=None, namespace=None, all_namespaces=Fals
 
     pods_running = get_pods(field=('NAME', 'READY'), namespace=namespace, all_namespaces=all_namespaces,
                             pod_names=pod_names, labels=labels, field_selectors=field_selector, grep='-v 1/1',
-                            exclude=exclude, strict=strict, con_ssh=con_ssh, **kwargs)
+                            exclude=exclude, strict=strict, con_ssh=con_ssh, fail_ok=True, **kwargs)
     not_ready_pods = []
     for pod_info in pods_running:
         pod_name, pod_ready = pod_info
