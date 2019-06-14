@@ -592,7 +592,7 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None, repeat=1, last_run=F
     if conf_file is None:
         conf_file = 'lab_setup'
 
-    if lab_setup_count == 0:
+    if vswitch_type in [VSwitchType.OVS_DPDK, VSwitchType.OVS, VSwitchType.NONE] and lab_setup_count == 0:
         if con_ssh.exec_cmd("test -f {}_ovs.conf".format(conf_file))[0] == 0:
             LOG.debug("setting up ovs lab_setup configuration")
             con_ssh.exec_cmd("rm {}.conf; mv {}_ovs.conf {}.conf".format(conf_file, conf_file, conf_file))
