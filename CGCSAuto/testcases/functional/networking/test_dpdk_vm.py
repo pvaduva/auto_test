@@ -1,6 +1,6 @@
 from pytest import mark, skip, fixture
 
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from consts.reasons import SkipHypervisor
 from keywords import vm_helper, network_helper, nova_helper, glance_helper, cinder_helper, system_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup

@@ -5,7 +5,7 @@ from keywords import nova_helper, vm_helper, heat_helper, host_helper, html_help
 from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
 from utils.clients.ssh import ControllerClient
 from consts.auth import HostLinuxCreds, Tenant
-from consts.cgcs import GuestImages, HeatStackStatus
+from consts.stx import GuestImages, HeatStackStatus
 from consts.proj_vars import ProjVar
 
 

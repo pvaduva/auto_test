@@ -3,7 +3,7 @@ import time
 from keywords import common, host_helper
 from utils.tis_log import LOG
 from utils.exceptions import IxiaError
-from consts.cgcs import IxiaServerIP
+from consts.stx import IxiaServerIP
 
 try:
     from IxNetwork import IxNet, IxNetError

@@ -4,7 +4,7 @@ from pytest import fixture, mark, raises
 
 from consts import horizon
 from consts.auth import Tenant
-from consts.cgcs import GuestImages
+from consts.stx import GuestImages
 from keywords import nova_helper
 from utils.tis_log import LOG
 from utils.horizon import helper
@@ -164,7 +164,7 @@ def volumes_pg_action(tenant_home_pg_container, request):
     volumes_pg = volumespage.VolumesPage(tenant_home_pg_container.driver, port=tenant_home_pg_container.port)
     volumes_pg.go_to_target_page()
     volume_name = helper.gen_resource_name('volume')
-    
+
     LOG.fixture_step('Create new volume {}'.format(volume_name))
     volumes_pg.create_volume(volume_name)
     assert volumes_pg.is_volume_status(volume_name, 'Available')
@@ -172,12 +172,12 @@ def volumes_pg_action(tenant_home_pg_container, request):
     def teardown():
         LOG.fixture_step('Back to Volumes page')
         volumes_pg.go_to_target_page()
-        
+
         LOG.fixture_step('Delete volume {}'.format(volume_name))
         volumes_pg.delete_volume(volume_name)
         assert volumes_pg.is_volume_deleted(volume_name)
     request.addfinalizer(teardown)
-    
+
     return volumes_pg, volume_name
 
 

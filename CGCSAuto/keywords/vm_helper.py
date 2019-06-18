@@ -10,7 +10,7 @@ from contextlib import contextmanager, ExitStack
 import pexpect
 
 from consts.auth import Tenant, SvcCgcsAuto
-from consts.cgcs import VMStatus, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, ImageStatus, \
+from consts.stx import VMStatus, NovaCLIOutput, EXT_IP, InstanceTopology, VifMapping, ImageStatus, \
     VMNetwork, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
 from consts.filepaths import VMPath, UserData, TestServerPath, IxiaPath
 from consts.proj_vars import ProjVar

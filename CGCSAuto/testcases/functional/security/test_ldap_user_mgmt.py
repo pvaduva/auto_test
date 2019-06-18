@@ -8,7 +8,7 @@ from utils.clients.telnet import TelnetClient
 from utils.clients.ssh import ControllerClient
 from utils import node, cli
 from consts.proj_vars import ProjVar
-from consts.cgcs import Prompt
+from consts.stx import Prompt
 from consts.filepaths import SYSADMIN_HOME
 from keywords import security_helper, system_helper
 
@@ -144,7 +144,7 @@ def test_ldap_delete_user():
         2   Delete the LDAP User
     """
     user_name = 'ldapuser04'
-    
+
     LOG.tc_step('Make sure LDAP user exist:{}, create it if not'.format(user_name))
     if not _make_sure_user_exist(user_name, delete_if_existing=False):
         skip('No LDAP User:{} existing to delete'.format(user_name))

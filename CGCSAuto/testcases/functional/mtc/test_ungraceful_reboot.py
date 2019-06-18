@@ -1,7 +1,7 @@
 from pytest import mark, skip, param
 
 from utils.tis_log import LOG
-from consts.cgcs import HostAvailState
+from consts.stx import HostAvailState
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import host_helper, system_helper
 

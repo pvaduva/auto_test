@@ -9,7 +9,7 @@ from utils.tis_log import LOG
 from utils.multi_thread import MThread
 from utils.clients.ssh import ControllerClient, NATBoxClient
 from consts.auth import HostLinuxCreds, Tenant
-from consts.cgcs import GuestImages
+from consts.stx import GuestImages
 from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
 from consts.timeout import HostTimeout, VMTimeout
 from keywords import vm_helper, heat_helper, host_helper, html_helper, system_helper, vlm_helper, network_helper

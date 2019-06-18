@@ -4,7 +4,7 @@ import time
 from telnetlib import Telnet, theNULL, DO, DONT, WILL, WONT, NOOPT, IAC, SGA, ECHO, SE, SB
 
 from consts.auth import HostLinuxCreds
-from consts.cgcs import DATE_OUTPUT, Prompt
+from consts.stx import DATE_OUTPUT, Prompt
 from consts.proj_vars import ProjVar
 from utils import exceptions
 from utils.clients.ssh import PASSWORD_PROMPT, EXIT_CODE_CMD

@@ -11,7 +11,7 @@ from pytest import mark, skip
 from utils import table_parser, cli
 from utils.tis_log import LOG
 
-from consts.cgcs import EventLogID
+from consts.stx import EventLogID
 from keywords import system_helper, host_helper, common
 
 from testfixtures.recover_hosts import HostsToRecover

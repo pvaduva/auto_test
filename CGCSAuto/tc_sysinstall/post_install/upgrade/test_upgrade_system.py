@@ -3,7 +3,7 @@ import time
 from utils.tis_log import LOG
 from keywords import system_helper, host_helper, install_helper, storage_helper, upgrade_helper
 from consts.filepaths import BuildServerPath
-from consts.cgcs import HostAvailState, HostOperState
+from consts.stx import HostAvailState, HostOperState
 from consts.timeout import HostTimeout
 
 

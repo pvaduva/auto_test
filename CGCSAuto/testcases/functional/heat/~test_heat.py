@@ -9,7 +9,7 @@ from keywords import nova_helper, heat_helper, ceilometer_helper, network_helper
     host_helper, common, system_helper, vm_helper
 
 from consts.heat import Heat, HeatUpdate
-from consts.cgcs import HEAT_PATH, HeatStackStatus
+from consts.stx import HEAT_PATH, HeatStackStatus
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from consts.reasons import SkipSysType

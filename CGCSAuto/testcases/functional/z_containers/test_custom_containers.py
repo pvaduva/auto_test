@@ -10,7 +10,7 @@ from utils.clients.local import LocalHostClient
 
 from keywords import common, kube_helper, host_helper, system_helper, container_helper, keystone_helper
 from consts.filepaths import TestServerPath, SYSADMIN_HOME, TiSPath
-from consts.cgcs import HostAvailState, Container
+from consts.stx import HostAvailState, Container
 from consts.proj_vars import ProjVar
 from testfixtures.recover_hosts import HostsToRecover
 

@@ -4,7 +4,7 @@ from configparser import ConfigParser
 from optparse import OptionParser
 
 from consts.auth import HostLinuxCreds, Tenant
-from consts.cgcs import TIMESTAMP_PATTERN
+from consts.stx import TIMESTAMP_PATTERN
 from consts.kpi_vars import KPI_DATE_FORMAT
 from consts.proj_vars import ProjVar
 from keywords import host_helper, common, system_helper

@@ -4,7 +4,7 @@ from pytest import fixture, mark, skip, param
 
 from utils import table_parser
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, InstanceTopology
+from consts.stx import FlavorSpec, InstanceTopology
 from consts.cli_errs import NumaErr     # Do not remove
 from keywords import nova_helper, vm_helper, system_helper, host_helper, network_helper
 from testfixtures.fixture_resources import ResourceCleanup

@@ -1,6 +1,6 @@
 import time
 from keywords import glance_helper, cinder_helper, vm_helper
-from consts.cgcs import ImageMetadata
+from consts.stx import ImageMetadata
 from utils.tis_log import LOG
 
 

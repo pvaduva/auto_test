@@ -1,5 +1,5 @@
 from testfixtures.resource_mgmt import *
-from consts.cgcs import HEAT_FLAVORS, FlavorSpec
+from consts.stx import HEAT_FLAVORS, FlavorSpec
 
 
 @fixture(scope='session', autouse=True)

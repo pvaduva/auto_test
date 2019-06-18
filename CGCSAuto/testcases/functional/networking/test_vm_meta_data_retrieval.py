@@ -2,7 +2,7 @@ from pytest import mark, fixture
 
 from utils.tis_log import LOG
 from keywords import vm_helper, network_helper
-from consts.cgcs import METADATA_SERVER
+from consts.stx import METADATA_SERVER
 
 
 @mark.sanity

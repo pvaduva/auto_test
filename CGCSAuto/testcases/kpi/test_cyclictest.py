@@ -8,7 +8,7 @@ from pytest import fixture, skip, mark
 
 from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
 from consts.build_server import DEFAULT_BUILD_SERVER
-from consts.cgcs import FlavorSpec, GuestImages
+from consts.stx import FlavorSpec, GuestImages
 from consts.filepaths import SYSADMIN_HOME
 from consts.kpi_vars import CyclicTest
 from consts.proj_vars import ProjVar

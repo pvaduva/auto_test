@@ -4,7 +4,7 @@ import pytest
 import setups
 from consts.auth import CliAuth, Tenant
 from consts.proj_vars import ProjVar, BackupVars, InstallVars
-from consts.cgcs import BackupRestore
+from consts.stx import BackupRestore
 
 
 ########################
@@ -22,7 +22,7 @@ def pytest_configure(config):
     dest_labs = config.getoption('dest_labs')
     cinder_backup = config.getoption('cinder_backup')
     reinstall_storage = config.getoption('reinstall_storage')
-    BackupVars.set_backup_vars(reinstall_storage=reinstall_storage)   
+    BackupVars.set_backup_vars(reinstall_storage=reinstall_storage)
 
     backup_dest = 'usb' if use_usb else 'local'
     setups.set_install_params(lab=lab_arg, skip=None, resume=None, installconf_path=None,

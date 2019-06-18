@@ -4,7 +4,7 @@ from pytest import mark, skip, fixture
 import keywords.host_helper
 from consts.kpi_vars import VmStartup, LiveMigrate, ColdMigrate, Rebuild
 from consts.reasons import SkipStorageBacking
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from consts.proj_vars import ProjVar
 from consts.auth import Tenant
 from utils.kpi import kpi_log_parser

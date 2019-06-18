@@ -3,7 +3,7 @@ import re
 from pytest import fixture, mark, param
 
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from keywords import nova_helper
 
 

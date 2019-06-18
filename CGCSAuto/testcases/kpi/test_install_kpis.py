@@ -6,7 +6,7 @@ import time
 
 from pytest import fixture, skip, mark
 
-from consts.cgcs import TIMESTAMP_PATTERN
+from consts.stx import TIMESTAMP_PATTERN
 from consts.proj_vars import ProjVar
 from consts.kpi_vars import DRBDSync, ConfigController, LabSetup, HeatStacks, SystemInstall, NodeInstall, Idle
 from keywords import system_helper, host_helper, vm_helper, common
@@ -139,7 +139,7 @@ def test_system_install_kpi(collect_kpi):
     start_path = SystemInstall.START_PATH
     end_pattern = SystemInstall.END
 
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name, 
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                               log_path=log_path, lab_name=lab_name, host=host,
                               start_pattern=start_pattern,
                               end_pattern=end_pattern, start_path=start_path,
@@ -192,7 +192,7 @@ def test_node_install_kpi(collect_kpi):
         end_time = re.findall(NodeInstall.TIMESTAMP_PATTERN, end_output)[0]
 
         install_duration = _get_time_delta(start_time, end_time)
-        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name, 
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                                   log_path=log_path, lab_name=lab_name, kpi_val=install_duration, fail_ok=False)
 
 

@@ -7,7 +7,7 @@ from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
-from consts.cgcs import AppStatus, Prompt, EventLogID, Container
+from consts.stx import AppStatus, Prompt, EventLogID, Container
 from consts.filepaths import TiSPath
 from keywords import system_helper, host_helper
 

@@ -3,7 +3,7 @@ import time
 
 from pytest import mark
 
-from consts.cgcs import Prompt
+from consts.stx import Prompt
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 

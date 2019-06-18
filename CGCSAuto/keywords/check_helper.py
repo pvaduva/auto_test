@@ -13,7 +13,7 @@ from pytest import skip
 from utils.tis_log import LOG
 from utils.rest import Rest
 from consts.auth import Tenant
-from consts.cgcs import MELLANOX_DEVICE, GuestImages, EventLogID
+from consts.stx import MELLANOX_DEVICE, GuestImages, EventLogID
 from consts.reasons import SkipStorageSpace
 from keywords import host_helper, system_helper, vm_helper, common, cinder_helper, glance_helper, storage_helper
 

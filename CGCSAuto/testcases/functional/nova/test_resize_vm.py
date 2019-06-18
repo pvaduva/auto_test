@@ -7,7 +7,7 @@ from utils.tis_log import LOG
 
 from keywords import vm_helper, nova_helper, host_helper, check_helper, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from consts.cgcs import FlavorSpec, GuestImages
+from consts.stx import FlavorSpec, GuestImages
 from consts.reasons import SkipStorageBacking
 
 
@@ -298,7 +298,7 @@ def _create_flavor(flavor_info, storage_backing):
     ephemeral = flavor_info[1]
     swap = flavor_info[2]
 
-    flavor_id = nova_helper.create_flavor(ephemeral=ephemeral, swap=swap, root_disk=root_disk, 
+    flavor_id = nova_helper.create_flavor(ephemeral=ephemeral, swap=swap, root_disk=root_disk,
                                           storage_backing=storage_backing)[1]
     ResourceCleanup.add('flavor', flavor_id)
     return flavor_id

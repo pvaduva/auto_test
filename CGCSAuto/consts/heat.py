@@ -1,4 +1,4 @@
-from consts.cgcs import GuestImages
+from consts.stx import GuestImages
 
 
 class Heat:

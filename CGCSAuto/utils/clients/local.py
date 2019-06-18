@@ -11,7 +11,7 @@ import pexpect
 from consts.auth import SvcCgcsAuto
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import ProjVar
-from consts.cgcs import PING_LOSS_RATE
+from consts.stx import PING_LOSS_RATE
 from utils import exceptions
 from utils.clients.ssh import SSHClient
 from utils.tis_log import LOG

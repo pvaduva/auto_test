@@ -1,6 +1,6 @@
 from utils.tis_log import LOG
 from keywords import glance_helper, vm_helper, nova_helper
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 
 
 def test_boot_windows_guest():

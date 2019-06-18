@@ -8,7 +8,7 @@ import pexpect
 from pexpect import pxssh
 
 from consts.auth import Guest, HostLinuxCreds
-from consts.cgcs import Prompt, DATE_OUTPUT
+from consts.stx import Prompt, DATE_OUTPUT
 from consts.lab import Labs, NatBoxes
 from consts.proj_vars import ProjVar
 from utils import exceptions, local_host

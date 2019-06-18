@@ -4,7 +4,7 @@ from pytest import fixture, skip, mark
 
 import keywords.host_helper
 from consts.auth import Tenant
-from consts.cgcs import VMStatus, GuestImages
+from consts.stx import VMStatus, GuestImages
 from consts.proj_vars import ProjVar
 from keywords import host_helper, vm_helper, nova_helper, cinder_helper, glance_helper, system_helper, network_helper
 from testfixtures.fixture_resources import ResourceCleanup

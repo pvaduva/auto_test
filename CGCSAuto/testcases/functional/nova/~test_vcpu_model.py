@@ -8,7 +8,7 @@ from pytest import mark, skip, fixture
 
 import keywords.host_helper
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages, CpuModel
+from consts.stx import FlavorSpec, ImageMetadata, GuestImages, CpuModel
 from consts.cli_errs import VCPUSchedulerErr
 
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper, glance_helper, check_helper

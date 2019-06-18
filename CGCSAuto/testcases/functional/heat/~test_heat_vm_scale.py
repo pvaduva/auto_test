@@ -2,7 +2,7 @@ import os
 
 from pytest import mark, fixture, param
 
-from consts.cgcs import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages, VMStatus
+from consts.stx import HEAT_SCENARIO_PATH, FlavorSpec, GuestImages, VMStatus
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
 from utils.tis_log import LOG

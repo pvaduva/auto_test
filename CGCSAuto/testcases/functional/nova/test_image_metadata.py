@@ -1,7 +1,7 @@
 import random
 from pytest import mark, param
 from utils.tis_log import LOG
-from consts.cgcs import ImageMetadata
+from consts.stx import ImageMetadata
 from keywords import glance_helper
 
 

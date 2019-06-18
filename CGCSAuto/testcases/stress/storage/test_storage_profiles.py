@@ -62,7 +62,7 @@ import time
 
 from pytest import skip, mark, fixture, param
 
-from consts.cgcs import HostAvailState
+from consts.stx import HostAvailState
 from consts.proj_vars import InstallVars
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import host_helper, system_helper, install_helper, vm_helper, storage_helper

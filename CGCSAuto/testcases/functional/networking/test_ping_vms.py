@@ -1,7 +1,7 @@
 from pytest import mark, param
 
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from keywords import vm_helper, glance_helper, nova_helper, network_helper, cinder_helper
 
 

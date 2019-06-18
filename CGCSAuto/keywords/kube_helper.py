@@ -8,7 +8,7 @@ from utils import table_parser, exceptions
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from keywords import common, system_helper
-from consts.cgcs import PodStatus
+from consts.stx import PodStatus
 
 
 def exec_kube_cmd(sub_cmd, args=None, con_ssh=None, fail_ok=False, grep=None):

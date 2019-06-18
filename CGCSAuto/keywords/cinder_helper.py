@@ -5,7 +5,7 @@ import time
 import math
 
 from consts.auth import Tenant
-from consts.cgcs import GuestImages, Prompt
+from consts.stx import GuestImages, Prompt
 from consts.timeout import VolumeTimeout
 from keywords import common, glance_helper
 from testfixtures.fixture_resources import ResourceCleanup

@@ -8,7 +8,7 @@ from utils import table_parser, cli
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
-from consts.cgcs import TIMEZONES
+from consts.stx import TIMEZONES
 from keywords import host_helper, system_helper, cinder_helper,  common
 
 

@@ -1,7 +1,7 @@
 from pytest import fixture
 
 from consts.auth import Tenant
-from consts.cgcs import AppStatus
+from consts.stx import AppStatus
 from keywords import system_helper, vm_helper, storage_helper, host_helper, common, check_helper, \
     kube_helper, container_helper
 from utils.tis_log import LOG

@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from keywords import system_helper, host_helper, install_helper, upgrade_helper
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import UpgradeVars
-from consts.cgcs import HostAvailState, HostOperState
+from consts.stx import HostAvailState, HostOperState
 
 
 def test_system_upgrade(upgrade_setup, check_system_health_query_upgrade):

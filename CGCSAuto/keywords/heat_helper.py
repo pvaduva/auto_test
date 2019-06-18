@@ -3,7 +3,7 @@ import time
 from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 from utils.clients.ssh import get_cli_client
-from consts.cgcs import GuestImages, HeatStackStatus, HEAT_CUSTOM_TEMPLATES
+from consts.stx import GuestImages, HeatStackStatus, HEAT_CUSTOM_TEMPLATES
 from consts.filepaths import TestServerPath
 from keywords import network_helper, common
 from testfixtures.fixture_resources import ResourceCleanup

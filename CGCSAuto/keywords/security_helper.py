@@ -6,7 +6,7 @@ from pexpect import EOF
 from string import ascii_lowercase, ascii_uppercase, digits
 
 from consts.auth import Tenant, HostLinuxCreds, CliAuth
-from consts.cgcs import Prompt, EventLogID
+from consts.stx import Prompt, EventLogID
 from consts.proj_vars import ProjVar
 from consts.filepaths import BuildServerPath, SYSADMIN_HOME
 from utils.tis_log import LOG

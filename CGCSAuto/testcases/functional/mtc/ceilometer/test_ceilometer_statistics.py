@@ -11,7 +11,7 @@ from pytest import mark, skip
 
 from utils.tis_log import LOG
 
-from consts.cgcs import GuestImages
+from consts.stx import GuestImages
 from consts.auth import Tenant
 from keywords import common, host_helper, ceilometer_helper, network_helper, glance_helper, system_helper, \
     gnocchi_helper

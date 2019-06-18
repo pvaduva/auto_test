@@ -22,7 +22,7 @@ from pytest import mark, skip
 
 from consts.auth import HostLinuxCreds, Tenant
 from consts.proj_vars import ProjVar
-from consts.cgcs import BackendState
+from consts.stx import BackendState
 from keywords import cinder_helper, storage_helper
 from utils import cli, table_parser
 from utils.tis_log import LOG

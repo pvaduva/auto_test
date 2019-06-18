@@ -1,6 +1,6 @@
 from pytest import skip, fixture
 
-from consts.cgcs import SysType, Prompt
+from consts.stx import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
 from keywords import system_helper, install_helper, vlm_helper
 from tc_sysinstall.fresh_install import fresh_install_helper

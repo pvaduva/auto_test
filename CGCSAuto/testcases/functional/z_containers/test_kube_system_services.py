@@ -3,7 +3,7 @@ import re
 from pytest import mark, skip
 
 from keywords import kube_helper, system_helper, host_helper
-from consts.cgcs import PodStatus, HostAvailState
+from consts.stx import PodStatus, HostAvailState
 from utils.tis_log import LOG
 
 

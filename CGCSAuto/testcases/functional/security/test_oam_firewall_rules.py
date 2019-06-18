@@ -9,7 +9,7 @@ from utils import cli
 from utils.tis_log import LOG
 from utils.multi_thread import MThread, Events
 from utils.clients.ssh import ControllerClient, NATBoxClient, get_cli_client
-from consts.cgcs import EventLogID, MULTI_REGION_MAP
+from consts.stx import EventLogID, MULTI_REGION_MAP
 from consts.filepaths import TestServerPath
 from consts.proj_vars import ProjVar
 from consts.auth import CliAuth, Tenant

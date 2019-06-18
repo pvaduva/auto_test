@@ -4,7 +4,7 @@ from pytest import mark, fixture, skip
 import keywords.host_helper
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec, ImageMetadata
+from consts.stx import FlavorSpec, ImageMetadata
 from consts.cli_errs import CpuRtErr  # Do not remove this import. Used in eval()
 from keywords import nova_helper, vm_helper, host_helper, common, glance_helper, cinder_helper, check_helper
 from testfixtures.fixture_resources import ResourceCleanup

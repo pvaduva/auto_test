@@ -5,7 +5,7 @@ This module provides helper functions for host upgrade functions
 import time
 
 from consts.auth import Tenant, HostLinuxCreds
-from consts.cgcs import HostOperState, HostAvailState, Prompt, HostAdminState
+from consts.stx import HostOperState, HostAvailState, Prompt, HostAdminState
 from consts.timeout import HostTimeout, InstallTimeout
 from keywords import system_helper, host_helper, install_helper, orchestration_helper, storage_helper
 from keywords.host_helper import swact_host, lock_host, unlock_host

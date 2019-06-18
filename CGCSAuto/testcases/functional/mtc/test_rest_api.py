@@ -1,7 +1,7 @@
 import copy
 
 from consts.timeout import HostTimeout
-from consts.cgcs import HTTPPort, HostAdminState
+from consts.stx import HTTPPort, HostAdminState
 from consts.auth import Tenant
 from pytest import fixture, skip
 from testfixtures.recover_hosts import HostsToRecover

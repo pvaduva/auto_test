@@ -2,7 +2,7 @@ import time
 
 from pytest import fixture, mark
 
-from consts.cgcs import EventLogID
+from consts.stx import EventLogID
 from keywords import host_helper, system_helper, network_helper, vm_helper
 from utils.tis_log import LOG
 

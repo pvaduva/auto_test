@@ -12,7 +12,7 @@ from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-from consts.cgcs import PLATFORM_NET_TYPES, PodStatus, AppStatus
+from consts.stx import PLATFORM_NET_TYPES, PodStatus, AppStatus
 from keywords import vm_helper, host_helper, system_helper, container_helper, kube_helper
 
 HOSTS_IF_MODIFY_ARGS = []

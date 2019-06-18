@@ -1,7 +1,7 @@
 import time
 
 from utils.tis_log import LOG
-from consts.cgcs import GuestImages, ImageMetadata
+from consts.stx import GuestImages, ImageMetadata
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup

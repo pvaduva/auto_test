@@ -1,6 +1,6 @@
 from utils.tis_log import LOG
 from utils import cli, table_parser
-from consts.cgcs import NtpPool
+from consts.stx import NtpPool
 from keywords import system_helper
 
 

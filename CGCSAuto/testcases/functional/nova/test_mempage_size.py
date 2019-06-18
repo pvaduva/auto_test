@@ -7,7 +7,7 @@ from pytest import fixture, mark, skip, param
 import keywords.host_helper
 from utils.tis_log import LOG
 from consts.filepaths import CompConfPath
-from consts.cgcs import FlavorSpec, ImageMetadata, NovaCLIOutput
+from consts.stx import FlavorSpec, ImageMetadata, NovaCLIOutput
 from keywords import nova_helper, vm_helper, system_helper, cinder_helper, host_helper, glance_helper
 
 

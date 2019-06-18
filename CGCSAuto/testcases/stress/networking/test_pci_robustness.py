@@ -3,7 +3,7 @@ from pytest import fixture, skip, mark
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from consts.timeout import VMTimeout
 from keywords import vm_helper, nova_helper, network_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -320,7 +320,7 @@ class TestPcipt:
         Teardown:
             - Delete vms, volumes, flavor created
             - Recover hosts if applicable
-        
+
         """
         net_type, pci_net_name, pci_hosts, pnet_id, nics, min_vcpu_host, seg_id, vm_num, vm_vcpus, pfs_use_init = \
             pcipt_prep

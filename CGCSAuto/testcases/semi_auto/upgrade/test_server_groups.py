@@ -2,7 +2,7 @@ from pytest import skip, fixture
 
 import keywords.host_helper
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from keywords import nova_helper, vm_helper
 
 

@@ -11,7 +11,7 @@ from utils.node import Node
 from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto
 from consts.timeout import InstallTimeout, HostTimeout
-from consts.cgcs import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState, VSwitchType
+from consts.stx import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState, VSwitchType
 from consts.filepaths import BuildServerPath, SYSADMIN_HOME, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
 from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \

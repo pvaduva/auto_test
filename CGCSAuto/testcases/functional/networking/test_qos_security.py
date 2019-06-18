@@ -8,7 +8,7 @@ from pytest import fixture, mark, skip
 from consts.auth import Tenant
 from consts.filepaths import IxiaPath
 from consts.proj_vars import ProjVar
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG

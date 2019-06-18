@@ -2,7 +2,7 @@ import pytest
 
 from consts.auth import SvcCgcsAuto
 from consts.build_server import Server, get_build_server_info
-from consts.cgcs import Prompt
+from consts.stx import Prompt
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import ProjVar, InstallVars
 from keywords import install_helper, system_helper

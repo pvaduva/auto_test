@@ -4,7 +4,7 @@ import time
 
 from pytest import fixture, skip, mark
 
-from consts.cgcs import EventLogID, HostAvailState
+from consts.stx import EventLogID, HostAvailState
 from keywords import host_helper, system_helper, common, storage_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser
@@ -55,7 +55,7 @@ def post_check(request):
 
 @mark.usefixtures("freespace_check")
 def test_increase_controllerfs():
-    """ 
+    """
     This test increases the size of the various controllerfs filesystems all at
     once.
 
@@ -164,7 +164,7 @@ def test_modify_controllerfs_invalidargs(fsvalues):
 
 
 def test_decrease_controllerfs():
-    """ 
+    """
     This test attempts to decrease the size of each of the controllerfs
     filesystems.  The expectation is that this should be rejected.
 
@@ -303,7 +303,7 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
 
 # Fails due to product issue
 def test_modify_drdb_swact_then_reboot():
-    """ 
+    """
     This test modifies the size of the drbd based filesystems, does and
     immediate swact and then reboots the active controller.
 

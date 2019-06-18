@@ -4,7 +4,7 @@ from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from consts.proj_vars import ProjVar
 from consts.auth import Tenant
-from consts.cgcs import EventLogID
+from consts.stx import EventLogID
 from keywords import dc_helper, system_helper
 
 

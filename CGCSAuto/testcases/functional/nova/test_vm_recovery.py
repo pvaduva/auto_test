@@ -1,6 +1,6 @@
 from pytest import mark, param
 
-from consts.cgcs import FlavorSpec, ImageMetadata, VMStatus
+from consts.stx import FlavorSpec, ImageMetadata, VMStatus
 from consts.feature_marks import Features
 from keywords import nova_helper, vm_helper, cinder_helper, glance_helper
 from utils.tis_log import LOG

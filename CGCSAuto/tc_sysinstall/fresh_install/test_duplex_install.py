@@ -1,6 +1,6 @@
 from pytest import skip, fixture
 
-from consts.cgcs import SysType, Prompt
+from consts.stx import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
 from keywords import install_helper, vlm_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
@@ -109,7 +109,7 @@ def test_duplex_install(install_setup):
         fresh_install_helper.configure_controller_(controller0_node)
 
     fresh_install_helper.check_ansible_configured_mgmt_interface(controller0_node, lab)
-    
+
     fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTITIAL)
 
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)

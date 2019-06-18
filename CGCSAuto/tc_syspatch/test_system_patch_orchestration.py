@@ -4,7 +4,7 @@ import pytest
 
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient, SSHClient
-from consts.cgcs import Prompt, PatchState
+from consts.stx import Prompt, PatchState
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.filepaths import SYSADMIN_HOME
 from consts.build_server import Server, get_build_server_info

@@ -6,7 +6,7 @@ from utils import table_parser, cli, exceptions
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
-from consts.cgcs import VMStatus, FlavorSpec, NetworkingVmMapping
+from consts.stx import VMStatus, FlavorSpec, NetworkingVmMapping
 from keywords import vm_helper, nova_helper, host_helper, glance_helper,system_helper
 
 

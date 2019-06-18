@@ -7,7 +7,7 @@ import time
 
 from pytest import mark, fixture, skip, param
 
-from consts.cgcs import MULTI_REGION_MAP
+from consts.stx import MULTI_REGION_MAP
 from consts.auth import HostLinuxCreds
 from consts.proj_vars import ProjVar
 from consts.timeout import HostTimeout
@@ -846,7 +846,7 @@ class MonitoredProcess:
 
             elif impact in ('enabled-degraded', 'disabled-failed'):
                 quorum = getattr(self, 'quorum', None)
-                
+
                 if quorum == '1':
                     LOG.warn('Killing quorum process:{}, the impacted node should reboot'.format(name))
                     wait_time_for_host_status = HostTimeout.REBOOT

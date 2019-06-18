@@ -4,7 +4,7 @@ from pytest import skip, fixture
 
 from utils.tis_log import LOG
 from utils.clients.local import LocalHostClient
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from consts.auth import Tenant, SvcCgcsAuto, ComplianceCreds
 from consts.proj_vars import ComplianceVar, ProjVar
 from consts.compliance import RefStack, USER_PASSWORD
@@ -115,7 +115,7 @@ def refstack_setup(refstack_pre_check, request):
             localhost.scp_on_dest(source_ip=ComplianceCreds.get_host(), source_user=ComplianceCreds.get_user(),
                                   source_pswd=ComplianceCreds.get_password(), source_path=source_path,
                                   dest_path=dest_dir, timeout=300, cleanup=False)
-        
+
         origin_name = ComplianceVar.get_var('REFSTACK_SUITE').rsplit(r'/', maxsplit=1)[-1]
         localhost.exec_cmd('mv {}/test-list.txt {}/{}'.format(dest_dir, dest_dir, origin_name))
     request.addfinalizer(scp_logs)

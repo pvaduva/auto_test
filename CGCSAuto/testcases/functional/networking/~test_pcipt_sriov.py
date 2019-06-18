@@ -3,7 +3,7 @@ import time
 
 from pytest import fixture, mark, skip
 
-from consts.cgcs import FlavorSpec, VMStatus, DevClassID
+from consts.stx import FlavorSpec, VMStatus, DevClassID
 from consts.reasons import SkipHostIf
 from keywords import vm_helper, nova_helper, network_helper, host_helper, common
 from utils.tis_log import LOG

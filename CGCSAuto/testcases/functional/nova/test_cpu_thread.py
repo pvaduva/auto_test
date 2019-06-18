@@ -6,7 +6,7 @@ from pytest import mark, fixture, skip, param
 from utils.tis_log import LOG
 
 from consts.reasons import SkipHypervisor, SkipHyperthreading
-from consts.cgcs import FlavorSpec, ImageMetadata
+from consts.stx import FlavorSpec, ImageMetadata
 # Do not remove used imports below as they are used in eval()
 from consts.cli_errs import CPUThreadErr, SharedCPUErr, ColdMigErr, CPUPolicyErr, ScaleErr
 

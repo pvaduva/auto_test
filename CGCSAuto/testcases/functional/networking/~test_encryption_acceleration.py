@@ -2,7 +2,7 @@ import random
 
 from pytest import mark, fixture, skip
 
-from consts.cgcs import FlavorSpec, DevClassID
+from consts.stx import FlavorSpec, DevClassID
 from keywords import network_helper, vm_helper, nova_helper, host_helper, check_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover

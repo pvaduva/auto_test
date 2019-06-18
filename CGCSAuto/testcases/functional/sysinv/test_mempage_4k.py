@@ -5,7 +5,7 @@
 
 from pytest import fixture, mark, skip, param
 
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from utils import table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG

@@ -4,7 +4,7 @@
 
 from pytest import fixture, mark, skip
 
-from consts.cgcs import EventLogID, SpareIP
+from consts.stx import EventLogID, SpareIP
 from keywords import system_helper
 from utils.tis_log import LOG
 

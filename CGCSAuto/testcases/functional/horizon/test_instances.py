@@ -2,7 +2,7 @@ from pytest import fixture, mark
 
 from consts import horizon
 from consts.auth import Tenant
-from consts.cgcs import GuestImages
+from consts.stx import GuestImages
 from keywords import nova_helper
 from utils.tis_log import LOG
 from utils.horizon import helper

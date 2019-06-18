@@ -1,6 +1,6 @@
 from pytest import fixture, skip, mark
 
-from consts.cgcs import PatchState, VMStatus
+from consts.stx import PatchState, VMStatus
 from utils.tis_log import LOG
 from utils.exceptions import TiSError
 from keywords import patching_helper, system_helper, vm_helper, cinder_helper, orchestration_helper

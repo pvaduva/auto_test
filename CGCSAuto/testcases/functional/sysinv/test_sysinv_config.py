@@ -5,7 +5,7 @@ import functools
 
 from pytest import mark, skip, fixture
 
-from consts.cgcs import SystemType
+from consts.stx import SystemType
 from consts.timeout import SysInvTimeout
 from consts.proj_vars import ProjVar
 from keywords import network_helper, system_helper, kube_helper, ceilometer_helper
@@ -300,7 +300,7 @@ class TestDnsSettings:
         if with_action_option is not None and with_action_option.upper() == 'RANDOM':
             with_action_option = ''.join(random.choice(string.ascii_lowercase) for _ in range(6))
             if with_action_option.upper() != 'APPLY':
-                LOG.info('with_action_option.upper: "%s", expecting to fail', with_action_option.upper()) 
+                LOG.info('with_action_option.upper: "%s", expecting to fail', with_action_option.upper())
                 expect_fail = True
 
         LOG.tc_step('\nAttempt to change the DNS servers to: {}'.format(ip_addr_list))

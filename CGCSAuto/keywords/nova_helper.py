@@ -3,7 +3,7 @@ from utils import table_parser
 from utils.tis_log import LOG
 from consts.proj_vars import ProjVar
 from consts.auth import Tenant
-from consts.cgcs import FlavorSpec, GuestImages
+from consts.stx import FlavorSpec, GuestImages
 from keywords import common
 from testfixtures.fixture_resources import ResourceCleanup
 

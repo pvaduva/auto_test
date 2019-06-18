@@ -3,7 +3,7 @@ import time
 from pytest import fixture
 
 from consts.auth import HostLinuxCreds
-from consts.cgcs import GuestImages
+from consts.stx import GuestImages
 from consts.filepaths import TestServerPath, SYSADMIN_HOME, TiSPath
 from consts.proj_vars import ProjVar
 from keywords import host_helper, system_helper, common

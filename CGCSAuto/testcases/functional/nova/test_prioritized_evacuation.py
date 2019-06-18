@@ -6,7 +6,7 @@ from datetime import datetime
 from pytest import mark, fixture, skip
 
 import keywords.host_helper
-from consts.cgcs import VMMetaData
+from consts.stx import VMMetaData
 from keywords import vm_helper, nova_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from utils.tis_log import LOG

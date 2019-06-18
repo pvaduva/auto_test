@@ -6,7 +6,7 @@ import keywords.host_helper
 import keywords.system_helper
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec, GuestImages, DevClassID
+from consts.stx import FlavorSpec, GuestImages, DevClassID
 from keywords import network_helper, nova_helper, vm_helper, glance_helper, system_helper, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
 

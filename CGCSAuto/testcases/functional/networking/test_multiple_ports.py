@@ -4,7 +4,7 @@ from pytest import fixture, mark, skip, param
 
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec, VMStatus
+from consts.stx import FlavorSpec, VMStatus
 from consts.reasons import SkipHostIf
 from keywords import vm_helper, nova_helper, network_helper, glance_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -91,7 +91,7 @@ class TestMutiPortsBasic:
 
         vm_helper.wait_for_vm_pingable_from_natbox(base_vm)
         vm_helper.ping_vms_from_vm(base_vm, base_vm, net_types='data')
-        
+
         return base_vm, flavor_id, mgmt_net_id, tenant_net_id, internal_net_id
 
     @mark.parametrize('vifs', [

@@ -3,7 +3,7 @@ from pytest import fixture, mark, skip, param
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 
-from consts.cgcs import FlavorSpec, EventLogID
+from consts.stx import FlavorSpec, EventLogID
 from consts.kpi_vars import LiveMigrate
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
 from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, check_helper, system_helper

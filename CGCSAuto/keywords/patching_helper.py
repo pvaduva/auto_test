@@ -9,7 +9,7 @@ from pytest import skip
 from utils import exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
-from consts.cgcs import PatchState, PatchPattern, EventLogID
+from consts.stx import PatchState, PatchPattern, EventLogID
 from consts.filepaths import SYSADMIN_HOME
 from consts.proj_vars import ProjVar, PatchingVars
 from consts.auth import HostLinuxCreds
@@ -170,7 +170,7 @@ def check_log_records(action='upload',
     max_lines = 100
     if expected_patches and isinstance(expected_patches, list):
         max_lines = max(max_lines, len(expected_patches)*10)
-        
+
     logs = get_log_records(action=action,
                            start_time=start_time,
                            max_lines=max_lines,

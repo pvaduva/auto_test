@@ -6,7 +6,7 @@ from consts.auth import Tenant
 from consts.proj_vars import BackupVars
 from consts.auth import SvcCgcsAuto
 from consts.build_server import Server
-from consts.cgcs import BACKUP_FILE_DATE_STR, PREFIX_BACKUP_FILE
+from consts.stx import BACKUP_FILE_DATE_STR, PREFIX_BACKUP_FILE
 
 
 def test_system_upgrade_simplex(upgrade_setup, check_system_health_query_upgrade):

@@ -21,7 +21,7 @@ from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import DEFAULT_BUILD_SERVER, BUILD_SERVERS
 from consts.timeout import HostTimeout, CMDTimeout
 from consts.filepaths import SYSADMIN_HOME
-from consts.cgcs import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
+from consts.stx import HostAvailState, HostAdminState, HostOperState, Prompt, MELLANOX_DEVICE, MaxVmsSupported, \
     EventLogID, HostTask, TrafficControl, PLATFORM_NET_TYPES, AppStatus, PLATFORM_AFFINE_INCOMPLETE, \
     FlavorSpec, STORAGE_AGGREGATE
 from utils import cli, exceptions, table_parser

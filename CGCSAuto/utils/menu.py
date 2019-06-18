@@ -5,7 +5,7 @@ from utils.tis_log import LOG
 from utils.exceptions import TelnetError
 from consts.proj_vars import InstallVars, ProjVar
 from consts import bios
-from consts.cgcs import SysType
+from consts.stx import SysType
 
 
 class Menu(object):

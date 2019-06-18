@@ -9,7 +9,7 @@ from contextlib import contextmanager
 import pexpect
 
 from consts.auth import Tenant, HostLinuxCreds
-from consts.cgcs import Networks, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE, DevClassID, UUID
+from consts.stx import Networks, PING_LOSS_RATE, MELLANOX4, VSHELL_PING_LOSS_RATE, DevClassID, UUID
 from consts.filepaths import UserData, SYSADMIN_HOME
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout

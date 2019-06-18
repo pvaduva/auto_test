@@ -6,7 +6,7 @@ from pytest import mark, skip, param
 
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
-from consts.cgcs import HostOperState, HostAvailState
+from consts.stx import HostOperState, HostAvailState
 from consts.kpi_vars import HostLock, HostUnlock, KPI_DATE_FORMAT
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import host_helper, system_helper, common

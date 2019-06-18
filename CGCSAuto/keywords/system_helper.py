@@ -6,7 +6,7 @@ import time
 from pytest import skip
 
 from consts.auth import Tenant, HostLinuxCreds
-from consts.cgcs import UUID, Prompt, SysType, EventLogID, HostAvailState
+from consts.stx import UUID, Prompt, SysType, EventLogID, HostAvailState
 from consts.proj_vars import ProjVar
 from consts.filepaths import SYSADMIN_HOME
 from consts.timeout import SysInvTimeout, MiscTimeout, HostTimeout

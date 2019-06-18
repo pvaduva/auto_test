@@ -16,7 +16,7 @@ import random
 
 from pytest import mark, skip, fixture
 
-from consts.cgcs import EventLogID, HostTask, HostAdminState, HostAvailState, HostOperState
+from consts.stx import EventLogID, HostTask, HostAdminState, HostAvailState, HostOperState
 from consts.timeout import HostTimeout
 from keywords import system_helper, host_helper, bmc_helper, common
 from testfixtures.recover_hosts import HostsToRecover
@@ -40,7 +40,7 @@ def sensor_data_fit(request):
     for host in hosts:
         if bmc_helper.get_sensors_table(host=host)['values']:
             bmc_hosts.append(host)
-    
+
     if not bmc_hosts:
         skip("No sensor added for any host in system")
 
@@ -57,7 +57,7 @@ def sensor_data_fit(request):
         con_ssh_ = ControllerClient.get_active_controller()
         con_ssh_.exec_sudo_cmd('rm /var/run/fit/sensor_data', fail_ok=False)
     request.addfinalizer(_revert)
-    
+
     return bmc_hosts
 
 
@@ -122,7 +122,7 @@ def test_sensorgroup_action_taken(host,
     bmc_hosts = sensor_data_fit
     if host not in bmc_hosts:
         skip("{} is not configured with BMC sensor".format(host))
-        
+
     global HOST
     HOST = host
 
@@ -354,7 +354,7 @@ def test_transition_sensorgroup_actions(host,
     bmc_hosts = sensor_data_fit
     if host not in bmc_hosts:
         skip("{} is not configured with BMC sensor".format(host))
-        
+
     global HOST
     HOST = host
     # Get a sensor to validate

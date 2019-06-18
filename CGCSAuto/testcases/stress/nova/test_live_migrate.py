@@ -3,7 +3,7 @@ from threading import Event
 from pytest import fixture
 
 from keywords import nova_helper, vm_helper
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from testfixtures.resource_mgmt import ResourceCleanup
 from utils.tis_log import LOG
 from utils.multi_thread import MThread

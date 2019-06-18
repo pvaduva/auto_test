@@ -4,7 +4,7 @@ import time
 from pytest import fixture
 
 from consts.proj_vars import ProjVar
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from consts.filepaths import TiSPath, HeatTemplate, TestServerPath, SYSADMIN_HOME
 from utils import exceptions
 from utils.tis_log import LOG
@@ -70,7 +70,7 @@ def _get_stress_ng_heat(con_ssh=None):
 
     # update heat file for multi-region system
     from consts.proj_vars import ProjVar
-    from consts.cgcs import MULTI_REGION_MAP
+    from consts.stx import MULTI_REGION_MAP
     region = ProjVar.get_var("REGION")
     if region != 'RegionOne' and region in MULTI_REGION_MAP:
         region_str = MULTI_REGION_MAP.get(region)
@@ -79,7 +79,7 @@ def _get_stress_ng_heat(con_ssh=None):
 
     if not system_helper.is_avs():
         con_ssh.exec_cmd("sed -i 's/avp/virtio/g' {}".format(file_path))
-        
+
     return file_path
 
 

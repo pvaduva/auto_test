@@ -4,7 +4,7 @@ import pytest
 
 import setups
 from consts.proj_vars import InstallVars, RestoreVars
-from consts.cgcs import BackupRestore
+from consts.stx import BackupRestore
 from consts.filepaths import BuildServerPath
 from keywords import vlm_helper
 from testfixtures.pre_checks_and_configs import *

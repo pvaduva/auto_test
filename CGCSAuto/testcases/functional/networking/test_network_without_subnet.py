@@ -3,7 +3,7 @@ import random
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
-from consts.cgcs import VMStatus
+from consts.stx import VMStatus
 from keywords import network_helper, vm_helper, system_helper
 
 
@@ -12,7 +12,7 @@ def base_vm(setups):
     LOG.fixture_step("Create a network without subnet with port security disabled")
     net_without_subnet = network_helper.create_network(name='net_without_subnet', port_security=False,
                                                        cleanup='module')[1]
-    
+
     LOG.fixture_step("Create a VM with one nic using network without subnet")
     mgmt_nic = {'net-id': network_helper.get_mgmt_net_id()}
     vm_id = vm_helper.boot_vm(name='base_vm', nics=[mgmt_nic, {'net-id': net_without_subnet}], cleanup='module')[1]
@@ -28,7 +28,7 @@ def base_vm(setups):
 def setups(request):
     if not system_helper.is_avs():
         skip("Feature only supported by AVS")
-    
+
     LOG.fixture_step("Add port_security service parameter")
     system_helper.add_ml2_extension_drivers(drivers='port_security')
 

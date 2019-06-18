@@ -12,7 +12,7 @@ from pytest import fixture, mark, param
 import keywords.host_helper
 from utils.tis_log import LOG
 
-from consts.cgcs import QoSSpec, FlavorSpec
+from consts.stx import QoSSpec, FlavorSpec
 from keywords import nova_helper, vm_helper, host_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 

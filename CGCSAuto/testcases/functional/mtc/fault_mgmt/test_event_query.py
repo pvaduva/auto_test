@@ -2,7 +2,7 @@ import re
 
 from pytest import mark
 
-from consts.cgcs import UUID
+from consts.stx import UUID
 from keywords import system_helper
 from utils import cli
 from utils.clients.ssh import ControllerClient

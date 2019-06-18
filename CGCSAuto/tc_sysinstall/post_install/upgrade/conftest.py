@@ -4,7 +4,7 @@ import pytest
 
 from consts.auth import SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import Server, get_build_server_info
-from consts.cgcs import Prompt, SUPPORTED_UPGRADES, BackupRestore
+from consts.stx import Prompt, SUPPORTED_UPGRADES, BackupRestore
 from consts.filepaths import BuildServerPath, SYSADMIN_HOME
 from consts.proj_vars import InstallVars, UpgradeVars, BackupVars
 from keywords import install_helper, patching_helper, upgrade_helper

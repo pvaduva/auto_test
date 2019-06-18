@@ -1,7 +1,7 @@
 from pytest import mark, skip, param
 
 from utils.tis_log import LOG
-from consts.cgcs import FlavorSpec, VMStatus
+from consts.stx import FlavorSpec, VMStatus
 from consts.reasons import SkipStorageSpace
 
 from keywords import vm_helper, nova_helper, glance_helper, cinder_helper, check_helper, host_helper

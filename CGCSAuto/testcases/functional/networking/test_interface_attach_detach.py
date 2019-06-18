@@ -2,7 +2,7 @@ import re
 from pytest import fixture, mark, skip
 from utils.tis_log import LOG
 
-from consts.cgcs import VMStatus, GuestImages, Prompt
+from consts.stx import VMStatus, GuestImages, Prompt
 from keywords import network_helper, nova_helper, vm_helper, glance_helper, cinder_helper, system_helper
 
 

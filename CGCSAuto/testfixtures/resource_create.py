@@ -1,6 +1,6 @@
 from pytest import fixture
 
-from consts.cgcs import GuestImages
+from consts.stx import GuestImages
 from keywords import nova_helper, glance_helper, keystone_helper, container_helper
 from utils.tis_log import LOG
 

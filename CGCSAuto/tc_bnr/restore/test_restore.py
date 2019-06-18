@@ -6,7 +6,7 @@ import pytest
 
 from consts.auth import SvcCgcsAuto, HostLinuxCreds, Tenant
 from consts.build_server import Server, get_build_server_info
-from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN, \
+from consts.stx import HostAvailState, HostOperState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN, \
     TIS_BLD_DIR_REGEX, TITANIUM_BACKUP_FILE_PATTERN, BackupRestore
 from consts.filepaths import TiSPath, BuildServerPath, SYSADMIN_HOME
 from consts.proj_vars import InstallVars, RestoreVars, ProjVar

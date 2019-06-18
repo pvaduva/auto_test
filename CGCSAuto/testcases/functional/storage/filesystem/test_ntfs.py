@@ -12,7 +12,7 @@ from pytest import skip
 
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 
 from keywords import vm_helper, nova_helper, glance_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup

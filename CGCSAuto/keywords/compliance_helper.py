@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 from utils.clients.ssh import ContainerClient, SSHClient
 from consts.compliance import VM_ROUTE_VIA, Dovetail, USER_PASSWORD
 from consts.auth import Tenant, ComplianceCreds, CumulusCreds
-from consts.cgcs import Prompt
+from consts.stx import Prompt
 from consts.proj_vars import ProjVar
 from keywords import network_helper, keystone_helper, vm_helper
 

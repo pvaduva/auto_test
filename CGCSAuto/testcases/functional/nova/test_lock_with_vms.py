@@ -8,7 +8,7 @@ from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.kpi_vars import HostLock, KPI_DATE_FORMAT
 from consts.reasons import SkipStorageBacking
-from consts.cgcs import VMStatus, SysType
+from consts.stx import VMStatus, SysType
 from consts.timeout import VMTimeout
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import vm_helper, nova_helper, host_helper, system_helper, common

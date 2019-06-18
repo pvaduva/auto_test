@@ -11,7 +11,7 @@ import re
 import time
 
 from consts.auth import Tenant
-from consts.cgcs import EventLogID, BackendState, BackendTask, GuestImages, PartitionStatus
+from consts.stx import EventLogID, BackendState, BackendTask, GuestImages, PartitionStatus
 from consts.timeout import HostTimeout, SysInvTimeout
 
 from keywords import system_helper, host_helper, keystone_helper, common

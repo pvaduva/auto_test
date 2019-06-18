@@ -1,7 +1,7 @@
 
 from pytest import fixture, mark, skip
 from utils.tis_log import LOG
-from consts.cgcs import VMStatus
+from consts.stx import VMStatus
 from keywords import vm_helper, nova_helper, network_helper, host_helper, system_helper
 
 from testfixtures.resource_mgmt import ResourceCleanup

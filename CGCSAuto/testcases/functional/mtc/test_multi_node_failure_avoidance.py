@@ -4,7 +4,7 @@ from datetime import datetime
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
-from consts.cgcs import EventLogID, HostAvailState
+from consts.stx import EventLogID, HostAvailState
 from keywords import system_helper, vlm_helper, common
 from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unreserve_hosts_module    # Used in fixture
 

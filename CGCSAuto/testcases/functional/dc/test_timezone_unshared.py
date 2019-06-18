@@ -5,7 +5,7 @@ from pytest import fixture, mark
 
 from utils.tis_log import LOG
 from consts.auth import Tenant
-from consts.cgcs import TIMEZONES
+from consts.stx import TIMEZONES
 from consts.proj_vars import ProjVar
 from keywords import system_helper, glance_helper, dc_helper, host_helper
 

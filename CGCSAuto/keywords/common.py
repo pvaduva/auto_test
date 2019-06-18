@@ -11,7 +11,7 @@ from datetime import datetime
 import pexpect
 
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.cgcs import Prompt
+from consts.stx import Prompt
 from consts.filepaths import SYSADMIN_HOME
 from consts.proj_vars import ProjVar
 from utils import exceptions

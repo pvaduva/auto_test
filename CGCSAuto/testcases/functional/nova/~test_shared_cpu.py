@@ -3,7 +3,7 @@ import re
 from pytest import fixture, mark, skip, param
 
 import keywords.host_helper
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from consts.cli_errs import SharedCPUErr, ResizeVMErr
 from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient

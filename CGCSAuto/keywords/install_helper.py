@@ -8,7 +8,7 @@ from urllib.request import urlopen
 import setups
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
 from consts.auth import Tenant, CliAuth
-from consts.cgcs import HostAvailState, Prompt, PREFIX_BACKUP_FILE, IMAGE_BACKUP_FILE_PATTERN, \
+from consts.stx import HostAvailState, Prompt, PREFIX_BACKUP_FILE, IMAGE_BACKUP_FILE_PATTERN, \
     CINDER_VOLUME_BACKUP_FILE_PATTERN, BACKUP_FILE_DATE_STR, BackupRestore, \
     PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH
 from consts.filepaths import SYSADMIN_HOME, TiSPath, BuildServerPath, LogPath

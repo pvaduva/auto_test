@@ -12,7 +12,7 @@ import setups
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import ProjVar, InstallVars, ComplianceVar
 from consts import build_server as build_server_consts
-from consts import cgcs
+from consts import stx
 from utils.mongo_reporter.cgcs_mongo_reporter import collect_and_upload_results
 from utils.tis_log import LOG
 from utils.cgcs_reporter import parse_log
@@ -626,7 +626,7 @@ def pytest_addoption(parser):
     ###############################
 
     upgrade_version_help = "TiS next software version that the lab is upgraded to. " \
-                           "Valid options are: {}".format(' '.join(v[1] for v in cgcs.SUPPORTED_UPGRADES))
+                           "Valid options are: {}".format(' '.join(v[1] for v in stx.SUPPORTED_UPGRADES))
 
     upgrade_build_dir_path_help = "The path to the upgrade software release build directory in build server." \
                                   " eg: /localdisk/loadbuild/jenkins/TS_16.10_Host/latest_build/. " \

@@ -8,7 +8,7 @@ import time
 
 from pytest import mark, param
 
-from consts.cgcs import EventLogID
+from consts.stx import EventLogID
 from keywords import vm_helper, host_helper, system_helper, storage_helper
 from testfixtures.recover_hosts import HostsToRecover
 from utils import cli, table_parser

@@ -8,7 +8,7 @@ from pytest import fixture, skip
 
 from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
 from consts.build_server import Server
-from consts.cgcs import TIS_BLD_DIR_REGEX, BackupRestore, PREFIX_BACKUP_FILE
+from consts.stx import TIS_BLD_DIR_REGEX, BackupRestore, PREFIX_BACKUP_FILE
 from consts.filepaths import BuildServerPath, SYSADMIN_HOME
 from consts.proj_vars import InstallVars, ProjVar, BackupVars
 from utils.clients.ssh import ControllerClient, NATBoxClient
@@ -671,7 +671,7 @@ def pb_migrate_test(backup_info, con_ssh, vm_ids=None):
     Run migration test before doing system backup.
 
     Args:
-        backup_info: 
+        backup_info:
             - options for doing backup
 
         con_ssh:
@@ -814,7 +814,7 @@ def get_backup_file_name_prefix(backup_info):
             - options for system backup
 
     Return:
-        the core name of the backup files 
+        the core name of the backup files
     """
 
     core_name = PREFIX_BACKUP_FILE

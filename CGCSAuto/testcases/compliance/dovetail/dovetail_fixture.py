@@ -7,7 +7,7 @@ from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from consts.proj_vars import ProjVar, ComplianceVar
 from consts.compliance import Dovetail
-from consts.cgcs import HostAvailState
+from consts.stx import HostAvailState
 from consts.auth import HostLinuxCreds, ComplianceCreds, Tenant, CliAuth
 from keywords import host_helper, system_helper, network_helper, keystone_helper, common, compliance_helper
 

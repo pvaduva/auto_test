@@ -2,7 +2,7 @@ import copy
 
 from pytest import skip
 
-from consts.cgcs import HostAvailState, TrafficControl
+from consts.stx import HostAvailState, TrafficControl
 from keywords import system_helper, host_helper
 from utils.tis_log import LOG
 

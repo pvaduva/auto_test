@@ -26,7 +26,7 @@ import string
 
 from pytest import fixture, mark, skip
 
-from consts.cgcs import PartitionStatus
+from consts.stx import PartitionStatus
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
@@ -615,7 +615,7 @@ def test_decrease_host_partition_size():
 
 
     Test Steps:
-    * Create a partition 
+    * Create a partition
     * Modify the partition to decrease its size
 
     Teardown:
@@ -678,7 +678,7 @@ def test_increase_host_partition_size_beyond_avail_disk_space():
     * Modify the partition to consume over than the available disk space
 
     Teardown:
-    * Delete created partitions 
+    * Delete created partitions
 
     """
 

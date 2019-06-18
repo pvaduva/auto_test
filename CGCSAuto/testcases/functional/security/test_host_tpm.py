@@ -8,7 +8,7 @@ from pytest import skip, fixture, mark, param
 
 from consts import build_server
 from consts.auth import HostLinuxCreds, SvcCgcsAuto
-from consts.cgcs import Prompt, EventLogID
+from consts.stx import Prompt, EventLogID
 from consts.filepaths import SecurityPath, BuildServerPath, SYSADMIN_HOME
 from consts.proj_vars import ProjVar
 

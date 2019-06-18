@@ -5,7 +5,7 @@ from pytest import fixture, mark, param
 
 from utils.tis_log import LOG
 from keywords import vm_helper, network_helper, glance_helper
-from consts.cgcs import PING_LOSS_RATE
+from consts.stx import PING_LOSS_RATE
 
 
 @fixture(scope='module', autouse=True)

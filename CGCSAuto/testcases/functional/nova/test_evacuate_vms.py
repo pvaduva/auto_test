@@ -3,7 +3,7 @@ from pytest import fixture, skip, mark
 import keywords.host_helper
 from utils.tis_log import LOG
 from consts.timeout import VMTimeout
-from consts.cgcs import FlavorSpec, VMStatus
+from consts.stx import FlavorSpec, VMStatus
 from consts.reasons import SkipStorageBacking, SkipHypervisor
 
 from keywords import vm_helper, host_helper, nova_helper, cinder_helper, system_helper, check_helper

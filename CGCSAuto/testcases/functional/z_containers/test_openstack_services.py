@@ -3,7 +3,7 @@ import time
 from pytest import skip, mark, fixture
 
 from keywords import container_helper, system_helper, host_helper, kube_helper
-from consts.cgcs import HostAvailState, PodStatus, AppStatus
+from consts.stx import HostAvailState, PodStatus, AppStatus
 from utils.tis_log import LOG
 
 

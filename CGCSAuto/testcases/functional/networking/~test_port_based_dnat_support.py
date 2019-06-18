@@ -2,7 +2,7 @@ import time
 
 from pytest import fixture
 
-from consts.cgcs import FlavorSpec, Prompt
+from consts.stx import FlavorSpec, Prompt
 from keywords import network_helper, vm_helper, nova_helper, glance_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils import exceptions

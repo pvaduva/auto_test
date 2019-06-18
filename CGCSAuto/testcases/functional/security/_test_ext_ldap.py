@@ -1,5 +1,5 @@
 from keywords import system_helper, keystone_helper
-from consts.cgcs import ExtLdap
+from consts.stx import ExtLdap
 from utils.tis_log import LOG
 from pytest import mark, fixture
 

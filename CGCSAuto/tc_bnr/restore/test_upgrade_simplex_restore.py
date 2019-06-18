@@ -1,7 +1,7 @@
 import time
 
 from consts.auth import SvcCgcsAuto
-from consts.cgcs import Prompt, BackupRestore
+from consts.stx import Prompt, BackupRestore
 from consts.filepaths import TiSPath, SYSADMIN_HOME
 from consts.proj_vars import RestoreVars
 from tc_bnr.restore.test_restore import restore_volumes  # Don't remove

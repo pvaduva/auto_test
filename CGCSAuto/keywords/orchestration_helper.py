@@ -7,7 +7,7 @@ import time
 from utils import cli, exceptions
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
-from consts.cgcs import OrchestStrategyPhase, OrchStrategyKey, OrchStrategyState
+from consts.stx import OrchestStrategyPhase, OrchStrategyKey, OrchStrategyState
 from consts.timeout import OrchestrationPhaseTimeout, HostTimeout
 from keywords import common
 

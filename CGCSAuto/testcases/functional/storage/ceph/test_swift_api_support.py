@@ -7,7 +7,7 @@ import time
 from pytest import mark, fixture, skip
 
 from consts.auth import HostLinuxCreds
-from consts.cgcs import GuestImages, BackendState, BackendTask, EventLogID
+from consts.stx import GuestImages, BackendState, BackendTask, EventLogID
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
 from keywords import glance_helper, vm_helper, host_helper, system_helper, storage_helper, keystone_helper, swift_helper

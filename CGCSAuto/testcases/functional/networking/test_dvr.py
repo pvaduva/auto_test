@@ -5,7 +5,7 @@ from pytest import mark, fixture, skip, param
 from utils.tis_log import LOG
 
 from consts.auth import Tenant
-from consts.cgcs import RouterStatus
+from consts.stx import RouterStatus
 from keywords import network_helper, vm_helper, system_helper, host_helper, cinder_helper
 from testfixtures.fixture_resources import ResourceCleanup
 

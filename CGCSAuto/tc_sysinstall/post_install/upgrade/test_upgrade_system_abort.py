@@ -5,7 +5,7 @@ import pytest
 from utils.tis_log import LOG
 from utils import table_parser
 from consts.proj_vars import InstallVars
-from consts.cgcs import HostAvailState, HostOperState
+from consts.stx import HostAvailState, HostOperState
 from keywords import system_helper, host_helper, install_helper, upgrade_helper
 
 

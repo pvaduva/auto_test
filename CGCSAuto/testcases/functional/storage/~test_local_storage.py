@@ -4,7 +4,7 @@ from xml.etree import ElementTree
 
 from pytest import skip, fixture
 
-from consts.cgcs import LocalStorage
+from consts.stx import LocalStorage
 from consts.auth import Tenant
 from consts.filepaths import SYSADMIN_HOME
 
@@ -470,7 +470,7 @@ class TestLocalStorage:
         """
 
         local_storage_type, compute_src = setup_local_storage
-        
+
         if not system_helper.is_storage_system():
             skip("This test requires a storage system")
 

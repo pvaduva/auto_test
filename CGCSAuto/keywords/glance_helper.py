@@ -6,7 +6,7 @@ import json
 from pytest import skip
 
 from consts.auth import Tenant
-from consts.cgcs import GuestImages, ImageMetadata
+from consts.stx import GuestImages, ImageMetadata
 from consts.proj_vars import ProjVar
 from consts.filepaths import SYSADMIN_HOME
 from consts.timeout import ImageTimeout

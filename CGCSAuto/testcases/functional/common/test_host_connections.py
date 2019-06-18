@@ -1,6 +1,6 @@
 from pytest import mark
 
-from consts.cgcs import HostAvailState
+from consts.stx import HostAvailState
 from keywords import system_helper, network_helper, host_helper
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG

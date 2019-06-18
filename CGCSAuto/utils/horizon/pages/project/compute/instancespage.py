@@ -8,7 +8,7 @@ from utils.horizon.pages import basepage
 from utils.horizon.regions import forms
 from utils.horizon.regions import tables
 from utils.horizon.regions import menus
-from consts.cgcs import Networks
+from consts.stx import Networks
 
 
 class LaunchInstanceForm(forms.TabbedFormRegion):

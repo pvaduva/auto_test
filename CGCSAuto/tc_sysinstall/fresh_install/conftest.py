@@ -7,7 +7,7 @@ from utils.node import Node
 from utils.jenkins_utils import build_info
 from consts.proj_vars import InstallVars, ProjVar
 from consts.filepaths import BuildServerPath, SYSADMIN_HOME
-from consts.cgcs import VSwitchType
+from consts.stx import VSwitchType
 from tc_sysinstall.fresh_install import fresh_install_helper
 from keywords import host_helper
 

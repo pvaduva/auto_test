@@ -3,7 +3,7 @@ import time
 from pytest import mark, skip, fixture
 
 from utils.tis_log import LOG
-from consts.cgcs import PatchState, VMStatus
+from consts.stx import PatchState, VMStatus
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import system_helper, host_helper, patching_helper, orchestration_helper, vm_helper, \
     cinder_helper

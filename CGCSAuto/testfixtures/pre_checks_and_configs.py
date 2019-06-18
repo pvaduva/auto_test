@@ -4,7 +4,7 @@ import time
 from pytest import fixture, skip
 
 from consts.auth import Tenant
-from consts.cgcs import EventLogID, HostAvailState, AppStatus
+from consts.stx import EventLogID, HostAvailState, AppStatus
 from consts.filepaths import HeatTemplate
 from consts.proj_vars import ProjVar, PatchingVars
 from consts.reasons import SkipSysType

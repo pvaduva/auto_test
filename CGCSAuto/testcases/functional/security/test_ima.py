@@ -1,7 +1,7 @@
 from pytest import mark, fixture, skip
 
 from consts.auth import HostLinuxCreds
-from consts.cgcs import EventLogID
+from consts.stx import EventLogID
 from keywords import system_helper, common
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG

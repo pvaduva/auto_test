@@ -3,7 +3,7 @@ import time
 from pytest import fixture, mark, skip, param
 
 from consts.auth import Tenant
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from consts.timeout import VMTimeout
 from keywords import vm_helper, nova_helper, host_helper, network_helper, common, system_helper
 from testfixtures.fixture_resources import ResourceCleanup

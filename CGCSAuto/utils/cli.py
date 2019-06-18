@@ -3,7 +3,7 @@ import os
 from pytest import skip
 
 from consts.auth import Tenant
-from consts.cgcs import Prompt
+from consts.stx import Prompt
 from consts.proj_vars import ProjVar
 from consts.timeout import CLI_TIMEOUT
 from utils import exceptions

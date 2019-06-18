@@ -3,7 +3,7 @@ from pytest import mark, skip, param
 
 from utils.tis_log import LOG
 
-from consts.cgcs import VMStatus
+from consts.stx import VMStatus
 from consts.timeout import VMTimeout
 from keywords import host_helper, system_helper, vm_helper, network_helper
 from testfixtures.recover_hosts import HostsToRecover

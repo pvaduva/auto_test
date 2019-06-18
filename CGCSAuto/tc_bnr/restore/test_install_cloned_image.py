@@ -5,7 +5,7 @@ import pytest
 
 from consts.auth import SvcCgcsAuto
 from consts.build_server import Server, get_build_server_info
-from consts.cgcs import HostAvailState, HostOperState, HostAdminState, Prompt
+from consts.stx import HostAvailState, HostOperState, HostAdminState, Prompt
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar
 from utils import node

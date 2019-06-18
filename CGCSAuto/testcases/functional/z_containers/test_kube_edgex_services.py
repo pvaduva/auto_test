@@ -4,7 +4,7 @@ from pytest import fixture, mark, skip
 
 from keywords import kube_helper, system_helper, host_helper
 from consts.filepaths import SYSADMIN_HOME
-from consts.cgcs import PodStatus, HostAvailState
+from consts.stx import PodStatus, HostAvailState
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 

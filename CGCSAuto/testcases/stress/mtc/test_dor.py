@@ -3,7 +3,7 @@ from pytest import mark
 
 from utils.tis_log import LOG
 from consts.timeout import HostTimeout, VMTimeout
-from consts.cgcs import EventLogID
+from consts.stx import EventLogID
 from consts.vlm import VlmAction
 from consts.proj_vars import ProjVar
 from keywords import system_helper, vlm_helper, host_helper, vm_helper

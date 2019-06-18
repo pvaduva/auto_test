@@ -2,7 +2,7 @@ from pytest import mark, param
 
 from utils.tis_log import LOG
 
-from consts.cgcs import FlavorSpec, ImageMetadata, GuestImages
+from consts.stx import FlavorSpec, ImageMetadata, GuestImages
 from consts.cli_errs import CPUPolicyErr  # used by eval
 
 from keywords import nova_helper, vm_helper, glance_helper, cinder_helper, check_helper, host_helper

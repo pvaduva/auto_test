@@ -7,7 +7,7 @@ import threading
 import configparser
 
 from consts.auth import Tenant, HostLinuxCreds, SvcCgcsAuto, CliAuth, Guest
-from consts.cgcs import Prompt, MULTI_REGION_MAP, SUBCLOUD_PATTERN, SysType, DROPS, GuestImages, Networks
+from consts.stx import Prompt, MULTI_REGION_MAP, SUBCLOUD_PATTERN, SysType, DROPS, GuestImages, Networks
 from consts.filepaths import SYSADMIN_HOME, BuildServerPath
 from consts.lab import Labs, add_lab_entry, NatBoxes, update_lab
 from consts.proj_vars import ProjVar, InstallVars

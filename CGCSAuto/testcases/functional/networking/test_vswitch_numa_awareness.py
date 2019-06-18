@@ -3,7 +3,7 @@ import re
 from pytest import mark, fixture, skip, param
 
 import keywords.host_helper
-from consts.cgcs import FlavorSpec
+from consts.stx import FlavorSpec
 from keywords import host_helper, system_helper, vm_helper, nova_helper, check_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover

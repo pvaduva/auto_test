@@ -4,7 +4,7 @@ import collections
 from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
-from consts.cgcs import VMStatus
+from consts.stx import VMStatus
 from consts.timeout import VMTimeout
 from keywords import nova_helper, vm_helper, host_helper, system_helper
 from testfixtures.fixture_resources import ResourceCleanup
@@ -22,7 +22,7 @@ g_vms = collections.defaultdict(dict)
 def reset_vms():
     g_vms.clear()
     g_vms.update(vtpm=None, autorc=None, non_autorc=None)
-    
+
 
 @fixture(scope='module', autouse=True)
 def prepare_vms(request):
