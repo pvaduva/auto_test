@@ -1,10 +1,19 @@
+#
+# Copyright (c) 2016 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+
 class Tenant:
     __PASSWORD = 'Li69nux*'
     __REGION = 'RegionOne'
     __URL_PLATFORM = 'http://192.168.204.2:5000/v3/'
     __URL_CONTAINERS = 'http://keystone.openstack.svc.cluster.local/v3'
-    __DC_MAP = {'SystemController': {'region': 'SystemController', 'auth_url': __URL_PLATFORM},
-                'RegionOne': {'region': 'RegionOne', 'auth_url': __URL_PLATFORM}}
+    __DC_MAP = {'SystemController': {'region': 'SystemController',
+                                     'auth_url': __URL_PLATFORM},
+                'RegionOne': {'region': 'RegionOne',
+                              'auth_url': __URL_PLATFORM}}
 
     # Platform openstack user - admin
     __ADMIN_PLATFORM = {
@@ -45,7 +54,6 @@ class Tenant:
         'TENANT1': __TENANT1,
         'TENANT2': __TENANT2}
 
-
     @classmethod
     def add_dc_region(cls, region_info):
         cls.__DC_MAP.update(region_info)
@@ -75,7 +83,8 @@ class Tenant:
         cls.__REGION = region
 
     @classmethod
-    def add(cls, tenantname, dictname=None, username=None, password=None, region=None, auth_url=None, domain='Default'):
+    def add(cls, tenantname, dictname=None, username=None, password=None,
+            region=None, auth_url=None, domain='Default'):
         tenant_dict = dict(tenant=tenantname)
         tenant_dict['user'] = username if username else tenantname
         tenant_dict['password'] = password if password else cls.__PASSWORD
@@ -85,7 +94,8 @@ class Tenant:
         if auth_url:
             tenant_dict['auth_url'] = auth_url
 
-        dictname = dictname.upper() if dictname else tenantname.upper().replace('-', '_')
+        dictname = dictname.upper() if dictname else tenantname.upper().\
+            replace('-', '_')
         cls.__tenants[dictname] = tenant_dict
         return tenant_dict
 
@@ -97,10 +107,12 @@ class Tenant:
         Get tenant auth dict that can be passed to auth_info in cli cmd
         Args:
             tenant_dictname (str): e.g., tenant1, TENANT2, system_controller
-            dc_region (None|str): key for dc_region added via add_dc_region. Used to update auth_url and region
+            dc_region (None|str): key for dc_region added via add_dc_region.
+                Used to update auth_url and region
                 e.g., SystemController, RegionOne, subcloud-2
 
-        Returns (dict): mutable dictionary. If changed, DC map or tenant dict will update as well.
+        Returns (dict): mutable dictionary. If changed, DC map or tenant dict
+            will update as well.
 
         """
         tenant_dictname = tenant_dictname.upper().replace('-', '_')
@@ -108,8 +120,9 @@ class Tenant:
         if dc_region:
             region_dict = cls.__DC_MAP.get(dc_region, None)
             if not region_dict:
-                raise ValueError('Distributed cloud region {} is not added to DC_MAP yet. DC_MAP: {}'.
-                                 format(dc_region, cls.__DC_MAP))
+                raise ValueError(
+                    'Distributed cloud region {} is not added to '
+                    'DC_MAP yet. DC_MAP: {}'.format(dc_region, cls.__DC_MAP))
             tenant_dict.update({'region': region_dict['region']})
         else:
             tenant_dict.pop('region', None)
@@ -119,15 +132,17 @@ class Tenant:
     @classmethod
     def get_region_and_url(cls, platform=False, dc_region=None):
         auth_region_and_url = {
-            'auth_url': cls.__URL_PLATFORM if platform else cls.__URL_CONTAINERS,
+            'auth_url':
+                cls.__URL_PLATFORM if platform else cls.__URL_CONTAINERS,
             'region': cls.__REGION
         }
 
         if dc_region:
             region_dict = cls.__DC_MAP.get(dc_region, None)
             if not region_dict:
-                raise ValueError('Distributed cloud region {} is not added to DC_MAP yet. DC_MAP: {}'.
-                                 format(dc_region, cls.__DC_MAP))
+                raise ValueError(
+                    'Distributed cloud region {} is not added to DC_MAP yet. '
+                    'DC_MAP: {}'.format(dc_region, cls.__DC_MAP))
             auth_region_and_url['region'] = region_dict.get('region')
             if platform:
                 auth_region_and_url['auth_url'] = region_dict.get('auth_url')
@@ -156,14 +171,17 @@ class Tenant:
         return cls.get(tenant_dictname=secondary)
 
     @classmethod
-    def update(cls, tenant_dictname, username=None, password=None, tenant=None, **kwargs):
+    def update(cls, tenant_dictname, username=None, password=None, tenant=None,
+               **kwargs):
         tenant_dict = cls.get(tenant_dictname)
 
         if not isinstance(tenant_dict, dict):
-            raise ValueError("{} dictionary does not exist in CGCSAuto/consts/auth.py".format(tenant_dictname))
+            raise ValueError("{} dictionary does not exist in "
+                             "CGCSAuto/consts/auth.py".format(tenant_dictname))
 
         if not username and not password and not tenant and not kwargs:
-            raise ValueError("Please specify username, password, tenant, and/or domain to update for {} dict".
+            raise ValueError("Please specify username, password, tenant, "
+                             "and/or domain to update for {} dict".
                              format(tenant_dictname))
 
         if username:
@@ -180,8 +198,8 @@ class Tenant:
         return cls.__DC_MAP
 
 
-class HostLinuxCreds:
-
+class HostLinuxUser:
+    # Default linux user credentials to use if unspecified in testcase-config
     __SYSADMIN = {
         'user': 'sysadmin',
         'password': 'Li69nux*'
@@ -196,12 +214,21 @@ class HostLinuxCreds:
         return cls.__SYSADMIN['password']
 
     @classmethod
+    def get_home(cls):
+        return cls.__SYSADMIN.get('home', '/home/{}'.format(cls.get_user()))
+
+    @classmethod
     def set_user(cls, username):
         cls.__SYSADMIN['user'] = username
 
     @classmethod
     def set_password(cls, password):
         cls.__SYSADMIN['password'] = password
+
+    @classmethod
+    def set_home(cls, home):
+        if home:
+            cls.__SYSADMIN['home'] = home
 
 
 class Guest:
@@ -279,11 +306,12 @@ class Guest:
         cls.CREDS[image_name]['password'] = password
 
 
-class SvcCgcsAuto:
+class TestFileServer:
     SERVER = '128.224.150.21'
     USER = 'svc-cgcsauto'
     PASSWORD = ')OKM0okm'
     VLM_PASSWORD = 'wrssvc-cgcsauto'
+    HOME = '/home/svc-cgcsauto'
     SANDBOX = '/sandbox'
     HOSTNAME = 'yow-cgcs-test'
     PROMPT = r'[\[]?svc-cgcsauto@.*\$[ ]?'
@@ -315,7 +343,8 @@ class CliAuth:
         var_name = var_name.upper()
         valid_vars = cls.__var_dict.keys()
         if var_name not in valid_vars:
-            raise ValueError("Invalid var_name. Valid vars: {}".format(valid_vars))
+            raise ValueError("Invalid var_name. Valid vars: {}".
+                             format(valid_vars))
 
         return cls.__var_dict[var_name]
 

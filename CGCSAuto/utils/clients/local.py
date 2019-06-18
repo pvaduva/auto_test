@@ -8,7 +8,7 @@ import threading
 
 import pexpect
 
-from consts.auth import SvcCgcsAuto
+from consts.auth import TestFileServer
 from consts.filepaths import BuildServerPath
 from consts.proj_vars import ProjVar
 from consts.stx import PING_LOSS_RATE
@@ -326,8 +326,8 @@ class RemoteCLIClient:
                 format(BuildServerPath.DEFAULT_WORK_SPACE, build_info.get('JOB', ''), build_info.get('BUILD_ID', ''))
             dest_dir = os.path.dirname(remote_cli_dir)
             dest_path = os.path.join(dest_dir, '{}.tgz'.format(dest_name))
-            localclient.scp_on_dest(source_user=SvcCgcsAuto.USER, source_ip=build_info.get('BUILD_SERVER'),
-                                    source_pswd=SvcCgcsAuto.PASSWORD,
+            localclient.scp_on_dest(source_user=TestFileServer.USER, source_ip=build_info.get('BUILD_SERVER'),
+                                    source_pswd=TestFileServer.PASSWORD,
                                     source_path=source_path,
                                     dest_path=dest_path, timeout=300)
 

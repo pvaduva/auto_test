@@ -20,7 +20,7 @@ thereby utilizing the feature.
 
 from pytest import mark, skip
 
-from consts.auth import HostLinuxCreds, Tenant
+from consts.auth import HostLinuxUser, Tenant
 from consts.proj_vars import ProjVar
 from consts.stx import BackendState
 from keywords import cinder_helper, storage_helper
@@ -163,8 +163,8 @@ def test_configure_external_ceph(ceph_lab, ceph_services):
     source_filepath = "/etc/ceph/ceph.conf"
     dest_filepath = "/home/sysadmin/ceph_{}.conf".format(source_lab_name)
 
-    con_ssh.scp_on_dest(source_user=HostLinuxCreds.get_user(), source_ip=source_server,
-                        source_pswd=HostLinuxCreds.get_password(), source_path=source_filepath,
+    con_ssh.scp_on_dest(source_user=HostLinuxUser.get_user(), source_ip=source_server,
+                        source_pswd=HostLinuxUser.get_password(), source_path=source_filepath,
                         dest_path=dest_filepath, timeout=60)
 
     LOG.tc_step("Confirm ceph.conf file was successfully copied before proceeding")

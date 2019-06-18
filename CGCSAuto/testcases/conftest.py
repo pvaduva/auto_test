@@ -3,8 +3,7 @@ from threading import Event
 import pytest
 
 import setups
-from consts.auth import CliAuth, Tenant
-from consts.filepaths import SYSADMIN_HOME
+from consts.auth import CliAuth, Tenant, HostLinuxUser
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
@@ -74,13 +73,14 @@ def setup_test_session(global_setup, request):
             from utils.clients.local import RemoteCLIClient
             RemoteCLIClient.remove_remote_cli_clients()
             ProjVar.set_var(REMOTE_CLI=None)
-            ProjVar.set_var(USER_FILE_DIR=SYSADMIN_HOME)
+            ProjVar.set_var(USER_FILE_DIR=HostLinuxUser.get_home())
         request.addfinalizer(remove_remote_cli)
 
 
 def pytest_collectstart():
     """
-    Set up the ssh session at collectstart. Because skipif condition is evaluated at the collecting test cases phase.
+    Set up the ssh session at collectstart. Because skipif condition is
+    evaluated at the collecting test cases phase.
     """
     global initialized
     if not initialized:
@@ -100,9 +100,10 @@ def pytest_collectstart():
 
 
 def pytest_runtest_teardown():
-    for con_ssh_ in ControllerClient.get_active_controllers(current_thread_only=True):
+    for con_ssh_ in ControllerClient.get_active_controllers(
+            current_thread_only=True):
         con_ssh_.flush()
-        con_ssh_.connect(retry=True, retry_interval=3, retry_timeout=300)
+        con_ssh_.connect(retry=True, retry_interval=10, retry_timeout=300)
     if natbox_ssh:
         natbox_ssh.flush()
         natbox_ssh.connect(retry=False)

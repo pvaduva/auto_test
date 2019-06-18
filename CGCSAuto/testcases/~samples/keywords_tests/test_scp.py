@@ -25,4 +25,5 @@ def test_scp_to_local():
 
     destip = ControllerClient.get_active_controller().host
 
-    common.scp_to_local(srce_path=srcdir, source_ip=destip, dest_path=destdir, is_dir=True)
+    common.scp_to_local(source_path=srcdir, source_server=destip,
+                        dest_path=destdir, is_dir=True)

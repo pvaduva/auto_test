@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from consts.auth import SvcCgcsAuto
+from consts.auth import TestFileServer
 from consts.build_server import Server, get_build_server_info
 from consts.stx import HostAvailState, HostOperState, HostAdminState, Prompt
 from consts.filepaths import BuildServerPath
@@ -48,10 +48,10 @@ def install_clone_setup():
     bld_server_attr = dict()
     bld_server_attr['name'] = bld_server['name']
     bld_server_attr['server_ip'] = bld_server['ip']
-    bld_server_attr['prompt'] = r'{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, bld_server['name'])
+    bld_server_attr['prompt'] = r'{}@{}\:(.*)\$ '.format(TestFileServer.USER, bld_server['name'])
 
-    bld_server_conn = install_helper.establish_ssh_connection(bld_server_attr['name'], user=SvcCgcsAuto.USER,
-                                password=SvcCgcsAuto.PASSWORD, initial_prompt=bld_server_attr['prompt'])
+    bld_server_conn = install_helper.establish_ssh_connection(bld_server_attr['name'], user=TestFileServer.USER,
+                                                              password=TestFileServer.PASSWORD, initial_prompt=bld_server_attr['prompt'])
 
     bld_server_conn.exec_cmd("bash")
     bld_server_conn.set_prompt(bld_server_attr['prompt'])

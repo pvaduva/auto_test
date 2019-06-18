@@ -4,7 +4,7 @@ This module provides helper functions for host upgrade functions
 
 import time
 
-from consts.auth import Tenant, HostLinuxCreds
+from consts.auth import Tenant, HostLinuxUser
 from consts.stx import HostOperState, HostAvailState, Prompt, HostAdminState
 from consts.timeout import HostTimeout, InstallTimeout
 from keywords import system_helper, host_helper, install_helper, orchestration_helper, storage_helper
@@ -611,7 +611,7 @@ def install_upgrade_license(license_path, timeout=30, con_ssh=None):
             con_ssh.send('y')
 
         if index == 1:
-            con_ssh.send(HostLinuxCreds.get_password())
+            con_ssh.send(HostLinuxUser.get_password())
 
         if index == 0:
             rc = con_ssh.exec_cmd("echo $?")[0]
@@ -1097,16 +1097,22 @@ def collect_upgrade_complete_kpi(lab, collect_kpi):
 
 def import_load(load_path, timeout=120, con_ssh=None, fail_ok=False, upgrade_ver=None):
     # TODO: Need to support remote_cli. i.e., no hardcoded load_path, etc
+    home_dir = HostLinuxUser.get_home()
     if upgrade_ver >= '17.07':
-        load_path = '/home/sysadmin/bootimage.sig'
-        rc, output = cli.system('load-import /home/sysadmin/bootimage.iso ', load_path, ssh_client=con_ssh, fail_ok=True)
+        load_path = '{}/bootimage.sig'.format(HostLinuxUser.get_home())
+        rc, output = cli.system('load-import {}/bootimage.iso'.format(home_dir),
+                                load_path,
+                                ssh_client=con_ssh, fail_ok=True)
     else:
-        rc, output = cli.system('load-import', load_path, ssh_client=con_ssh, fail_ok=True)
+        rc, output = cli.system('load-import', load_path, ssh_client=con_ssh,
+                                fail_ok=True)
     if rc == 0:
         table_ = table_parser.table(output)
         id_ = (table_parser.get_values(table_, "Value", Property='id')).pop()
-        soft_ver = (table_parser.get_values(table_, "Value", Property='software_version')).pop()
-        LOG.info('Waiting to finish importing  load id {} version {}'.format(id_, soft_ver))
+        soft_ver = (table_parser.get_values(table_, "Value",
+                                            Property='software_version')).pop()
+        LOG.info('Waiting to finish importing  load id {} version {}'.format(
+            id_, soft_ver))
 
         end_time = time.time() + timeout
 

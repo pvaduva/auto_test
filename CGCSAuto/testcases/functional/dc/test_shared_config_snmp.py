@@ -3,12 +3,12 @@ from pytest import fixture
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from consts.proj_vars import ProjVar
-from consts.auth import Tenant, SvcCgcsAuto
+from consts.auth import Tenant, TestFileServer
 from keywords import dc_helper, system_helper
 
 
 SNMP_COMM = 'cgcsauto_dc_snmp_comm'
-SNMP_TRAPDEST = ('cgcsauto_dc_snmp_trapdest', SvcCgcsAuto.SERVER)
+SNMP_TRAPDEST = ('cgcsauto_dc_snmp_trapdest', TestFileServer.SERVER)
 
 
 @fixture(scope='module')

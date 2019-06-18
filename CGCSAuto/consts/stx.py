@@ -1,3 +1,10 @@
+#
+# Copyright (c) 2016 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+
 from consts.proj_vars import ProjVar
 
 # output of date. such as: Tue Mar  1 18:20:29 UTC 2016
@@ -5,16 +12,19 @@ DATE_OUTPUT = r'[0-2]\d:[0-5]\d:[0-5]\d\s[A-Z]{3,}\s\d{4}$'
 
 EXT_IP = '8.8.8.8'
 
-# such as in string '5 packets transmitted, 0 received, 100% packet loss, time 4031ms', number 100 will be found
+# such as in string '5 packets transmitted, 0 received, 100% packet loss,
+# time 4031ms', number 100 will be found
 PING_LOSS_RATE = r'\, (\d{1,3})\% packet loss\,'
 
-# vshell ping loss rate pattern. 3 packets transmitted, 0 received, 0 total, 100.00%% loss
+# vshell ping loss rate pattern. 3 packets transmitted, 0 received, 0 total,
+# 100.00%% loss
 VSHELL_PING_LOSS_RATE = r'\, (\d{1,3}).\d{1,2}[%]% loss'
 
 # Matches 8-4-4-4-12 hexadecimal digits. Lower case only
 UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 
-# Match name and uuid. Such as: 'cgcs-guest (a764c205-eb82-4f18-bda6-6c8434223eb5)'
+# Match name and uuid. Such as: 'cgcs-guest (
+# a764c205-eb82-4f18-bda6-6c8434223eb5)'
 NAME_UUID = r'(.*) \((' + UUID + r')\)'
 
 # Message to indicate boot from volume from nova show
@@ -35,7 +45,8 @@ MELLANOX_DEVICE = 'MT27500|MT27710'
 MELLANOX4 = 'MT.*ConnectX-4'
 
 PREFIX_BACKUP_FILE = 'titanium_backup_'
-TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + r'(\.\w)*.+_(.*)_(system|images)\.tgz'
+TITANIUM_BACKUP_FILE_PATTERN = PREFIX_BACKUP_FILE + \
+                               r'(\.\w)*.+_(.*)_(system|images)\.tgz'
 IMAGE_BACKUP_FILE_PATTERN = r'image_{}(.*)\.tgz'.format(UUID)
 CINDER_VOLUME_BACKUP_FILE_PATTERN = r'volume\-{}(.*)\.tgz'.format(UUID)
 BACKUP_FILE_DATE_STR = "%Y%m%d-%H%M%S"
@@ -49,7 +60,10 @@ PLATFORM_CONF_PATH = '/etc/platform/platform.conf'
 MULTI_REGION_MAP = {'RegionOne': '', 'RegionTwo': '-R2'}
 SUBCLOUD_PATTERN = 'subcloud'
 
-SUPPORTED_UPGRADES = [['15.12', '16.10'], ['16.10', '17.06'], ['17.06', '18.01'], ['17.06', '18.03']]
+SUPPORTED_UPGRADES = [['15.12', '16.10'],
+                      ['16.10', '17.06'],
+                      ['17.06', '18.01'],
+                      ['17.06', '18.03']]
 
 DROPS = {1: '18.07'}
 PLATFORM_NET_TYPES = ('mgmt', 'oam', 'infra', 'pxeboot')
@@ -64,7 +78,6 @@ TIMEZONES = [
     "UTC"
 ]
 
-
 STORAGE_AGGREGATE = {
     # 'local_lvm' : 'local_storage_lvm_hosts',
     'local_image': 'local_storage_image_hosts',
@@ -76,10 +89,9 @@ class NtpPool:
     NTP_POOL_1 = '2.pool.ntp.org,1.pool.ntp.org,0.pool.ntp.org'
     NTP_POOL_2 = '1.pool.ntp.org,2.pool.ntp.org,2.pool.ntp.org'
     NTP_POOL_3 = '3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org'
-    NTP_POOL_TOO_LONG = '3.ca.pool.ntp.org,2.ca.pool.ntp.org,1.ca.pool.ntp.org,1.com,2.com,3.com'
-    NTP_NAME_TOO_LONG = 'garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_' \
-                        'garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_' \
-                        'garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage_garbage'
+    NTP_POOL_TOO_LONG = '3.ca.pool.ntp.org,2.ca.pool.ntp.org,' \
+                        '1.ca.pool.ntp.org,1.com,2.com,3.com'
+    NTP_NAME_TOO_LONG = 'garbage_' * 30
 
 
 class GuestImages:
@@ -91,34 +103,68 @@ class GuestImages:
     }
     TIS_GUEST_PATTERN = 'cgcs-guest|tis-centos-guest'
     GUESTS_NO_RM = ['ubuntu_14', 'tis-centos-guest', 'cgcs-guest']
-    # Image files name and size from yow-cgcs-test.wrs.com:/sandbox/images
-    # <glance_image_name>: <source_file_name>, <root disk size>, <dest_file_name>, <disk_format>, <container_format>
+    # Image files name and size from TestFileServer
+    # <glance_image_name>: <source_file_name>, <root disk size>,
+    # <dest_file_name>, <disk_format>, <container_format>
     IMAGE_FILES = {
-        'ubuntu_14': ('ubuntu-14.04-server-cloudimg-amd64-disk1.img', 3, 'ubuntu_14.qcow2', 'qcow2', 'bare'),
-        'ubuntu_12': ('ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_12.qcow2', 'qcow2', 'bare'),
-        'ubuntu_16': ('ubuntu-16.04-xenial-server-cloudimg-amd64-disk1.img', 8, 'ubuntu_16.qcow2', 'qcow2', 'bare'),
-        'centos_6': ('CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8, 'centos_6.qcow2', 'qcow2', 'bare'),
-        'centos_7': ('CentOS-7-x86_64-GenericCloud.qcow2', 8, 'centos_7.qcow2', 'qcow2', 'bare'),
-        'rhel_6': ('rhel-6.5-x86_64.qcow2', 11, 'rhel_6.qcow2', 'qcow2', 'bare'),                # OVP img
-        'rhel_7': ('rhel-7.2-x86_64.qcow2', 11, 'rhel_7.qcow2', 'qcow2', 'bare'),               # OVP img
-        'opensuse_11': ('openSUSE-11.3-x86_64.qcow2', 11, 'opensuse_11.qcow2', 'qcow2', 'bare'),     # OVP img
-        'opensuse_12': ('openSUSE-12.3-x86_64.qcow2', 21, 'opensuse_12.qcow2', 'qcow2', 'bare'),      # OVP img
-        'opensuse_13': ('openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16, 'opensuse_13.qcow2',
-                        'qcow2', 'bare'),
-        # 'win_2012': ('win2012r2.qcow2', 36, 'win_2012.qcow2'),   # Service Team img
-        # 'win_2012': ('windows_server_2012_r2_standard_eval_kvm_20170321.qcow2', 13, 'win2012r2.qcow2'),  # MattP+ssh
-        'win_2012': ('win2012r2_cygwin_compressed.qcow2', 13, 'win2012r2.qcow2', 'qcow2', 'bare'),  # MattP
-        'win_2016': ('win2016_cygwin_compressed.qcow2', 29, 'win2016.qcow2', 'qcow2', 'bare'),
-        'ge_edge': ('edgeOS.hddirect.qcow2', 5, 'ge_edge.qcow2', 'qcow2', 'bare'),
-        'cgcs-guest': ('cgcs-guest.img', 1, 'cgcs-guest.img', 'raw', 'bare'),       # wrl-6
-        'vxworks': ('vxworks-tis.img', 1, 'vxworks.img', 'raw', 'bare'),
-        'tis-centos-guest': (None, 2, 'tis-centos-guest.img', 'raw', 'bare'),
-        'tis-centos-guest-rt': (None, 2, 'tis-centos-guest-rt.img', 'raw', 'bare'),
-        'tis-centos-guest-qcow2': (None, 2, 'tis-centos-guest.qcow2', 'qcow2', 'bare'),
-        'centos_gpu': ('centos-67-cloud-gpu.img', 8, 'centos_6_gpu.qcow2', 'qcow2', 'bare'),
-        'debian-8-m-agent': ('debian-8-m-agent.qcow2', 1.8, 'debian-8-m-agent.qcow2', 'qcow2', 'bare'),
-        'trusty_uefi': ('trusty-server-cloudimg-amd64-uefi1.img', 2.2, 'trusty-uefi.qcow2', 'qcow2', 'bare'),
-        'uefi_shell': ('uefi_shell.iso', 2, 'uefi_shell.iso', 'raw', 'bare'),
+        'ubuntu_14': (
+            'ubuntu-14.04-server-cloudimg-amd64-disk1.img', 3,
+            'ubuntu_14.qcow2', 'qcow2', 'bare'),
+        'ubuntu_12': (
+            'ubuntu-12.04-server-cloudimg-amd64-disk1.img', 8,
+            'ubuntu_12.qcow2', 'qcow2', 'bare'),
+        'ubuntu_16': (
+            'ubuntu-16.04-xenial-server-cloudimg-amd64-disk1.img', 8,
+            'ubuntu_16.qcow2', 'qcow2', 'bare'),
+        'centos_6': (
+            'CentOS-6.8-x86_64-GenericCloud-1608.qcow2', 8,
+            'centos_6.qcow2', 'qcow2', 'bare'),
+        'centos_7': (
+            'CentOS-7-x86_64-GenericCloud.qcow2', 8,
+            'centos_7.qcow2', 'qcow2', 'bare'),
+        'rhel_6': (
+            'rhel-6.5-x86_64.qcow2', 11, 'rhel_6.qcow2', 'qcow2', 'bare'),
+        'rhel_7': (
+            'rhel-7.2-x86_64.qcow2', 11, 'rhel_7.qcow2', 'qcow2', 'bare'),
+        'opensuse_11': (
+            'openSUSE-11.3-x86_64.qcow2', 11,
+            'opensuse_11.qcow2', 'qcow2', 'bare'),
+        'opensuse_12': (
+            'openSUSE-12.3-x86_64.qcow2', 21,
+            'opensuse_12.qcow2', 'qcow2', 'bare'),
+        'opensuse_13': (
+            'openSUSE-13.2-OpenStack-Guest.x86_64-0.0.10-Build2.94.qcow2', 16,
+            'opensuse_13.qcow2', 'qcow2', 'bare'),
+        'win_2012': (
+            'win2012r2_cygwin_compressed.qcow2', 13,
+            'win2012r2.qcow2', 'qcow2', 'bare'),
+        'win_2016': (
+            'win2016_cygwin_compressed.qcow2', 29,
+            'win2016.qcow2', 'qcow2', 'bare'),
+        'ge_edge': (
+            'edgeOS.hddirect.qcow2', 5,
+            'ge_edge.qcow2', 'qcow2', 'bare'),
+        'cgcs-guest': (
+            'cgcs-guest.img', 1, 'cgcs-guest.img', 'raw', 'bare'),
+        'vxworks': (
+            'vxworks-tis.img', 1, 'vxworks.img', 'raw', 'bare'),
+        'tis-centos-guest': (
+            None, 2, 'tis-centos-guest.img', 'raw', 'bare'),
+        'tis-centos-guest-rt': (
+            None, 2, 'tis-centos-guest-rt.img', 'raw', 'bare'),
+        'tis-centos-guest-qcow2': (
+            None, 2, 'tis-centos-guest.qcow2', 'qcow2', 'bare'),
+        'centos_gpu': (
+            'centos-67-cloud-gpu.img', 8,
+            'centos_6_gpu.qcow2', 'qcow2', 'bare'),
+        'debian-8-m-agent': (
+            'debian-8-m-agent.qcow2', 1.8,
+            'debian-8-m-agent.qcow2', 'qcow2', 'bare'),
+        'trusty_uefi': (
+            'trusty-server-cloudimg-amd64-uefi1.img', 2.2,
+            'trusty-uefi.qcow2', 'qcow2', 'bare'),
+        'uefi_shell': (
+            'uefi_shell.iso', 2, 'uefi_shell.iso', 'raw', 'bare'),
     }
 
 
@@ -136,16 +182,21 @@ class Networks:
         'data': r'172.\d{1,3}.\d{1,3}.\d{1,3}',
         'mgmt': r'192.168.\d{3}\.\d{1,3}|192.168.[8|9]\d\.\d{1,3}',
         'internal': r'10.\d{1,3}.\d{1,3}.\d{1,3}',
-        'external': r'192.168.\d\.\d{1,3}|192.168.[1-5]\d\.\d{1,3}|10.10.\d{1,3}\.\d{1,3}'
+        'external': r'192.168.\d\.\d{1,3}|192.168.[1-5]\d\.\d{1,3}|10.10.\d{'
+                    r'1,3}\.\d{1,3}'
     }
-    # MGMT_IP and EXT_IP patterns are based on "NAT accessible IP address allocations" table in lab connectivity wiki
+
+    # MGMT_IP and EXT_IP patterns are based on "NAT accessible IP address
+    # allocations" table in lab connectivity wiki
 
     @classmethod
     def get_nenutron_net_patterns(cls, net_type='mgmt'):
-        return cls.__NEUTRON_NET_NAME_PATTERN.get(net_type), cls.__NEUTRON_NET_IP_PATTERN.get(net_type)
+        return cls.__NEUTRON_NET_NAME_PATTERN.get(
+            net_type), cls.__NEUTRON_NET_IP_PATTERN.get(net_type)
 
     @classmethod
-    def set_neutron_net_patterns(cls, net_type, net_name_pattern=None, net_ip_pattern=None):
+    def set_neutron_net_patterns(cls, net_type, net_name_pattern=None,
+                                 net_ip_pattern=None):
         if net_type not in cls.__NEUTRON_NET_NAME_PATTERN:
             raise ValueError("Unknown net_type {}. Select from: {}".format(
                 net_type, list(cls.__NEUTRON_NET_NAME_PATTERN.keys())))
@@ -224,11 +275,12 @@ class Prompt:
 
     VXWORKS_PROMPT = '-> '
 
-    ADMIN_PROMPT = r'\[sysadmin@controller\-[01].*\(keystone_admin\)\]\$'
-    TENANT1_PROMPT = r'\[sysadmin@controller\-[01] .*\(keystone_tenant1\)\]\$ '
-    TENANT2_PROMPT = r'\[sysadmin@controller\-[01] .*\(keystone_tenant2\)\]\$ '
-    TENANT_PROMPT = r'\[sysadmin@controller\-[01] .*\(keystone_{}\)\]\$ '  # general prompt. Need to fill in tenant name
-    REMOTE_CLI_PROMPT = r'\(keystone_{}\)\]\$ '     # remote cli prompt
+    ADMIN_PROMPT = r'\[.*@controller\-[01].*\(keystone_admin\)\]\$'
+    TENANT1_PROMPT = r'\[.*@controller\-[01] .*\(keystone_tenant1\)\]\$ '
+    TENANT2_PROMPT = r'\[.*@controller\-[01] .*\(keystone_tenant2\)\]\$ '
+    TENANT_PROMPT = r'\[.*@controller\-[01] .*\(keystone_{}\)\]\$ '  #
+    # general prompt. Need to fill in tenant name
+    REMOTE_CLI_PROMPT = r'\(keystone_{}\)\]\$ '  # remote cli prompt
 
     COMPUTE_PROMPT = r'.*compute\-([0-9]){1,}\:~\$'
     STORAGE_PROMPT = r'.*storage\-([0-9]){1,}\:~\$'
@@ -250,7 +302,8 @@ class NovaCLIOutput:
     VM_ACTION_ACCEPTED = "Request to {} server (.*) has been accepted."
     VM_START_ACCEPTED = "Request to start server (.*) has been accepted."
     VM_STOP_ACCEPTED = "Request to stop server (.*) has been accepted."
-    VM_DELETE_REJECTED_NOT_EXIST = "No server with a name or ID of '(.*)' exists."
+    VM_DELETE_REJECTED_NOT_EXIST = "No server with a name or ID of '(.*)' " \
+                                   "exists."
     VM_DELETE_ACCEPTED = "Request to delete server (.*) has been accepted."
     VM_BOOT_REJECT_MEM_PAGE_SIZE_FORBIDDEN = "Page size .* forbidden against .*"
     SRV_GRP_DEL_REJ_NOT_EXIST = "Delete for server group (.*) failed"
@@ -318,7 +371,8 @@ class InstanceTopology:
     NODE = r'node:(\d),'
     PGSIZE = r'pgsize:(\d{1,3}),'
     VCPUS = r'vcpus:(\d{1,2}),'
-    PCPUS = r'pcpus:(\d{1,2}),\s'     # find a string separated by ',' if multiple numa nodes
+    # find a string separated by ',' if multiple numa nodes
+    PCPUS = r'pcpus:(\d{1,2}),\s'
     CPU_POLICY = 'pol:(.*),'
     SIBLINGS = 'siblings:(.*),'
     THREAD_POLICY = 'thr:(.*)$|thr:(.*),'
@@ -341,7 +395,7 @@ class EventLogID:
     HEARTBEAT_ENABLED = '700.211'
     REBOOT_VM_COMPLETE = '700.186'
     REBOOT_VM_INPROGRESS = '700.182'
-    REBOOT_VM_ISSUED = '700.181'    # soft-reboot or hard-reboot in reason text
+    REBOOT_VM_ISSUED = '700.181'  # soft-reboot or hard-reboot in reason text
     VM_DELETED = '700.114'
     VM_DELETING = '700.110'
     VM_CREATED = '700.108'
@@ -359,7 +413,8 @@ class EventLogID:
     INFRA_NET_FAIL = '200.009'
     BMC_SENSOR_ACTION = '200.007'
     STORAGE_DEGRADE = '200.006'
-    # 200.004	compute-0 experienced a service-affecting failure. Auto-recovery in progress.
+    # 200.004	compute-0 experienced a service-affecting failure.
+    # Auto-recovery in progress.
     # host=compute-0 	critical 	April 7, 2017, 2:34 p.m.
     HOST_RECOVERY_IN_PROGRESS = '200.004'
     HOST_LOCK = '200.001'
@@ -436,7 +491,7 @@ class HTTPPort:
     SYS_PORT = 6385
     SYS_VER = "v1"
     CINDER_PORT = 8776
-    CINDER_VER = "v3"   # v1 and v2 are also supported
+    CINDER_VER = "v3"  # v1 and v2 are also supported
     GLANCE_PORT = 9292
     GLANCE_VER = "v2"
     HEAT_PORT = 8004
@@ -444,7 +499,7 @@ class HTTPPort:
     HEAT_CFN_PORT = 8000
     HEAT_CFN_VER = "v1"
     NOVA_PORT = 8774
-    NOVA_VER = "v2.1"     # v3 also supported
+    NOVA_VER = "v2.1"  # v3 also supported
     NOVA_EC2_PORT = 8773
     NOVA_EC2_VER = "v2"
     PATCHING_PORT = 15491
@@ -468,7 +523,8 @@ class OrchestStrategyPhase:
 
     @staticmethod
     def validate(phase):
-        if phase in [OrchestStrategyPhase.BUILD, OrchestStrategyPhase.APPLY, OrchestStrategyPhase.ABORT]:
+        if phase in [OrchestStrategyPhase.BUILD, OrchestStrategyPhase.APPLY,
+                     OrchestStrategyPhase.ABORT]:
             return True
         else:
             return False
@@ -496,9 +552,12 @@ class OrchStrategyState:
     ABORT_TIMEOUT = 'abort-timeout'
 
     OrchestStrategyPhaseStates = {
-        OrchestStrategyPhase.BUILD: [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT],
-        OrchestStrategyPhase.ABORT: [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
-        OrchestStrategyPhase.APPLY: [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
+        OrchestStrategyPhase.BUILD:
+            [BUILDING, BUILT, BUILD_FAILED, BUILD_TIMEOUT],
+        OrchestStrategyPhase.ABORT:
+            [ABORTING, ABORTED, ABORT_FAILED, ABORT_TIMEOUT],
+        OrchestStrategyPhase.APPLY:
+            [APPLYING, APPLIED, APPLY_FAILED, APPLY_TIMEOUT],
     }
 
     def validate(self, phase, state):
@@ -548,8 +607,12 @@ class BackupRestore:
 
 
 class CpuModel:
-    CPU_MODELS = ('Skylake-Server', 'Skylake-Client', 'Broadwell', 'Broadwell-noTSX', 'Haswell-noTSX-IBRS',
-                  'Haswell', 'IvyBridge', 'SandyBridge', 'Westmere', 'Nehalem', 'Penryn', 'Conroe')
+    CPU_MODELS = (
+        'Skylake-Server', 'Skylake-Client',
+        'Broadwell', 'Broadwell-noTSX',
+        'Haswell-noTSX-IBRS', 'Haswell',
+        'IvyBridge', 'SandyBridge',
+        'Westmere', 'Nehalem', 'Penryn', 'Conroe')
 
 
 class ExtLdap:
@@ -634,11 +697,14 @@ class MuranoEnvStatus:
 
 
 class TrafficControl:
-    CLASSES = {'1:40': 'default', '1:1': 'root', '1:10': 'hiprio', '1:20': 'storage', '1:30': 'migration',
+    CLASSES = {'1:40': 'default', '1:1': 'root', '1:10': 'hiprio',
+               '1:20': 'storage', '1:30': 'migration',
                '1:50': 'drbd'}
 
-    RATE_PATTERN_ROOT = r'class htb 1:1 root rate (\d+)([GMK])bit ceil (\d+)([GMK])bit burst \d+b cburst \d+b'
-    RATE_PATTERN = r'class htb (1:\d+) parent 1:1 leaf \d+: prio \d+ rate (\d+)([GMK])bit ceil (\d+)([GMK])bit ' \
+    RATE_PATTERN_ROOT = r'class htb 1:1 root rate (\d+)([GMK])bit ceil (\d+)(' \
+                        r'[GMK])bit burst \d+b cburst \d+b'
+    RATE_PATTERN = r'class htb (1:\d+) parent 1:1 leaf \d+: prio \d+ rate (' \
+                   r'\d+)([GMK])bit ceil (\d+)([GMK])bit ' \
                    r'burst \d+b cburst \d+b'
 
     # no infra
@@ -679,11 +745,11 @@ class TrafficControl:
     INFRA_USES_MGMT = {
         'config': 'infra consolidated over mgmt',
         'root': (0.99, 0.99),
-        'default': (0.99*0.1, 0.99*0.2),
-        'hiprio': (0.99*0.1, 0.99*0.2),
-        'storage': (0.99*0.5, 0.99*1),
-        'migration': (0.99*0.3, 0.99*1),
-        'drbd': (0.99*0.8, 0.99*1)}
+        'default': (0.99 * 0.1, 0.99 * 0.2),
+        'hiprio': (0.99 * 0.1, 0.99 * 0.2),
+        'storage': (0.99 * 0.5, 0.99 * 1),
+        'migration': (0.99 * 0.3, 0.99 * 1),
+        'drbd': (0.99 * 0.8, 0.99 * 1)}
 
     # mgmt could be sep or over pxe
     INFRA_SEP = {
@@ -699,11 +765,11 @@ class TrafficControl:
     INFRA_USES_PXE = {
         'config': 'infra and mgmt consolidated over pxeboot',
         'root': (1, 1),
-        'default': (0.99*0.1, 0.99*0.2),    # 0.1, 0.2 is the ratio for mgmt
-        'hiprio': (0.99*0.1, 0.99*0.2),     # 0.1, 0.2 is the ratio for mgmt
-        'storage': (0.99*0.5, 0.99),
-        'migration': (0.99*0.3, 0.99),
-        'drbd': (0.99*0.8, 0.99)}
+        'default': (0.99 * 0.1, 0.99 * 0.2),  # 0.1, 0.2 is the ratio for mgmt
+        'hiprio': (0.99 * 0.1, 0.99 * 0.2),  # 0.1, 0.2 is the ratio for mgmt
+        'storage': (0.99 * 0.5, 0.99),
+        'migration': (0.99 * 0.3, 0.99),
+        'drbd': (0.99 * 0.8, 0.99)}
 
 
 class PatchState:

@@ -4,7 +4,7 @@ from utils.tis_log import LOG
 from keywords import system_helper, install_helper, common, upgrade_helper, cinder_helper
 from consts.auth import Tenant
 from consts.proj_vars import BackupVars
-from consts.auth import SvcCgcsAuto
+from consts.auth import TestFileServer
 from consts.build_server import Server
 from consts.stx import BACKUP_FILE_DATE_STR, PREFIX_BACKUP_FILE
 
@@ -53,14 +53,14 @@ def test_system_upgrade_simplex(upgrade_setup, check_system_health_query_upgrade
     print('Backup_File_Name', backup_file_name)
     # ssh to test server
     test_server_attr = dict()
-    test_server_attr['name'] = SvcCgcsAuto.HOSTNAME.split('.')[0]
-    test_server_attr['server_ip'] = SvcCgcsAuto.SERVER
+    test_server_attr['name'] = TestFileServer.HOSTNAME.split('.')[0]
+    test_server_attr['server_ip'] = TestFileServer.SERVER
     test_server_attr['prompt'] = r'\[{}@{} {}\]\$ ' \
-        .format(SvcCgcsAuto.USER, test_server_attr['name'], SvcCgcsAuto.USER)
+        .format(TestFileServer.USER, test_server_attr['name'], TestFileServer.USER)
 
     test_server_conn = install_helper.establish_ssh_connection(test_server_attr['name'],
-                                                               user=SvcCgcsAuto.USER,
-                                                               password=SvcCgcsAuto.PASSWORD,
+                                                               user=TestFileServer.USER,
+                                                               password=TestFileServer.PASSWORD,
                                                                initial_prompt=test_server_attr['prompt'])
 
     test_server_conn.set_prompt(test_server_attr['prompt'])

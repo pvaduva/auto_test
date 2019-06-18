@@ -1,6 +1,13 @@
+#
+# Copyright (c) 2016 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+
 from pytest import mark, fixture, skip
 
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxUser
 from consts.stx import EventLogID
 from keywords import system_helper, common
 from utils.clients.ssh import ControllerClient
@@ -135,13 +142,15 @@ def copy_file(source_file, dest_file, sudo=True, preserve=True, cleanup=None):
         source_file:
         dest_file:
         sudo (bool): whether to copy with sudo
-        cleanup (None|str): source or dest. Add source or dest file to files to delete list
+        cleanup (None|str): source or dest. Add source or dest file to files to
+            delete list
         preserve (bool): whether to preserve attributes of source file
 
     Returns:
 
     """
-    LOG.info("Copy file {} preserve attributes".format('and' if preserve else 'without'))
+    LOG.info("Copy file {} preserve attributes".format('and' if preserve
+                                                       else 'without'))
     preserve_str = '--preserve=all ' if preserve else ''
     cmd = "cp {} {}{}".format(source_file, preserve_str, dest_file)
     _exec_cmd(cmd, sudo=sudo, fail_ok=False)
@@ -161,7 +170,8 @@ def move_file(source_file, dest_file, sudo=True):
 
 
 def create_and_execute(file_path, sudo=True):
-    LOG.tc_step("Create a new {} file and execute it".format('root' if sudo else 'non-root'))
+    LOG.tc_step("Create a new {} file and execute it".format('root' if sudo
+                                                             else 'non-root'))
     cmd = "touch {}".format(file_path)
     _exec_cmd(cmd=cmd, sudo=sudo, fail_ok=False)
     files_to_delete.append(file_path)
@@ -170,7 +180,8 @@ def create_and_execute(file_path, sudo=True):
     chmod_file(file_path, "755", sudo=sudo)
 
     LOG.info("Append to copy of monitored file")
-    cmd = 'echo "ls" | {}tee -a {}'.format('sudo -S ' if sudo else '', file_path)
+    cmd = 'echo "ls" | {}tee -a {}'.format('sudo -S ' if sudo else '',
+                                           file_path)
     _exec_cmd(cmd=cmd, sudo=False, fail_ok=False)
 
     LOG.info("Execute created file")
@@ -216,7 +227,8 @@ def test_ima_no_event(operation, file_path):
         files_to_delete.append(dest_file)
 
         checksum_match = checksum_compare(source_file, dest_file)
-        assert checksum_match, "SHA256 checksum should match source file and the symlink but didn't"
+        assert checksum_match, "SHA256 checksum should match source file and " \
+                               "the symlink but didn't"
 
     elif operation == 'copy_and_execute':
         dest_file = "/usr/sbin/TEMP"
@@ -227,6 +239,8 @@ def test_ima_no_event(operation, file_path):
         con_ssh.exec_sudo_cmd("{} -p".format(dest_file))
 
     elif operation == 'change_file_attributes':
+        if HostLinuxUser.get_home() != 'sysadmin':
+            skip('sysadmin user is required to run this test')
         dest_file = "/usr/sbin/TEMP"
         copy_file(source_file, dest_file)
         files_to_delete.append(dest_file)
@@ -234,16 +248,17 @@ def test_ima_no_event(operation, file_path):
         LOG.info("Change permission of copy")
         chmod_file(dest_file, "777")
         LOG.info("Changing group ownership of file")
-        chgrp_file(dest_file, "wrs")
+        chgrp_file(dest_file, "sys_protected")
         LOG.info("Changing file ownership")
-        chown_file(dest_file, "sysadmin:wrs")
+        chown_file(dest_file, "sysadmin:sys_protected")
 
     elif operation == 'create_and_execute':
-        dest_file = "/home/sysadmin/TEMP"
+        dest_file = "{}/TEMP".format(HostLinuxUser.get_home())
         create_and_execute(file_path=dest_file, sudo=False)
 
     LOG.tc_step("Ensure no IMA events are raised")
-    events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
+    events_found = system_helper.wait_for_events(start=start_time,
+                                                 timeout=60, num=10,
                                                  event_log_id=EventLogID.IMA,
                                                  fail_ok=True, strict=False)
 
@@ -270,7 +285,8 @@ def _exec_cmd(cmd, con_ssh=None, sudo=False, fail_ok=True):
 def test_ima_event_generation(operation, file_path):
     """
     Following IMA violation scenarios are covered:
-        - append/edit data to/of a monitored file, result in changing of the hash
+        - append/edit data to/of a monitored file, result in changing of the
+            hash
         - dynamic library changes
         - create and execute a files as sysadmin
 
@@ -278,12 +294,7 @@ def test_ima_event_generation(operation, file_path):
     - Perform specified file operations
     - Check IMA violation event is logged
 
-    Maps to TC_17641/TC_17642/TC_17643/TC_17662/ from US105523 (Alter a monitored file by adding a
-    line to it)
-
-    This test also covers TC_17665/T_16397 from US105523 (FM Event Log Updates)
     """
-
     global files_to_delete
 
     con_ssh = ControllerClient.get_active_controller()
@@ -303,7 +314,8 @@ def test_ima_event_generation(operation, file_path):
             execute_cmd = "{} -p".format(dest_file)
         else:
             LOG.tc_step("Append to copy of monitored file")
-            cmd = 'echo "output" | sudo -S tee -a /usr/sbin/TEMP'.format(HostLinuxCreds.get_password())
+            cmd = 'echo "output" | sudo -S tee -a /usr/sbin/TEMP'.format(
+                HostLinuxUser.get_password())
             con_ssh.exec_cmd(cmd, fail_ok=False)
             LOG.tc_step("Execute modified file")
             con_ssh.exec_sudo_cmd(dest_file)
@@ -324,20 +336,23 @@ def test_ima_event_generation(operation, file_path):
         move_file(dest_file_nocsum, source_file)
 
     elif operation == 'create_and_execute':
-        dest_file = "/home/sysadmin/TEMP"
+        dest_file = "{}/TEMP".format(HostLinuxUser.get_home())
         create_and_execute(file_path=dest_file, sudo=True)
 
     LOG.tc_step("Check for IMA event")
-    ima_events = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
+    ima_events = system_helper.wait_for_events(start=start_time,
+                                               timeout=60, num=10,
                                                event_log_id=EventLogID.IMA,
                                                state='log', severity='major',
                                                fail_ok=True, strict=False)
 
     if backup_file:
-        LOG.info("Restore backup file {} to {}".format(backup_file, source_file))
+        LOG.info("Restore backup file {} to {}".format(backup_file,
+                                                       source_file))
         move_file(backup_file, source_file)
 
-    assert ima_events, "IMA event is not generated after {} on {}".format(operation, file_path)
+    assert ima_events, "IMA event is not generated after {} on " \
+                       "{}".format(operation, file_path)
 
 
 # CHECK TEST PROCEDURE - FAILS in the middle
@@ -369,11 +384,12 @@ def _test_dynamic_library_change_via_ld_preload_envvar_assignment():
     ls_cmd = "/usr/bin/ls"
 
     LOG.info("Execute signed binary via LD_PRELOAD")
-    exitcode, msg = con_ssh.exec_sudo_cmd("LD_PRELOAD={} ldd {}".format(dest_file, ls_cmd))
+    con_ssh.exec_sudo_cmd("LD_PRELOAD={} ldd {}".format(dest_file, ls_cmd))
     # Getting seg fault
 
     LOG.info("Check for IMA event")
-    events_found = system_helper.wait_for_events(start=start_time, timeout=60, num=10,
+    events_found = system_helper.wait_for_events(start=start_time, timeout=60,
+                                                 num=10,
                                                  event_log_id=EventLogID.IMA,
                                                  state='log', severity='major',
                                                  fail_ok=True, strict=False)
@@ -406,21 +422,28 @@ def test_ima_keyring_protection():
     LOG.info("Extracted key is: {}".format(key_id))
 
     LOG.info("Attempting to add new keys to keyring")
-    exitcode, msg = con_ssh.exec_sudo_cmd("keyctl add keyring TEST stuff {}".format(key_id))
-    assert exitcode != 0, "Key addition should have failed but instead succeeded"
+    exitcode, msg = con_ssh.exec_sudo_cmd("keyctl add keyring TEST stuff "
+                                          "{}".format(key_id))
+    assert exitcode != 0, \
+        "Key addition should have failed but instead succeeded"
 
     LOG.info("Attempt to change the timeout on a key")
-    exitcode, msg = con_ssh.exec_sudo_cmd("keyctl timeout {} 3600".format(key_id))
-    assert exitcode != 0, "Key timeout modification should be rejected but instead succeeded"
+    exitcode, msg = con_ssh.exec_sudo_cmd("keyctl timeout {} "
+                                          "3600".format(key_id))
+    assert exitcode != 0, \
+        "Key timeout modification should be rejected but instead succeeded"
 
     LOG.info("Attempt to change the group of a key")
     exitcode, msg = con_ssh.exec_sudo_cmd("keyctl chgrp {} 0".format(key_id))
-    assert exitcode != 0, "Key group modification should be rejected but instead succeeded"
+    assert exitcode != 0, \
+        "Key group modification should be rejected but instead succeeded"
 
     LOG.info("Attempt to change the ownership of a key")
     exitcode, msg = con_ssh.exec_sudo_cmd("keyctl chown {} 1875".format(key_id))
-    assert exitcode != 0, "Key ownership modification should be rejected but instead succeeded"
+    assert exitcode != 0, \
+        "Key ownership modification should be rejected but instead succeeded"
 
     LOG.info("Attempt to delete a key")
     exitcode, msg = con_ssh.exec_sudo_cmd("keyctl clear {}".format(key_id))
-    assert exitcode != 0, "Key ownership deletion should be rejected but instead succeeded"
+    assert exitcode != 0, \
+        "Key ownership deletion should be rejected but instead succeeded"

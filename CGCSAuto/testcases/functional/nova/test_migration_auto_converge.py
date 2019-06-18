@@ -5,7 +5,8 @@ from pytest import fixture
 
 from consts.proj_vars import ProjVar
 from consts.stx import FlavorSpec
-from consts.filepaths import TiSPath, HeatTemplate, TestServerPath, SYSADMIN_HOME
+from consts.filepaths import StxPath, HeatTemplate, TestServerPath
+from consts.auth import HostLinuxUser
 from utils import exceptions
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
@@ -17,7 +18,7 @@ from keywords import vm_helper, nova_helper, common, heat_helper, network_helper
 def prefix_remote_cli(request):
     if ProjVar.get_var('REMOTE_CLI'):
         ProjVar.set_var(REMOTE_CLI=False)
-        ProjVar.set_var(USER_FILE_DIR=SYSADMIN_HOME)
+        ProjVar.set_var(USER_FILE_DIR=HostLinuxUser.get_home())
 
         def revert():
             ProjVar.set_var(REMOTE_CLI=True)
@@ -36,7 +37,7 @@ def _get_stress_ng_heat(con_ssh=None):
     Returns (str): TiS filepath of the userdata
 
     """
-    file_dir = TiSPath.CUSTOM_HEAT_TEMPLATES
+    file_dir = StxPath.CUSTOM_HEAT_TEMPLATES
     file_name = HeatTemplate.STRESS_NG
     file_path = file_dir + file_name
 

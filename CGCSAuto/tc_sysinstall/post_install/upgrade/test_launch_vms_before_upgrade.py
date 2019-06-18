@@ -1,7 +1,6 @@
-from consts.auth import Tenant
+from consts.auth import Tenant, HostLinuxUser
 from consts.proj_vars import ProjVar
 from keywords import system_helper, vm_helper, nova_helper
-from testfixtures.resource_mgmt import ResourceCleanup
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
@@ -27,8 +26,11 @@ def test_launch_vms_pre_upgrade():
     current_version = system_helper.get_sw_version()
 
     for tenant in tenants:
-        tenant_cred_file = '/home/sysadmin/openrc.{}'.format(tenant)
-        tenant_passwd = Tenant.get('tenant1')['password'] if tenant == Tenant.get('tenant1')['user'] else Tenant.get('tenant2')['password']
+        tenant_cred_file = '{}/openrc.{}'.format(HostLinuxUser.get_home(),
+                                                 tenant)
+        tenant_passwd = Tenant.get('tenant1')['password'] if \
+            tenant == Tenant.get('tenant1')['user'] else \
+            Tenant.get('tenant2')['password']
         if '*' in tenant_passwd:
             index = tenant_passwd.index('*')
             tenant_passwd = tenant_passwd[:index] + '\\' + tenant_passwd[index:]

@@ -5,8 +5,7 @@ from xml.etree import ElementTree
 from pytest import skip, fixture
 
 from consts.stx import LocalStorage
-from consts.auth import Tenant
-from consts.filepaths import SYSADMIN_HOME
+from consts.auth import Tenant, HostLinuxUser
 
 from utils import cli, table_parser
 from utils.tis_log import LOG
@@ -293,7 +292,7 @@ class TestLocalStorage:
         return rtn_list
 
     def get_remote_storprofile_file(self, local_storage_type='image'):
-        remote_file = os.path.join(SYSADMIN_HOME, '{}_storage_profile_to_import.xml'.format(local_storage_type))
+        remote_file = os.path.join(HostLinuxUser.get_home(), '{}_storage_profile_to_import.xml'.format(local_storage_type))
 
         return remote_file
 

@@ -10,9 +10,8 @@ from utils import exceptions
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from consts.stx import PatchState, PatchPattern, EventLogID
-from consts.filepaths import SYSADMIN_HOME
 from consts.proj_vars import ProjVar, PatchingVars
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxUser
 from testfixtures.recover_hosts import HostsToRecover
 from keywords import host_helper, system_helper, orchestration_helper, common
 
@@ -1449,7 +1448,7 @@ def download_test_patches(build_server=None, patch_dir=None, tis_dir=None, con_s
 
     """
     if not tis_dir:
-        tis_dir = SYSADMIN_HOME + 'test_patches'
+        tis_dir = HostLinuxUser.get_home() + 'test_patches'
 
     build_info = system_helper.get_build_info(con_ssh=con_ssh)
     if not build_server:
@@ -1480,7 +1479,7 @@ def download_test_patches(build_server=None, patch_dir=None, tis_dir=None, con_s
         LOG.info("Download patch files from patch dir {}".format(patch_dir))
         dest_server = ProjVar.get_var('LAB')['floating ip']
         bs_ssh.exec_cmd("ls -1 --color=none {}/*.patch".format(patch_dir), fail_ok=False)
-        pre_opts = 'sshpass -p "{}"'.format(HostLinuxCreds.get_password())
+        pre_opts = 'sshpass -p "{}"'.format(HostLinuxUser.get_password())
         bs_ssh.rsync(patch_dir+"/*.patch", dest_server, tis_dir, pre_opts=pre_opts, timeout=600)
         output = con_ssh.exec_cmd("ls -1  {}/*.patch".format(tis_dir), fail_ok=False)[1]
 

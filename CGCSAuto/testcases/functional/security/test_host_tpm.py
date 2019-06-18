@@ -7,9 +7,9 @@ import functools
 from pytest import skip, fixture, mark, param
 
 from consts import build_server
-from consts.auth import HostLinuxCreds, SvcCgcsAuto
+from consts.auth import HostLinuxUser, TestFileServer
 from consts.stx import Prompt, EventLogID
-from consts.filepaths import SecurityPath, BuildServerPath, SYSADMIN_HOME
+from consts.filepaths import SecurityPath, BuildServerPath
 from consts.proj_vars import ProjVar
 
 from utils import cli, lab_info, table_parser
@@ -37,7 +37,7 @@ fmt_password = r'{password}'
 expected_install = (
     ('Password: ', fmt_password),
     (r'Enter password for the CA-Signed certificate file \[Enter <CR> for no password\]', fmt_password),
-    (r'Enter \[sudo\] password for sysadmin', fmt_password),
+    (r'Enter \[sudo\] password for {}'.format(HostLinuxUser.get_user()), fmt_password),
     ('Installing certificate file ', ''),
     ('WARNING, Installing an invalid or expired certificate', ''),
     (r'OK to Proceed\? \(yes/NO\)', 'yes'),
@@ -76,13 +76,13 @@ def check_lab_status(request):
         skip('Non-HTTPs lab, skip the test.')
 
     ssh_client = ControllerClient.get_active_controller()
-    working_ssl_file = os.path.join(SYSADMIN_HOME, testing_ssl_file)
+    working_ssl_file = os.path.join(HostLinuxUser.get_home(), testing_ssl_file)
     LOG.info('backup default ssl pem file to:' + working_ssl_file)
     ssh_client.exec_sudo_cmd('cp -f ' + default_ssl_file + ' ' + testing_ssl_file)
 
     def cleaup():
         ssh_client.exec_sudo_cmd('rm -rf ' + working_ssl_file)
-        backup_dir = os.path.join(SYSADMIN_HOME, conf_backup_dir)
+        backup_dir = os.path.join(HostLinuxUser.get_home(), conf_backup_dir)
         ssh_client.exec_sudo_cmd('rm -rf ' + backup_dir)
         LOG.info('remove saved configuration files on local')
         if os.path.exists(local_conf_backup_dir):
@@ -92,7 +92,7 @@ def check_lab_status(request):
 
 @fixture(scope='function', autouse=True)
 def backup_configuration_files():
-    backup_dir = os.path.join(SYSADMIN_HOME, conf_backup_dir)
+    backup_dir = os.path.join(HostLinuxUser.get_home(), conf_backup_dir)
     ssh_client = ControllerClient.get_active_controller()
     LOG.info('Save current configuration files')
     ssh_client.exec_sudo_cmd('rm -f ' + backup_dir + '; mkdir -p ' + backup_dir)
@@ -123,8 +123,8 @@ def fetch_cert_file(ssh_client, search_path=None):
         return code, msg
 
     from_server = build_server.DEFAULT_BUILD_SERVER['ip']
-    prompt = r'\[{}@.* \~\]\$'.format(SvcCgcsAuto.USER)
-    ssh_to_server = SSHFromSSH(ssh_client, from_server, SvcCgcsAuto.USER, SvcCgcsAuto.PASSWORD, initial_prompt=prompt)
+    prompt = r'\[{}@.* \~\]\$'.format(TestFileServer.USER)
+    ssh_to_server = SSHFromSSH(ssh_client, from_server, TestFileServer.USER, TestFileServer.PASSWORD, initial_prompt=prompt)
     ssh_to_server.connect(retry=5)
 
     if search_path is None:
@@ -155,8 +155,11 @@ def fetch_cert_file(ssh_client, search_path=None):
     LOG.info('found cert-file on build server, trying to scp to current active controller\ncert-file:{}'.format(
         certificate_file))
 
-    scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} sysadmin@{}:{}'.format(
-        certificate_file, lab_info.get_lab_floating_ip(), save_cert_to)
+    scp_cmd = \
+        'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {} ' \
+        '{}@{}:{}'.format(
+            certificate_file, HostLinuxUser.get_user(),
+            lab_info.get_lab_floating_ip(), save_cert_to)
 
     ssh_to_server.send(scp_cmd)
     timeout = 60
@@ -165,7 +168,7 @@ def fetch_cert_file(ssh_client, search_path=None):
         ssh_to_server.send('yes')
         output_index = ssh_to_server.expect([ssh_to_server.prompt, Prompt.PASSWORD_PROMPT], timeout=timeout)
     if output_index == 1:
-        ssh_to_server.send(HostLinuxCreds.get_password())
+        ssh_to_server.send(HostLinuxUser.get_password())
         output_index = ssh_to_server.expect(timeout=timeout)
 
     assert output_index == 0, "Failed to scp files"
@@ -535,13 +538,13 @@ def test_enable_tpm(swact_first):
             LOG.info('Less than 2 controllers, skip swact')
         else:
             host_helper.swact_host(fail_ok=False)
-            copy_config_from_local(con_ssh, local_conf_backup_dir, os.path.join(SYSADMIN_HOME, conf_backup_dir))
+            copy_config_from_local(con_ssh, local_conf_backup_dir, os.path.join(HostLinuxUser.get_home(), conf_backup_dir))
 
     LOG.tc_step('Install HTTPS Certificate into TPM')
     code, output = store_cert_into_tpm(con_ssh,
                                        check_first=False,
                                        fail_ok=False,
-                                       pem_password=HostLinuxCreds.get_password())
+                                       pem_password=HostLinuxUser.get_password())
     assert 0 == code, 'Failed to instll certificate into TPM, cert-file'
 
     LOG.info('OK, certificate is installed into TPM')
@@ -585,7 +588,7 @@ def test_disable_tpm(swact_first):
                 LOG.info('Less than 2 controllers, skip swact')
             else:
                 host_helper.swact_host(fail_ok=False)
-                copy_config_from_local(ssh_client, local_conf_backup_dir, os.path.join(SYSADMIN_HOME, conf_backup_dir))
+                copy_config_from_local(ssh_client, local_conf_backup_dir, os.path.join(HostLinuxUser.get_home(), conf_backup_dir))
 
         LOG.tc_step('Disabling TPM')
         code, output = remove_cert_from_tpm(ssh_client, fail_ok=False, check_first=False)

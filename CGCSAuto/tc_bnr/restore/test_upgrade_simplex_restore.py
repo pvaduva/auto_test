@@ -1,8 +1,8 @@
 import time
 
-from consts.auth import SvcCgcsAuto
+from consts.auth import TestFileServer, HostLinuxUser
 from consts.stx import Prompt, BackupRestore
-from consts.filepaths import TiSPath, SYSADMIN_HOME
+from consts.filepaths import StxPath
 from consts.proj_vars import RestoreVars
 from tc_bnr.restore.test_restore import restore_volumes  # Don't remove
 from utils.clients.ssh import ControllerClient
@@ -69,7 +69,7 @@ def test_upgrade_restore(restore_setup):
 
         system_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, system_backup_file)
     else:
-        system_backup_path = "{}{}".format(SYSADMIN_HOME, system_backup_file)
+        system_backup_path = "{}{}".format(HostLinuxUser.get_home(), system_backup_file)
 
     LOG.tc_step("Restoring the backup system files ")
     install_helper.upgrade_controller_simplex(system_backup=system_backup_path,
@@ -83,9 +83,9 @@ def test_upgrade_restore(restore_setup):
     ControllerClient.set_active_controller(con_ssh)
 
     if backup_src.lower() == 'local':
-        images_backup_path = "{}{}".format(SYSADMIN_HOME, images_backup_file)
+        images_backup_path = "{}{}".format(HostLinuxUser.get_home(), images_backup_file)
         common.scp_from_test_server_to_active_controller("{}/{}".format(backup_src_path, images_backup_file),
-                                                         SYSADMIN_HOME)
+                                                         HostLinuxUser.get_home())
     else:
         images_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, images_backup_file)
 
@@ -109,24 +109,24 @@ def test_upgrade_restore(restore_setup):
 
         # transfer all backup files to /opt/backups from test server
         with con_ssh.login_as_root():
-            con_ssh.scp_on_dest(source_user=SvcCgcsAuto.USER, source_ip=SvcCgcsAuto.SERVER,
-                                source_pswd=SvcCgcsAuto.PASSWORD, source_path=backup_src_path + "/*",
-                                dest_path=TiSPath.BACKUPS + '/', timeout=1200)
+            con_ssh.scp_on_dest(source_user=TestFileServer.USER, source_ip=TestFileServer.SERVER,
+                                source_pswd=TestFileServer.PASSWORD, source_path=backup_src_path + "/*",
+                                dest_path=StxPath.BACKUPS + '/', timeout=1200)
 
     else:
         # copy all backupfiles from USB to /opt/backups
-        cmd = " cp  {}/* {}".format(BackupRestore.USB_BACKUP_PATH, TiSPath.BACKUPS)
+        cmd = " cp  {}/* {}".format(BackupRestore.USB_BACKUP_PATH, StxPath.BACKUPS)
         con_ssh.exec_sudo_cmd(cmd, expect_timeout=600)
 
     LOG.tc_step("Checking if backup files are copied to /opt/backups ... ")
-    assert int(con_ssh.exec_cmd("ls {} | wc -l".format(TiSPath.BACKUPS))[1]) >= 2, \
-        "Missing backup files in {}".format(TiSPath.BACKUPS)
+    assert int(con_ssh.exec_cmd("ls {} | wc -l".format(StxPath.BACKUPS))[1]) >= 2, \
+        "Missing backup files in {}".format(StxPath.BACKUPS)
 
     LOG.tc_step("Restoring Cinder Volumes ...")
     restore_volumes()
 
-    LOG.tc_step("Delete backup files from {} ....".format(TiSPath.BACKUPS))
-    con_ssh.exec_sudo_cmd("rm -rf {}/*".format(TiSPath.BACKUPS))
+    LOG.tc_step("Delete backup files from {} ....".format(StxPath.BACKUPS))
+    con_ssh.exec_sudo_cmd("rm -rf {}/*".format(StxPath.BACKUPS))
     LOG.tc_step("Restoring compute  ")
     install_helper.restore_compute(tel_net_session=controller_node.telnet_conn)
 

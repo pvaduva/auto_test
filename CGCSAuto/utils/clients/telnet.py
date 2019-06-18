@@ -3,7 +3,7 @@ import re
 import time
 from telnetlib import Telnet, theNULL, DO, DONT, WILL, WONT, NOOPT, IAC, SGA, ECHO, SE, SB
 
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxUser
 from consts.stx import DATE_OUTPUT, Prompt
 from consts.proj_vars import ProjVar
 from utils import exceptions
@@ -38,8 +38,10 @@ VT100_DEVICE_OK = bytes([27,91,48,110]) # Device OK
 
 class TelnetClient(Telnet):
 
-    def __init__(self, host, prompt=None, port=0, timeout=30, hostname=None, user=HostLinuxCreds.get_user(),
-                 password=HostLinuxCreds.get_password(), negotiate=False, vt100query=False, console_log_file=None):
+    def __init__(self, host, prompt=None, port=0, timeout=30, hostname=None,
+                 user=HostLinuxUser.get_user(),
+                 password=HostLinuxUser.get_password(),
+                 negotiate=False, vt100query=False, console_log_file=None):
 
         self.logger = LOG
         super(TelnetClient, self).__init__(host=host, port=port, timeout=timeout)

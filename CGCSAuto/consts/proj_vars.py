@@ -1,9 +1,11 @@
-from consts.filepaths import SYSADMIN_HOME
-
 #
-# Please DO NOT import any CGCSAUTO modules other than consts.filepaths #
+# Copyright (c) 2016 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
 #
 
+
+# Please DO NOT import any modules #
 
 class ProjVar:
     __var_dict = {'BUILD_PATH': None,
@@ -28,7 +30,7 @@ class ProjVar:
                   'IS_VBOX': False,
                   'RELEASE': 'R6',
                   'REMOTE_CLI': False,
-                  'USER_FILE_DIR': SYSADMIN_HOME,
+                  'USER_FILE_DIR': '~/',
                   'NO_TEARDOWN': False,
                   'VSWITCH_TYPE': None,
                   'IS_DC': False,
@@ -38,18 +40,19 @@ class ProjVar:
                   'INSTANCE_BACKING': {},
                   'OPENSTACK_DEPLOYED': None,
                   'DEFAULT_INSTANCE_BACKING': None,
-                  'STX_KEYFILE_PATH': '{}/.ssh/id_rsa'.format(SYSADMIN_HOME)
+                  'STX_KEYFILE_PATH': '~/.ssh/id_rsa'
                   }
 
     @classmethod
-    def init_vars(cls, lab, natbox, logdir, tenant, collect_all, report_all, report_tag,
+    def init_vars(cls, lab, natbox, logdir, tenant, collect_all,
+                  report_all, report_tag,
                   always_collect, horizon_visible):
 
         labname = lab['short_name']
 
         cls.__var_dict.update(**{
             'NATBOX_KEYFILE_PATH': '~/priv_keys/keyfile_{}.pem'.format(labname),
-            'STX_KEYFILE_SYS_HOME': '/home/sysadmin/keyfile_{}.pem'.format(labname),
+            'STX_KEYFILE_SYS_HOME': '~/keyfile_{}.pem'.format(labname),
             'LOG_DIR': logdir,
             'TCLIST_PATH': logdir + '/test_results.log',
             'PYTESTLOG_PATH': logdir + '/pytestlog.log',
@@ -81,7 +84,8 @@ class ProjVar:
         var_name = var_name.upper()
         valid_vars = cls.__var_dict.keys()
         if var_name not in valid_vars:
-            raise ValueError("Invalid var_name: {}. Valid vars: {}".format(var_name, valid_vars))
+            raise ValueError("Invalid var_name: {}. Valid vars: {}".
+                             format(var_name, valid_vars))
 
         return cls.__var_dict[var_name]
 
@@ -145,7 +149,8 @@ class InstallVars:
             'VSWITCH_TYPE': vswitch_type,
             "KUBERNETES": kubernetes,
             "DEPLOY_OPENSTACK": deploy_openstack,
-            "DEPLOY_OPENSTACK_FROM_CONTROLLER1": deploy_openstack_from_controller_1,
+            "DEPLOY_OPENSTACK_FROM_CONTROLLER1":
+                deploy_openstack_from_controller_1,
             "IPV6_CONFIG": ipv6_config,
             # TIS BUILD info
             'BUILD_SERVER': build_server,
@@ -165,8 +170,10 @@ class InstallVars:
             'INSTALL_SUBCLOUD': install_subcloud,
             'NO_MANAGE': no_manage,
             'SECURITY': security,
-            # Default path is <DEFAULT_LAB_FILES_DIR>/TiS_config.ini_centos|hosts_bulk_add.xml|lab_setup.conf if
-            # Unspecified. This needs to be parsed/converted when rsync/scp files.
+            # Default path is <DEFAULT_LAB_FILES_DIR>/
+            # TiS_config.ini_centos|hosts_bulk_add.xml|
+            # lab_setup.conf if Unspecified. This needs to be
+            # parsed/converted when rsync/scp files.
             # Lab specific
             'TIS_CONFIG': tis_config,
             'HOSTS_BULK_ADD': hosts_bulk_add,
@@ -209,7 +216,8 @@ class InstallVars:
         var_name = var_name.upper()
         valid_vars = cls.__var_dict.keys()
         if var_name not in valid_vars:
-            raise ValueError("Invalid var_name. Valid vars: {}".format(valid_vars))
+            raise ValueError("Invalid var_name. Valid vars: {}".
+                             format(valid_vars))
 
         return cls.__var_dict[var_name]
 
@@ -243,10 +251,12 @@ class UpgradeVars:
             'PATCH_DIR': patch_dir,
             # Generic
             'UPGRADE_LICENSE': upgrade_license_path,
-            # Orchestration -  the orchestration starting point after certain number of nodes upgraded normally
-            #  eg:  controller -  indicate after controllers are upgraded the remaining are upgraded through
-            #        orchestration.
-            #       compute:1 - indicate orchestrations starts after one compute is upgraded.
+            # Orchestration -  the orchestration starting point after
+            # certain number of nodes upgraded normally
+            #  eg:  controller -  indicate after controllers are upgraded the
+            # remaining are upgraded through orchestration.
+            #   compute:1 - indicate orchestrations starts after one
+            #   compute is upgraded.
             'ORCHESTRATION_AFTER': orchestration_after,
             'STORAGE_APPLY_TYPE': storage_apply_strategy,
             'COMPUTE_APPLY_TYPE': compute_apply_strategy,
@@ -281,7 +291,8 @@ class UpgradeVars:
         var_name = var_name.upper()
         valid_vars = cls.__var_dict.keys()
         if var_name not in valid_vars:
-            raise ValueError("Invalid var_name. Valid vars: {}".format(valid_vars))
+            raise ValueError("Invalid var_name. Valid vars: {}".
+                             format(valid_vars))
 
         return cls.__var_dict[var_name]
 
@@ -297,7 +308,8 @@ class PatchingVars:
         'PATCH_BUILD_SERVER': None,
 
         # Formal release patch vars
-        'PATCH_BASE_DIR': '/localdisk/loadbuild/jenkins/TC_18.03_Patch_Formal_Build',
+        'PATCH_BASE_DIR':
+            '/localdisk/loadbuild/jenkins/TC_18.03_Patch_Formal_Build',
         'CONTROLLER_APPLY_TYPE': "serial",
         'STORAGE_APPLY_TYPE': "serial",
         'COMPUTE_APPLY_TYPE': "serial",
@@ -313,7 +325,8 @@ class PatchingVars:
         if var_name not in cls.__var_dict:
             def_var_name = 'DEF_{}'.format(var_name)
             if def_var_name not in cls.__var_dict:
-                raise ValueError("Invalid var_name. Valid vars: {}".format(var_name))
+                raise ValueError(
+                    "Invalid var_name. Valid vars: {}".format(var_name))
             else:
                 var_name = def_var_name
         return cls.__var_dict[var_name]
@@ -355,7 +368,8 @@ class RestoreVars:
         var_name = var_name.upper()
 
         if var_name not in cls.__var_dict:
-            raise ValueError("Invalid var_name. Valid vars: {}".format(var_name))
+            raise ValueError(
+                "Invalid var_name. Valid vars: {}".format(var_name))
 
         return cls.__var_dict[var_name]
 
@@ -377,7 +391,8 @@ class BackupVars:
             'BACKUP_DEST': backup_dest,
             'BACKUP_DEST_PATH': kwargs.pop('backup_dest_path', ''),
             'DELETE_BUCKUPS': kwargs.pop('delete_backups', True),
-            'DEST_LABS': kwargs.pop('dest_labs', '').split() if kwargs.get('dest_labs', '') else '',
+            'DEST_LABS': kwargs.pop('dest_labs', '').split() if
+            kwargs.get('dest_labs', '') else '',
             'BACKUP_DEST_SERVER': kwargs.pop('backup_dest_server', None),
             'CINDER_BACKUP': kwargs.pop('cinder_backup', True),
             'REINSTALL_STORAGE': kwargs.pop('reinstall_storage', False),
@@ -388,7 +403,8 @@ class BackupVars:
         var_name = var_name.upper()
 
         if var_name not in cls.__var_dict:
-            raise ValueError("Invalid var_name. Valid vars: {}".format(var_name))
+            raise ValueError(
+                "Invalid var_name. Valid vars: {}".format(var_name))
 
         return cls.__var_dict[var_name]
 
@@ -418,6 +434,7 @@ class ComplianceVar:
         var_name = var_name.upper()
         valid_vars = cls.__var_dict.keys()
         if var_name not in valid_vars:
-            raise ValueError("Invalid var_name: {}. Valid vars: {}".format(var_name, valid_vars))
+            raise ValueError("Invalid var_name: {}. Valid vars: {}".
+                             format(var_name, valid_vars))
 
         return cls.__var_dict[var_name]

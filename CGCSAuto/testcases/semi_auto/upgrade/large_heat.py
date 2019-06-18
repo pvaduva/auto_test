@@ -2,9 +2,9 @@ from pytest import fixture, skip
 
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, heat_helper, host_helper, html_helper
-from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
+from consts.filepaths import StxPath, HeatTemplate, TestServerPath
 from utils.clients.ssh import ControllerClient
-from consts.auth import HostLinuxCreds, Tenant
+from consts.auth import HostLinuxUser, Tenant
 from consts.stx import GuestImages, HeatStackStatus
 from consts.proj_vars import ProjVar
 
@@ -56,7 +56,7 @@ def _get_large_heat(con_ssh=None):
     Returns (str): TiS file path of the heat template
 
     """
-    file_dir = TiSPath.CUSTOM_HEAT_TEMPLATES
+    file_dir = StxPath.CUSTOM_HEAT_TEMPLATES
     file_name = HeatTemplate.LARGE_HEAT
     file_path = file_dir + file_name
     source_file = TestServerPath.CUSTOM_HEAT_TEMPLATES + file_name
@@ -70,8 +70,8 @@ def _get_large_heat(con_ssh=None):
         return file_path
 
     with host_helper.ssh_to_test_server() as ssh_to_server:
-        ssh_to_server.rsync(source_file, html_helper.get_ip_addr(), file_dir, dest_user=HostLinuxCreds.get_user(),
-                            dest_password=HostLinuxCreds.get_password(), timeout=1200)
+        ssh_to_server.rsync(source_file, html_helper.get_ip_addr(), file_dir, dest_user=HostLinuxUser.get_user(),
+                            dest_password=HostLinuxUser.get_password(), timeout=1200)
     return file_path
 
 
@@ -97,7 +97,7 @@ def launch_heat_stack():
     # make sure heat templates are there in Tis
     _get_large_heat()
 
-    file_dir = TiSPath.CUSTOM_HEAT_TEMPLATES
+    file_dir = StxPath.CUSTOM_HEAT_TEMPLATES
     file_name = HeatTemplate.LARGE_HEAT
     heat_template_file = file_dir + file_name + "/"
 
@@ -165,7 +165,7 @@ def test_heat_stack_update():
     It will check the status of the heat stack to be in good state (create complete/update complete)
     It will update the heat stack
     """
-    file_dir = TiSPath.CUSTOM_HEAT_TEMPLATES
+    file_dir = StxPath.CUSTOM_HEAT_TEMPLATES
     file_name = HeatTemplate.LARGE_HEAT
     file_path = file_dir + file_name + '/update_env.sh'
 

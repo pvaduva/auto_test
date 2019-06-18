@@ -5,7 +5,7 @@
 
 from pytest import fixture, raises
 
-from consts.filepaths import SYSADMIN_HOME
+from consts.auth import HostLinuxUser
 from consts.proj_vars import ProjVar
 from keywords import common
 from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient
@@ -26,11 +26,11 @@ def keyfile_setup(request):
     # copy the authorized key from test server to lab under /home/root/.ssh/authorized_keys
     LOG.fixture_step("copy id_rsa.pub key file from test server to lab")
     source = '/folk/svc-cgcsauto/.ssh/id_rsa.pub'
-    destination = SYSADMIN_HOME
+    destination = HostLinuxUser.get_home()
     common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=destination)
 
     con_ssh = ControllerClient.get_active_controller()
-    sysadmin_keyfile = SYSADMIN_HOME + '/id_rsa.pub'
+    sysadmin_keyfile = HostLinuxUser.get_home() + '/id_rsa.pub'
     LOG.fixture_step("Logging in as root")
     with con_ssh.login_as_root() as root_ssh:
         LOG.info("Logged in as root")
@@ -41,7 +41,7 @@ def keyfile_setup(request):
     def delete_keyfile():
         LOG.fixture_step("cleanup files from the lab as root")
         # clean up id_rsa.pub from sysadmin folder and authorized_keys in /home/root/.ssh/
-        con_ssh.exec_cmd('rm /home/sysadmin/id_rsa.pub')
+        con_ssh.exec_cmd('rm {}/id_rsa.pub'.format(HostLinuxUser.get_home()))
         con_ssh.exec_sudo_cmd('rm -f /home/root/.ssh/authorized_keys')
 
     request.addfinalizer(delete_keyfile)

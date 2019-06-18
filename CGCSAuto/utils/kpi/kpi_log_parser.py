@@ -3,7 +3,7 @@ import re
 from configparser import ConfigParser
 from optparse import OptionParser
 
-from consts.auth import HostLinuxCreds, Tenant
+from consts.auth import HostLinuxUser, Tenant
 from consts.stx import TIMESTAMP_PATTERN
 from consts.kpi_vars import KPI_DATE_FORMAT
 from consts.proj_vars import ProjVar
@@ -76,7 +76,7 @@ def record_kpi(local_kpi_file, kpi_name, host=None, log_path=None, end_pattern=N
                 if not ProjVar.get_var('LAB'):
                     ProjVar.set_var(lab=lab)
                     ProjVar.set_var(source_openrc=True)
-                con_ssh = SSHClient(lab.get('floating ip'), HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
+                con_ssh = SSHClient(lab.get('floating ip'), HostLinuxUser.get_user(), HostLinuxUser.get_password(),
                                     CONTROLLER_PROMPT)
                 con_ssh.connect()
 

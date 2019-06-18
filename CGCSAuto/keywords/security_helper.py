@@ -1,3 +1,10 @@
+#
+# Copyright (c) 2016 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+
 import random
 import re
 import os
@@ -5,20 +12,19 @@ import time
 from pexpect import EOF
 from string import ascii_lowercase, ascii_uppercase, digits
 
-from consts.auth import Tenant, HostLinuxCreds, CliAuth
+from consts.auth import Tenant, HostLinuxUser, CliAuth
 from consts.stx import Prompt, EventLogID
 from consts.proj_vars import ProjVar
-from consts.filepaths import BuildServerPath, SYSADMIN_HOME
 from utils.tis_log import LOG
 from utils import exceptions
 from utils.clients.ssh import ControllerClient, SSHClient, SSHFromSSH
-from keywords import system_helper, keystone_helper
-
+from keywords import system_helper, keystone_helper, common
 
 MIN_LINUX_PASSWORD_LEN = 7
-SPECIAL_CHARACTERS = '!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
+SPECIAL_CHARACTERS = r'!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
 
-# use this simple "dictionary" for now, because no english dictionary installed on test server
+# use this simple "dictionary" for now, because no english dictionary
+# installed on test server
 SIMPLE_WORD_DICTIONARY = '''
 and is being proof-read and supplemented by volunteers from around the
 world.  This is an unfunded project, and future enhancement of this
@@ -33,53 +39,37 @@ original 1913 dictionary are now well over 100 years old
 
 
 class LinuxUser:
-    users = {HostLinuxCreds.get_user(): HostLinuxCreds.get_password()}
-    con_ssh = None
+    __users = {}
 
     def __init__(self, user, password, con_ssh=None):
         self.user = user
         self.password = password
-        self.added = False
-        self.con_ssh = con_ssh if con_ssh is not None else ControllerClient.get_active_controller()
-
-    def add_user(self):
-        self.added = True
-        LinuxUser.users[self.user] = self.password
-        raise NotImplementedError
-
-    def modify_password(self):
-        raise NotImplementedError
-
-    def delete_user(self):
-        raise NotImplementedError
-
-    def login(self):
-        raise NotImplementedError
-
-    @classmethod
-    def get_user_password(cls):
-        raise NotImplementedError
+        self.con_ssh = con_ssh
+        self.__users[user] = password
 
     @classmethod
     def get_current_user_password(cls, con_ssh=None):
-        if con_ssh:
-            cls.con_ssh = con_ssh
-        elif not cls.con_ssh:
-            cls.con_ssh = ControllerClient.get_active_controller()
-        user = cls.con_ssh.get_current_user()
-        return user, cls.users[user]
+        if not con_ssh:
+            con_ssh = ControllerClient.get_active_controller()
+        user = con_ssh.get_current_user()
+        if user == HostLinuxUser.get_user():
+            return user, HostLinuxUser.get_password()
+
+        return user, cls.__users[user]
 
 
 class Singleton(type):
     """
-    A singleton used to make sure only one instance of a class is allowed to create
+    A singleton used to make sure only one instance of a class is allowed to
+    create
     """
 
     __instances = {}
 
     def __call__(cls, *args, **kwargs):
         if cls not in cls.__instances:
-            cls.__instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+            cls.__instances[cls] = super(Singleton, cls).__call__(*args,
+                                                                  **kwargs)
         return cls.__instances[cls]
 
 
@@ -99,7 +89,7 @@ class LdapUserManager(object, metaclass=Singleton):
 
     """
 
-    LINUX_ROOT_PASSWORD = HostLinuxCreds.get_password()
+    LINUX_ROOT_PASSWORD = HostLinuxUser.get_password()
     KEYSTONE_USER_NAME = Tenant.get('admin')['user']
     KEYSTONE_USER_DOMAIN_NAME = 'Default'
     KEYSTONE_PASSWORD = Tenant.get('admin')['password']
@@ -116,10 +106,12 @@ class LdapUserManager(object, metaclass=Singleton):
 
     def ssh_to_host(self, host=None):
         """
-        Get the ssh connection to the active controller or the specified host (if it's the case)
+        Get the ssh connection to the active controller or the specified host
+        (if it's the case)
 
         Args:
-            host (str):     the host to ssh to, using the active controller if it's unset or None
+            host (str):     the host to ssh to, using the active controller
+            if it's unset or None
 
         Returns (object):
             the ssh connection session to the active controller
@@ -163,12 +155,14 @@ class LdapUserManager(object, metaclass=Singleton):
         Returns (str):
             the password of the user
         """
-        if user_name in self.users_info and self.users_info[user_name]['passwords']:
+        if user_name in self.users_info and \
+                self.users_info[user_name]['passwords']:
             return self.users_info[user_name]['passwords'][-1]
 
         return None
 
-    def login_as_ldap_user_first_time(self, user_name, new_password=None, host=None):
+    def login_as_ldap_user_first_time(self, user_name, new_password=None,
+                                      host=None):
         """
         Login with the specified LDAP User for the first time,
             during which change the initial password as a required step.
@@ -189,23 +183,25 @@ class LdapUserManager(object, metaclass=Singleton):
         if new_password is not None:
             password = new_password
         else:
-            password = 'new_{}_Li69nux!'.format(''.join(random.sample(user_name, len(user_name))))
+            password = 'new_{}_Li69nux!'.format(
+                ''.join(random.sample(user_name, len(user_name))))
 
         cmd_expected = [
             (
-                'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, hostname_ip),
-                ('Are you sure you want to continue connecting (yes/no)?',),
+                'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(
+                    user_name, hostname_ip),
+                (r'Are you sure you want to continue connecting (yes/no)?',),
                 ('Failed to get "continue connecting" prompt',)
             ),
             (
                 'yes',
                 # ("{}@{}'s password:".format(user_name, hostname_ip),),
-                (".*@.*'s password: ".format(hostname_ip),),
+                (r".*@.*'s password: ".format(hostname_ip),),
                 ('Failed to get password prompt',)
             ),
             (
                 '{}'.format(user_name),
-                ('\(current\) LDAP Password: ',),
+                (r'\(current\) LDAP Password: ',),
                 ('Failed to get password prompt for current password',)
             ),
             (
@@ -224,12 +220,15 @@ class LdapUserManager(object, metaclass=Singleton):
                     'passwd: all authentication tokens updated successfully.',
                     'Connection to controller-1 closed.',
                 ),
-                ('Failed to change to new password for current user:{}'.format(user_name),)
+                ('Failed to change to new password for current user:{}'.format(
+                    user_name),)
             ),
             (
                 '',
                 (self.ssh_con.get_prompt(),),
-                ('Failed in last step of first-time login as LDAP User:{}'.format(user_name),)
+                (
+                    'Failed in last step of first-time login as LDAP '
+                    'User:{}'.format(user_name),)
             ),
         ]
 
@@ -251,18 +250,22 @@ class LdapUserManager(object, metaclass=Singleton):
         Find the LDAP User with the specified name
 
         Args:
-            user_name (str):            - user name of the LDAP User to search for
+            user_name (str):            - user name of the LDAP User to
+            search for
 
         Returns:
-            existing_flag (boolean)     - True, the LDAP User with the specified name existing
-                                        - False, cannot find a LDAP User with the specified name
+            existing_flag (boolean)     - True, the LDAP User with the
+            specified name existing
+                                        - False, cannot find a LDAP User with
+                                        the specified name
 
             user_info (dict):           - user information
         """
 
         cmd = 'ldapfinger -u {}'.format(user_name)
         self.ssh_con.flush()
-        code, output = self.ssh_con.exec_sudo_cmd(cmd, fail_ok=True, strict_passwd_prompt=True)
+        code, output = self.ssh_con.exec_sudo_cmd(cmd, fail_ok=True,
+                                                  strict_passwd_prompt=True)
 
         found = False
         user_info = {}
@@ -331,7 +334,8 @@ class LdapUserManager(object, metaclass=Singleton):
             secondary_group (bool):
                 True    -   Secondary group to add user to
                 False   -   No secondary group
-            secondary_group_name (str):     Name of secondary group (will be ignored if secondary_group is False
+            secondary_group_name (str):     Name of secondary group (will be
+            ignored if secondary_group is False
             password_expiry_days (int):
             password_expiry_warn_days (int):
 
@@ -345,13 +349,15 @@ class LdapUserManager(object, metaclass=Singleton):
             bool(secondary_group)
             str(secondary_group_name)
         except ValueError:
-            return 1, 'invalid input: {}, {}'.format(password_expiry_days, password_expiry_warn_days)
+            return 1, 'invalid input: {}, {}'.format(password_expiry_days,
+                                                     password_expiry_warn_days)
 
         if opt_expiry_days <= 0:
             return 4, 'invalid password expiry days:{}'.format(opt_expiry_days)
 
         if opt_expiry_warn_days <= 0:
-            return 5, 'invalid password expiry days:{}'.format(opt_expiry_warn_days)
+            return 5, 'invalid password expiry days:{}'.format(
+                opt_expiry_warn_days)
 
         return 0, ''
 
@@ -374,35 +380,47 @@ class LdapUserManager(object, metaclass=Singleton):
             secondary_group (bool):
                 True    -   Secondary group to add user to
                 False   -   No secondary group
-            secondary_group_name (str):     Name of secondary group (will be ignored if secondary_group is False
+            secondary_group_name (str):     Name of secondary group (will be
+            ignored if secondary_group is False
             password_expiry_days (int):
             password_expiry_warn_days (int):
             delete_if_existing (bool):
                 True    -   Delete the user if it is already existing
                 False   -   Return the existing LDAP User
             check_if_existing (bool):
-                True    -   Check if the LDAP User existing with the specified name
-                False   -   Do not check if any LDAP Users with the specified name existing
+                True    -   Check if the LDAP User existing with the
+                specified name
+                False   -   Do not check if any LDAP Users with the specified
+                name existing
 
         Returns tuple(code, user_infor):
             code (int):
-                -1   -- a LDAP User already existing with the same name (don't care other attributes for now)
-                0   -- successfully created a LDAP User withe specified name and attributes
-                1  -- a LDAP User already existing but fail_on_existing specified
-                2  -- CLI to create a user succeeded but cannot find the user after
+                -1   -- a LDAP User already existing with the same name (
+                don't care other attributes for now)
+                0   -- successfully created a LDAP User withe specified name
+                and attributes
+                1  -- a LDAP User already existing but fail_on_existing
+                specified
+                2  -- CLI to create a user succeeded but cannot find the user
+                after
                 3  -- failed to create a LDAP User (the CLI failed)
-                4  -- failed to change the initial password and login the first time
+                4  -- failed to change the initial password and login the
+                first time
                 5  -- invalid inputs
         """
-        password_expiry_days = 90 if password_expiry_days is None else password_expiry_days
-        password_expiry_warn_days = 2 if password_expiry_warn_days is None else password_expiry_warn_days
+        password_expiry_days = 90 if password_expiry_days is None else \
+            password_expiry_days
+        password_expiry_warn_days = 2 if password_expiry_warn_days is None \
+            else password_expiry_warn_days
         secondary_group = False if secondary_group is None else secondary_group
-        secondary_group_name = '' if secondary_group_name is None else secondary_group_name
+        secondary_group_name = '' if secondary_group_name is None else \
+            secondary_group_name
 
-        code, message = self.validate_user_settings(secondary_group=secondary_group,
-                                                    secondary_group_name=secondary_group_name,
-                                                    password_expiry_days=password_expiry_days,
-                                                    password_expiry_warn_days=password_expiry_warn_days)
+        code, message = self.validate_user_settings(
+            secondary_group=secondary_group,
+            secondary_group_name=secondary_group_name,
+            password_expiry_days=password_expiry_days,
+            password_expiry_warn_days=password_expiry_warn_days)
         if 0 != code:
             return 5, {}
 
@@ -418,31 +436,33 @@ class LdapUserManager(object, metaclass=Singleton):
         cmds_expectings = [
             (
                 'sudo ldapusersetup',
-                ('Enter username to add to LDAP:',),
+                (r'Enter username to add to LDAP:',),
                 ()
             ),
             (
                 '{}'.format(user_name),
-                ('Add {} to sudoer list? (yes/NO): '.format(user_name), ),
+                (r'Add {} to sudoer list? (yes/NO): '.format(user_name),),
                 ('Critical setup error: cannot add user.*',),
             ),
             (
                 'yes' if sudoer else 'NO',
-                ('Add .* to secondary user group\? \(yes/NO\):', ),
+                (r'Add .* to secondary user group\? \(yes/NO\):',),
                 ()
             ),
-            ]
+        ]
 
         if secondary_group:
             cmds_expectings += [
                 (
                     'yes',
-                    ('Secondary group to add user to? [wrs_protected]: ',),
+                    (r'Secondary group to add user to? [sys_protected]: ',),
                     ()
                 ),
                 (
                     '{}'.format(secondary_group_name),
-                    ('Enter days after which user password must be changed \[{}\]:'.format(password_expiry_days),),
+                    (
+                        r'Enter days after which user password must be changed '
+                        r'\[{}\]:'.format(password_expiry_days),),
                     ()
                 )
 
@@ -451,7 +471,9 @@ class LdapUserManager(object, metaclass=Singleton):
             cmds_expectings += [
                 (
                     'NO',
-                    ('Enter days after which user password must be changed \[{}\]:'.format(password_expiry_days), ),
+                    (
+                        r'Enter days after which user password must be changed '
+                        r'\[{}\]:'.format(password_expiry_days),),
                     (),
                 ),
             ]
@@ -459,15 +481,18 @@ class LdapUserManager(object, metaclass=Singleton):
         cmds_expectings += [
             (
                 '{}'.format(password_expiry_days),
-                ('Enter days before password is to expire that user is warned \[{}\]:'.format(
-                    password_expiry_warn_days), ),
+                (
+                    r'Enter days before password is to expire that user is '
+                    r'warned \[{}\]:'.format(password_expiry_warn_days),),
                 (),
             ),
             (
                 '{}'.format(password_expiry_warn_days),
                 (
-                    'Successfully modified user entry uid=m-user01,ou=People,dc=cgcs,dc=local in LDAP',
-                    'Updating password expiry to {} days'.format(password_expiry_warn_days),
+                    'Successfully modified user entry uid=m-user01,ou=People,'
+                    'dc=cgcs,dc=local in LDAP',
+                    'Updating password expiry to {} days'.format(
+                        password_expiry_warn_days),
                 ),
                 (),
             )
@@ -479,7 +504,8 @@ class LdapUserManager(object, metaclass=Singleton):
             self.ssh_con.send(cmd)
             expected_outputs = list(outputs + errors)
 
-            index = self.ssh_con.expect(blob_list=expected_outputs, fail_ok=True)
+            index = self.ssh_con.expect(blob_list=expected_outputs,
+                                        fail_ok=True)
             if len(outputs) <= index:
                 created = False
                 break
@@ -491,7 +517,8 @@ class LdapUserManager(object, metaclass=Singleton):
         if created:
             existing, user_info = self.find_ldap_user(user_name)
             if existing:
-                success, password = self.login_as_ldap_user_first_time(user_name)
+                success, password = self.login_as_ldap_user_first_time(
+                    user_name)
                 if not success:
                     code = 4
                 else:
@@ -505,7 +532,8 @@ class LdapUserManager(object, metaclass=Singleton):
 
         return code, user_info
 
-    def login_as_ldap_user(self, user_name, password, host=None, pre_store=False, disconnect_after=False):
+    def login_as_ldap_user(self, user_name, password, host=None,
+                           pre_store=False, disconnect_after=False):
         """
         Login as the specified user name and password onto the specified host
 
@@ -514,14 +542,17 @@ class LdapUserManager(object, metaclass=Singleton):
             password (str):         password
             host (str):             host to login to
             pre_store (bool):
-                    True    -       pre-store keystone user credentials for session
-                    False   -       chose 'N' (by default) meaning do not pre-store keystone user credentials
+                    True    -       pre-store keystone user credentials for
+                    session
+                    False   -       chose 'N' (by default) meaning do not
+                    pre-store keystone user credentials
             disconnect_after (bool):
                     True    -       disconnect the logged in session
                     False   -       keep the logged in session
 
         Returns (tuple):
-            logged_in (bool)    -   True if successfully logged into the specified host
+            logged_in (bool)    -   True if successfully logged into the
+            specified host
                                     using the specified user/password
             password (str)      -   the password used to login
             ssh_con (object)    -   the ssh session logged in
@@ -531,22 +562,26 @@ class LdapUserManager(object, metaclass=Singleton):
             if system_helper.is_aio_simplex():
                 host = 'controller-0'
 
-        prompt_keystone_user_name = 'Enter Keystone username \[{}\]: '.format(user_name)
+        prompt_keystone_user_name = r'Enter Keystone username \[{}\]: '.format(
+            user_name)
         cmd_expected = (
             (
-                'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name, host),
-                ('Are you sure you want to continue connecting \(yes/no\)\?',),
-                ('ssh: Could not resolve hostname {}: Name or service not known'.format(host),),
+                'ssh -l {} -o UserKnownHostsFile=/dev/null {}'.format(user_name,
+                                                                      host),
+                (r'Are you sure you want to continue connecting \(yes/no\)\?',),
+                (
+                    'ssh: Could not resolve hostname {}: Name or service not '
+                    'known'.format(host),),
             ),
             (
                 'yes',
-                ('{}@{}\'s password: '.format(user_name, host),),
+                (r'{}@{}\'s password: '.format(user_name, host),),
                 (),
             ),
             (
                 '{}'.format(password),
                 (prompt_keystone_user_name, Prompt.CONTROLLER_PROMPT,),
-                ('Permission denied, please try again\.',),
+                (r'Permission denied, please try again\.',),
             ),
         )
 
@@ -554,7 +589,8 @@ class LdapUserManager(object, metaclass=Singleton):
         self.ssh_con.flush()
         for i in range(len(cmd_expected)):
             cmd, expected, errors = cmd_expected[i]
-            LOG.info('cmd={}\nexpected={}\nerrors={}\n'.format(cmd, expected, errors))
+            LOG.info('cmd={}\nexpected={}\nerrors={}\n'.format(cmd, expected,
+                                                               errors))
             self.ssh_con.send(cmd)
 
             index = self.ssh_con.expect(blob_list=list(expected + errors))
@@ -563,7 +599,8 @@ class LdapUserManager(object, metaclass=Singleton):
             elif 3 == i:
                 if expected[index] == prompt_keystone_user_name:
                     assert pre_store, \
-                        'pre_store is False, while selecting "y" to "Pre-store Keystone user credentials ' \
+                        'pre_store is False, while selecting "y" to ' \
+                        '"Pre-store Keystone user credentials ' \
                         'for this session!"'
                 else:
                     logged_in = True
@@ -577,8 +614,10 @@ class LdapUserManager(object, metaclass=Singleton):
 
         return logged_in, password, self.ssh_con
 
-    def change_ldap_user_password(self, user_name, password, new_password, change_own_password=True,
-                                  check_if_existing=True, host=None, disconnect_after=False):
+    def change_ldap_user_password(self, user_name, password, new_password,
+                                  change_own_password=True,
+                                  check_if_existing=True, host=None,
+                                  disconnect_after=False):
         """
         Modify the password of the specified user to the new one
 
@@ -595,13 +634,15 @@ class LdapUserManager(object, metaclass=Singleton):
 
             check_if_existing (bool):
                 -   True:   check if the user already existing first
-                    False:  change the password without checking the existence of the user
+                    False:  change the password without checking the
+                    existence of the user
 
             host (str):
                 -   The host to log into
 
             disconnect_after (bool)
-                -   True:   disconnect the ssh connection after changing the password
+                -   True:   disconnect the ssh connection after changing the
+                password
                 -   False:  keep the ssh connection
 
         Returns (bool):
@@ -616,8 +657,11 @@ class LdapUserManager(object, metaclass=Singleton):
         if not change_own_password:
             return False
 
-        logged_in, password, ssh_con = self.login_as_ldap_user(user_name,
-                                                               password=password, host=host, disconnect_after=False)
+        logged_in, password, ssh_con = \
+            self.login_as_ldap_user(user_name,
+                                    password=password,
+                                    host=host,
+                                    disconnect_after=False)
 
         if not logged_in or not password or not ssh_con:
             return False, ssh_con
@@ -625,7 +669,7 @@ class LdapUserManager(object, metaclass=Singleton):
         cmds_expected = (
             (
                 'passwd',
-                ('\(current\) LDAP Password: ',),
+                (r'\(current\) LDAP Password: ',),
                 (),
             ),
             (
@@ -639,7 +683,8 @@ class LdapUserManager(object, metaclass=Singleton):
                 (
                     'BAD PASSWORD: The password is too similar to the old one',
                     'BAD PASSWORD: No password supplied',
-                    'passwd: Have exhausted maximum number of retries for service',
+                    'passwd: Have exhausted maximum number of retries for '
+                    'service',
                     EOF,
                 ),
             ),
@@ -681,9 +726,15 @@ def get_admin_password_in_keyring(con_ssh=None):
     return admin_pswd
 
 
-def change_linux_user_password(password, new_password, user='sysadmin', host=None):
-    LOG.info('Attempt to change password, from password:{}, to new-password:{}, on host:{}'.format(
-        password, new_password, host))
+def change_linux_user_password(password, new_password, user=None,
+                               host=None):
+    if not user:
+        user = HostLinuxUser.get_user()
+
+    LOG.info(
+        'Attempt to change password, from password:{}, to new-password:{}, '
+        'on host:{}'.format(
+            password, new_password, host))
 
     input_outputs = (
         (
@@ -708,15 +759,18 @@ def change_linux_user_password(password, new_password, user='sysadmin', host=Non
         ),
         (
             new_password,
-            (': all authentication tokens updated successfully.', Prompt.CONTROLLER_PROMPT,),
+            (': all authentication tokens updated successfully.',
+             Prompt.CONTROLLER_PROMPT,),
             (),
         ),
     )
     conn_to_ac = ControllerClient.get_active_controller()
-    initial_prompt = '.*{}\:~\$ '.format(host)
-    LOG.info('Will login as user:"{}", password:"{}", to host:"{}"'.format(user, password, host))
+    initial_prompt = r'.*{}\:~\$ '.format(host)
+    LOG.info('Will login as user:"{}", password:"{}", to host:"{}"'.format(
+        user, password, host))
 
-    conn = SSHFromSSH(conn_to_ac, host, user, password, force_password=True, initial_prompt=initial_prompt)
+    conn = SSHFromSSH(conn_to_ac, host, user, password, force_password=True,
+                      initial_prompt=initial_prompt)
     passed = True
     try:
         conn.connect(retry=False, use_password=True)
@@ -733,21 +787,25 @@ def change_linux_user_password(password, new_password, user='sysadmin', host=Non
                 break
 
     except Exception as e:
-        LOG.warn('Caught exception when connecting to host:{} as user:{} with pasword:{}\n{}\n'.format(
-            host, user, password, e))
+        LOG.warn(
+            'Caught exception when connecting to host:{} as user:{} with '
+            'pasword:{}\n{}\n'.format(
+                host, user, password, e))
 
         raise
 
     finally:
         pass
-        # TODO: close this connection will lead EOF error in ssh.py if invoked in fixture cleanup handler
-        if user != 'sysadmin':
+        # TODO: close this connection will lead EOF error in ssh.py if
+        #  invoked in fixture cleanup handler
+        if user != HostLinuxUser.get_user():
             conn.close()
 
     # flush the output to the cli so the next cli is correctly registered
     conn.flush()
-    LOG.info('Successfully changed password from:\n{}\nto:{} for user:{} on host:{}'.format(
-        password, new_password, user, host))
+    LOG.info(
+        'Successfully changed password from:\n{}\nto:{} for user:{} on '
+        'host:{}'.format(password, new_password, user, host))
 
     return passed, new_password
 
@@ -760,8 +818,9 @@ def gen_linux_password(exclude_list=None, length=32):
         exclude_list = [exclude_list]
 
     if length < MIN_LINUX_PASSWORD_LEN:
-        LOG.warn('Length requested is too small, must longer than {}, requesting {}'.format(
-            MIN_LINUX_PASSWORD_LEN, length))
+        LOG.warn(
+            'Length requested is too small, must longer than {}, requesting '
+            '{}'.format(MIN_LINUX_PASSWORD_LEN, length))
         return None
 
     total = length
@@ -778,12 +837,14 @@ def gen_linux_password(exclude_list=None, length=32):
             left -= 1
             total -= count
 
-        password = ''.join(random.sample(raw_password, min(length, len(raw_password))))
+        password = ''.join(
+            random.sample(raw_password, min(length, len(raw_password))))
 
         missing_length = length - len(password)
         if missing_length > 0:
             all_chars = ''.join(vocabulary)
-            password += ''.join(random.choice(all_chars) for _ in range(missing_length))
+            password += ''.join(
+                random.choice(all_chars) for _ in range(missing_length))
 
         if password in exclude_list:
             password = ''
@@ -793,12 +854,13 @@ def gen_linux_password(exclude_list=None, length=32):
     return password
 
 
-def gen_invalid_password(invalid_type='shorter', previous_passwords=None, minimum_length=7):
-
+def gen_invalid_password(invalid_type='shorter', previous_passwords=None,
+                         minimum_length=7):
     if previous_passwords is None:
         previous_passwords = []
 
-    valid_password = list(gen_linux_password(exclude_list=previous_passwords, length=minimum_length * 4))
+    valid_password = list(gen_linux_password(exclude_list=previous_passwords,
+                                             length=minimum_length * 4))
 
     current_length = len(valid_password)
 
@@ -807,27 +869,35 @@ def gen_invalid_password(invalid_type='shorter', previous_passwords=None, minimu
         invalid_password = random.sample(valid_password, invalid_len)
 
     elif invalid_type == '1_lowercase':
-        invalid_password = ''.join(c for c in valid_password if c not in ascii_lowercase)
+        invalid_password = ''.join(
+            c for c in valid_password if c not in ascii_lowercase)
         missing_length = current_length - len(invalid_password)
-        invalid_password += ''.join(random.choice(ascii_uppercase) for _ in range(missing_length))
+        invalid_password += ''.join(
+            random.choice(ascii_uppercase) for _ in range(missing_length))
 
     elif invalid_type == '1_uppercase':
-        invalid_password = ''.join(c for c in valid_password if c not in ascii_uppercase)
+        invalid_password = ''.join(
+            c for c in valid_password if c not in ascii_uppercase)
         missing_length = current_length - len(invalid_password)
-        invalid_password += ''.join(random.choice(ascii_lowercase) for _ in range(missing_length))
+        invalid_password += ''.join(
+            random.choice(ascii_lowercase) for _ in range(missing_length))
 
     elif invalid_type == '1_digit':
         invalid_password = ''.join(c for c in valid_password if c not in digits)
         missing_length = current_length - len(invalid_password)
-        invalid_password += ''.join(random.choice(ascii_lowercase) for _ in range(missing_length))
+        invalid_password += ''.join(
+            random.choice(ascii_lowercase) for _ in range(missing_length))
 
     elif invalid_type == '1_special':
-        invalid_password = ''.join(c for c in valid_password if c not in SPECIAL_CHARACTERS)
+        invalid_password = ''.join(
+            c for c in valid_password if c not in SPECIAL_CHARACTERS)
         missing_length = current_length - len(invalid_password)
-        invalid_password += ''.join(random.choice(ascii_lowercase) for _ in range(missing_length))
+        invalid_password += ''.join(
+            random.choice(ascii_lowercase) for _ in range(missing_length))
 
     elif invalid_type == 'not_in_dictionary':
-        invalid_password = random.choice(re.split('\W', SIMPLE_WORD_DICTIONARY))
+        invalid_password = random.choice(
+            re.split(r'\W', SIMPLE_WORD_DICTIONARY))
 
     elif invalid_type == 'diff_more_than_3':
         if not previous_passwords or len(previous_passwords) < 1:
@@ -838,7 +908,8 @@ def gen_invalid_password(invalid_type='shorter', previous_passwords=None, minimu
         count_difference = random.randint(0, 2)
         for index in random.sample(range(len_last_password), count_difference):
             cur_char = last_password[index]
-            last_password[index] = random.choice(c for c in last_password if c != cur_char)
+            last_password[index] = random.choice(
+                c for c in last_password if c != cur_char)
         invalid_password = ''.join(last_password)
 
     elif invalid_type == 'not_simple_reverse':
@@ -874,14 +945,16 @@ def gen_invalid_password(invalid_type='shorter', previous_passwords=None, minimu
     return ''.join(invalid_password)
 
 
-def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Tenant.get('admin_platform'),
+def modify_https(enable_https=True, check_first=True, con_ssh=None,
+                 auth_info=Tenant.get('admin_platform'),
                  fail_ok=False):
     """
     Modify platform https via 'system modify https_enable=<bool>'
 
     Args:
         enable_https (bool): True/False to enable https or not
-        check_first (bool): if user want to check if the lab is already in the state that user try to enable
+        check_first (bool): if user want to check if the lab is already in
+        the state that user try to enable
         con_ssh (SSHClient):
         auth_info (dict):
         fail_ok (bool):
@@ -893,49 +966,67 @@ def modify_https(enable_https=True, check_first=True, con_ssh=None, auth_info=Te
 
     """
     if check_first:
-        is_https = keystone_helper.is_https_enabled(source_openrc=False, auth_info=auth_info, con_ssh=con_ssh)
+        is_https = keystone_helper.is_https_enabled(source_openrc=False,
+                                                    auth_info=auth_info,
+                                                    con_ssh=con_ssh)
         if (is_https and enable_https) or (not is_https and not enable_https):
-            msg = "Https is already {}. Do nothing.".format('enabled' if enable_https else 'disabled')
+            msg = "Https is already {}. Do nothing.".format(
+                'enabled' if enable_https else 'disabled')
             LOG.info(msg)
             return -1, msg
 
-    LOG.info("Modify system to {} https".format('enable' if enable_https else 'disable'))
-    res, output = system_helper.modify_system(fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info,
-                                              https_enabled='{}'.format(str(enable_https).lower()))
+    LOG.info("Modify system to {} https".format(
+        'enable' if enable_https else 'disable'))
+    res, output = system_helper.modify_system(fail_ok=fail_ok, con_ssh=con_ssh,
+                                              auth_info=auth_info,
+                                              https_enabled='{}'.format(
+                                                  str(enable_https).lower()))
     if res == 1:
         return 1, output
 
     LOG.info("Wait up to 60s for config out-of-date alarm with best effort.")
-    system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id='controller-', strict=False,
-                                 con_ssh=con_ssh, timeout=60, fail_ok=True, auth_info=auth_info)
+    system_helper.wait_for_alarm(alarm_id=EventLogID.CONFIG_OUT_OF_DATE,
+                                 entity_id='controller-', strict=False,
+                                 con_ssh=con_ssh, timeout=60, fail_ok=True,
+                                 auth_info=auth_info)
 
     LOG.info("Wait up to 600s for config out-of-date alarm to clear.")
-    system_helper.wait_for_alarm_gone(EventLogID.CONFIG_OUT_OF_DATE, con_ssh=con_ssh, timeout=600,
-                                      check_interval=20, fail_ok=False, auth_info=auth_info)
+    system_helper.wait_for_alarm_gone(EventLogID.CONFIG_OUT_OF_DATE,
+                                      con_ssh=con_ssh, timeout=600,
+                                      check_interval=20, fail_ok=False,
+                                      auth_info=auth_info)
 
     LOG.info("Wait up to 300s for public endpoints to be updated")
     expt_status = 'enabled' if enable_https else 'disabled'
     end_time = time.time() + 300
     while time.time() < end_time:
-        if keystone_helper.is_https_enabled(con_ssh=con_ssh, source_openrc=False, auth_info=auth_info) == enable_https:
+        if keystone_helper.is_https_enabled(con_ssh=con_ssh,
+                                            source_openrc=False,
+                                            auth_info=auth_info) == \
+                enable_https:
             break
         time.sleep(10)
     else:
-        raise exceptions.KeystoneError("Https is not {} in 'openstack endpoint list'".format(expt_status))
+        raise exceptions.KeystoneError(
+            "Https is not {} in 'openstack endpoint list'".format(expt_status))
 
     msg = 'Https is {} successfully'.format(expt_status)
     LOG.info(msg)
-    # TODO: install certificate for https. There will be a warning msg if self-signed certificate is used
+    # TODO: install certificate for https. There will be a warning msg if
+    #  self-signed certificate is used
 
     if not ProjVar.get_var('IS_DC') or \
-            (auth_info and auth_info.get('region', None) in ('RegionOne', 'SystemController')):
-        # If DC, use the central region https as system https, since that is the one used for external access
+            (auth_info and auth_info.get('region', None) in (
+            'RegionOne', 'SystemController')):
+        # If DC, use the central region https as system https, since that is
+        # the one used for external access
         CliAuth.set_vars(HTTPS=enable_https)
 
     return 0, msg
 
 
-def set_ldap_user_password(user_name, new_password, check_if_existing=True, fail_ok=False):
+def set_ldap_user_password(user_name, new_password, check_if_existing=True,
+                           fail_ok=False):
     """
     Set ldap user password use ldapsetpasswd
 
@@ -948,7 +1039,8 @@ def set_ldap_user_password(user_name, new_password, check_if_existing=True, fail
 
         check_if_existing (bool):
             -   True:   check if the user already existing first
-                False:  change the password without checking the existence of the user
+                False:  change the password without checking the existence of
+                    the user
 
         fail_ok (bool)
 
@@ -962,88 +1054,44 @@ def set_ldap_user_password(user_name, new_password, check_if_existing=True, fail
             return False
 
     ssh_client = ControllerClient.get_active_controller()
-    rc, output = ssh_client.exec_sudo_cmd('ldapsetpasswd {} {}'.format(user_name, new_password), fail_ok=fail_ok)
+    rc, output = ssh_client.exec_sudo_cmd(
+        'ldapsetpasswd {} {}'.format(user_name, new_password), fail_ok=fail_ok)
     if rc > 1:
         return 1, output
 
     return rc, output
 
 
-def fetch_cert_file(cert='ca-cert', scp_to_local=True, con_ssh=None, bld_server=None,
-                    search_dir=None):
+def fetch_cert_file(cert_file=None, scp_to_local=True, con_ssh=None):
     """
     fetch cert file from build server. scp to TiS.
     Args:
-        cert (str): valid values: ca-cert, server-with-key
+        cert_file (str): valid values: ca-cert, server-with-key
         scp_to_local (bool): Whether to scp cert file to localhost as well.
         con_ssh (SSHClient): active controller ssh client
-        bld_server
-        search_dir
 
     Returns (str|None):
-        cert file path on localhost if scp_to_local=True, else cert file path on TiS system.
-        If no certificate found, return None.
+        cert file path on localhost if scp_to_local=True, else cert file path
+        on TiS system. If no certificate found, return None.
 
     """
-    valid_certs = ('ca-cert', 'server-with-key')
-    if cert not in valid_certs:
-        raise ValueError("Please set cert to one of the following: {}".format(valid_certs))
-
-    cert_name = '{}.pem'.format(cert)
-    cert_on_tis = '{}/{}'.format(SYSADMIN_HOME, cert_name)
+    if not cert_file:
+        cert_file = '{}/ca-cert.pem'.format(HostLinuxUser.get_home())
 
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    build_info = system_helper.get_build_info(con_ssh=con_ssh)
-    from keywords import common, host_helper
-    if not con_ssh.file_exists(cert_on_tis):
-        if not bld_server:
-            bld_server = build_info('BUILD_SERVER')
-        with host_helper.ssh_to_build_server(bld_srv=bld_server) as bs_ssh:
-            if not search_dir:
-                search_dir = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE,
-                                          build_info['JOB'],
-                                          build_info['BUILD_ID'],
-                                          BuildServerPath.LAB_CONF_DIR_PREV,
-                                          'yow')
-            if not bs_ssh.file_exists(search_dir):
-                LOG.warning('{} does not exist on {}'.format(search_dir, bld_server))
-                return None
-
-            if cert == 'ca-cert':
-                search_path = '{}/cert/'.format(search_dir)
-            else:
-                lab_name = ProjVar.get_var('lab')['name'].lower().split('yow-')[-1]
-                search_path = '{}/*{}*/'.format(search_dir, lab_name)
-
-            from_server = bs_ssh.host
-            search_cmd = "find {} -type f -name '{}'".format(search_path, cert_name)
-            code, output = bs_ssh.exec_cmd(search_cmd, fail_ok=True)
-            if code != 0 or not output:
-                msg = 'failed to fetch cert-file from build server, tried path:{}, server:{}'.format(
-                        search_path, from_server)
-                LOG.warn(msg)
-                return None
-            cert_file_on_bs = output.splitlines()[0]
-
-        LOG.info('found cert-file on build server, trying to scp to current active controller\ncert-file:{}'.format(
-            cert_file_on_bs))
-        common._scp_from_remote_server_to_active_controller(source_server=from_server,
-                                                            source_path=cert_file_on_bs,
-                                                            dest_dir=SYSADMIN_HOME,
-                                                            dest_name=cert_name,
-                                                            timeout=120,
-                                                            con_ssh=con_ssh)
-        assert con_ssh.file_exists(cert_on_tis), "{} does not exist after scp from build server".format(cert_on_tis)
-
-    LOG.info("Cert file is on TiS at: {}".format(cert_on_tis))
-    cert_path = cert_on_tis
+    if not con_ssh.file_exists(cert_file):
+        raise FileNotFoundError(
+            '{} not found on active controller'.format(cert_file))
 
     if scp_to_local:
+        cert_name = os.path.basename(cert_file)
         dest_path = os.path.join(ProjVar.get_var('TEMP_DIR'), cert_name)
-        common.scp_from_active_controller_to_localhost(source_path=cert_on_tis, dest_path=dest_path, timeout=120)
-        cert_path = dest_path
+        common.scp_from_active_controller_to_localhost(source_path=cert_file,
+                                                       dest_path=dest_path,
+                                                       timeout=120)
+        cert_file = dest_path
         LOG.info("Cert file copied to {} on localhost".format(dest_path))
 
-    return cert_path
+    return cert_file

@@ -8,9 +8,9 @@ from utils import cli, table_parser
 from utils.tis_log import LOG
 from utils.multi_thread import MThread
 from utils.clients.ssh import ControllerClient, NATBoxClient
-from consts.auth import HostLinuxCreds, Tenant
+from consts.auth import HostLinuxUser, Tenant
 from consts.stx import GuestImages
-from consts.filepaths import TiSPath, HeatTemplate, TestServerPath
+from consts.filepaths import StxPath, HeatTemplate, TestServerPath
 from consts.timeout import HostTimeout, VMTimeout
 from keywords import vm_helper, heat_helper, host_helper, html_helper, system_helper, vlm_helper, network_helper
 
@@ -76,7 +76,7 @@ def _get_large_heat(con_ssh=None, heat_template='system'):
     Returns (str): TiS file path of the heat template
 
     """
-    file_dir = TiSPath.CUSTOM_HEAT_TEMPLATES
+    file_dir = StxPath.CUSTOM_HEAT_TEMPLATES
     file_name = HeatTemplate.SYSTEM_TEST_HEAT
 
     if heat_template is 'patch':
@@ -94,8 +94,8 @@ def _get_large_heat(con_ssh=None, heat_template='system'):
         return file_path
 
     with host_helper.ssh_to_test_server() as ssh_to_server:
-        ssh_to_server.rsync(source_file, html_helper.get_ip_addr(), file_dir, dest_user=HostLinuxCreds.get_user(),
-                            dest_password=HostLinuxCreds.get_password(), timeout=1200)
+        ssh_to_server.rsync(source_file, html_helper.get_ip_addr(), file_dir, dest_user=HostLinuxUser.get_user(),
+                            dest_password=HostLinuxUser.get_password(), timeout=1200)
     return file_path
 
 
@@ -120,7 +120,7 @@ def launch_heat_stack():
     # make sure heat templates are there in Tis
     _get_large_heat()
 
-    file_dir = TiSPath.CUSTOM_HEAT_TEMPLATES
+    file_dir = StxPath.CUSTOM_HEAT_TEMPLATES
     file_name = HeatTemplate.SYSTEM_TEST_HEAT + "/" + HeatTemplate.SYSTEM_TEST_HEAT_NAME
     heat_template_file = file_dir + file_name + "/"
 
@@ -279,11 +279,12 @@ def sys_reboot_storage():
 
 
 def launch_lab_setup_tenants_vms():
-    stack1 = "/home/sysadmin/lab_setup-tenant1-resources.yaml"
+    home_dir = HostLinuxUser.get_home()
+    stack1 = "{}/lab_setup-tenant1-resources.yaml".format(home_dir)
     stack1_name = "lab_setup-tenant1-resources"
-    stack2 = "/home/sysadmin/lab_setup-tenant2-resources.yaml"
+    stack2 = "{}/lab_setup-tenant2-resources.yaml".format(home_dir)
     stack2_name = "lab_setup-tenant2-resources"
-    script_name = "/home/sysadmin/create_resource_stacks.sh"
+    script_name = "{}/create_resource_stacks.sh".format(home_dir)
 
     con_ssh = ControllerClient.get_active_controller()
     if con_ssh.file_exists(file_path=script_name):
@@ -291,14 +292,18 @@ def launch_lab_setup_tenants_vms():
         con_ssh.exec_cmd(cmd1)
         con_ssh.exec_cmd(script_name, fail_ok=False)
 
-    stack_id_t1 = heat_helper.get_stacks(name=stack1_name, auth_info=Tenant.get('tenant1'))
+    stack_id_t1 = heat_helper.get_stacks(name=stack1_name,
+                                         auth_info=Tenant.get('tenant1'))
     # may be better to delete all tenant stacks if any
     if not stack_id_t1:
-        heat_helper.create_stack(stack_name=stack1_name, template=stack1, auth_info=Tenant.get('tenant1'),
+        heat_helper.create_stack(stack_name=stack1_name, template=stack1,
+                                 auth_info=Tenant.get('tenant1'),
                                  timeout=1000, cleanup=None)
-    stack_id_t2 = heat_helper.get_stacks(name=stack2_name, auth_info=Tenant.get('tenant2'))
+    stack_id_t2 = heat_helper.get_stacks(name=stack2_name,
+                                         auth_info=Tenant.get('tenant2'))
     if not stack_id_t2:
-        heat_helper.create_stack(stack_name=stack2_name, template=stack2, auth_info=Tenant.get('tenant2'),
+        heat_helper.create_stack(stack_name=stack2_name, template=stack2,
+                                 auth_info=Tenant.get('tenant2'),
                                  timeout=1000, cleanup=None)
 
     LOG.info("Checking all VMs are in active state")

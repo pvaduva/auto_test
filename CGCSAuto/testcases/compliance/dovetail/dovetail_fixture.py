@@ -8,7 +8,7 @@ from utils.clients.ssh import ControllerClient
 from consts.proj_vars import ProjVar, ComplianceVar
 from consts.compliance import Dovetail
 from consts.stx import HostAvailState
-from consts.auth import HostLinuxCreds, ComplianceCreds, Tenant, CliAuth
+from consts.auth import HostLinuxUser, ComplianceCreds, Tenant, CliAuth
 from keywords import host_helper, system_helper, network_helper, keystone_helper, common, compliance_helper
 
 TEST_NODE_PROMPT = '.*@.*:.* '
@@ -133,7 +133,7 @@ def configure_dovetail_server(hosts_per_personality):
                            'role': 'Controller',
                            'ip': node_ip,
                            'user': 'root',
-                           'password': HostLinuxCreds.get_password()
+                           'password': HostLinuxUser.get_password()
                            })
         node_count += 1
 
@@ -144,7 +144,7 @@ def configure_dovetail_server(hosts_per_personality):
                            'role': 'Compute',
                            'ip': node_ip,
                            'user': 'root',
-                           'password': HostLinuxCreds.get_password()
+                           'password': HostLinuxUser.get_password()
                            })
         node_count += 1
 
@@ -230,9 +230,9 @@ def __config_sshd(hosts, hosts_configured=None, revert=False):
                         LOG.info('---Set root password')
                         root_ssh.send('passwd root')
                         root_ssh.expect('New password:', timeout=15)
-                        root_ssh.send(HostLinuxCreds.get_password())
+                        root_ssh.send(HostLinuxUser.get_password())
                         root_ssh.expect('Retype new password:', timeout=10)
-                        root_ssh.send(HostLinuxCreds.get_password())
+                        root_ssh.send(HostLinuxUser.get_password())
                         root_ssh.expect(timeout=30)
 
                 LOG.info('---Restart sshd')

@@ -5,6 +5,7 @@ import re
 from pytest import fixture, skip, mark
 
 from consts import timeout
+from consts.auth import HostLinuxUser
 from keywords import host_helper, system_helper
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
@@ -117,10 +118,11 @@ def test_patch_log_upload_dir(get_patch_name):
                   'sw-patch-controller-daemon.*INFO: Importing patch:.*{}'.format(patch_name)]
     res_2 = check_logs(search_for, lines=20, api=False)
 
-    search_for = ['sw-patch-controller-daemon.*INFO: User: sysadmin/admin Action: Importing patches:.*{}.patch'
-                  .format(patch_name),
-                  'sw-patch-controller-daemon.*INFO: User: sysadmin/admin Action: Importing patch:.*{}.patch'
-                  .format(patch_name)]
+    user = HostLinuxUser.get_user()
+    search_for = ['sw-patch-controller-daemon.*INFO: User: {}/admin Action: '
+                  'Importing patches:.*{}.patch'.format(user, patch_name),
+                  'sw-patch-controller-daemon.*INFO: User: {}/admin Action: '
+                  'Importing patch:.*{}.patch'.format(user, patch_name)]
     res_3 = check_logs(search_for, lines=10, api=True)
 
     LOG.tc_step("Deleting patch {}".format(patch_name))
@@ -147,18 +149,22 @@ def test_patch_log_what_requires(get_patch_name):
     con_ssh.exec_sudo_cmd('sw-patch upload test_patches/{}.patch'.format(patch_name))
     con_ssh.exec_sudo_cmd('sw-patch what-requires {}'.format(patch_name))
 
+    user = HostLinuxUser.get_user()
     search_for = ['sw-patch-controller-daemon.*INFO: Querying what requires patches:.*{}'.format(patch_name)]
     res_1 = check_logs(search_for, lines=10, api=False)
 
-    search_for = ['sw-patch-controller-daemon.*INFO: User: sysadmin/admin Action: '
-                  'Querying what requires patches:.*{}'.format(patch_name)]
+    search_for = ['sw-patch-controller-daemon.*INFO: User: {}/admin Action: '
+                  'Querying what requires patches:.*{}'.format(user,
+                                                               patch_name)]
     res_2 = check_logs(search_for, lines=10, api=True)
 
     LOG.tc_step("Deleting patch {}".format(patch_name))
     con_ssh.exec_sudo_cmd('sw-patch delete {}'.format(patch_name))
 
-    assert res_1, "FAIL: uploading patches did not generate the expected logs in patching.log"
-    assert res_2, "FAIL: uploading patches did not generate the expected logs in patching-api.log"
+    assert res_1, "FAIL: uploading patches did not generate the expected " \
+                  "logs in patching.log"
+    assert res_2, "FAIL: uploading patches did not generate the expected logs " \
+                  "in patching-api.log"
 
 
 @fixture(scope='function')
@@ -172,15 +178,18 @@ def setup_host_install(request, get_patch_name):
 
     patch_name = get_patch_name
     LOG.fixture_step("Applying {} to patching controller".format(patch_name))
-    con_ssh.exec_sudo_cmd('sw-patch upload test_patches/{}.patch'.format(patch_name))
+    con_ssh.exec_sudo_cmd('sw-patch upload test_patches/{}.patch'.format(
+        patch_name))
     con_ssh.exec_sudo_cmd('sw-patch apply {}'.format(patch_name))
 
     def delete_patch():
-        LOG.fixture_step("Removing {} from patching controller".format(patch_name))
+        LOG.fixture_step("Removing {} from patching controller".format(
+            patch_name))
         con_ssh.exec_sudo_cmd('sw-patch remove {}'.format(patch_name))
         con_ssh.exec_sudo_cmd('sw-patch delete {}'.format(patch_name))
         LOG.fixture_step("Reinstalling {} to revert the patch".format(patch_name))
-        con_ssh.exec_sudo_cmd('sw-patch host-install {}'.format(host), expect_timeout=timeout.CLI_TIMEOUT)
+        con_ssh.exec_sudo_cmd('sw-patch host-install {}'.format(host),
+                              expect_timeout=timeout.CLI_TIMEOUT)
         host_helper.unlock_host(host)
 
     request.addfinalizer(delete_patch)
@@ -227,7 +236,9 @@ def test_patch_log_host_install(setup_host_install):
     res = check_logs(search_for, lines=50, api=False)
     assert res, "FAIL: uploading patches did not generate the expected logs in patching.log"
 
-    search_for = ['sw-patch-controller-daemon.*INFO: User: sysadmin/admin '
-                  'Action: Running host-install for {}'.format(host)]
+    search_for = ['sw-patch-controller-daemon.*INFO: User: {}/admin '
+                  'Action: Running host-install for {}'.
+                  format(HostLinuxUser.get_user(), host)]
     res = check_logs(search_for, lines=25, api=True)
-    assert res, "FAIL: uploading patches did not generate the expected logs in patching-api.log"
+    assert res, "FAIL: uploading patches did not generate the expected " \
+                "logs in patching-api.log"

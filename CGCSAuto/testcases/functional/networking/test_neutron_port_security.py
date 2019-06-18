@@ -3,7 +3,7 @@ from pytest import fixture, mark
 from utils.tis_log import LOG
 from keywords import network_helper, vm_helper, system_helper, common
 from consts.auth import Tenant
-from consts.filepaths import TiSPath, TestServerPath
+from consts.filepaths import StxPath, TestServerPath
 
 
 @fixture(scope='module')
@@ -12,7 +12,7 @@ def setup_port_security():
     LOG.fixture_step("Copy userdata files from test server to active controller")
     for i in (1, 2):
         source = "{}/port_security/vm{}-userdata.txt".format(TestServerPath.TEST_FILES, i)
-        common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=TiSPath.USERDATA)
+        common.scp_from_test_server_to_active_controller(source_path=source, dest_dir=StxPath.USERDATA)
 
     LOG.fixture_step("Enable port security ml2 extension driver on system")
     system_helper.add_ml2_extension_drivers(drivers='port_security')
@@ -70,7 +70,7 @@ def test_neutron_port_security(setup_port_security, port_security):
                 format(port_security))
     vms = []
     for i in (1, 2):
-        user_data = '{}/vm{}-userdata.txt'.format(TiSPath.USERDATA, i)
+        user_data = '{}/vm{}-userdata.txt'.format(StxPath.USERDATA, i)
         vm_name = 'vm{}_mismatch_ip_ps_{}'.format(i, port_security)
         vm = vm_helper.boot_vm(name=vm_name, nics=nics, cleanup='function', user_data=user_data)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm)

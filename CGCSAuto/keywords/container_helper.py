@@ -8,7 +8,7 @@ from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.proj_vars import ProjVar
 from consts.stx import AppStatus, Prompt, EventLogID, Container
-from consts.filepaths import TiSPath
+from consts.filepaths import StxPath
 from keywords import system_helper, host_helper
 
 
@@ -67,7 +67,7 @@ def upload_helm_charts(tar_file, repo=None, delete_first=False, con_ssh=None, ti
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    helm_dir = os.path.normpath(TiSPath.HELM_CHARTS_DIR)
+    helm_dir = os.path.normpath(StxPath.HELM_CHARTS_DIR)
     if not repo:
         repo = 'starlingx'
     file_path = os.path.join(helm_dir, repo, os.path.basename(tar_file))
@@ -391,7 +391,7 @@ def get_docker_reg_addr(con_ssh=None):
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    output = con_ssh.exec_cmd('grep --color=never "addr: " {}'.format(TiSPath.DOCKER_CONF), fail_ok=False)[1]
+    output = con_ssh.exec_cmd('grep --color=never "addr: " {}'.format(StxPath.DOCKER_CONF), fail_ok=False)[1]
     reg_addr = output.split('addr: ')[1].strip()
     return reg_addr
 

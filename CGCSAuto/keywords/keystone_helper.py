@@ -1,6 +1,13 @@
+#
+# Copyright (c) 2016 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+
 import re
 
-from consts.auth import Tenant, HostLinuxCreds
+from consts.auth import Tenant, HostLinuxUser
 from consts.proj_vars import ProjVar
 from utils import cli, exceptions, table_parser
 from utils.clients.ssh import ControllerClient
@@ -8,49 +15,58 @@ from utils.tis_log import LOG
 from keywords import common
 
 
-def get_roles(field='ID', con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
-    table_ = table_parser.table(cli.openstack('role list', ssh_client=con_ssh, auth_info=auth_info)[1])
+def get_roles(field='ID', con_ssh=None, auth_info=Tenant.get('admin'),
+              **kwargs):
+    table_ = table_parser.table(cli.openstack('role list', ssh_client=con_ssh,
+                                              auth_info=auth_info)[1])
     return table_parser.get_multi_values(table_, field, **kwargs)
 
 
-def get_users(field='ID', con_ssh=None, auth_info=Tenant.get('admin'), **kwargs):
+def get_users(field='ID', con_ssh=None, auth_info=Tenant.get('admin'),
+              **kwargs):
     """
     Return a list of user id(s) with given user name.
 
     Args:
         field (str|list|tuple):
-        project
         con_ssh (SSHClient):
         auth_info
 
     Returns (list): list of user id(s)
 
     """
-    table_ = table_parser.table(cli.openstack('user list', ssh_client=con_ssh, auth_info=auth_info)[1])
+    table_ = table_parser.table(cli.openstack('user list', ssh_client=con_ssh,
+                                              auth_info=auth_info)[1])
     return table_parser.get_multi_values(table_, field, **kwargs)
 
 
-def add_or_remove_role(add_=True, role='admin', project=None, user=None, domain=None, group=None, group_domain=None,
-                       project_domain=None, user_domain=None, inherited=None, check_first=True, fail_ok=False,
+def add_or_remove_role(add_=True, role='admin', project=None, user=None,
+                       domain=None, group=None, group_domain=None,
+                       project_domain=None, user_domain=None, inherited=None,
+                       check_first=True, fail_ok=False,
                        con_ssh=None, auth_info=Tenant.get('admin')):
     """
-    Add or remove given role for specified user and tenant. e.g., add admin role to tenant2 user on tenant2 project
+    Add or remove given role for specified user and tenant. e.g., add admin
+    role to tenant2 user on tenant2 project
 
     Args:
         add_(bool): whether to add or remove
         role (str): an existing role from openstack role list
-        project (str): tenant name. When unset, the primary tenant name will be used
+        project (str): tenant name. When unset, the primary tenant name
+            will be used
         user (str): an existing user that belongs to given tenant
         domain (str): Include <domain> (name or ID)
         group (str): Include <group> (name or ID)
-        group_domain (str): Domain the group belongs to (name or ID). This can be used in case collisions
-                between group names exist.
-        project_domain (str): Domain the project belongs to (name or ID). This can be used in case collisions
-                between project names exist.
-        user_domain (str): Domain the user belongs to (name or ID). This can be used in case collisions
-                between user names exist.
-        inherited (bool): Specifies if the role grant is inheritable to the sub projects
-        check_first (bool): whether to check if role already exists for given user and tenant
+        group_domain (str): Domain the group belongs to (name or ID).
+            This can be used in case collisions between group names exist.
+        project_domain (str): Domain the project belongs to (name or ID).
+            This can be used in case collisions between project names exist.
+        user_domain (str): Domain the user belongs to (name or ID).
+            This can be used in case collisions between user names exist.
+        inherited (bool): Specifies if the role grant is inheritable to the
+            sub projects
+        check_first (bool): whether to check if role already exists for given
+            user and tenant
         fail_ok (bool): whether to throw exception on failure
         con_ssh (SSHClient): active controller ssh session
         auth_info (dict): auth info to use to executing the add role cli
@@ -68,13 +84,21 @@ def add_or_remove_role(add_=True, role='admin', project=None, user=None, domain=
         user = tenant_dict.get('user', project)
 
     if check_first:
-        existing_roles = get_role_assignments(role=role, project=project, user=user, user_domain=user_domain, group=group,
-                                              group_domain=group_domain, domain=domain,
-                                              project_domain=project_domain, inherited=inherited, effective_only=False,
-                                              con_ssh=con_ssh, auth_info=auth_info)
+        existing_roles = get_role_assignments(role=role, project=project,
+                                              user=user,
+                                              user_domain=user_domain,
+                                              group=group,
+                                              group_domain=group_domain,
+                                              domain=domain,
+                                              project_domain=project_domain,
+                                              inherited=inherited,
+                                              effective_only=False,
+                                              con_ssh=con_ssh,
+                                              auth_info=auth_info)
         if existing_roles:
             if add_:
-                msg = "Role already exists with given criteria: {}".format(existing_roles)
+                msg = "Role already exists with given criteria: {}".format(
+                    existing_roles)
                 LOG.info(msg)
                 return -1, msg
         else:
@@ -84,7 +108,9 @@ def add_or_remove_role(add_=True, role='admin', project=None, user=None, domain=
                 return -1, msg
 
     msg_str = 'Add' if add_ else 'Remov'
-    LOG.info("{}ing {} role to {} user under {} project".format(msg_str, role, user, project))
+    LOG.info(
+        "{}ing {} role to {} user under {} project".format(msg_str, role, user,
+                                                           project))
 
     sub_cmd = "--user {} --project {}".format(user, project)
     if inherited is True:
@@ -105,15 +131,19 @@ def add_or_remove_role(add_=True, role='admin', project=None, user=None, domain=
     sub_cmd += ' {}'.format(role)
 
     cmd = 'role add' if add_ else 'role remove'
-    res, out = cli.openstack(cmd, sub_cmd, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    res, out = cli.openstack(cmd, sub_cmd, ssh_client=con_ssh, fail_ok=fail_ok,
+                             auth_info=auth_info)
 
     if res == 1:
         return 1, out
 
-    LOG.info("{} cli accepted. Check role is {}ed successfully".format(cmd, msg_str))
-    post_roles = get_role_assignments(role=role, project=project, user=user, user_domain=user_domain, group=group,
+    LOG.info("{} cli accepted. Check role is {}ed "
+             "successfully".format(cmd, msg_str))
+    post_roles = get_role_assignments(role=role, project=project, user=user,
+                                      user_domain=user_domain, group=group,
                                       group_domain=group_domain, domain=domain,
-                                      project_domain=project_domain, inherited=inherited, effective_only=True,
+                                      project_domain=project_domain,
+                                      inherited=inherited, effective_only=True,
                                       con_ssh=con_ssh, auth_info=auth_info)
 
     err_msg = ''
@@ -133,27 +163,33 @@ def add_or_remove_role(add_=True, role='admin', project=None, user=None, domain=
     return 0, succ_msg
 
 
-def get_role_assignments(field='Role', names=True, role=None, user=None, project=None, user_domain=None, group=None,
-                         group_domain=None, domain=None, project_domain=None, inherited=None, effective_only=None,
+def get_role_assignments(field='Role', names=True, role=None, user=None,
+                         project=None, user_domain=None, group=None,
+                         group_domain=None, domain=None, project_domain=None,
+                         inherited=None, effective_only=None,
                          con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Get values from 'openstack role assignment list' table
 
     Args:
-        field (str|list|tuple): role assignment table header to determine which values to return
-        names (bool): whether to display role assignment with name (default is ID)
+        field (str|list|tuple): role assignment table header to determine
+            which values to return
+        names (bool): whether to display role assignment with name
+            (default is ID)
         role (str): an existing role from openstack role list
-        project (str): tenant name. When unset, the primary tenant name will be used
+        project (str): tenant name. When unset, the primary tenant name
+            will be used
         user (str): an existing user that belongs to given tenant
         domain (str): Include <domain> (name or ID)
         group (str): Include <group> (name or ID)
-        group_domain (str): Domain the group belongs to (name or ID). This can be used in case collisions
-                between group names exist.
-        project_domain (str): Domain the project belongs to (name or ID). This can be used in case collisions
-                between project names exist.
-        user_domain (str): Domain the user belongs to (name or ID). This can be used in case collisions
-                between user names exist.
-        inherited (bool): Specifies if the role grant is inheritable to the sub projects
+        group_domain (str): Domain the group belongs to (name or ID). This can
+            be used in case collisions between group names exist.
+        project_domain (str): Domain the project belongs to (name or ID). This
+            can be used in case collisions between project names exist.
+        user_domain (str): Domain the user belongs to (name or ID). This can
+            be used in case collisions between user names exist.
+        inherited (bool): Specifies if the role grant is inheritable to the
+            sub projects
         effective_only (bool): Whether to show effective roles only
         con_ssh (SSHClient): active controller ssh session
         auth_info (dict): auth info to use to executing the add role cli
@@ -177,7 +213,8 @@ def get_role_assignments(field='Role', names=True, role=None, user=None, project
     args = common.parse_args(optional_args)
 
     role_assignment_tab = table_parser.table(
-        cli.openstack('role assignment list', args, ssh_client=con_ssh, auth_info=auth_info)[1])
+        cli.openstack('role assignment list', args, ssh_client=con_ssh,
+                      auth_info=auth_info)[1])
 
     if not role_assignment_tab['headers']:
         LOG.info("No role assignment is found with criteria: {}".format(args))
@@ -186,9 +223,10 @@ def get_role_assignments(field='Role', names=True, role=None, user=None, project
     return table_parser.get_multi_values(role_assignment_tab, field)
 
 
-def set_user(user, name=None, project=None, password=None, project_doamin=None, email=None, description=None,
-             enable=None, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
-
+def set_user(user, name=None, project=None, password=None, project_doamin=None,
+             email=None, description=None,
+             enable=None, fail_ok=False, auth_info=Tenant.get('admin'),
+             con_ssh=None):
     LOG.info("Updating {}...".format(user))
     arg = ''
     optional_args = {
@@ -207,50 +245,63 @@ def set_user(user, name=None, project=None, password=None, project_doamin=None, 
         arg += '--{} '.format('enable' if enable else 'disable')
 
     if not arg.strip():
-        raise ValueError("Please specify the param(s) and value(s) to change to")
+        raise ValueError(
+            "Please specify the param(s) and value(s) to change to")
 
     arg += user
 
-    code, output = cli.openstack('user set', arg, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    code, output = cli.openstack('user set', arg, ssh_client=con_ssh,
+                                 fail_ok=fail_ok, auth_info=auth_info)
 
     if code > 0:
         return 1, output
 
     if name or project or password:
         tenant_dictname = user.upper()
-        Tenant.update(tenant_dictname, username=name, password=password, tenant=project)
+        Tenant.update(tenant_dictname, username=name, password=password,
+                      tenant=project)
 
     if password and user == 'admin':
         from consts.proj_vars import ProjVar
         if ProjVar.get_var('REGION') != 'RegionOne':
-            LOG.info("Run openstack_update_admin_password on secondary region after admin password change")
+            LOG.info(
+                "Run openstack_update_admin_password on secondary region "
+                "after admin password change")
             if not con_ssh:
                 con_ssh = ControllerClient.get_active_controller()
             with con_ssh.login_as_root(timeout=30) as con_ssh:
-                con_ssh.exec_cmd("echo 'y' | openstack_update_admin_password '{}'".format(password))
+                con_ssh.exec_cmd(
+                    "echo 'y' | openstack_update_admin_password '{}'".format(
+                        password))
 
     msg = 'User {} updated successfully'.format(user)
     LOG.info(msg)
     return 0, output
 
 
-def get_endpoints(field='ID', endpoint_id=None, service_name=None, service_type=None, enabled=None, interface="admin",
-                  region=None, url=None, strict=False, auth_info=Tenant.get('admin'), con_ssh=None, cli_filter=True):
+def get_endpoints(field='ID', endpoint_id=None, service_name=None,
+                  service_type=None, enabled=None, interface="admin",
+                  region=None, url=None, strict=False,
+                  auth_info=Tenant.get('admin'), con_ssh=None, cli_filter=True):
     """
     Get a list of endpoints with given arguments
     Args:
-        field (str|list|tuple): valid header of openstack endpoints list table. 'ID'
+        field (str|list|tuple): valid header of openstack endpoints list
+        table. 'ID'
         endpoint_id (str): id of the endpoint
-        service_name (str): Service name of endpoint like novaav3, neutron, keystone. vim, heat, swift, etc
+        service_name (str): Service name of endpoint like novaav3, neutron,
+        keystone. vim, heat, swift, etc
         service_type(str): Service type
         enabled (str): True/False
-        interface (str): Interface of endpoints. valid entries: admin, internal, public
+        interface (str): Interface of endpoints. valid entries: admin,
+            internal, public
         region (str): RegionOne or RegionTwo
         url (str): url of endpoint
         strict(bool):
         auth_info (dict):
         con_ssh (SSHClient):
-        cli_filter (bool): whether to filter out using cli. e.g., openstack endpoint list --service xxx
+        cli_filter (bool): whether to filter out using cli. e.g., openstack
+        endpoint list --service xxx
 
     Returns (list):
 
@@ -269,7 +320,8 @@ def get_endpoints(field='ID', endpoint_id=None, service_name=None, service_type=
                 pre_args.append('{}={}'.format(key, val))
         pre_args_str = ' '.join(pre_args)
 
-    output = cli.openstack('endpoint list', positional_args=pre_args_str, ssh_client=con_ssh, auth_info=auth_info)[1]
+    output = cli.openstack('endpoint list', positional_args=pre_args_str,
+                           ssh_client=con_ssh, auth_info=auth_info)[1]
     if not output.strip():
         LOG.warning("No endpoints returned with param: {}".format(pre_args_str))
         return []
@@ -286,10 +338,12 @@ def get_endpoints(field='ID', endpoint_id=None, service_name=None, service_type=
         'Region': region,
     }
     kwargs = {k: v for k, v in kwargs.items() if v}
-    return table_parser.get_multi_values(table_, field, strict=strict, regex=True, merge_lines=True, **kwargs)
+    return table_parser.get_multi_values(table_, field, strict=strict,
+                                         regex=True, merge_lines=True, **kwargs)
 
 
-def get_endpoints_values(endpoint_id, fields, con_ssh=None, auth_info=Tenant.get('admin')):
+def get_endpoints_values(endpoint_id, fields, con_ssh=None,
+                         auth_info=Tenant.get('admin')):
     """
     Gets the  endpoint target field value for given  endpoint Id
     Args:
@@ -301,24 +355,32 @@ def get_endpoints_values(endpoint_id, fields, con_ssh=None, auth_info=Tenant.get
     Returns (list): list of endpoint values
 
     """
-    table_ = table_parser.table(cli.openstack('endpoint show', endpoint_id, ssh_client=con_ssh, auth_info=auth_info)[1])
+    table_ = table_parser.table(
+        cli.openstack('endpoint show', endpoint_id, ssh_client=con_ssh,
+                      auth_info=auth_info)[1])
     return table_parser.get_multi_values_two_col_table(table_, fields)
 
 
-def is_https_enabled(con_ssh=None, source_openrc=True, auth_info=Tenant.get('admin_platform')):
+def is_https_enabled(con_ssh=None, source_openrc=True,
+                     auth_info=Tenant.get('admin_platform')):
     if not con_ssh:
-        con_name = auth_info.get('region') if (auth_info and ProjVar.get_var('IS_DC')) else None
+        con_name = auth_info.get('region') if (
+                    auth_info and ProjVar.get_var('IS_DC')) else None
         con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     table_ = table_parser.table(
-        cli.openstack('endpoint list', ssh_client=con_ssh, auth_info=auth_info, source_openrc=source_openrc)[1])
-    con_ssh.exec_cmd('unset OS_REGION_NAME')    # Workaround for CGTS-8348
-    filters = {'Service Name': 'keystone', 'Service Type': 'identity', 'Interface': 'public'}
-    keystone_pub = table_parser.get_values(table_=table_, target_header='URL', **filters)[0]
+        cli.openstack('endpoint list', ssh_client=con_ssh, auth_info=auth_info,
+                      source_openrc=source_openrc)[1])
+    con_ssh.exec_cmd('unset OS_REGION_NAME')  # Workaround
+    filters = {'Service Name': 'keystone', 'Service Type': 'identity',
+               'Interface': 'public'}
+    keystone_pub = table_parser.get_values(table_=table_, target_header='URL',
+                                           **filters)[0]
     return 'https' in keystone_pub
 
 
-def delete_users(user, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
+def delete_users(user, fail_ok=False, auth_info=Tenant.get('admin'),
+                 con_ssh=None):
     """
     Delete the given openstack user
     Args:
@@ -329,10 +391,12 @@ def delete_users(user, fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=Non
 
     Returns: tuple, (code, msg)
     """
-    return cli.openstack('user delete', user, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    return cli.openstack('user delete', user, ssh_client=con_ssh,
+                         fail_ok=fail_ok, auth_info=auth_info)
 
 
-def get_projects(field='ID', auth_info=Tenant.get('admin'), con_ssh=None, strict=False, **filters):
+def get_projects(field='ID', auth_info=Tenant.get('admin'), con_ssh=None,
+                 strict=False, **filters):
     """
     Get list of Project names or IDs
     Args:
@@ -345,17 +409,23 @@ def get_projects(field='ID', auth_info=Tenant.get('admin'), con_ssh=None, strict
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.openstack('project list', ssh_client=con_ssh, auth_info=auth_info)[1])
-    return table_parser.get_multi_values(table_, field, strict=strict, **filters)
+    table_ = table_parser.table(
+        cli.openstack('project list', ssh_client=con_ssh, auth_info=auth_info)[
+            1])
+    return table_parser.get_multi_values(table_, field, strict=strict,
+                                         **filters)
 
 
-def create_project(name=None, field='ID', domain=None, parent=None, description=None, enable=None, con_ssh=None,
-                   rtn_exist=None, fail_ok=False, auth_info=Tenant.get('admin'), **properties):
+def create_project(name=None, field='ID', domain=None, parent=None,
+                   description=None, enable=None, con_ssh=None,
+                   rtn_exist=None, fail_ok=False, auth_info=Tenant.get('admin'),
+                   **properties):
     """
     Create a openstack project
     Args:
         name (str|None):
-        field (str): ID or Name. Whether to return project id or name if created successfully
+        field (str): ID or Name. Whether to return project id or name if
+            created successfully
         domain (str|None):
         parent (str|None):
         description (str|None):
@@ -372,7 +442,9 @@ def create_project(name=None, field='ID', domain=None, parent=None, description=
 
     """
     if not name:
-        existing_names = get_projects(field='Name', auth_info=Tenant.get('admin'), con_ssh=con_ssh)
+        existing_names = get_projects(field='Name',
+                                      auth_info=Tenant.get('admin'),
+                                      con_ssh=con_ssh)
         max_count = 0
         end_str = ''
         for name in existing_names:
@@ -380,7 +452,7 @@ def create_project(name=None, field='ID', domain=None, parent=None, description=
             if match:
                 count, end_str = match.groups()
                 max_count = max(int(count), max_count)
-        name = 'tenant{}{}'.format(max_count+1, end_str)
+        name = 'tenant{}{}'.format(max_count + 1, end_str)
 
     LOG.info("Create/Show openstack project {}".format(name))
 
@@ -397,18 +469,22 @@ def create_project(name=None, field='ID', domain=None, parent=None, description=
     arg_str = common.parse_args(args_dict=arg_dict, repeat_arg=True)
     arg_str += ' {}'.format(name)
 
-    code, output = cli.openstack('project create', arg_str, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    code, output = cli.openstack('project create', arg_str, ssh_client=con_ssh,
+                                 fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
-    project_ = table_parser.get_value_two_col_table(table_parser.table(output), field=field)
+    project_ = table_parser.get_value_two_col_table(table_parser.table(output),
+                                                    field=field)
     LOG.info("Project {} successfully created/showed.".format(project_))
 
     return 0, project_
 
 
-def create_user(name=None, field='name', domain=None, project=None, project_domain=None, rtn_exist=None,
-                password=HostLinuxCreds.get_password(), email=None, description=None, enable=None,
+def create_user(name=None, field='name', domain=None, project=None,
+                project_domain=None, rtn_exist=None,
+                password=None, email=None,
+                description=None, enable=None,
                 auth_info=Tenant.get('admin'), fail_ok=False, con_ssh=None):
     """
     Create an openstack user
@@ -432,6 +508,8 @@ def create_user(name=None, field='name', domain=None, project=None, project_doma
         (1, <std_err>)
 
     """
+    if not password:
+        password = HostLinuxUser.get_password()
 
     if not name:
         name = 'user'
@@ -452,11 +530,13 @@ def create_user(name=None, field='name', domain=None, project=None, project_doma
 
     arg_str = '{} {}'.format(common.parse_args(args_dict=arg_dict), name)
 
-    code, output = cli.openstack('user create', arg_str, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    code, output = cli.openstack('user create', arg_str, ssh_client=con_ssh,
+                                 fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return 1, output
 
-    user = table_parser.get_value_two_col_table(table_parser.table(output), field=field)
+    user = table_parser.get_value_two_col_table(table_parser.table(output),
+                                                field=field)
     LOG.info("Openstack user {} successfully created/showed".format(user))
 
     return 0, user

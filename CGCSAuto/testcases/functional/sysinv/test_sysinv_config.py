@@ -46,7 +46,8 @@ def test_system_type():
     Test Steps:
         - Determine the System Type based on whether the system is CPE or not
         - Retrieve the System Type information from SystInv
-        - Compare the types and verify they are the same, fail the test case otherwise
+        - Compare the types and verify they are the same, fail the test case
+        otherwise
 
     Notes:
         - Covers SysInv test-cases:
@@ -106,12 +107,7 @@ class TestRetentionPeriod:
     Test modification of Retention Period of the TiS system
     """
 
-    # PM_SETTING_FILE = '/etc/ceilometer/ceilometer.conf'  # file where the Retention Period is stored
-    PM_SETTING_FILE = '/etc/panko/panko.conf'  # file where the Retention Period is stored
-    # MIN_RETENTION_PERIOD = 3600  # seconds of 1 hour, minimum value allowed
     MAX_RETENTION_PERIOD = 31536000  # seconds of 1 year, maximum value allowed
-    SEARCH_KEY_FOR_RENTION_PERIOD = r'event_time_to_live'
-    retention_period = 0
 
     @fixture(scope='class', autouse=True)
     def restore_retention_period(self, request):
@@ -123,12 +119,14 @@ class TestRetentionPeriod:
 
         """
         LOG.info('Backup Retention Period')
-        TestRetentionPeriod.retention_period = ceilometer_helper.get_retention_period()
-        LOG.info('Current Retention Period is {}'.format(TestRetentionPeriod.retention_period))
+        retention_period = ceilometer_helper.get_retention_period()
+        LOG.info('Current Retention Period is {}'.format(retention_period))
 
         def restore_retention_period():
-            LOG.info('Restore Retention Period to its orignal value {}'.format(TestRetentionPeriod.retention_period))
-            ceilometer_helper.set_retention_period(int(TestRetentionPeriod.retention_period), fail_ok=True)
+            LOG.info('Restore Retention Period to its original value '
+                     '{}'.format(retention_period))
+            ceilometer_helper.set_retention_period(
+                int(retention_period), fail_ok=True)
 
         request.addfinalizer(restore_retention_period)
 
@@ -138,7 +136,8 @@ class TestRetentionPeriod:
             24828899,
             MAX_RETENTION_PERIOD + 1,
         ])
-    def test_modify_ceilometer_event_retention_period(self, new_retention_period):
+    def test_modify_ceilometer_event_retention_period(self,
+                                                      new_retention_period):
         """
         Test change the 'retention period for ceilometer event' to new values.
 
@@ -146,41 +145,29 @@ class TestRetentionPeriod:
             new_retention_period(int):
 
         Test Setups:
-            - Do nothing, and delegate to the class-scope fixture to save the currently in-use Retention Period
+            - Do nothing, and delegate to the class-scope fixture to save the
+            currently in-use Retention Period
 
         Test Steps:
             - Change the Retention Period with CLI
 
         Test Teardown:
-            - Do nothing, and delegate to the class-scope fixture to restore the original value of Retention Period
+            - Do nothing, and delegate to the class-scope fixture to restore
+            the original value of Retention Period
             before test
 
         Notes:
             - Covers SysInv test-case
                 38) Change the retention period via CLI
-            - We can determine the range of accepted values on the running system in stead of parameterizing
+            - We can determine the range of accepted values on the running
+            system in stead of parameterizing
                 on hardcoded values
         """
-        section = 'database'
-        field = 'event_time_to_live'
 
-        LOG.tc_step('Check if the modification attempt will fail based on the input value')
-        # if new_retention_period < self.MIN_RETENTION_PERIOD or new_retention_period > self.MAX_RETENTION_PERIOD:
-        LOG.tc_step('Attempt to change to new value:{}'.format(new_retention_period))
-        ceilometer_helper.set_retention_period(new_retention_period, name=field, check_first=False)
-
-        LOG.tc_step('Wait for {} seconds'.format(SysInvTimeout.RETENTION_PERIOD_SAVED))
-        time.sleep(SysInvTimeout.RETENTION_PERIOD_SAVED)
-
-        LOG.tc_step('Verify new value:{} was set for {}'.format(new_retention_period, field))
-
-        post_settings = kube_helper.get_openstack_configs(conf_file=self.PM_SETTING_FILE, label_app='panko',
-                                                          label_component='api', configs={section: field},
-                                                          fail_ok=False)
-
-        for panko_api_pod, event_ttl in post_settings.items():
-            event_ttl = int(event_ttl.get(section, field).strip())
-            assert new_retention_period == event_ttl, "panko event_time_to_live is not the same as set"
+        LOG.tc_step('Attempt to change to new value:{}'.format(
+            new_retention_period))
+        ceilometer_helper.set_retention_period(new_retention_period,
+                                               check_first=True)
 
 
 @mark.p3
@@ -193,14 +180,17 @@ class TestDnsSettings:
 
     @repeat_checking(repeat_times=10, wait_time=6)
     def wait_for_dns_changed(self, expected_ip_addres):
-        ip_addr_list = expected_ip_addres if expected_ip_addres is not None else []
+        ip_addr_list = expected_ip_addres if expected_ip_addres is not \
+                                             None else []
 
         controller_ssh = ControllerClient.get_active_controller()
 
         cmd_get_saved_dns = 'cat {}'.format(TestDnsSettings.DNS_SETTING_FILE)
-        code, output = controller_ssh.exec_cmd(cmd_get_saved_dns, expect_timeout=20)
+        code, output = controller_ssh.exec_cmd(cmd_get_saved_dns,
+                                               expect_timeout=20)
 
-        assert 0 == code, 'Failed to get saved DNS settings: {}'.format(cmd_get_saved_dns)
+        assert 0 == code, 'Failed to get saved DNS settings: {}'.format(
+            cmd_get_saved_dns)
 
         LOG.info('Find saved DNS servers:\n{}\n'.format(output))
         saved_dns = []
@@ -210,11 +200,13 @@ class TestDnsSettings:
                 if ip and not ip.startswith('192.168'):
                     saved_dns.append(ip)
 
-        LOG.info('Verify all input DNS servers are saved, expecting:{}'.format(expected_ip_addres))
+        LOG.info('Verify all input DNS servers are saved, '
+                 'expecting:{}'.format(expected_ip_addres))
         if set(ip_addr_list).issubset(set(saved_dns)):
             return 0, saved_dns
         else:
-            return 1, 'Saved DNS servers are different from the input DNS servers\nActual:{}\nExpected:{}\n'\
+            return 1, 'Saved DNS servers are different from the input DNS ' \
+                      'servers\nActual:{}\nExpected:{}\n'\
                 .format(saved_dns, ip_addr_list)
 
     @fixture(scope='class', autouse=True)
@@ -227,13 +219,15 @@ class TestDnsSettings:
 
         """
         if ProjVar.get_var('IS_DC'):
-            skip("Distributed Cloud has different procedure for DNS configuration.")
+            skip("Distributed Cloud has different procedure for "
+                 "DNS configuration.")
 
         self.dns_servers = system_helper.get_dns_servers(con_ssh=None)
         LOG.info('Save current DNS-servers:{}'.format(self.dns_servers))
 
         def restore_dns_settings():
-            LOG.info('Restore the DNS-servers to the original:{}'.format(self.dns_servers))
+            LOG.info('Restore the DNS-servers to the '
+                     'original:{}'.format(self.dns_servers))
             system_helper.set_dns_servers(nameservers=self.dns_servers)
 
         request.addfinalizer(restore_dns_settings)
@@ -258,11 +252,12 @@ class TestDnsSettings:
 
 
         Args:
-            - new_dns_servers(list): IP addresses of new DNS servers to change to.
-                Both IPv4 and IPv6 are supported.
+            - new_dns_servers(list): IP addresses of new DNS servers to change
+            to. Both IPv4 and IPv6 are supported.
 
         Test Setups:
-            - Do nothing, and delegate to the class-scope fixture to save the currently in-use DNS servers
+            - Do nothing, and delegate to the class-scope fixture to save the
+            currently in-use DNS servers
 
         Test Steps:
             - Set the new DNS servers via CLI
@@ -270,10 +265,12 @@ class TestDnsSettings:
             - Check the changes are saved to persistent storage
 
         Test Teardown:
-            - Do nothing, and delegate to the class-scope fixture to restore the original DNS servers
+            - Do nothing, and delegate to the class-scope fixture to restore
+            the original DNS servers
 
         Notes:
-            - This TC covers SysInv 5) Change the DNS server IP addresses using CLI
+            - This TC covers SysInv 5) Change the DNS server IP addresses
+            using CLI
         """
 
         LOG.tc_step('Validate the input IPs')

@@ -1,6 +1,13 @@
-####################################################################################
-# DO NOT import anything from helper modules to this module, such as nova_helper   #
-####################################################################################
+#
+# Copyright (c) 2016 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+
+#############################################################
+# DO NOT import anything from helper modules to this module #
+#############################################################
 
 import os
 import re
@@ -10,16 +17,16 @@ from datetime import datetime
 
 import pexpect
 
-from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
-from consts.stx import Prompt
-from consts.filepaths import SYSADMIN_HOME
+from consts.auth import Tenant, TestFileServer, HostLinuxUser
 from consts.proj_vars import ProjVar
 from utils import exceptions
-from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, get_cli_client
+from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, \
+    get_cli_client
 from utils.tis_log import LOG
 
 
-def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None,
+def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None,
+                                          timeout=900, con_ssh=None,
                                           central_region=False):
     if con_ssh is None:
         con_ssh = get_cli_client(central_region=central_region)
@@ -28,28 +35,36 @@ def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None,
 
     if ProjVar.get_var('USER_FILE_DIR') == ProjVar.get_var('TEMP_DIR'):
         LOG.info("Copy file from test server to localhost")
-        source_server = SvcCgcsAuto.SERVER
-        source_user = SvcCgcsAuto.USER
-        source_password = SvcCgcsAuto.PASSWORD
-        dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
+        source_server = TestFileServer.SERVER
+        source_user = TestFileServer.USER
+        source_password = TestFileServer.PASSWORD
+        dest_path = dest_dir if not dest_name else os.path.join(dest_dir,
+                                                                dest_name)
         LOG.info('Check if file already exists on TiS')
         if con_ssh.file_exists(file_path=dest_path):
-            LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
+            LOG.info('dest path {} already exists. Return existing path'.format(
+                dest_path))
             return dest_path
 
         os.makedirs(dest_dir, exist_ok=True)
-        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
-                            dest_path=dest_path, source_pswd=source_password, timeout=timeout)
+        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server,
+                            source_path=source_path,
+                            dest_path=dest_path, source_pswd=source_password,
+                            timeout=timeout)
         return dest_path
     else:
         LOG.info("Copy file from test server to active controller")
-        return scp_from_test_server_to_active_controller(source_path=source_path, dest_dir=dest_dir,
-                                                         dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
+        return scp_from_test_server_to_active_controller(
+            source_path=source_path, dest_dir=dest_dir,
+            dest_name=dest_name, timeout=timeout, con_ssh=con_ssh)
 
 
-def _scp_from_remote_server_to_active_controller(source_server, source_path, dest_dir, dest_name=None,
-                                                 source_user=SvcCgcsAuto.USER, source_password=SvcCgcsAuto.PASSWORD,
-                                                 timeout=900, con_ssh=None, is_dir=False):
+def _scp_from_remote_to_active_controller(source_server, source_path,
+                                          dest_dir, dest_name=None,
+                                          source_user=None,
+                                          source_password=None,
+                                          timeout=900, con_ssh=None,
+                                          is_dir=False):
     """
     SCP file or files under a directory from remote server to TiS server
 
@@ -67,6 +82,11 @@ def _scp_from_remote_server_to_active_controller(source_server, source_path, des
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
+    if not source_user:
+        source_user = TestFileServer.USER
+    if not source_password:
+        source_password = TestFileServer.PASSWORD
+
     if dest_name is None and not is_dir:
         dest_name = source_path.split(sep='/')[-1]
 
@@ -74,7 +94,8 @@ def _scp_from_remote_server_to_active_controller(source_server, source_path, des
 
     LOG.info('Check if file already exists on TiS')
     if not is_dir and con_ssh.file_exists(file_path=dest_path):
-        LOG.info('dest path {} already exists. Return existing path'.format(dest_path))
+        LOG.info('dest path {} already exists. Return existing path'.format(
+            dest_path))
         return dest_path
 
     LOG.info('Create destination directory on tis server if not already exists')
@@ -84,34 +105,46 @@ def _scp_from_remote_server_to_active_controller(source_server, source_path, des
     nat_name = ProjVar.get_var('NATBOX')
     if nat_name:
         nat_name = nat_name.get('name')
-    if nat_name and (nat_name == 'localhost' or nat_name.startswith('128.224.')):
+    if nat_name and (
+            nat_name == 'localhost' or nat_name.startswith('128.224.')):
         LOG.info('VBox detected, performing intermediate scp')
 
         nat_dest_path = '/tmp/{}'.format(dest_name)
         nat_ssh = NATBoxClient.get_natbox_client()
 
         if not nat_ssh.file_exists(nat_dest_path):
-            LOG.info("scp file from {} to NatBox: {}".format(nat_name, source_server))
-            nat_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
-                                dest_path=nat_dest_path, source_pswd=source_password, timeout=timeout,
+            LOG.info("scp file from {} to NatBox: {}".format(nat_name,
+                                                             source_server))
+            nat_ssh.scp_on_dest(source_user=source_user,
+                                source_ip=source_server,
+                                source_path=source_path,
+                                dest_path=nat_dest_path,
+                                source_pswd=source_password, timeout=timeout,
                                 is_dir=is_dir)
 
-        LOG.info('scp file from natbox {} to active controller'.format(nat_name))
-        dest_user = HostLinuxCreds.get_user()
-        dest_pswd = HostLinuxCreds.get_password()
+        LOG.info(
+            'scp file from natbox {} to active controller'.format(nat_name))
+        dest_user = HostLinuxUser.get_user()
+        dest_pswd = HostLinuxUser.get_password()
         dest_ip = ProjVar.get_var('LAB').get('floating ip')
-        nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user, dest_ip=dest_ip, dest_path=dest_path,
-                              dest_password=dest_pswd, timeout=timeout, is_dir=is_dir)
+        nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user,
+                              dest_ip=dest_ip, dest_path=dest_path,
+                              dest_password=dest_pswd, timeout=timeout,
+                              is_dir=is_dir)
 
-    else:   # if not a VBox lab, scp from remote server directly to TiS server
+    else:  # if not a VBox lab, scp from remote server directly to TiS server
         LOG.info("scp file(s) from {} to tis".format(source_server))
-        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server, source_path=source_path,
-                            dest_path=dest_path, source_pswd=source_password, timeout=timeout, is_dir=is_dir)
+        con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server,
+                            source_path=source_path,
+                            dest_path=dest_path, source_pswd=source_password,
+                            timeout=timeout, is_dir=is_dir)
 
     return dest_path
 
 
-def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=None, timeout=900, con_ssh=None,
+def scp_from_test_server_to_active_controller(source_path, dest_dir,
+                                              dest_name=None, timeout=900,
+                                              con_ssh=None,
                                               is_dir=False):
     """
     SCP file or files under a directory from test server to TiS server
@@ -127,27 +160,29 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir, dest_name=N
     Returns (str|None): destination file/dir path if scp successful else None
 
     """
-    if con_ssh is None:
+    if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    source_server = SvcCgcsAuto.SERVER
-    source_user = SvcCgcsAuto.USER
-    source_password = SvcCgcsAuto.PASSWORD
+    source_server = TestFileServer.SERVER
+    source_user = TestFileServer.USER
+    source_password = TestFileServer.PASSWORD
 
-    return _scp_from_remote_server_to_active_controller(source_server=source_server,
-                                                        source_path=source_path,
-                                                        dest_dir=dest_dir,
-                                                        dest_name=dest_name,
-                                                        source_user=source_user,
-                                                        source_password=source_password,
-                                                        timeout=timeout,
-                                                        con_ssh=con_ssh,
-                                                        is_dir=is_dir)
+    return _scp_from_remote_to_active_controller(
+        source_server=source_server,
+        source_path=source_path,
+        dest_dir=dest_dir,
+        dest_name=dest_name,
+        source_user=source_user,
+        source_password=source_password,
+        timeout=timeout,
+        con_ssh=con_ssh,
+        is_dir=is_dir)
 
 
-def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=None, timeout=900, is_dir=False,
+def scp_from_active_controller_to_test_server(source_path, dest_dir,
+                                              dest_name=None, timeout=900,
+                                              is_dir=False,
                                               con_ssh=None):
-
     """
     SCP file or files under a directory from test server to TiS server
 
@@ -165,39 +200,24 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir, dest_name=N
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    dir_option = '-r ' if is_dir else ''
-    dest_server = SvcCgcsAuto.SERVER
-    dest_user = SvcCgcsAuto.USER
-    dest_password = SvcCgcsAuto.PASSWORD
+    dest_server = TestFileServer.SERVER
+    dest_user = TestFileServer.USER
+    dest_password = TestFileServer.PASSWORD
 
     dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
 
-    scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}@{}:{}'.format(
-        dir_option, source_path, dest_user, dest_server, dest_path)
-
     LOG.info("scp file(s) from tis server to test server")
-    con_ssh.send(scp_cmd)
-    index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=timeout)
-    if index == 2:
-        con_ssh.send('yes')
-        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT], timeout=timeout)
-    if index == 1:
-        con_ssh.send(dest_password)
-        index = con_ssh.expect(timeout=timeout)
-
-    assert index == 0, "Failed to scp files"
-
-    exit_code = con_ssh.get_exit_code()
-    assert 0 == exit_code, "scp not fully succeeded"
+    con_ssh.scp_on_source(source_path=source_path, dest_user=dest_user,
+                          dest_password=dest_password, dest_path=dest_path,
+                          timeout=timeout, is_dir=is_dir, dest_ip=dest_server)
 
     return dest_path
 
 
-def scp_from_localhost_to_active_controller(source_path, dest_path='',
-                                            dest_user=HostLinuxCreds.get_user(),
-                                            dest_password=HostLinuxCreds.get_password(),
+def scp_from_localhost_to_active_controller(source_path, dest_path,
+                                            dest_user=None,
+                                            dest_password=None,
                                             timeout=900, is_dir=False):
-
     active_cont_ip = ControllerClient.get_active_controller().host
 
     return scp_from_local(source_path, active_cont_ip, dest_path=dest_path,
@@ -205,23 +225,29 @@ def scp_from_localhost_to_active_controller(source_path, dest_path='',
                           timeout=timeout, is_dir=is_dir)
 
 
-def scp_from_active_controller_to_localhost(source_path, dest_path='',
-                                            src_user=HostLinuxCreds.get_user(),
-                                            src_password=HostLinuxCreds.get_password(),
+def scp_from_active_controller_to_localhost(source_path, dest_path,
+                                            src_user=None,
+                                            src_password=None,
                                             timeout=900, is_dir=False):
-
     active_cont_ip = ControllerClient.get_active_controller().host
 
-    return scp_to_local(source_path=source_path, source_ip=active_cont_ip, dest_path=dest_path,
+    if not src_user:
+        src_user = HostLinuxUser.get_user()
+    if not src_password:
+        src_password = HostLinuxUser.get_password()
+
+    return scp_to_local(source_path=source_path, source_server=active_cont_ip,
+                        dest_path=dest_path,
                         source_user=src_user, source_password=src_password,
                         timeout=timeout, is_dir=is_dir)
 
 
-def scp_from_local(source_path, dest_ip, dest_path=SYSADMIN_HOME,
-                   dest_user=HostLinuxCreds.get_user(), dest_password=HostLinuxCreds.get_password(),
+def scp_from_local(source_path, dest_ip, dest_path=None,
+                   dest_user=None, dest_password=None,
                    timeout=900, is_dir=False):
     """
-    Scp file(s) from localhost (i.e., from where the automated tests are executed).
+    Scp file(s) from localhost (i.e., from where the automated tests are
+    executed).
 
     Args:
         source_path (str): source file/directory path
@@ -233,23 +259,32 @@ def scp_from_local(source_path, dest_ip, dest_path=SYSADMIN_HOME,
         is_dir (bool): whether to copy a single file or a directory
 
     """
+    if not dest_path:
+        dest_path = HostLinuxUser.get_home()
+    if not dest_user:
+        dest_user = HostLinuxUser.get_user()
+    if not dest_password:
+        dest_password = HostLinuxUser.get_password()
+
     dir_option = '-r ' if is_dir else ''
 
-    cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{} {}@{}:{}'.format(
-            dir_option, source_path, dest_user, dest_ip, dest_path)
+    cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ' \
+          '{}{} {}@{}:{}'.\
+        format(dir_option, source_path, dest_user, dest_ip, dest_path)
 
-    _scp_base(cmd, remote_password=dest_password, timeout=timeout)
+    _scp_on_local(cmd, remote_password=dest_password, timeout=timeout)
 
 
-def scp_to_local(source_path=None, source_ip=None, dest_path=SYSADMIN_HOME,
-                 source_user=HostLinuxCreds.get_user(), source_password=HostLinuxCreds.get_password(),
+def scp_to_local(dest_path, source_path, source_server=None,
+                 source_user=None,
+                 source_password=None,
                  timeout=900, is_dir=False):
     """
     Scp file(s) to localhost (i.e., to where the automated tests are executed).
 
     Args:
         source_path (str): source file/directory path
-        source_ip (str): ip of the source host.
+        source_server (str): ip of the source host.
         source_user (str): username of source host.
         source_password (str): password of source host
         dest_path (str): destination directory path to copy the file(s) to
@@ -257,17 +292,20 @@ def scp_to_local(source_path=None, source_ip=None, dest_path=SYSADMIN_HOME,
         is_dir (bool): whether to copy a single file or a directory
 
     """
-    if not source_path or not source_ip:
-        return
+    if not source_user:
+        source_user = HostLinuxUser.get_user()
+    if not source_password:
+        source_password = HostLinuxUser.get_password()
 
     dir_option = '-r ' if is_dir else ''
-    cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {}{}@{}:{} {}'.format(
-            dir_option, source_user, source_ip, source_path, dest_path)
+    cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ' \
+          '{}{}@{}:{} {}'.\
+        format(dir_option, source_user, source_server, source_path, dest_path)
 
-    _scp_base(cmd, remote_password=source_password, timeout=timeout)
+    _scp_on_local(cmd, remote_password=source_password, timeout=timeout)
 
 
-def _scp_base(cmd, remote_password, logdir=None, timeout=900):
+def _scp_on_local(cmd, remote_password, logdir=None, timeout=900):
     LOG.debug('scp cmd: {}'.format(cmd))
 
     logdir = logdir or ProjVar.get_var('LOG_DIR')
@@ -275,11 +313,13 @@ def _scp_base(cmd, remote_password, logdir=None, timeout=900):
 
     with open(logfile, mode='a') as f:
         local_child = pexpect.spawn(command=cmd, encoding='utf-8', logfile=f)
-        index = local_child.expect([pexpect.EOF, 'assword:', 'yes/no'], timeout=timeout)
+        index = local_child.expect([pexpect.EOF, 'assword:', 'yes/no'],
+                                   timeout=timeout)
 
         if index == 2:
             local_child.sendline('yes')
-            index = local_child.expect([pexpect.EOF, 'assword:'], timeout=timeout)
+            index = local_child.expect([pexpect.EOF, 'assword:'],
+                                       timeout=timeout)
 
         if index == 1:
             local_child.sendline(remote_password)
@@ -288,7 +328,8 @@ def _scp_base(cmd, remote_password, logdir=None, timeout=900):
 
 def get_tenant_name(auth_info=None):
     """
-    Get name of given tenant. If None is given, primary tenant name will be returned.
+    Get name of given tenant. If None is given, primary tenant name will be
+    returned.
 
     Args:
         auth_info (dict|None): Tenant dict
@@ -390,23 +431,28 @@ def get_unique_name(name_str, existing_names=None, resource_type='other'):
     """
     valid_types = NameCount.get_valid_types()
     if resource_type not in valid_types:
-        raise ValueError("Invalid resource_type provided. Valid types: {}".format(valid_types))
+        raise ValueError(
+            "Invalid resource_type provided. Valid types: {}".format(
+                valid_types))
 
     if existing_names:
         if resource_type in ['image', 'volume', 'flavor']:
             unique_name = name_str
         else:
-            unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
+            unique_name = "{}-{}".format(name_str, NameCount.get_number(
+                resource_type=resource_type))
 
         for i in range(50):
             if unique_name not in existing_names:
                 return unique_name
 
-            unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
+            unique_name = "{}-{}".format(name_str, NameCount.get_number(
+                resource_type=resource_type))
         else:
             raise LookupError("Cannot find unique name.")
     else:
-        unique_name = "{}-{}".format(name_str, NameCount.get_number(resource_type=resource_type))
+        unique_name = "{}-{}".format(name_str, NameCount.get_number(
+            resource_type=resource_type))
 
     return unique_name
 
@@ -477,7 +523,8 @@ def _execute_with_openstack_cli():
     return ProjVar.get_var('OPENSTACK_CLI')
 
 
-def wait_for_val_from_func(expt_val, timeout, check_interval, func, *args, **kwargs):
+def wait_for_val_from_func(expt_val, timeout, check_interval, func, *args,
+                           **kwargs):
     end_time = time.time() + timeout
     current_val = None
     while time.time() < end_time:
@@ -494,14 +541,16 @@ def wait_for_val_from_func(expt_val, timeout, check_interval, func, *args, **kwa
     return False, current_val
 
 
-def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=60, time_to_stay=1, check_interval=1,
+def wait_for_process(ssh_client, process, sudo=False, disappear=False,
+                     timeout=60, time_to_stay=1, check_interval=1,
                      fail_ok=True):
     """
     Wait for given process to appear or disappear
 
     Args:
         ssh_client (SSH_Client):
-        process (str): unique identification of process, such as pid, or unique proc name
+        process (str): unique identification of process, such as pid, or
+            unique proc name
         sudo (bool)
         disappear (bool): whether to wait for proc appear or disappear
         timeout (int): max wait time
@@ -515,9 +564,10 @@ def wait_for_process(ssh_client, process, sudo=False, disappear=False, timeout=6
     cmd = 'ps aux | grep --color=never {} | grep -v grep'.format(process)
     # msg_str = 'disappear' if disappear else 'appear'
 
-    res = ssh_client.wait_for_cmd_output_persists(cmd, process, timeout=timeout, time_to_stay=time_to_stay,
-                                                  strict=False, regex=False, check_interval=check_interval,
-                                                  exclude=disappear, non_zero_rtn_ok=True, sudo=sudo, fail_ok=fail_ok)
+    res = ssh_client.wait_for_cmd_output_persists(
+        cmd, process, timeout=timeout, time_to_stay=time_to_stay,
+        strict=False, regex=False, check_interval=check_interval,
+        exclude=disappear, non_zero_rtn_ok=True, sudo=sudo, fail_ok=fail_ok)
 
     return res
 
@@ -534,7 +584,8 @@ def get_date_in_format(ssh_client=None, date_format="%Y%m%d %T"):
     """
     if ssh_client is None:
         ssh_client = ControllerClient.get_active_controller()
-    return ssh_client.exec_cmd("date +'{}'".format(date_format), fail_ok=False)[1]
+    return ssh_client.exec_cmd("date +'{}'".format(date_format),
+                               fail_ok=False)[1]
 
 
 def write_to_file(file_path, content, mode='a'):
@@ -550,7 +601,9 @@ def write_to_file(file_path, content, mode='a'):
     """
     time_stamp = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
     with open(file_path, mode=mode) as f:
-        f.write('\n-----------------[{}]-----------------\n{}\n'.format(time_stamp, content))
+        f.write(
+            '\n-----------------[{}]-----------------\n{}\n'.format(time_stamp,
+                                                                    content))
 
 
 def collect_software_logs(con_ssh=None):
@@ -560,21 +613,26 @@ def collect_software_logs(con_ssh=None):
     con_ssh.exec_cmd('source /etc/platform/openrc', get_exit_code=False)
     con_ssh.send('collect all')
 
-    expect_list = ['.*password for sysadmin:', 'collecting data.', con_ssh.prompt]
+    expect_list = ['.*password for .*:', 'collecting data.',
+                   con_ssh.prompt]
     index_1 = con_ssh.expect(expect_list, timeout=20)
     if index_1 == 2:
-        LOG.error("Something is wrong with collect all. Check ssh console log for detail.")
+        LOG.error(
+            "Something is wrong with collect all. Check ssh console log for "
+            "detail.")
         return
     elif index_1 == 0:
         con_ssh.send(con_ssh.password)
         con_ssh.expect('collecting data')
 
-    index_2 = con_ssh.expect(['/scratch/ALL_NODES.*', con_ssh.prompt], timeout=1200)
+    index_2 = con_ssh.expect(['/scratch/ALL_NODES.*', con_ssh.prompt],
+                             timeout=1200)
     if index_2 == 0:
         output = con_ssh.cmd_output
         con_ssh.expect()
         logpath = re.findall('.*(/scratch/ALL_NODES_.*.tar).*', output)[0]
-        LOG.info("\n################### TiS server log path: {}".format(logpath))
+        LOG.info(
+            "\n################### TiS server log path: {}".format(logpath))
     else:
         LOG.error("Collecting logs failed. No ALL_NODES logs found.")
         return
@@ -582,9 +640,13 @@ def collect_software_logs(con_ssh=None):
     lab_ip = ProjVar.get_var('LAB')['floating ip']
     dest_path = ProjVar.get_var('LOG_DIR')
     try:
-        LOG.info("Copying log file from lab {} to local {}".format(lab_ip, dest_path))
-        scp_to_local(source_path=logpath, source_ip=lab_ip, dest_path=dest_path, timeout=300)
-        LOG.info("{} is successfully copied to local directory: {}".format(logpath, dest_path))
+        LOG.info("Copying log file from lab {} to local {}".format(lab_ip,
+                                                                   dest_path))
+        scp_to_local(source_path=logpath, source_server=lab_ip,
+                     dest_path=dest_path,
+                     timeout=300)
+        LOG.info("{} is successfully copied to local directory: {}".format(
+            logpath, dest_path))
     except Exception as e:
         LOG.warning("Failed to copy log file to localhost.")
         LOG.error(e, exc_info=True)
@@ -596,8 +658,10 @@ def parse_args(args_dict, repeat_arg=False, vals_sep=' '):
     Args:
         args_dict (dict): key/value pairs
         repeat_arg: if value is tuple, list, dict, should the arg be repeated.
-            e.g., True for --nic in nova boot. False for -m in gnocchi measures aggregation
-        vals_sep (str): separator to join multiple vals. Only applicable when repeat_arg=False.
+            e.g., True for --nic in nova boot. False for -m in gnocchi
+            measures aggregation
+        vals_sep (str): separator to join multiple vals. Only applicable when
+        repeat_arg=False.
 
     Returns (str):
 
@@ -609,7 +673,8 @@ def parse_args(args_dict, repeat_arg=False, vals_sep=' '):
                 v = '"{}"'.format(v)
             vals_.append('{}={}'.format(k, v))
         if repeat_key:
-            args_str = ' ' + ' '.join(['{} {}'.format(key__, v_) for v_ in vals_])
+            args_str = ' ' + ' '.join(
+                ['{} {}'.format(key__, v_) for v_ in vals_])
         else:
             args_str = ' {} {}'.format(key__, vals_sep.join(vals_))
         return args_str
@@ -630,24 +695,28 @@ def parse_args(args_dict, repeat_arg=False, vals_sep=' '):
         elif isinstance(val, (int, float)):
             args += ' {}={}'.format(key, val)
         elif isinstance(val, dict):
-            args += convert_val_dict(key__=key, vals_dict=val, repeat_key=repeat_arg)
+            args += convert_val_dict(key__=key, vals_dict=val,
+                                     repeat_key=repeat_arg)
         elif isinstance(val, (list, tuple)):
             if repeat_arg:
                 for val_ in val:
                     if isinstance(val_, dict):
-                        args += convert_val_dict(key__=key, vals_dict=val_, repeat_key=False)
+                        args += convert_val_dict(key__=key, vals_dict=val_,
+                                                 repeat_key=False)
                     else:
                         args += ' {}={}'.format(key, val_)
             else:
                 args += ' {}={}'.format(key, vals_sep.join(val))
         else:
-            raise ValueError("Unrecognized value type. Key: {}; value: {}".format(key, val))
+            raise ValueError(
+                "Unrecognized value type. Key: {}; value: {}".format(key, val))
 
     return args.strip()
 
 
 def get_symlink(ssh_client, file_path):
-    code, output = ssh_client.exec_cmd('ls -l {} | grep --color=never ""'.format(file_path))
+    code, output = ssh_client.exec_cmd(
+        'ls -l {} | grep --color=never ""'.format(file_path))
     if code != 0:
         LOG.warning('{} not found!'.format(file_path))
         return None
@@ -676,15 +745,18 @@ def lab_time_now(con_ssh=None, date_format='%Y-%m-%dT%H:%M:%S'):
         con_ssh = ControllerClient.get_active_controller()
 
     date_cmd_format = date_format + '.%N'
-    timestamp = get_date_in_format(ssh_client=con_ssh, date_format=date_cmd_format)
-    with_milliseconds = timestamp.split('.')[0] + '.{}'.format(int(int(timestamp.split('.')[1]) / 1000))
+    timestamp = get_date_in_format(ssh_client=con_ssh,
+                                   date_format=date_cmd_format)
+    with_milliseconds = timestamp.split('.')[0] + '.{}'.format(
+        int(int(timestamp.split('.')[1]) / 1000))
     format1 = date_format + '.%f'
     parsed = datetime.strptime(with_milliseconds, format1)
 
     return with_milliseconds.split('.')[0], parsed
 
 
-def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=True, top_down=False, sudo=False,
+def search_log(file_path, ssh_client, pattern, extended_regex=False,
+               get_all=True, top_down=False, sudo=False,
                start_time=None):
 
     prefix_space = False
@@ -693,13 +765,16 @@ def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=Tru
         prefix_space = True
         sudo = True
 
-    # Reformat the timestamp to add or remove T based on the actual format in specified log
+    # Reformat the timestamp to add or remove T based on the actual format
+    # in specified log
     if start_time:
         tmp_cmd = """zgrep -m 1 "" {} | awk '{{print $1}}'""".format(file_path)
         if sudo:
-            tmp_time = ssh_client.exec_sudo_cmd(tmp_cmd, fail_ok=False, prefix_space=prefix_space)[1]
+            tmp_time = ssh_client.exec_sudo_cmd(tmp_cmd, fail_ok=False,
+                                                prefix_space=prefix_space)[1]
         else:
-            tmp_time = ssh_client.exec_cmd(tmp_cmd, fail_ok=False, prefix_space=prefix_space)[1]
+            tmp_time = ssh_client.exec_cmd(tmp_cmd, fail_ok=False,
+                                           prefix_space=prefix_space)[1]
 
         if re.search(r'\dT\d', tmp_time):
             start_time = start_time.strip().replace(' ', 'T')
@@ -707,22 +782,26 @@ def search_log(file_path, ssh_client, pattern, extended_regex=False, get_all=Tru
             start_time = start_time.strip().replace('T', ' ')
 
     # Compose the zgrep cmd to search the log
-    init_filter = """| awk '$0 > "{}"'""".format(start_time) if start_time else ''
+    init_filter = """| awk '$0 > "{}"'""".format(start_time) if start_time \
+        else ''
     count = '' if get_all else '|grep --color=never -m 1 ""'
     extended_regex = '-E ' if extended_regex else ''
     base_cmd = '' if top_down else '|tac'
-    cmd = 'zgrep --color=never {}"{}" {}|grep -v grep{}{}{}'.format(extended_regex, pattern, file_path, init_filter,
-                                                                    base_cmd, count)
+    cmd = 'zgrep --color=never {}"{}" {}|grep -v grep{}{}{}'.\
+        format(extended_regex, pattern, file_path, init_filter, base_cmd, count)
     if sudo:
-        out = ssh_client.exec_sudo_cmd(cmd, fail_ok=True, prefix_space=prefix_space)[1]
+        out = ssh_client.exec_sudo_cmd(cmd, fail_ok=True,
+                                       prefix_space=prefix_space)[1]
     else:
-        out = ssh_client.exec_cmd(cmd, fail_ok=True, prefix_space=prefix_space)[1]
+        out = ssh_client.exec_cmd(cmd, fail_ok=True,
+                                  prefix_space=prefix_space)[1]
 
     return out
 
 
 @contextmanager
-def ssh_to_remote_node(host, username=None, password=None, prompt=None, ssh_client=None, use_telnet=False,
+def ssh_to_remote_node(host, username=None, password=None, prompt=None,
+                       ssh_client=None, use_telnet=False,
                        telnet_session=None):
     """
     ssh to a external node from sshclient.
@@ -743,10 +822,12 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None, ssh_clie
 \    """
 
     if not host:
-        raise exceptions.SSHException("Remote node hostname or ip address must be provided")
+        raise exceptions.SSHException(
+            "Remote node hostname or ip address must be provided")
 
     if use_telnet and not telnet_session:
-        raise exceptions.SSHException("Telnet session cannot be none if using telnet.")
+        raise exceptions.SSHException(
+            "Telnet session cannot be none if using telnet.")
 
     if not ssh_client and not use_telnet:
         ssh_client = ControllerClient.get_active_controller()
@@ -755,8 +836,8 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None, ssh_clie
         from keywords.security_helper import LinuxUser
         default_user, default_password = LinuxUser.get_current_user_password()
     else:
-        default_user = HostLinuxCreds.get_user()
-        default_password = HostLinuxCreds.get_password()
+        default_user = HostLinuxUser.get_user()
+        default_password = HostLinuxUser.get_password()
 
     user = username if username else default_user
     password = password if password else default_password
@@ -768,11 +849,13 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None, ssh_clie
     if not prompt:
         prompt = '.*' + host + r'\:~\$'
 
-    remote_ssh = SSHClient(host, user=user, password=password, initial_prompt=prompt)
+    remote_ssh = SSHClient(host, user=user, password=password,
+                           initial_prompt=prompt)
     remote_ssh.connect()
     current_host = remote_ssh.host
     if not current_host == host:
-        raise exceptions.SSHException("Current host is {} instead of {}".format(current_host, host))
+        raise exceptions.SSHException(
+            "Current host is {} instead of {}".format(current_host, host))
     try:
         yield remote_ssh
     finally:

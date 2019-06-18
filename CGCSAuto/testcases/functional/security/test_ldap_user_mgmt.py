@@ -9,7 +9,7 @@ from utils.clients.ssh import ControllerClient
 from utils import node, cli
 from consts.proj_vars import ProjVar
 from consts.stx import Prompt
-from consts.filepaths import SYSADMIN_HOME
+from consts.auth import HostLinuxUser
 from keywords import security_helper, system_helper
 
 
@@ -419,9 +419,11 @@ def _test_telnet_ldap_admin_access(user_name):
         LOG.tc_step("Telnet to lab as {} user with password {}".format(user_name, password))
         telnet.login(expect_prompt_timeout=30, handle_init_login=True)
 
-        code, output = telnet.exec_cmd('ls {}'.format(SYSADMIN_HOME), fail_ok=False)
+        code, output = telnet.exec_cmd('ls {}'.format(HostLinuxUser.get_home()), fail_ok=False)
         LOG.info('output from test {}'.format(output))
-        assert '*** forbidden' not in output, 'not able to ls to /home/sysadmin as admin user'
+        assert '*** forbidden' not in output, \
+            'not able to ls to {} as admin user'.format(
+                HostLinuxUser.get_home())
     finally:
         telnet.send('exit')
         telnet.close()

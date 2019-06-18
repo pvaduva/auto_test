@@ -4,14 +4,14 @@ import pexpect
 from pexpect import pxssh
 from pytest import fail
 
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxUser
 from utils.clients import ssh
 from utils.clients.ssh import SSHClient
 from utils.clients.ssh import SSHFromSSH
 from utils.tis_log import LOG
 
-username = HostLinuxCreds.get_user()
-password = HostLinuxCreds.get_password()
+username = HostLinuxUser.get_user()
+password = HostLinuxUser.get_password()
 hostname = '10.10.10.3'
 #hostname = '128.224.150.73'
 # hostname = 'yow-cgcs-ironpass-1.wrs.com'

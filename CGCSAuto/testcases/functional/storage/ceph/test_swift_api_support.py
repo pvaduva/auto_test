@@ -6,7 +6,7 @@ import time
 
 from pytest import mark, fixture, skip
 
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxUser
 from consts.stx import GuestImages, BackendState, BackendTask, EventLogID
 from consts.proj_vars import ProjVar
 from consts.timeout import VMTimeout
@@ -36,7 +36,6 @@ def get_ceph_backend_info():
         return None
 
 
-@mark.usefixtures('ceph_precheck')
 @fixture(scope='module', autouse=True)
 def ceph_backend_installed():
     ceph_info = get_ceph_backend_info()
@@ -285,7 +284,8 @@ def test_swift_cli_interaction(tc, pre_swift_check):
     if tc == 'large':
         test_objects_info = get_large_img_file()
         if not test_objects_info:
-            skip("Not enough space in /home/sysadmin for 8G large file")
+            skip("Not enough space in {} for 8G large file".format(
+                HostLinuxUser.get_home()))
     else:
         test_objects_info = get_test_obj_file_names()
 
@@ -884,8 +884,8 @@ def delete_object_file(object_path, rm_dir=False, client=None):
 
     if not ProjVar.get_var('REMOTE_CLI'):
         standby_controller = system_helper.get_standby_controller_name()
-        with host_helper.ssh_to_host(standby_controller, username=HostLinuxCreds.get_user(),
-                                     password=HostLinuxCreds.get_password()) as standby_ssh:
+        with host_helper.ssh_to_host(standby_controller, username=HostLinuxUser.get_user(),
+                                     password=HostLinuxUser.get_password()) as standby_ssh:
             _delete_on_client(client_=standby_ssh)
 
     return True

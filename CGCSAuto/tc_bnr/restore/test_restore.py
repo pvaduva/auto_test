@@ -4,11 +4,12 @@ import time
 
 import pytest
 
-from consts.auth import SvcCgcsAuto, HostLinuxCreds, Tenant
+from consts.auth import TestFileServer, HostLinuxUser, Tenant
 from consts.build_server import Server, get_build_server_info
-from consts.stx import HostAvailState, HostOperState, HostAdminState, Prompt, IMAGE_BACKUP_FILE_PATTERN, \
+from consts.stx import HostAvailState, HostOperState, HostAdminState, \
+    Prompt, IMAGE_BACKUP_FILE_PATTERN, \
     TIS_BLD_DIR_REGEX, TITANIUM_BACKUP_FILE_PATTERN, BackupRestore
-from consts.filepaths import TiSPath, BuildServerPath, SYSADMIN_HOME
+from consts.filepaths import StxPath, BuildServerPath
 from consts.proj_vars import InstallVars, RestoreVars, ProjVar
 from consts.timeout import HostTimeout
 from setups import collect_tis_logs
@@ -158,13 +159,13 @@ def pre_restore_checkup():
                      "USB will be checked after controller boot ....")
     else:
         test_server_attr = dict()
-        test_server_attr['name'] = SvcCgcsAuto.HOSTNAME.split('.')[0]
-        test_server_attr['server_ip'] = SvcCgcsAuto.SERVER
+        test_server_attr['name'] = TestFileServer.HOSTNAME.split('.')[0]
+        test_server_attr['server_ip'] = TestFileServer.SERVER
         test_server_attr['prompt'] = r'\[{}@{} {}\]\$ ' \
-            .format(SvcCgcsAuto.USER, test_server_attr['name'], SvcCgcsAuto.USER)
+            .format(TestFileServer.USER, test_server_attr['name'], TestFileServer.USER)
 
-        test_server_conn = install_helper.establish_ssh_connection(test_server_attr['name'], user=SvcCgcsAuto.USER,
-                                                                   password=SvcCgcsAuto.PASSWORD,
+        test_server_conn = install_helper.establish_ssh_connection(test_server_attr['name'], user=TestFileServer.USER,
+                                                                   password=TestFileServer.PASSWORD,
                                                                    initial_prompt=test_server_attr['prompt'])
 
         test_server_conn.set_prompt(test_server_attr['prompt'])
@@ -263,10 +264,10 @@ def restore_setup(pre_restore_checkup):
         bld_server_attr = dict()
         bld_server_attr['name'] = bld_server['name']
         bld_server_attr['server_ip'] = bld_server['ip']
-        bld_server_attr['prompt'] = r'{}@{}\:(.*)\$ '.format(SvcCgcsAuto.USER, bld_server['name'])
+        bld_server_attr['prompt'] = r'{}@{}\:(.*)\$ '.format(TestFileServer.USER, bld_server['name'])
 
-        bld_server_conn = install_helper.establish_ssh_connection(bld_server_attr['name'], user=SvcCgcsAuto.USER,
-                                                                  password=SvcCgcsAuto.PASSWORD,
+        bld_server_conn = install_helper.establish_ssh_connection(bld_server_attr['name'], user=TestFileServer.USER,
+                                                                  password=TestFileServer.PASSWORD,
                                                                   initial_prompt=bld_server_attr['prompt'])
 
         bld_server_conn.exec_cmd("bash")
@@ -321,14 +322,14 @@ def restore_setup(pre_restore_checkup):
     backup_src = RestoreVars.get_restore_var('backup_src'.upper())
     backup_src_path = RestoreVars.get_restore_var('backup_src_path'.upper())
     if backup_src.lower() == 'local':
-        LOG.fixture_step("Transferring system backup file to controller-0 {} ... ".format(SYSADMIN_HOME))
+        LOG.fixture_step("Transferring system backup file to controller-0 {} ... ".format(HostLinuxUser.get_home()))
 
         system_backup_file = [file for file in tis_backup_files if "system.tgz" in file].pop()
         common.scp_from_test_server_to_active_controller("{}/{}".format(backup_src_path, system_backup_file),
-                                                         SYSADMIN_HOME)
+                                                         HostLinuxUser.get_home())
 
-        assert con_ssh.exec_cmd("ls {}{}".format(SYSADMIN_HOME, system_backup_file))[0] == 0, \
-            "Missing backup file {} in dir {}".format(system_backup_file, SYSADMIN_HOME)
+        assert con_ssh.exec_cmd("ls {}{}".format(HostLinuxUser.get_home(), system_backup_file))[0] == 0, \
+            "Missing backup file {} in dir {}".format(system_backup_file, HostLinuxUser.get_home())
 
     elif backup_src.lower() == 'usb':
         tis_backup_files = pre_restore_checkup
@@ -704,7 +705,7 @@ def test_restore(restore_setup):
     if backup_src.lower() == 'usb':
         system_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, system_backup_file)
     else:
-        system_backup_path = "{}{}".format(SYSADMIN_HOME, system_backup_file)
+        system_backup_path = "{}{}".format(HostLinuxUser.get_home(), system_backup_file)
 
     compute_configured = install_helper.restore_controller_system_config(
         system_backup=system_backup_path,
@@ -727,9 +728,9 @@ def test_restore(restore_setup):
     make_sure_all_hosts_locked(con_ssh)
 
     if backup_src.lower() == 'local':
-        images_backup_path = "{}{}".format(SYSADMIN_HOME, images_backup_file)
+        images_backup_path = "{}{}".format(HostLinuxUser.get_home(), images_backup_file)
         common.scp_from_test_server_to_active_controller("{}/{}".format(backup_src_path, images_backup_file),
-                                                         SYSADMIN_HOME)
+                                                         HostLinuxUser.get_home())
     else:
         images_backup_path = "{}/{}".format(BackupRestore.USB_BACKUP_PATH, images_backup_file)
 
@@ -778,25 +779,25 @@ def test_restore(restore_setup):
 
         # transfer all backup files to /opt/backups from test server
         with con_ssh.login_as_root():
-            con_ssh.scp_on_dest(source_user=SvcCgcsAuto.USER, source_ip=SvcCgcsAuto.SERVER,
-                                source_pswd=SvcCgcsAuto.PASSWORD, source_path=backup_src_path + "/*",
-                                dest_path=TiSPath.BACKUPS + '/', timeout=1200)
+            con_ssh.scp_on_dest(source_user=TestFileServer.USER, source_ip=TestFileServer.SERVER,
+                                source_pswd=TestFileServer.PASSWORD, source_path=backup_src_path + "/*",
+                                dest_path=StxPath.BACKUPS + '/', timeout=1200)
 
     else:
         # copy all backupfiles from USB to /opt/backups
-        cmd = " cp  {}/* {}".format(BackupRestore.USB_BACKUP_PATH, TiSPath.BACKUPS)
+        cmd = " cp  {}/* {}".format(BackupRestore.USB_BACKUP_PATH, StxPath.BACKUPS)
         con_ssh.exec_sudo_cmd(cmd, expect_timeout=600)
 
     LOG.tc_step("Checking if backup files are copied to /opt/backups ... ")
-    assert int(con_ssh.exec_cmd("ls {} | wc -l".format(TiSPath.BACKUPS))[1]) >= 2, \
-        "Missing backup files in {}".format(TiSPath.BACKUPS)
+    assert int(con_ssh.exec_cmd("ls {} | wc -l".format(StxPath.BACKUPS))[1]) >= 2, \
+        "Missing backup files in {}".format(StxPath.BACKUPS)
 
     if is_aio_lab:
         LOG.tc_step("Restoring Cinder Volumes ...")
         restore_volumes()
 
         LOG.tc_step('Run restore-complete (CGTS-9756)')
-        cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
+        cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxUser.get_password())
         controller_node.telnet_conn.login()
         controller_node.telnet_conn.exec_cmd(cmd, extra_expects=[' will reboot on completion'])
 
@@ -818,7 +819,7 @@ def test_restore(restore_setup):
             LOG.tc_step('Run restore-complete (CGTS-9756)')
             controller_node.telnet_conn.login()
 
-            cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
+            cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxUser.get_password())
             controller_node.telnet_conn.exec_cmd(cmd, extra_expects=' will reboot ')
             controller_node.telnet_conn.close()
 
@@ -869,7 +870,7 @@ def test_restore(restore_setup):
             storage_helper.wait_for_ceph_health_ok(timeout=600)
 
             LOG.info("Importing images ...")
-            image_backup_files = install_helper.get_backup_files(IMAGE_BACKUP_FILE_PATTERN, TiSPath.BACKUPS, con_ssh)
+            image_backup_files = install_helper.get_backup_files(IMAGE_BACKUP_FILE_PATTERN, StxPath.BACKUPS, con_ssh)
             LOG.info("Image backup found: {}".format(image_backup_files))
             imported = install_helper.import_image_from_backup(image_backup_files)
             LOG.info("Images successfully imported: {}".format(imported))
@@ -879,7 +880,7 @@ def test_restore(restore_setup):
 
         LOG.tc_step('Run restore-complete (CGTS-9756), regular lab')
         controller_node.telnet_conn.login()
-        cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxCreds.get_password())
+        cmd = 'echo "{}" | sudo -S config_controller --restore-complete'.format(HostLinuxUser.get_password())
         controller_node.telnet_conn.exec_cmd(cmd, extra_expects='controller-0 login:')
 
         LOG.info('rebuild ssh connection')
@@ -904,8 +905,8 @@ def test_restore(restore_setup):
     else:
         LOG.warn('Only 1 controller, but not AIO lab!!??')
 
-    LOG.tc_step("Delete backup files from {} ....".format(TiSPath.BACKUPS))
-    con_ssh.exec_sudo_cmd("rm -rf {}/*".format(TiSPath.BACKUPS))
+    LOG.tc_step("Delete backup files from {} ....".format(StxPath.BACKUPS))
+    con_ssh.exec_sudo_cmd("rm -rf {}/*".format(StxPath.BACKUPS))
 
     LOG.tc_step('Perform post-restore testing/checking')
     post_restore_test(con_ssh)

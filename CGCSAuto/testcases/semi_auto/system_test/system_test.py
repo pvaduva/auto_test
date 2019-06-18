@@ -2,7 +2,7 @@ from pytest import fixture, mark, skip
 
 from utils.tis_log import LOG
 from keywords import nova_helper, vm_helper, heat_helper, host_helper, system_test_helper
-from consts.filepaths import TiSPath, HeatTemplate
+from consts.filepaths import StxPath, HeatTemplate
 from utils.clients.ssh import ControllerClient
 from consts.auth import Tenant
 from consts.stx import HeatStackStatus
@@ -100,7 +100,7 @@ def test_heat_stack_update():
     """
 
     # compile the file names and paths
-    file_dir = TiSPath.CUSTOM_HEAT_TEMPLATES
+    file_dir = StxPath.CUSTOM_HEAT_TEMPLATES
     file_name = HeatTemplate.SYSTEM_TEST_HEAT + "/" + HeatTemplate.SYSTEM_TEST_HEAT_NAME
     heat_template_file = file_dir + file_name + "/"
     file_path = heat_template_file + "templates/update_env.sh"

@@ -5,7 +5,7 @@ from pytest import skip, fixture
 from utils.tis_log import LOG
 from utils.clients.local import LocalHostClient
 from consts.stx import FlavorSpec
-from consts.auth import Tenant, SvcCgcsAuto, ComplianceCreds
+from consts.auth import Tenant, TestFileServer, ComplianceCreds
 from consts.proj_vars import ComplianceVar, ProjVar
 from consts.compliance import RefStack, USER_PASSWORD
 from keywords import keystone_helper, nova_helper, cinder_helper, network_helper, glance_helper, storage_helper, \
@@ -33,8 +33,8 @@ def refstack_pre_check():
 
         LOG.fixture_step('scp test-list file to refstack test history dir')
         dest_path = '{}/test-list.txt'.format(RefStack.TEST_HISTORY_DIR)
-        refstack_host_ssh.scp_on_dest(source_path=refstack_suite, source_ip=SvcCgcsAuto.SERVER,
-                                      source_user=SvcCgcsAuto.USER, source_pswd=SvcCgcsAuto.PASSWORD,
+        refstack_host_ssh.scp_on_dest(source_path=refstack_suite, source_ip=TestFileServer.SERVER,
+                                      source_user=TestFileServer.USER, source_pswd=TestFileServer.PASSWORD,
                                       dest_path=dest_path, timeout=120)
 
 

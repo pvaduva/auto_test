@@ -1,7 +1,6 @@
 from pytest import fixture, mark, skip
 
 from keywords import vm_helper, host_helper
-from setup_consts import P1, P2, P3
 from utils import cli
 from utils import table_parser
 from utils.tis_log import LOG
@@ -25,12 +24,12 @@ def vm_tenant2_image_unavailable():
 @mark.usefixtures('check_alarms')
 @mark.parametrize(
     ('vm_boot_type', "vm_storage", "vm_interface", "block_migrate", "specify_host"), [
-        P1(('volume', 'local_image', 'avp', False, True)),
-        P1(('volume', 'local_image', 'virtio', True, False)),
-        P2(('volume', 'local_image', 'virtio', False, False)),
-        P1(('image', 'local_image', '', True, True)),  # local_image vm needs to be manually booted for now
+        ('volume', 'local_image', 'avp', False, True),
+        ('volume', 'local_image', 'virtio', True, False),
+        ('volume', 'local_image', 'virtio', False, False),
+        ('image', 'local_image', '', True, True),  # local_image vm needs to be manually booted for now
         ('image', 'local_image', '', False, False),
-        P3(('image', 'local_image', '', True, False)),
+        ('image', 'local_image', '', True, False),
         # ('volume', 'local_image', 'virtio', False, False),
         # ('volume', 'local_image', 'virtio', True, False),
         # ('volume', 'remote', 'vswitch', True, False),

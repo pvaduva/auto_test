@@ -2,7 +2,7 @@ import os
 import subprocess
 import sys
 
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxUser
 from consts.lab import Labs
 from consts.proj_vars import ProjVar
 from keywords import system_helper
@@ -83,7 +83,7 @@ def __get_lab_ssh(labname, log_dir=None):
 
     ProjVar.set_var(lab=lab)
     ProjVar.set_var(source_openrc=True)
-    con_ssh = SSHClient(lab.get('floating ip'), HostLinuxCreds.get_user(), HostLinuxCreds.get_password(),
+    con_ssh = SSHClient(lab.get('floating ip'), HostLinuxUser.get_user(), HostLinuxUser.get_password(),
                         CONTROLLER_PROMPT)
     con_ssh.connect()
     # if 'auth_url' in lab:

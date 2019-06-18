@@ -8,7 +8,7 @@ import time
 from pytest import mark, fixture, skip, param
 
 from consts.stx import MULTI_REGION_MAP
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxUser
 from consts.proj_vars import ProjVar
 from consts.timeout import HostTimeout
 from keywords import pm_helper, system_helper, host_helper
@@ -804,10 +804,11 @@ class MonitoredProcess:
                 sleep 0.5; continue; fi; echo "{}" | sudo -S kill -9 \$pid &>/dev/null;
                 if [ \$? -eq 0 ]; then echo "OK \$n - \$pid killed"; ((n++)); last_pid=\$pid; pid=''; sleep {};
                 else sleep 0.5; fi; done; echo \$pid'''.format(
-                    retries, pid_file, HostLinuxCreds.get_password(), wait_after_each_kill)
+                    retries, pid_file, HostLinuxUser.get_password(), wait_after_each_kill)
 
         LOG.info('Attempt to kill process:{} on host:{}, cli:\n{}\n'.format(name, host, cmd))
-        cmd_2 = 'cat >/home/sysadmin/test_process.sh  <<EOL\n{}\nEOL'.format(cmd)
+        cmd_2 = 'cat >{}/test_process.sh  <<EOL\n{}\nEOL'.format(
+            HostLinuxUser.get_home(), cmd)
 
         wait_time = max(wait_after_each_kill * retries + 60, 60)
 
@@ -946,7 +947,9 @@ class MonitoredProcess:
                 self.pid = -1
                 try:
                     with host_helper.ssh_to_host(host, con_ssh=con_ssh) as con:
-                        raw_pid = con.exec_cmd('tail /home/sysadmin/results.txt | tail -n1', fail_ok=True)[1]
+                        raw_pid = con.exec_cmd(
+                            'tail {}/results.txt | tail -n1'.format(
+                                HostLinuxUser.get_home()), fail_ok=True)[1]
                         self.pid = int(raw_pid)
                 except ValueError as e:
                     LOG.warn('Unknown pid:{} from cmd:{}'.format(cmd, e))

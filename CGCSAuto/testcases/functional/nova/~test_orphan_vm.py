@@ -2,9 +2,9 @@ import time
 
 from pytest import fixture
 
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxUser
 from consts.stx import GuestImages
-from consts.filepaths import TestServerPath, SYSADMIN_HOME, TiSPath
+from consts.filepaths import TestServerPath, StxPath
 from consts.proj_vars import ProjVar
 from keywords import host_helper, system_helper, common
 from utils.clients.ssh import ControllerClient
@@ -56,7 +56,7 @@ def orphan_audit_setup(request):
 
     LOG.fixture_step("SCP orphan_guest.xml to active controller")
     source_file = TestServerPath.TEST_FILES + 'orphan_guest.xml'
-    common.scp_from_test_server_to_active_controller(source_file, dest_dir=SYSADMIN_HOME, dest_name='orphan_guest.xml',
+    common.scp_from_test_server_to_active_controller(source_file, dest_dir=HostLinuxUser.get_home(), dest_name='orphan_guest.xml',
                                                      timeout=120, con_ssh=None)
 
     LOG.fixture_step("Change orphan_guest.xml specs allow a vm to be properly launched")
@@ -87,11 +87,11 @@ def orphan_audit_setup(request):
         request.addfinalizer(teardown)
 
         # copy Default guest img and XML file over to compute
-        img_path = TiSPath.IMAGES + GuestImages.IMAGE_FILES.get(GuestImages.DEFAULT['guest'])[2]
-        con_ssh.scp_on_source(SYSADMIN_HOME + 'orphan_guest.xml', HostLinuxCreds.get_user(), vm_host, SYSADMIN_HOME,
-                              HostLinuxCreds.get_password(), timeout=60)
-        con_ssh.scp_on_source(img_path, HostLinuxCreds.get_user(), vm_host, TiSPath.IMAGES,
-                              HostLinuxCreds.get_password(), timeout=300)
+        img_path = StxPath.IMAGES + GuestImages.IMAGE_FILES.get(GuestImages.DEFAULT['guest'])[2]
+        con_ssh.scp_on_source(HostLinuxUser.get_home() + 'orphan_guest.xml', HostLinuxUser.get_user(), vm_host, HostLinuxUser.get_home(),
+                              HostLinuxUser.get_password(), timeout=60)
+        con_ssh.scp_on_source(img_path, HostLinuxUser.get_user(), vm_host, StxPath.IMAGES,
+                              HostLinuxUser.get_password(), timeout=300)
 
     else:
         vm_host = system_helper.get_active_controller_name()

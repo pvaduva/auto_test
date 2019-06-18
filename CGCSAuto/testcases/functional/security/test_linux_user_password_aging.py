@@ -5,7 +5,7 @@ from collections import defaultdict, deque
 from pexpect import pxssh, spawn, TIMEOUT
 from pytest import fixture, mark, skip
 
-from consts.auth import HostLinuxCreds
+from consts.auth import HostLinuxUser
 from consts.stx import HostAvailState, Prompt
 from keywords import security_helper, host_helper, system_helper
 from utils import lab_info
@@ -98,7 +98,7 @@ def restore_sysadmin_password(current_password=None, target_password=None):
         LOG.info('chaning password {} times: from:{} to:{}\n'.format(n, current_password, new_password))
 
         security_helper.change_linux_user_password(current_password, new_password,host=current_host)
-        HostLinuxCreds.set_password(new_password)
+        HostLinuxUser.set_password(new_password)
         current_password = new_password
         exclude_list.append(new_password)
 
@@ -111,7 +111,7 @@ def restore_sysadmin_password(current_password=None, target_password=None):
     LOG.info('Restore password of sysadmin to:{}'.format(original_password))
 
     security_helper.change_linux_user_password(current_password, original_password, user='sysadmin', host=current_host)
-    HostLinuxCreds.set_password(original_password)
+    HostLinuxUser.set_password(original_password)
     LOG.info('Password for sysadmin is restored to:{}'.format(original_password))
 
     return original_password
@@ -128,13 +128,13 @@ def restore_sysadmin_password_raw(connect, current_password, original_password, 
         LOG.info('chaning password {} times: from:{} to:{}\n'.format(n, current_password, new_password))
 
         change_password(connect, current_password, new_password)
-        HostLinuxCreds.set_password(new_password)
+        HostLinuxUser.set_password(new_password)
         current_password = new_password
 
     LOG.info('Restore password of sysadmin to:{}'.format(original_password))
     change_password(connect, current_password, original_password)
 
-    HostLinuxCreds.set_password(original_password)
+    HostLinuxUser.set_password(original_password)
     LOG.info('Password for sysadmin is restored to:{}'.format(original_password))
 
 
@@ -150,7 +150,7 @@ def cleanup_test_users(request):
         conn_to_ac = ControllerClient.get_active_controller()
         count = 0
         for (host, user), _ in _host_users.items():
-            if user == 'sysadmin' or user == HostLinuxCreds.get_user():
+            if user == 'sysadmin' or user == HostLinuxUser.get_user():
                 LOG.info('-do not delete user:{} on host:{}\n'.format(user, host))
                 continue
 
@@ -179,7 +179,7 @@ def login_as_linux_user(user, password, host, cmd='whoami', expecting_fail=False
 
     if is_on_action_controller(host):
         LOG.info('Login to the active controller:{}\n'.format(host))
-        if user != HostLinuxCreds.get_user():
+        if user != HostLinuxUser.get_user():
             skip('Login to the active controller(will not skip if controller-1 is active), '
                  'host:{}, user:{}'.format(host, user))
             return False, ''
@@ -328,12 +328,12 @@ def test_sysadmin_password_propagation():
     LOG.tc_step('Attemp to change the password for sysadmin')
 
     user = 'sysadmin'
-    if user != HostLinuxCreds.get_user():
+    if user != HostLinuxUser.get_user():
         LOG.error('HostLinuxCreds.get_user() is NOT sysadmin')
         skip('HostLinuxCreds.get_user() is NOT sysadmin')
         return
 
-    password = HostLinuxCreds.get_password()
+    password = HostLinuxUser.get_password()
     update_host_user('active-controller', user, password)
 
     new_password = security_helper.gen_linux_password(exclude_list=_host_users[('active-controller', user)],length=PASSWORD_LEGNTH)
@@ -349,7 +349,7 @@ def test_sysadmin_password_propagation():
     LOG.info('OK, password changed for sysadmin, new password:{}, old password:{} on host:{}\n'.format(
         new_password, password, current_host))
 
-    HostLinuxCreds.set_password(new_password)
+    HostLinuxUser.set_password(new_password)
     update_host_user('active-controller', user, new_password)
 
     LOG.tc_step('Wait alarms for password changed raised and cleared')
@@ -490,12 +490,12 @@ def test_sysadmin_aging_and_swact(swact):
     global _host_users
 
     LOG.tc_step('Change the aging settings of sysadmin')
-    if 'sysadmin' != HostLinuxCreds.get_user():
-        skip('Current User:{} is not sysadmin'.format(HostLinuxCreds.get_user()))
+    if 'sysadmin' != HostLinuxUser.get_user():
+        skip('Current User:{} is not sysadmin'.format(HostLinuxUser.get_user()))
         return
 
     user = 'sysadmin'
-    original_password = HostLinuxCreds.get_password()
+    original_password = HostLinuxUser.get_password()
     active_controller = ControllerClient.get_active_controller()
     active_controller_name = system_helper.get_active_controller_name()
     host = lab_info.get_lab_floating_ip()
@@ -521,7 +521,6 @@ def test_sysadmin_aging_and_swact(swact):
     LOG.info('OK, aging settings of sysadmin was successfully changed with command:\n{}\ncode:{}, output:{}'.format(
         command, code, output))
 
-
     LOG.tc_step('Verify new password needs to be set upon login')
     exclude_list = [original_password]
 
@@ -539,7 +538,7 @@ def test_sysadmin_aging_and_swact(swact):
     if new_password != original_password:
         _host_users[('active-controller', 'sysadmin')].append(new_password)
 
-    HostLinuxCreds.set_password(new_password)
+    HostLinuxUser.set_password(new_password)
     exclude_list.append(new_password)
     LOG.info('OK, new password was required and logged in\n')
 
@@ -581,7 +580,7 @@ def test_sysadmin_aging_and_swact(swact):
     # restore_sysadmin_password_raw(connect, new_password, original_password, exclude_list=exclude_list)
     restore_sysadmin_password_raw(connect, current_password=new_password, original_password="Li69nux*", exclude_list=exclude_list)
 
-    HostLinuxCreds.set_password(original_password)
+    HostLinuxUser.set_password(original_password)
     LOG.info('Close the connection to {} as user:{} with password:{}'.format(host, user, original_password))
     connect.close()
 
@@ -774,11 +773,10 @@ def test_linux_user_lockout():
 
     LOG.tc_step('Attempt to login with WRONG password as sysadmin {} times'.format(MAX_FAILED_LOGINS))
     user = 'sysadmin'
-    if HostLinuxCreds.get_user() != user:
-        skip('Error: user name from HostLinuxCreds.get_user() != sysadmin, it is:{}'.format(HostLinuxCreds.get_user()))
-        return
+    if HostLinuxUser.get_user() != user:
+        skip('Error: user name from HostLinuxCreds.get_user() != sysadmin, it is:{}'.format(HostLinuxUser.get_user()))
 
-    password = HostLinuxCreds.get_password()
+    password = HostLinuxUser.get_password()
     invalid_password = '123'
     host = lab_info.get_lab_floating_ip()
 

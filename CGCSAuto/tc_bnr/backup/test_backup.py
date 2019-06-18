@@ -6,10 +6,10 @@ import pexpect
 
 from pytest import fixture, skip
 
-from consts.auth import Tenant, SvcCgcsAuto, HostLinuxCreds
+from consts.auth import Tenant, TestFileServer, HostLinuxUser
 from consts.build_server import Server
 from consts.stx import TIS_BLD_DIR_REGEX, BackupRestore, PREFIX_BACKUP_FILE
-from consts.filepaths import BuildServerPath, SYSADMIN_HOME
+from consts.filepaths import BuildServerPath
 from consts.proj_vars import InstallVars, ProjVar, BackupVars
 from utils.clients.ssh import ControllerClient, NATBoxClient
 from utils.tis_log import LOG
@@ -111,14 +111,14 @@ def pre_system_backup():
         backup_dest_full_path = '{}/{}'.format(backup_dest_path, lab['short_name'])
         # ssh to test server
         test_server_attr = dict()
-        test_server_attr['name'] = SvcCgcsAuto.HOSTNAME.split('.')[0]
-        test_server_attr['server_ip'] = SvcCgcsAuto.SERVER
+        test_server_attr['name'] = TestFileServer.HOSTNAME.split('.')[0]
+        test_server_attr['server_ip'] = TestFileServer.SERVER
         test_server_attr['prompt'] = r'\[{}@{} {}\]\$ '\
-            .format(SvcCgcsAuto.USER, test_server_attr['name'], SvcCgcsAuto.USER)
+            .format(TestFileServer.USER, test_server_attr['name'], TestFileServer.USER)
 
         test_server_conn = install_helper.establish_ssh_connection(test_server_attr['name'],
-                                                                   user=SvcCgcsAuto.USER,
-                                                                   password=SvcCgcsAuto.PASSWORD,
+                                                                   user=TestFileServer.USER,
+                                                                   password=TestFileServer.PASSWORD,
                                                                    initial_prompt=test_server_attr['prompt'])
 
         test_server_conn.set_prompt(test_server_attr['prompt'])
@@ -362,10 +362,10 @@ def backup_load_iso_image(backup_info):
             LOG.warn("No ISO found on path:{}".format(iso_file_path))
             return True
 
-        pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+        pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
         # build_server_conn.rsync("-L " + iso_file_path, lab['controller-0 ip'],
         build_server_conn.rsync("-L " + iso_file_path, html_helper.get_ip_addr(),
-                                os.path.join(SYSADMIN_HOME, "bootimage.iso"),
+                                os.path.join(HostLinuxUser.get_home(), "bootimage.iso"),
                                 pre_opts=pre_opts,
                                 timeout=360)
 
@@ -381,13 +381,13 @@ def backup_load_iso_image(backup_info):
 
         # Check if the ISO is uploaded to controller-0
         con_ssh = ControllerClient.get_active_controller()
-        cmd = "test -e " + os.path.join(SYSADMIN_HOME, "bootimage.iso")
-        assert con_ssh.exec_cmd(cmd)[0] == 0,  'The bootimage.iso file not found in {}'.format(SYSADMIN_HOME)
+        cmd = "test -e " + os.path.join(HostLinuxUser.get_home(), "bootimage.iso")
+        assert con_ssh.exec_cmd(cmd)[0] == 0,  'The bootimage.iso file not found in {}'.format(HostLinuxUser.get_home())
 
         LOG.tc_step("Burning backup load ISO to /dev/{}  ...".format(usb_part1))
         # Write the ISO to USB
         cmd = "echo {} | sudo -S dd if={} of=/dev/{} bs=1M oflag=direct; sync"\
-            .format(HostLinuxCreds.get_password(), os.path.join(SYSADMIN_HOME, "bootimage.iso"), usb_part1)
+            .format(HostLinuxUser.get_password(), os.path.join(HostLinuxUser.get_home(), "bootimage.iso"), usb_part1)
 
         rc,  output = con_ssh.exec_cmd(cmd, expect_timeout=900)
         if rc == 0:
@@ -399,7 +399,7 @@ def backup_load_iso_image(backup_info):
 
     else:
         LOG.tc_step("Copying  load image ISO to local test server: {} ...".format(backup_dest_path))
-        common.scp_from_active_controller_to_test_server(os.path.join(SYSADMIN_HOME, "bootimage.iso"), backup_dest_path)
+        common.scp_from_active_controller_to_test_server(os.path.join(HostLinuxUser.get_home(), "bootimage.iso"), backup_dest_path)
         LOG.info(" The backup build iso file copied to local test server: {}".format(backup_dest_path))
         return True
 

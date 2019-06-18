@@ -6,10 +6,9 @@ import pexpect
 
 from pytest import fixture, skip, mark
 
-from consts.auth import HostLinuxCreds, SvcCgcsAuto, Tenant
+from consts.auth import HostLinuxUser, TestFileServer, Tenant
 from consts.build_server import DEFAULT_BUILD_SERVER
 from consts.stx import FlavorSpec, GuestImages
-from consts.filepaths import SYSADMIN_HOME
 from consts.kpi_vars import CyclicTest
 from consts.proj_vars import ProjVar
 from utils import cli, table_parser, exceptions
@@ -59,7 +58,7 @@ testable_hypervisors = {}
 def disable_remote_cli(request):
     if ProjVar.get_var('REMOTE_CLI'):
         ProjVar.set_var(REMOTE_CLI=False)
-        ProjVar.set_var(USER_FILE_DIR=SYSADMIN_HOME)
+        ProjVar.set_var(USER_FILE_DIR=HostLinuxUser.get_home())
 
         def revert():
             ProjVar.set_var(REMOTE_CLI=True)
@@ -88,8 +87,8 @@ def get_rt_guest_image():
                                      GuestImages.IMAGE_FILES['tis-centos-guest-rt'][2])
 
     if not con_ssh.file_exists(img_path_on_tis):
-        con_ssh.scp_on_dest(source_user=SvcCgcsAuto.USER, source_ip=BUILD_SERVER, source_path=RT_GUEST_PATH,
-                            dest_path=img_path_on_tis, source_pswd=SvcCgcsAuto.PASSWORD)
+        con_ssh.scp_on_dest(source_user=TestFileServer.USER, source_ip=BUILD_SERVER, source_path=RT_GUEST_PATH,
+                            dest_path=img_path_on_tis, source_pswd=TestFileServer.PASSWORD)
 
     return img_path_on_tis
 
@@ -201,8 +200,8 @@ def fetch_results_from_target(target_ssh, target_host, active_con_name=None, run
 
     con_ssh = ControllerClient.get_active_controller()
 
-    user = HostLinuxCreds.get_user()
-    password = HostLinuxCreds.get_password()
+    user = HostLinuxUser.get_user()
+    password = HostLinuxUser.get_password()
 
     if not run_log:
         run_log = '{}/{}-{}*.txt'.format(cyclictest_dir, RUN_LOG, target_host)
@@ -522,8 +521,8 @@ def prep_test_on_host(target_ssh, target, file_path, active_controller_name, cyc
     dest_path = '{}/{}'.format(cyclictest_dir, os.path.basename(file_path))
     if not target_ssh.file_exists(dest_path):
         LOG.info('Copy CYCLICTEST to selected host {}:{}'.format(target, dest_path))
-        target_ssh.scp_on_dest(HostLinuxCreds.get_user(), active_controller_name, dest_path=dest_path,
-                               source_path=file_path, source_pswd=HostLinuxCreds.get_password())
+        target_ssh.scp_on_dest(HostLinuxUser.get_user(), active_controller_name, dest_path=dest_path,
+                               source_path=file_path, source_pswd=HostLinuxUser.get_password())
 
         LOG.info('Check if CYCLICTEST was copied to target host')
         assert target_ssh.file_exists(dest_path), \
