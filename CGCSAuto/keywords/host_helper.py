@@ -1813,7 +1813,7 @@ def modify_host_interface(host, interface, pnet=None, ae_mode=None, tx_hash_poli
         '--txhashpolicy': tx_hash_policy,
         '--imtu': mtu,
         '--ifclass': if_class,
-        '--networks': network,
+        # '--networks': network,
         '--ipv4-mode': ipv4_mode,
         '--ipv6-mode': ipv6_mode,
         '--ipv4-pool': ipv4_pool,
@@ -1832,6 +1832,9 @@ def modify_host_interface(host, interface, pnet=None, ae_mode=None, tx_hash_poli
     if code > 0:
         return 1, out
 
+    if network is not None:
+        interface_network_assign(host, interface, network)
+
     if lock_unlock:
         unlock_host(host, con_ssh=con_ssh)
 
@@ -1839,6 +1842,36 @@ def modify_host_interface(host, interface, pnet=None, ae_mode=None, tx_hash_poli
     LOG.info(msg)
 
     return 0, msg
+
+
+def interface_network_assign(host, interface, network=None, fail_ok=False, con_ssh=None,
+                             auth_info=Tenant.get('admin_platform')):
+
+
+        """
+
+        Args:
+            host:
+            interface:
+            network:
+            fail_ok:
+            con_ssh:
+            auth_info:
+
+        Returns:
+
+        """
+
+        args = '{} {} {}'.format(host, interface, network)
+        code, out = cli.system('interface-network-assign', args, ssh_client=con_ssh, fail_ok=fail_ok,
+                               auth_info=auth_info)
+        if code > 0:
+            return 1, out
+
+        msg = "{} interface {} is successfully assigned as network {}".format(host, interface, network)
+        LOG.info(msg)
+
+        return 0, msg
 
 
 def compare_host_to_cpuprofile(host, profile_uuid):
