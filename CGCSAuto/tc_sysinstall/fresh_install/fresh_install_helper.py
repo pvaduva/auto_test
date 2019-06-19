@@ -286,7 +286,10 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
     # install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
     # WK Touch .this_didnt_work to avoid using heat for kubernetes
-    controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
+    try:
+        controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
+    except:
+        pass
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
