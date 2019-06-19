@@ -1813,7 +1813,6 @@ def modify_host_interface(host, interface, pnet=None, ae_mode=None, tx_hash_poli
         '--txhashpolicy': tx_hash_policy,
         '--imtu': mtu,
         '--ifclass': if_class,
-        # '--networks': network,
         '--ipv4-mode': ipv4_mode,
         '--ipv6-mode': ipv6_mode,
         '--ipv4-pool': ipv4_pool,
@@ -1846,8 +1845,6 @@ def modify_host_interface(host, interface, pnet=None, ae_mode=None, tx_hash_poli
 
 def interface_network_assign(host, interface, network=None, fail_ok=False, con_ssh=None,
                              auth_info=Tenant.get('admin_platform')):
-
-
         """
 
         Args:
