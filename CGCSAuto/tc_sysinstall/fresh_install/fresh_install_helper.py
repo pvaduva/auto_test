@@ -281,7 +281,7 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
                                                 con_telnet=controller0_node.telnet_conn, kubernetes=kubernetes,
                                                 banner=banner, branding=branding, ansible=ansible)
 
-    if controller0_node.ssh_conn is not None or controller0_node.ssh_conn._is_alive():
+    if controller0_node.ssh_conn is not None:
         controller0_node.ssh_conn.close()
 
     controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
