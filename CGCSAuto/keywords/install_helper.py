@@ -3381,10 +3381,6 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         system_helper.wait_for_hosts_states(controller0.name,
                                                      availability=[HostAvailState.ONLINE, HostAvailState.DEGRADED],
                                                      use_telnet=True, con_telnet=con_telnet)
-        # if kubernetes:
-        #     LOG.info("Setting DNS server ...")
-        #     system_helper.set_dns_servers(["8.8.8.8"], with_action_option='apply', use_telnet=True,
-        #                                   con_telnet=con_telnet)
         if not ansible:
            con_telnet.exec_cmd("cd; touch .lab_setup.done.group0.controller-0.interfaces")
 

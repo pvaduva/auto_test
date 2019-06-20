@@ -281,15 +281,11 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
                                                 con_telnet=controller0_node.telnet_conn, kubernetes=kubernetes,
                                                 banner=banner, branding=branding, ansible=ansible)
 
-    if controller0_node.ssh_conn is None:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
-    # install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
+    controller0_node.ssh_conn.close()
+    controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
     # WK Touch .this_didnt_work to avoid using heat for kubernetes
-    try:
-        controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
-    except:
-        pass
+    controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
