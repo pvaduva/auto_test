@@ -363,7 +363,7 @@ def generate_report(recipients, subject='', source='mongo', tags=None, start_dat
             mark_status_on_build_server(status=raw_status, build_server=build_server, build_id=build)
     finally:
         subject = subject.strip()
-        subject = "TiS {} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
+        subject = "{} Test Report {} [{}] - {}".format(subject, lab, build, raw_status)
         recipients = recipients.strip()
         if ' ' in recipients and ';' not in recipients:
             recipients = ';'.join(recipients.split())
