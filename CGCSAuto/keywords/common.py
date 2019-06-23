@@ -605,7 +605,7 @@ def parse_args(args_dict, repeat_arg=False, vals_sep=' '):
     def convert_val_dict(key__, vals_dict, repeat_key):
         vals_ = []
         for k, v in vals_dict.items():
-            if ' ' in v:
+            if isinstance(v, str) and ' ' in v:
                 v = '"{}"'.format(v)
             vals_.append('{}={}'.format(k, v))
         if repeat_key:
