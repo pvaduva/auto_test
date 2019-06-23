@@ -256,6 +256,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                             raise exceptions.HostPostCheckFailed(err_msg)
 
                 if check_hypervisor_up and computes:
+                    nova_auth = Tenant.get('admin',
+                                           dc_region=auth_info.get('region')
+                                           if auth_info else None)
                     res, hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh,
                                                                         timeout=HostTimeout.HYPERVISOR_UP,
                                                                         auth_info=auth_info)
