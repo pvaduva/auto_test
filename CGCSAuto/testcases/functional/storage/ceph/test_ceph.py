@@ -402,8 +402,7 @@ def test_lock_stor_check_osds_down(host):
 
         LOG.tc_step('Check health of CEPH cluster')
         ceph_healthy = storage_helper.is_ceph_healthy(con_ssh)
-        assert not ceph_healthy, "ceph should be unhealthy"
-        LOG.info(msg)
+        assert not ceph_healthy
 
         LOG.tc_step('Check that OSDs are down')
         osd_list = storage_helper.get_osds(host, con_ssh)
