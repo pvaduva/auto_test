@@ -204,5 +204,4 @@ def ceph_precheck():
     """
 
     LOG.info('Verify the health of the CEPH cluster')
-    rtn, msg = storage_helper.is_ceph_healthy()
-    LOG.info('{}'.format(msg))
+    storage_helper.is_ceph_healthy()

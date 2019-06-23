@@ -42,9 +42,9 @@ def ceph_backend_installed():
     ceph_info = get_ceph_backend_info()
     if not ceph_info:
         skip("No ceph system installed in the lab")
-    rel, msg = storage_helper.is_ceph_healthy()
+    rel = storage_helper.is_ceph_healthy()
     if not rel:
-        skip("Ceph health not OK: {}".format(msg))
+        skip("Ceph health not OK")
 
     return ceph_info
 

@@ -65,7 +65,7 @@ def test_apply_storage_profile_negative(create_storage_profile, personality):
 
     # For storage systems, skip test if ceph isn't healthy
     if len(system_helper.get_storage_nodes()) > 0:
-        ceph_healthy, msg = storage_helper.is_ceph_healthy()
+        ceph_healthy = storage_helper.is_ceph_healthy()
         if not ceph_healthy:
             skip('Skipping due to ceph not being healthy')
 

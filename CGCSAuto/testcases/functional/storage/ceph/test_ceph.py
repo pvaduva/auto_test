@@ -120,7 +120,7 @@ def test_ceph_mon_process_kill(monitor):
             - system has storage nodes
             - health of the ceph cluster is okay
             - that we have OSDs provisioned
-        2.  Pick one ceph monitor and remove it from the quorum 
+        2.  Pick one ceph monitor and remove it from the quorum
         3.  Kill the monitor process
         4.  Check that the appropriate alarms are raised
         5.  Restore the monitor to the quorum
@@ -252,11 +252,11 @@ def test_ceph_reboot_storage_node():
             msg = None
             end_time = time.time() + 10
             while time.time() < end_time:
-                ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+                ceph_healthy = storage_helper.is_ceph_healthy(con_ssh)
                 if not ceph_healthy:
                     break
 
-            assert not ceph_healthy, msg
+            assert not ceph_healthy, "ceph is not healthy"
             LOG.info(msg)
 
             LOG.tc_step('Check that OSDs are down')
@@ -306,11 +306,11 @@ def test_ceph_reboot_storage_node():
             LOG.tc_step('Check health of CEPH cluster')
             end_time = time.time() + 40
             while time.time() < end_time:
-                ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+                ceph_healthy = storage_helper.is_ceph_healthy(con_ssh)
                 if ceph_healthy is True:
                     break
 
-            assert ceph_healthy, msg
+            assert ceph_healthy, "ceph is not healthy"
 
         for vm_thread in vm_threads:
             assert vm_thread.res is True, "Writing in vm stopped unexpectedly"
@@ -401,8 +401,8 @@ def test_lock_stor_check_osds_down(host):
             "Alarm {} not raised".format(EventLogID.HOST_LOCK)
 
         LOG.tc_step('Check health of CEPH cluster')
-        ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-        assert not ceph_healthy, msg
+        ceph_healthy = storage_helper.is_ceph_healthy(con_ssh)
+        assert not ceph_healthy, "ceph should be unhealthy"
         LOG.info(msg)
 
         LOG.tc_step('Check that OSDs are down')
@@ -458,7 +458,7 @@ def test_lock_stor_check_osds_down(host):
         LOG.tc_step('Check health of CEPH cluster')
         end_time = time.time() + 40
         while time.time() < end_time:
-            ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+            ceph_healthy = storage_helper.is_ceph_healthy(con_ssh)
             if ceph_healthy is True:
                 break
 
@@ -547,11 +547,11 @@ def test_lock_cont_check_mon_down():
     msg = ''
     end_time = time.time() + 40
     while time.time() < end_time:
-        ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
+        ceph_healthy = storage_helper.is_ceph_healthy(con_ssh)
         if ceph_healthy:
             break
     else:
-        assert 0, msg
+        assert 0, "ceph is not healthy"
 
 
 # Tested on PV1.  Runtime: 1212.55 secs Date: Aug 2nd, 2017.  Status: Pass
@@ -618,8 +618,8 @@ def test_storgroup_semantic_checks():
         assert rtn_code == 0, out
 
         LOG.tc_step("Verify CEPH cluster health reflects the OSD being down")
-        ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-        assert not ceph_healthy, msg
+        ceph_healthy = storage_helper.is_ceph_healthy(con_ssh)
+        assert not ceph_healthy, "ceph is not healthy"
 
         LOG.tc_step('Check that alarms are raised when {} is locked'.format(host))
         assert system_helper.wait_for_alarm(alarm_id=EventLogID.HOST_LOCK, entity_id=host)[0], \
@@ -670,8 +670,8 @@ def test_storgroup_semantic_checks():
             "Alarm {} not cleared".format(EventLogID.STORAGE_ALARM_COND)
 
         LOG.tc_step('Check health of CEPH cluster')
-        ceph_healthy, msg = storage_helper.is_ceph_healthy(con_ssh)
-        assert ceph_healthy, msg
+        ceph_healthy = storage_helper.is_ceph_healthy(con_ssh)
+        assert ceph_healthy, "ceph is not healthy"
 
         LOG.tc_step('Check OSDs are up after unlock')
         for osd_id in osd_list:
@@ -701,7 +701,7 @@ def _test_modify_ceph_pool_size():
     Test Steps:
         1.  Determine the current size of the ceph image pool
         2.  Modify the sizes of all ceph pools (object pool only if swift is
-        enabled) 
+        enabled)
         3.  Confirm the pool size has been increased both in sysinv and
         underlying ceph
     """

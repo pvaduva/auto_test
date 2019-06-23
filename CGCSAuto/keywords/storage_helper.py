@@ -402,7 +402,7 @@ def wait_for_ceph_health_ok(con_ssh=None, timeout=300, fail_ok=False, check_inte
     end_time = time.time() + timeout
     output = None
     while time.time() < end_time:
-        rc, output = is_ceph_healthy(con_ssh=con_ssh)
+        rc = is_ceph_healthy(con_ssh=con_ssh)
         if rc:
             return True
 
