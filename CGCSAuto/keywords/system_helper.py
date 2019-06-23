@@ -2229,7 +2229,7 @@ def is_avs(con_ssh=None):
     if vswitch_type is None:
         vswitch_type = get_system_values(fields='vswitch_type', con_ssh=con_ssh)[0]
         ProjVar.set_var(VSWITCH_TYPE=vswitch_type)
-    return 'ovs' not in vswitch_type  # Possible values: 'avs', '', 'ovs-dpdk' or 'ovs'.
+    return 'avs' in vswitch_type  # Possible values: 'avs', 'none', 'ovs-dpdk'
 
 
 def get_controller_uptime(con_ssh, auth_info=Tenant.get('admin_platform')):
