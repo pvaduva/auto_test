@@ -3375,7 +3375,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             raise exceptions.InstallError(msg)
         if deploy_manager:
             cmd = 'ansible-playbook lab-install-playbook.yaml -e "deployment_config=deployment-config.yaml ' \
-                  'deployment_manager_overrides=helm-chart-overrides.yaml ansible_become=true"'
+                  'deployment_manager_overrides=helm-chart-overrides.yaml"'
             con_telnet.set_prompt(r'.*:~\$\s?')
 
         elif not ansible:
