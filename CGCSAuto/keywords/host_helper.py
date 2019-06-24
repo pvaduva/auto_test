@@ -261,7 +261,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None, fail_ok=Fa
                                            if auth_info else None)
                     res, hosts_hypervisordown = wait_for_hypervisors_up(computes, fail_ok=fail_ok, con_ssh=con_ssh,
                                                                         timeout=HostTimeout.HYPERVISOR_UP,
-                                                                        auth_info=auth_info)
+                                                                        auth_info=nova_auth)
                     if not res:
                         err_msg = "Hosts not up in nova hypervisor-list: {}".format(hosts_hypervisordown)
                         if fail_ok:
