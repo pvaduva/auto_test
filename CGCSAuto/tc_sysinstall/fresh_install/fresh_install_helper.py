@@ -1347,7 +1347,8 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
                                                        resource_type='hosts', con_ssh=controller0_node.ssh_conn,
                                                        name='controller-0', availability='available')
 
-            if not available_host or ('true' not in available_host[0]):
+            #if not available_host or ('true' not in available_host[0]):
+            if not available_host:
                 LOG.info("Waiting for controller-0 to become available and true: {}"
                          .format(list(available_host[0]) if available_host else available_host))
                 time.sleep(20)
