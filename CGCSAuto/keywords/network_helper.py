@@ -1824,9 +1824,9 @@ def create_router(name=None, project=None, distributed=None, ha=None,
         name = 'router'
         name = '-'.join([project, name, str(common.Count.get_router_count())])
 
-    project = project if (
-                auth_info and auth_info['user'] == 'admin' and project !=
-                auth_info['tenant']) else None,
+    if not project and auth_info and auth_info['tenant'] == 'admin':
+        project = Tenant.get_primary()['tenant']
+
     args_dict = {
         '--project': project,
         '--distributed': True if distributed else None,

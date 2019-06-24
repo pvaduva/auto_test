@@ -54,6 +54,7 @@ def __verify_alarms(request, scope):
             before_alarms=before_alarms, fail_ok=True)
         post_apps_status = container_helper.get_apps(
             field=('application', 'status'), application=prev_applied_apps)
+        LOG.info('prev bad pods: {}'.format(prev_bad_pods))
         kube_helper.wait_for_pods_healthy(timeout=120, all_namespaces=True,
                                           name=prev_bad_pods, exclude=True,
                                           strict=True)

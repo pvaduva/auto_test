@@ -102,7 +102,7 @@ def __get_resource_tables(namespace=None, all_namespaces=None,
 
 
 def get_unhealthy_pods(field='NAME', namespace=None, all_namespaces=True,
-                       pods_names=None,
+                       pod_names=None,
                        labels=None, exclude=False, strict=True, con_ssh=None,
                        **kwargs):
     """
@@ -110,7 +110,7 @@ def get_unhealthy_pods(field='NAME', namespace=None, all_namespaces=True,
     Args:
         namespace (str|None):
         all_namespaces: (bool|None)
-        pods_names (str|list|tuple|None): full names of pods to check
+        pod_names (str|list|tuple|None): full names of pods to check
         labels (str|dict|None):
         field (str|tuple|list):
         exclude:
@@ -122,7 +122,7 @@ def get_unhealthy_pods(field='NAME', namespace=None, all_namespaces=True,
     """
     field_selector = 'status.phase!=Running,status.phase!=Succeeded'
     return get_pods(field=field, namespace=namespace,
-                    all_namespaces=all_namespaces, pods_names=pods_names,
+                    all_namespaces=all_namespaces, pod_names=pod_names,
                     labels=labels, field_selectors=field_selector,
                     exclude=exclude, strict=strict,
                     con_ssh=con_ssh, **kwargs)
@@ -761,6 +761,7 @@ def wait_for_pods_healthy(pod_names=None, namespace=None, all_namespaces=True,
                                            all_namespaces=all_namespaces,
                                            con_ssh=con_ssh, exclude=exclude,
                                            strict=strict, **kwargs)
+
         bad_pods = {pod_info[0]: pod_info[1] for pod_info in bad_pods_info if
                     (not pod_names or pod_info[0] in pod_names)}
         if not bad_pods:
@@ -979,8 +980,9 @@ def dump_pods_info(con_ssh=None):
                   fail_ok=True)
     exec_kube_cmd(
         'get pods',
-        """--all-namespaces -o wide | grep -v -e Running -e Completed
-         -e NAMESPACE | awk '{system("kubectl describe pods -n "$1" "$2)}'""",
+        "--all-namespaces -o wide | grep -v -e Running -e Completed "
+        "-e NAMESPACE | awk "
+        + """'{system("kubectl describe pods -n "$1" "$2)}'""""",
         con_ssh=con_ssh, fail_ok=True)
 
     # exec_kube_cmd('get pods', """--all-namespaces -o wide |

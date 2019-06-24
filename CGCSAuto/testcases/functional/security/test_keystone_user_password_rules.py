@@ -423,9 +423,10 @@ def create_user(user_name, role, del_if_existing=False, project_name_id=None, pr
                 domain='default', password='Li69nux*', email='', description='', enable=True, con_ssh=None,
                 auth_info=Tenant.get('admin'), fail_ok=False):
 
-    existing_user = keystone_helper.get_users(user_name, auth_info=auth_info, con_ssh=con_ssh)
-    if existing_user:
-        existing_user = existing_user[0]
+    existing_users = keystone_helper.get_users(auth_info=auth_info,
+                                               con_ssh=con_ssh)
+    if user_name in existing_users:
+        existing_user = existing_users[0]
         LOG.info('User already existing: {}\n'.format(existing_user))
         if del_if_existing:
             LOG.info('Delete the existing user: {}\n'.format(existing_user))
