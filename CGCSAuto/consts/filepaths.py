@@ -97,6 +97,10 @@ class BuildServerPath:
     STX_HELM_CHARTS = 'helm-charts'
     DEFAULT_HELM_CHARTS = STX_HELM_CHARTS_CENGN
     DEFAULT_ISO = ISO_PATH_CENGN
+    DEPLOY_MANAGER_PATH = '/folk/cgts/lab/deployment-manager/'
+    DEPLOY_MANAGER_REPO_PATH = LAB_CONF_DIR + "/deployment-manager"
+    PLAY_BOOKS_PATH = LAB_CONF_DIR + "/playbooks"
+    DEFAULT_CUMULUS_DOCKER_REGISTRY_CERT_PATH = '/folk/cgts/lab/cumulus-docker-registry-ca-cert.pem'
 
     HEAT_TEMPLATES_EXTS = {'16.10': HEAT_TEMPLATES_PREV, '17.06': HEAT_TEMPLATES_PREV, '18.03': HEAT_TEMPLATES_PREV,
                            'default': HEAT_TEMPLATES}

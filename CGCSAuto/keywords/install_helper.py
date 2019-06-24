@@ -626,21 +626,44 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
         lab_file_dir = default_lab_config_path + "/yow/{}".format(lab['name'])
         script_path = os.path.join(default_lab_config_path, "scripts")
 
+
     LOG.info("Getting lab config file from specified path: {}".format(lab_file_dir))
+    cmd = "test -e " + lab_file_dir
+    conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+
+    cmd = "test -e {}/deployment-config.yaml".format(lab_file_dir)
+    deployment_mgr = False
+    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0:
+        deployment_mgr = True
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
 
-    cmd = "test -e " + script_path
-    server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
-    server.ssh_conn.rsync(script_path + "/*",
-                               lab['controller-0 ip'],
-                               SYSADMIN_HOME, pre_opts=pre_opts)
+    if deployment_mgr:
+        download_deploy_manager_files(lab, server, load_path=load_path)
+    else:
+        cmd = "test -e " + script_path
+        server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+        server.ssh_conn.rsync(script_path + "/*",
+                                   lab['controller-0 ip'],
+                                   SYSADMIN_HOME, pre_opts=pre_opts)
 
     cmd = "test -e " + lab_file_dir
     conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
-    conf_server.ssh_conn.rsync(lab_file_dir + "/*",
+    if deployment_mgr:
+        extra_option = "-L "
+    else:
+        extra_option = ''
+
+    conf_server.ssh_conn.rsync("{}".format(extra_option) + lab_file_dir + "/*",
                                lab['controller-0 ip'],
                                SYSADMIN_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
+
+    site_file_path = os.path.join(default_lab_config_path, "yow/ansible/site.yml")
+
+    if conf_server.ssh_conn.exec_cmd('test -e {}'.format(site_file_path), rm_date=False)[0] == 0:
+        conf_server.ssh_conn.rsync(site_file_path,
+                               lab['controller-0 ip'],
+                               SYSADMIN_HOME, pre_opts=pre_opts)
 
     openstack_lab_files_dir = os.path.split(script_path)[0] + "/yow/openstack"
 
@@ -3301,7 +3324,8 @@ def get_git_name(lab_name):
 
 
 def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None, close_telnet=False,
-                             banner=True, branding=True, kubernetes=False, subcloud=False, ansible=False):
+                             banner=True, branding=True, kubernetes=False, subcloud=False, ansible=False,
+                             deploy_manager=False):
     """
     Runs the config_controller command on the active_controller host
     Args:
@@ -3332,7 +3356,9 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             con_telnet.exec_cmd("""echo '{}'>> {}""".format(histime_format_cmd, bashrc_path))
             con_telnet.exec_cmd("source {}".format(bashrc_path))
         con_telnet.exec_cmd("export USER=sysadmin")
+
         config_file_found = False
+
         if ansible:
             config_file = 'localhost.yml'
 
@@ -3347,7 +3373,12 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         if not config_file_found:
             msg = "The controller configuration file {}  not found in {}".format(config_file, SYSADMIN_HOME)
             raise exceptions.InstallError(msg)
-        if not ansible:
+        if deploy_manager:
+            cmd = 'ansible-playbook lab-install-playbook.yaml -e "deployment_config=deployment-config.yaml ' \
+                  'deployment_manager_overrides=helm-chart-overrides.yaml ansible_become=true"'
+            con_telnet.set_prompt(r'.*:~\$\s?')
+
+        elif not ansible:
             extra_option = '--force'
             # extra_option = '--force' \
             #     if con_telnet.exec_sudo_cmd("config_controller --help | grep \'\\-\\-force\'", fail_ok=True)[0] == 0 \
@@ -3389,6 +3420,9 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             con_telnet.close()
 
     return rc, output
+
+
+
 
 
 def apply_banner(telnet_conn, fail_ok=True):
@@ -4312,3 +4346,50 @@ def analyze_ansible_output(output):
     return 1, None
 
 
+def download_deploy_manager_files(lab, server, load_path=None, deployment_manager_path=None, lab_playbooks_path=None):
+    """
+    Downloads the deployment manager files from build server
+    Args:
+        lab:
+        server:
+        deployment_manager_path:
+
+    Returns:
+
+    """
+    if not lab or not server:
+        raise ValueError("The lab dictionary and build server object must be specified")
+
+    if not load_path:
+        load_path = BuildServerPath.DEFAULT_HOST_BUILD_PATH
+    if not deployment_manager_path:
+        deployment_manager_path = os.path.join(load_path, BuildServerPath.DEPLOY_MANAGER_REPO_PATH)
+    if not lab_playbooks_path:
+        lab_playbooks_path = os.path.join(load_path, BuildServerPath.PLAY_BOOKS_PATH)
+
+    server_ssh = server.ssh_conn
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+    if server_ssh.exec_cmd('test -d {}'.format(deployment_manager_path), rm_date=False)[0] == 0:
+        helm_chart_overrides = 'helm-chart-overrides.yaml'
+        helm_chart_overrides_path = '{}/{}'.format(deployment_manager_path, helm_chart_overrides)
+        if server_ssh.exec_cmd('test -f {}'.format(helm_chart_overrides_path), rm_date=False)[0] == 0:
+            pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+            dest_path = '{}/{}'.format(SYSADMIN_HOME, helm_chart_overrides)
+            server.ssh_conn.rsync(helm_chart_overrides_path,
+                                  lab['controller-0 ip'],
+                                  dest_path, pre_opts=pre_opts)
+
+    if server_ssh.exec_cmd('test -d {}'.format(lab_playbooks_path), rm_date=False)[0] == 0:
+        #upload the lab install playbooks
+        server.ssh_conn.rsync(lab_playbooks_path + "/*",
+                                  lab['controller-0 ip'],
+                                  SYSADMIN_HOME, pre_opts=pre_opts)
+
+    if server_ssh.exec_cmd('test -d {}'.format(BuildServerPath.DEPLOY_MANAGER_PATH), rm_date=False)[0] == 0:
+        server.ssh_conn.rsync("--exclude='*/' " + BuildServerPath.DEPLOY_MANAGER_PATH + "/*",
+                               lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
+
+        # Cumulus docker registry certificate
+        server.ssh_conn.rsync(BuildServerPath.DEFAULT_CUMULUS_DOCKER_REGISTRY_CERT_PATH,
+                              lab['controller-0 ip'],
+                              SYSADMIN_HOME, pre_opts=pre_opts)
