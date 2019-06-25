@@ -46,7 +46,7 @@ def sysinv_rest():
         ('GET', '/service_parameter'),
         ('GET', '/services'),
         ('GET', '/storage_backend'),
-        ('GET', '/storage_backend/usage'),
+        # ('GET', '/storage_backend/usage'),
         ('GET', '/storage_ceph'),
         ('GET', '/storage_lvm'),
         # ('GET', '/tpmconfig'),
