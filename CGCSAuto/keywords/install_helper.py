@@ -4382,9 +4382,11 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
     if server_ssh.exec_cmd('test -d {}'.format(deployment_manager_path), rm_date=False)[0] == 0:
         helm_chart_overrides = 'helm-chart-overrides.yaml'
         helm_chart_overrides_path = '{}/{}'.format(deployment_manager_path, helm_chart_overrides)
+
         if server_ssh.exec_cmd('test -f {}'.format(helm_chart_overrides_path), rm_date=False)[0] == 0:
             pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
-            dest_path = '{}/{}'.format(SYSADMIN_HOME, helm_chart_overrides)
+            dest_path = "{}titanium-deployment-manager-overrides.yaml".format(SYSADMIN_HOME)
+            #dest_path = '{}/{}'.format(SYSADMIN_HOME, helm_chart_overrides)
             server.ssh_conn.rsync(helm_chart_overrides_path,
                                   lab['controller-0 ip'],
                                   dest_path, pre_opts=pre_opts)
@@ -4396,8 +4398,18 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
                                   SYSADMIN_HOME, pre_opts=pre_opts)
 
     if server_ssh.exec_cmd('test -d {}'.format(BuildServerPath.DEPLOY_MANAGER_PATH), rm_date=False)[0] == 0:
-        server.ssh_conn.rsync("--exclude='*/' " + BuildServerPath.DEPLOY_MANAGER_PATH + "/*",
+        server.ssh_conn.rsync(BuildServerPath.DEPLOY_MANAGER_PATH + "/*.yaml",
                                lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
+
+        server.ssh_conn.rsync(BuildServerPath.DEPLOY_MANAGER_PATH + "/*.sh",
+                               lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
+
+        titanium_deploy_mgr_tgz_path = os.path.join(BuildServerPath.DEPLOY_MANAGER_PATH,
+                                                   BuildServerPath.TITANIUM_DEPLOYMENT_MGR_TGZ)
+        dest_path = '{}titanium-deployment-manager.tgz'.format(SYSADMIN_HOME)
+
+        server.ssh_conn.rsync( titanium_deploy_mgr_tgz_path,
+                               lab['controller-0 ip'], dest_path, pre_opts=pre_opts)
 
     if server_ssh.exec_cmd('test -f {}'.format(registry_ca_cert_path), rm_date=False)[0] == 0:
         # Cumulus docker registry certificate
