@@ -73,7 +73,7 @@ def test_auth_log_sudo_cmd():
     LOG.tc_step("Executing sudo command {}".format(cmd))
     con_ssh.exec_sudo_cmd(cmd, fail_ok=True)
 
-    searching_for = ['sudo: notice  sysadmin.*PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/ls -l']
+    searching_for = ['sudo: notice sysadmin.*PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/ls -l']
     found = wait_for_log(log_path=log_path, ssh_client=con_ssh, patterns=searching_for, start_time=start_time)
 
     assert len(searching_for) == len(found), "FAIL: The sudo command was not logged. " \
@@ -131,7 +131,7 @@ def test_auth_log_sudo_su():
 
     """
     con_ssh = ControllerClient.get_active_controller()
-    searching_for = ['sudo: notice  sysadmin.*PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/su \-',
+    searching_for = ['sudo: notice sysadmin.*PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/su \-',
                      'su: notice \(to root\) sysadmin on',
                      # uses su-l:session because login_as_root calls 'sudo su -'
                      'su: info pam_unix\(su-l:session\): session opened for user root by sysadmin\(uid=0\)']
