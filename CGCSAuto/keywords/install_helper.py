@@ -659,9 +659,15 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
                                SYSADMIN_HOME, pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
 
     site_file_path = os.path.join(default_lab_config_path, "yow/ansible/site.yml")
+    local_install_override_file_path = os.path.join(default_lab_config_path, "yow/ansible/local-install-overrides.yaml")
 
     if conf_server.ssh_conn.exec_cmd('test -e {}'.format(site_file_path), rm_date=False)[0] == 0:
         conf_server.ssh_conn.rsync(site_file_path,
+                               lab['controller-0 ip'],
+                               SYSADMIN_HOME, pre_opts=pre_opts)
+
+    if conf_server.ssh_conn.exec_cmd('test -e {}'.format(local_install_override_file_path), rm_date=False)[0] == 0:
+        conf_server.ssh_conn.rsync(local_install_override_file_path,
                                lab['controller-0 ip'],
                                SYSADMIN_HOME, pre_opts=pre_opts)
 
@@ -3374,8 +3380,10 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             msg = "The controller configuration file {}  not found in {}".format(config_file, SYSADMIN_HOME)
             raise exceptions.InstallError(msg)
         if deploy_manager:
-            cmd = 'ansible-playbook lab-install-playbook.yaml -e "deployment_config=deployment-config.yaml ' \
-                  'deployment_manager_overrides=helm-chart-overrides.yaml"'
+            # cmd = 'ansible-playbook lab-install-playbook.yaml -e "deployment_config=deployment-config.yaml ' \
+            #       'deployment_manager_overrides=helm-chart-overrides.yaml"'
+            cmd = 'ansible-playbook lab-install-playbook.yaml -e "@local-install-overrides.yaml"'
+
             con_telnet.set_prompt(r'.*:~\$\s?')
 
         elif not ansible:
