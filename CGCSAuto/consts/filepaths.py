@@ -95,6 +95,7 @@ class BuildServerPath:
     ISO_PATH_CENGN = 'outputs/iso/bootimage.iso'
     ISO_PATH = 'export/bootimage.iso'
     STX_HELM_CHARTS = 'helm-charts'
+    TITANIUM_HELM_CHARTS = 'helm-charts/centos'
     DEFAULT_HELM_CHARTS = STX_HELM_CHARTS_CENGN
     DEFAULT_ISO = ISO_PATH_CENGN
     DEPLOY_MANAGER_PATH = '/folk/cgts/lab/deployment-manager/'
