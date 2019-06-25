@@ -145,7 +145,7 @@ def _get_local_results(res_path):
     log_path = "{}:{}".format(hostname, log_path)
     pass_rate = re.findall("Passed: .* \((.*)%\)\n", other_info)[0].strip()
     summary = other_info.split(sep='\nSummary:')[-1].strip()
-    overall_status = _get_overall_status(pass_rate)
+    overall_status = get_overall_status(pass_rate)
 
     return lab, build, build_server, overall_status, log_path, summary, testcases_res, sw_version, patches, build_job
 
@@ -251,12 +251,12 @@ def _get_results_from_mongo(tags, start_date, end_date, include_bld=False, logs_
         hostname = local_host.get_host_name()
         log_path = "{}:{}".format(hostname, logs_dir)
 
-    overall_status = _get_overall_status(pass_rate)
+    overall_status = get_overall_status(pass_rate)
 
     return lab, build, build_server, overall_status, log_path, summary, testcases_res, build_job
 
 
-def _get_overall_status(pass_rate):
+def get_overall_status(pass_rate):
     pass_rate = str(pass_rate).split(sep='%')[0]
     pass_rate = float(pass_rate)
     if pass_rate == 100:
