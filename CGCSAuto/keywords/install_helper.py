@@ -4399,6 +4399,6 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
         server.ssh_conn.rsync("--exclude='*/' " + BuildServerPath.DEPLOY_MANAGER_PATH + "/*",
                                lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
 
-    if server_ssh.exec_cmd('test -d {}'.format(registry_ca_cert_path), rm_date=False)[0] == 0:
+    if server_ssh.exec_cmd('test -f {}'.format(registry_ca_cert_path), rm_date=False)[0] == 0:
         # Cumulus docker registry certificate
         server.ssh_conn.rsync(registry_ca_cert_path, lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
