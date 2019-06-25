@@ -4375,6 +4375,8 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
     if not lab_playbooks_path:
         lab_playbooks_path = os.path.join(load_path, BuildServerPath.PLAY_BOOKS_PATH)
 
+    registry_ca_cert_path = os.path.join(load_path, BuildServerPath.DEFAULT_CUMULUS_DOCKER_REGISTRY_CERT_PATH)
+
     server_ssh = server.ssh_conn
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     if server_ssh.exec_cmd('test -d {}'.format(deployment_manager_path), rm_date=False)[0] == 0:
@@ -4397,7 +4399,6 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
         server.ssh_conn.rsync("--exclude='*/' " + BuildServerPath.DEPLOY_MANAGER_PATH + "/*",
                                lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
 
+    if server_ssh.exec_cmd('test -d {}'.format(registry_ca_cert_path), rm_date=False)[0] == 0:
         # Cumulus docker registry certificate
-        server.ssh_conn.rsync(BuildServerPath.DEFAULT_CUMULUS_DOCKER_REGISTRY_CERT_PATH,
-                              lab['controller-0 ip'],
-                              SYSADMIN_HOME, pre_opts=pre_opts)
+        server.ssh_conn.rsync(registry_ca_cert_path, lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
