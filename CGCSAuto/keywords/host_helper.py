@@ -889,8 +889,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK,
         check_stx = container_helper.is_stx_openstack_deployed(
             applied_only=True, con_ssh=con_ssh, auth_info=auth_info,
             use_telnet=use_telnet, con_telnet=con_telnet)
-        prev_bad_pods = kube_helper.get_unhealthy_pods(node=host,
-                                                       con_ssh=con_ssh,
+        prev_bad_pods = kube_helper.get_unhealthy_pods(con_ssh=con_ssh,
                                                        all_namespaces=True)
     exitcode, output = cli.system('host-unlock', host, ssh_client=con_ssh,
                                   use_telnet=use_telnet, con_telnet=con_telnet,
@@ -1001,7 +1000,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK,
         if con0_install:
             prev_bad_pods = 'coredns-'
         res_pods = kube_helper.wait_for_pods_healthy(
-            check_interval=10, con_ssh=con_ssh, fail_ok=fail_ok, node=host,
+            check_interval=10, con_ssh=con_ssh, fail_ok=fail_ok,
             name=prev_bad_pods, exclude=True, all_namespaces=True)
 
         if con0_install:
