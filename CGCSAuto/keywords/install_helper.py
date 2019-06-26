@@ -637,15 +637,13 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
         deployment_mgr = True
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
+    download_deploy_manager_files(lab, server, load_path=load_path, deployment_mgr=deployment_mgr)
 
-    if deployment_mgr:
-        download_deploy_manager_files(lab, server, load_path=load_path)
-    else:
-        cmd = "test -e " + script_path
-        server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
-        server.ssh_conn.rsync(script_path + "/*",
-                                   lab['controller-0 ip'],
-                                   SYSADMIN_HOME, pre_opts=pre_opts)
+    cmd = "test -e " + script_path
+    server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+    server.ssh_conn.rsync(script_path + "/*",
+                               lab['controller-0 ip'],
+                               SYSADMIN_HOME, pre_opts=pre_opts)
 
     cmd = "test -e " + lab_file_dir
     conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
@@ -3398,9 +3396,13 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             cmd = 'echo "{}" | sudo -S {} {} {}'.format(HostLinuxCreds.get_password(), config_cmd, config_file,
                                                         extra_option)
         else:
-            cmd = 'ansible-playbook /usr/share/ansible/stx-ansible/playbooks/bootstrap/bootstrap.yml -e ' \
-                         '"override_files_dir={} ansible_become_pass={}"'\
-                .format(SYSADMIN_HOME, HostLinuxCreds.get_password())
+            # cmd = 'ansible-playbook /usr/share/ansible/stx-ansible/playbooks/bootstrap/bootstrap.yml -e ' \
+            #              '"override_files_dir={} ansible_become_pass={}"'\
+            #     .format(SYSADMIN_HOME, HostLinuxCreds.get_password())
+
+            cmd = 'ansible-playbook /usr/share/ansible/stx-ansible/playbooks/bootstrap/bootstrap.yml ' \
+                  '-e "@local-install-overrides.yaml"'
+
             con_telnet.set_prompt(r'.*:~\$\s?')
 
         os.environ["TERM"] = "xterm"
@@ -4354,7 +4356,8 @@ def analyze_ansible_output(output):
     return 1, None
 
 
-def download_deploy_manager_files(lab, server, load_path=None, deployment_manager_path=None, lab_playbooks_path=None):
+def download_deploy_manager_files(lab, server, load_path=None, deployment_manager_path=None, lab_playbooks_path=None,
+                                  deployment_mgr=True):
     """
     Downloads the deployment manager files from build server
     Args:
@@ -4400,9 +4403,9 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
     if server_ssh.exec_cmd('test -d {}'.format(BuildServerPath.DEPLOY_MANAGER_PATH), rm_date=False)[0] == 0:
         server.ssh_conn.rsync(BuildServerPath.DEPLOY_MANAGER_PATH + "/*.yaml",
                                lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
-
-        server.ssh_conn.rsync(BuildServerPath.DEPLOY_MANAGER_PATH + "/*.sh",
-                               lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
+        if not deployment_mgr:
+            server.ssh_conn.rsync(BuildServerPath.DEPLOY_MANAGER_PATH + "/*.sh",
+                                   lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
 
         titanium_deploy_mgr_tgz_path = os.path.join(BuildServerPath.DEPLOY_MANAGER_PATH,
                                                    BuildServerPath.TITANIUM_DEPLOYMENT_MGR_TGZ)
