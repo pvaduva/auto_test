@@ -377,7 +377,7 @@ class SSHClient:
         if searchwindowsize is not None:
             kwargs['searchwindowsize'] = searchwindowsize
         elif blob_list == [self.prompt]:
-            kwargs['searchwindowsize'] = 500
+            kwargs['searchwindowsize'] = 100
 
         try:
             index = self.session.expect(blob_list, timeout=timeout, **kwargs)
