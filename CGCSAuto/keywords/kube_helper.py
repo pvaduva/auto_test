@@ -665,12 +665,18 @@ def wait_for_nodes_ready(hosts=None, timeout=120, check_interval=5,
         (False, <nodes_not_ready>(list))
 
     """
+    if hosts and isinstance(hosts, str):
+        hosts = [hosts]
+
     end_time = time.time() + timeout
     nodes_not_ready = None
     while time.time() < end_time:
-        nodes_not_ready = get_nodes(hosts=hosts, status='Ready', field='NAME',
+        nodes_not_ready = get_nodes(status='Ready', field='NAME',
                                     exclude=True, con_ssh=con_ssh,
                                     fail_ok=True)
+        if nodes_not_ready and hosts:
+            nodes_not_ready = list(set(nodes_not_ready) & set(hosts))
+
         if nodes_not_ready:
             LOG.info('{} not ready yet'.format(nodes_not_ready))
         elif nodes_not_ready is not None:
