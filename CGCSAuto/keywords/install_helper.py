@@ -2711,16 +2711,21 @@ def remove_patches(lab):
     return 0, ''
 
 
-def establish_ssh_connection(host, user=HostLinuxUser.get_user(), password=HostLinuxUser.get_password(),
-                             initial_prompt=Prompt.CONTROLLER_PROMPT, retry=False, fail_ok=False):
+def establish_ssh_connection(host, user=HostLinuxUser.get_user(),
+                             password=HostLinuxUser.get_password(),
+                             initial_prompt=Prompt.CONTROLLER_PROMPT,
+                             retry=False, fail_ok=False, searchwindowsize=50):
 
     try:
-        _ssh_conn = SSHClient(host, user=user, password=password, initial_prompt=initial_prompt, timeout=360)
+        _ssh_conn = SSHClient(host, user=user, password=password,
+                              initial_prompt=initial_prompt, timeout=360,
+                              searchwindownsize=searchwindowsize)
         _ssh_conn.connect(retry=retry)
         return _ssh_conn
 
     except Exception as e:
-        LOG.error("Fail to establish ssh connection with {}: {}".format(host, str(e) ))
+        LOG.error("Fail to establish ssh connection with {}: {}".format(
+            host, str(e)))
         if fail_ok:
             return None
         else:
