@@ -2714,13 +2714,13 @@ def remove_patches(lab):
 def establish_ssh_connection(host, user=HostLinuxUser.get_user(),
                              password=HostLinuxUser.get_password(),
                              initial_prompt=Prompt.CONTROLLER_PROMPT,
-                             retry=False, fail_ok=False, searchwindowsize=50):
+                             retry=False, fail_ok=False):
 
     try:
         _ssh_conn = SSHClient(host, user=user, password=password,
-                              initial_prompt=initial_prompt, timeout=360,
-                              searchwindownsize=searchwindowsize)
+                              initial_prompt=initial_prompt, timeout=360)
         _ssh_conn.connect(retry=retry)
+        _ssh_conn.exec_cmd('unset PROMPT_COMMAND')
         return _ssh_conn
 
     except Exception as e:
