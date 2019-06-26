@@ -998,9 +998,16 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK,
                 auth_info=auth_info, con_ssh=con_ssh, check_interval=10,
                 fail_ok=fail_ok)[0]
 
+        if con0_install:
+            prev_bad_pods = 'coredns-'
         res_pods = kube_helper.wait_for_pods_healthy(
             check_interval=10, con_ssh=con_ssh, fail_ok=fail_ok, node=host,
             name=prev_bad_pods, exclude=True, all_namespaces=True)
+
+        if con0_install:
+            res_pods = kube_helper.wait_for_pods_status(
+                partial_names='coredns', namespace='kube-system',
+                node='controller-0', check_interval=10, timeout=300)
 
         if not (res_nodes and res_app and res_pods):
             err_msg = "Container check failed after unlock {}".format(host)

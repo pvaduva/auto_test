@@ -398,6 +398,7 @@ def wait_for_pods_status(pod_names=None, partial_names=None, labels=None,
                             break
 
         if not pods_to_check and not continue_check:
+            LOG.info('Pods in expected status: {}'.format(actual_status))
             return True, actual_status
 
         time.sleep(check_interval)
@@ -407,8 +408,9 @@ def wait_for_pods_status(pod_names=None, partial_names=None, labels=None,
     criteria = '{} {}'.format(name_str, label_str).strip()
     msg = "Pods did not reach expected status within {}s. Criteria not met: " \
           "{}. Actual info: {}".format(timeout, criteria, actual_status)
+
+    LOG.info(msg)
     if fail_ok:
-        LOG.info(msg)
         return False, actual_status
 
     raise exceptions.KubeError(msg)
