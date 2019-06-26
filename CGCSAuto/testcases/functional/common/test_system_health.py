@@ -46,3 +46,8 @@ def test_system_alarms(pre_alarms_session):
     LOG.tc_step("Gathering system alarms at the end of test session")
     check_helper.check_alarms(before_alarms=pre_alarms_session)
     LOG.info("No new alarms found after test session.")
+
+
+def test_test():
+    from keywords import kube_helper
+    kube_helper.wait_for_nodes_ready('controller-0', timeout=20)

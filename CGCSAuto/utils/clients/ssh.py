@@ -378,7 +378,7 @@ class SSHClient:
         if searchwindowsize is not None:
             kwargs['searchwindowsize'] = searchwindowsize
         elif blob_list == [self.prompt]:
-            kwargs['searchwindowsize'] = 100
+            kwargs['searchwindowsize'] = 500
 
         try:
             index = self.session.expect(blob_list, timeout=timeout, **kwargs)
@@ -1211,7 +1211,9 @@ class SSHFromSSH(SSHClient):
                             'failed.')
 
                     self.send(self.password)
-                    self.expect(prompt, timeout=timeout)
+                    search_size = 1000 if ' -v' in self.ssh_cmd else None
+                    self.expect(prompt, timeout=timeout,
+                                searchwindowsize=search_size)
 
                 # Set prompt for matching
                 self.set_prompt(prompt)
@@ -1347,13 +1349,13 @@ class VMSSHClient(SSHFromSSH):
 
         # Check if connecting to vm through port forwarding rule
         if vm_ext_port:
-            self.ssh_cmd = 'ssh -vvv {} -p {} {}@{}'.format(ssh_options,
-                                                            vm_ext_port,
-                                                            self.user,
-                                                            self.host)
+            self.ssh_cmd = 'ssh -v {} -p {} {}@{}'.format(ssh_options,
+                                                          vm_ext_port,
+                                                          self.user,
+                                                          self.host)
         else:
-            self.ssh_cmd = 'ssh -vvv {} {}@{}'.format(ssh_options, self.user,
-                                                      self.host)
+            self.ssh_cmd = 'ssh -v {} {}@{}'.format(ssh_options, self.user,
+                                                    self.host)
 
         self.connect(use_password=password, retry=retry,
                      retry_timeout=retry_timeout)
