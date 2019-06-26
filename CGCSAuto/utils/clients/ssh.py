@@ -237,8 +237,7 @@ class SSHClient:
                         if 'your password' in output:
                             LOG.warning(
                                 "Login failed possibly due to password expire "
-                                "warning. "
-                                        "Retry with small searchwindowsize")
+                                "warning. Retry with small searchwindowsize")
                             self.searchwindowsize = 50
                         else:
                             raise
@@ -581,8 +580,8 @@ class SSHClient:
         code, output = self._process_exec_result(rm_date=True)
         if code != 0 and not fail_ok:
             raise exceptions.SSHExecCommandFailed(
-                "Non-zero return code for rsync cmd: {}. Output: {}".
-                                                  format(cmd, output))
+                "Non-zero return code for rsync cmd: {}. Output: {}".format(
+                    cmd, output))
 
         return code, output
 
@@ -772,8 +771,8 @@ class SSHClient:
                                                  get_exit_code=get_exit_code)
         if code != 0 and not fail_ok:
             raise exceptions.SSHExecCommandFailed(
-                "Non-zero return code for sudo cmd: {}. Output: {}".
-                                                  format(cmd, output))
+                "Non-zero return code for sudo cmd: {}. Output: {}".format(
+                    cmd, output))
 
         return code, output
 
@@ -1111,8 +1110,8 @@ class ContainerClient(SSHClient):
             self.send('exit')
             self.parent.expect()
             LOG.info(
-                "ssh session to {} is closed and returned to parent session {}".
-                     format(self.host, self.parent.host))
+                "ssh session to {} is closed and returned to parent session "
+                "{}".format(self.host, self.parent.host))
         else:
             LOG.info(
                 "ssh session to {} is not open. Flushing the buffer for "
@@ -1255,8 +1254,8 @@ class SSHFromSSH(SSHClient):
             self.send('exit')
             self.parent.expect()
             LOG.info(
-                "ssh session to {} is closed and returned to parent session {}".
-                     format(self.host, self.parent.host))
+                "ssh session to {} is closed and returned to parent session "
+                "{}".format(self.host, self.parent.host))
         else:
             LOG.info(
                 "ssh session to {} is not open. Flushing the buffer for "

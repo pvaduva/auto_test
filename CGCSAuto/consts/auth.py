@@ -215,7 +215,7 @@ class HostLinuxUser:
 
     @classmethod
     def get_home(cls):
-        return cls.__SYSADMIN.get('home', '/home/{}'.format(cls.get_user()))
+        return cls.__SYSADMIN.get('home', '/home/{}/'.format(cls.get_user()))
 
     @classmethod
     def set_user(cls, username):
