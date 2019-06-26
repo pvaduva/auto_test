@@ -24,21 +24,29 @@ def ixia_required(ixia_required):
 
 @fixture(scope='module')
 def update_network_quotas(request):
-    for tenant in (Tenant.get_primary()['tenant'], Tenant.get_secondary()['tenant']):
-        LOG.fixture_step("Increasing network and subnet quotas by 10 for {}".format(tenant))
-        nw_quota, sn_quota = vm_helper.get_quotas(('networks', 'subnets'), tenant=tenant)
-        vm_helper.set_quotas(tenant=tenant, subnet=sn_quota+10, network=nw_quota+10)
+    for tenant in \
+            (Tenant.get_primary()['tenant'], Tenant.get_secondary()['tenant']):
+        LOG.fixture_step(
+            "Increasing network and subnet quotas by 10 for {}".format(tenant))
+        nw_quota, sn_quota = vm_helper.get_quotas(('networks', 'subnets'),
+                                                  tenant=tenant)
+        vm_helper.set_quotas(tenant=tenant, subnets=sn_quota+10,
+                             networks=nw_quota+10)
 
         def teardown():
-            LOG.fixture_step("Reverting network and subnet quotas for {}".format(tenant))
-            vm_helper.set_quotas(tenant=tenant, subnet=sn_quota, network=nw_quota)
+            LOG.fixture_step("Reverting network and subnet quotas for "
+                             "{}".format(tenant))
+            vm_helper.set_quotas(tenant=tenant, subnets=sn_quota,
+                                 networks=nw_quota)
         request.addfinalizer(teardown)
 
 
 @fixture(scope='module')
 def skip_if_25g():
-    if ProjVar.get_var("LAB")['name'] in ["yow-cgcs-wildcat-61_62", "yow-cgcs-wildcat-63_66"]:
-        skip("25G labs are not supported for this testcase due to insufficient stress")
+    if ProjVar.get_var("LAB")['name'] in ["yow-cgcs-wildcat-61_62",
+                                          "yow-cgcs-wildcat-63_66"]:
+        skip("25G labs are not supported for this testcase due to "
+             "insufficient stress")
 
 
 @fixture(scope='module')

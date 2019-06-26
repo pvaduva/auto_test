@@ -16,7 +16,7 @@ from contextlib import contextmanager, ExitStack
 
 import pexpect
 
-from consts.auth import Tenant, TestFileServer
+from consts.auth import Tenant, TestFileServer, HostLinuxUser
 from consts.stx import VMStatus, NovaCLIOutput, EXT_IP, InstanceTopology, \
     VifMapping, ImageStatus, \
     VMNetwork, EventLogID, GuestImages, Networks, FlavorSpec, VimEventID
@@ -909,6 +909,12 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, image_id=None,
         # create userdata cloud init file to run right after vm
         # initialization to get ip on interfaces other than eth0.
         user_data = _create_cloud_init_if_conf(guest_os, nics_num=len(nics))
+
+    if user_data and user_data.startswith('~'):
+        user_data.replace('~', HostLinuxUser.get_home(), count=1)
+
+    if file and file.startswith('~'):
+        file.replace('~', HostLinuxUser.get_home(), count=1)
 
     # create cmd
     non_repeat_args = {'--flavor': flavor,

@@ -2,9 +2,10 @@ import re
 
 from pytest import mark, fixture, skip, param
 
-import keywords.host_helper
 from consts.stx import FlavorSpec
-from keywords import host_helper, system_helper, vm_helper, nova_helper, check_helper, common
+from consts.cli_errs import CpuAssignment   # DO not remove
+from keywords import host_helper, system_helper, vm_helper, nova_helper, \
+    check_helper, common
 from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 from utils import table_parser
@@ -48,7 +49,7 @@ def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
     if len(nova_hosts) < 1:
         skip("No nova compute host available in the system, no host to lock and reconfigure.")
 
-    storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
+    storage_backing, hosts = host_helper.get_storage_backing_with_max_hosts()
     host = hosts[0]
     host_other = hosts[1] if len(hosts) > 1 else None
 
@@ -126,7 +127,8 @@ class TestVSwitchCPUReconfig:
         # ((2, 0), (1, 1), None, 'AIO'),       # CPE only
         ((1, 2), (3, 2), None, None),
         # ((1, 2), (2, 2), None, None),     # Unnecessary test
-        ((2, 0), (0, 0), None, None),  # Shared vswitch core feature, which allows 0 dedicated vswitch core
+        # ((2, 0), (0, 0), None, None),  # Shared vswitch core feature,
+        # which allows 0 dedicated vswitch core
         ((1, 0), (1, 0), 'nonHT', 'nonAIO'),  # Standard lab only
         ((2, 0), (1, 0), 'nonHT', 'AIO'),  # CPE only
         # ((2, 0), (2, 0), None, True),       # CPE only    # remove - covered by other test
@@ -368,7 +370,7 @@ def _create_flavor(vcpus, storage_backing, vswitch_numa_affinity=None, numa_0=No
 def get_hosts(host_to_config):
     host0, proc_ids, ht_enabled, is_cpe, host1, storage_backing = host_to_config
     if not host1:
-        storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
+        storage_backing, hosts = host_helper.get_storage_backing_with_max_hosts()
         if len(hosts) < 2:
             skip("Less than two up hypervisors support same storage backing")
         else:

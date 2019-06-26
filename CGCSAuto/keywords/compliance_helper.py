@@ -214,5 +214,7 @@ def create_tenants_and_update_quotas(new_tenants_index=(3, 6), add_swift_role=Fa
             projects.append(name)
 
     for project in projects:
-        vm_helper.set_quotas(tenant=project, instances=20, cores=50, volumes=30, snapshots=20,
-                             ports=500, subnets=100, networks=100, **{'floating-ips': 50})
+        vm_helper.set_quotas(tenant=project, instances=20, cores=50,
+                             volumes=30, snapshots=20,
+                             ports=500, subnets=100, networks=100,
+                             **{'floating-ips': 50})

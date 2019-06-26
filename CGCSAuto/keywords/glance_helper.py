@@ -369,6 +369,9 @@ def create_image(name=None, image_id=None, source_image_file=None, volume=None,
         file_path = "{}/{}".format(img_dir, default_guest_img)
 
     if file_path:
+        if file_path.startswith('~/'):
+            file_path.replace('~', HostLinuxUser.get_home(), count=1)
+        file_path = os.path.normpath(file_path)
         if 'win' in file_path and 'os_type' not in properties:
             properties['os_type'] = 'windows'
         elif 'ge_edge' in file_path and 'hw_firmware_type' not in properties:

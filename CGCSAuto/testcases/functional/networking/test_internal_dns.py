@@ -187,9 +187,10 @@ def test_ping_between_vms_using_hostnames(func_recover):
     subnet_list = network_helper.get_subnets(network=mgmt_net_id)
 
     LOG.tc_step("Store existing DNS entries so they can be restored later")
-    dns_servers = network_helper.get_subnet_values(subnet_list[0], fields='dns_nameservers')[0]
+    dns_servers = network_helper.get_subnet_values(
+        subnet_list[0], fields='dns_nameservers')[0].split(', ')
     if not dns_servers:
-        LOG.tc_step("No DNS servers found.  Setting DNS servers to defaults")
+        LOG.tc_step("No DNS servers found. Setting DNS servers to defaults")
         dns_servers = DEFAULT_DNS_SERVERS
         set_dns_servers(subnet_list, dns_servers)
 

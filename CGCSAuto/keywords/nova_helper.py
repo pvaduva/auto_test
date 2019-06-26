@@ -96,8 +96,8 @@ def create_flavor(name=None, flavor_id=None, vcpus=1, ram=1024, root_disk=None, 
         sys_inst_backing = ProjVar.get_var('INSTANCE_BACKING')
         if not default_flavor_backing:
             from keywords import host_helper
-            sys_inst_backing = host_helper.get_hosts_per_storage_backing(up_only=False, auth_info=auth_info,
-                                                                         con_ssh=con_ssh, refresh=True)
+            sys_inst_backing = host_helper.get_hosts_per_storage_backing(
+                auth_info=auth_info, con_ssh=con_ssh, refresh=True)
         configured_backings = [backing for backing in sys_inst_backing if sys_inst_backing.get(backing)]
         LOG.debug("configured backing:{} sys inst backing: {}, required storage backing: {}".
                   format(configured_backings, sys_inst_backing, storage_backing))
