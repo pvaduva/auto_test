@@ -4028,8 +4028,8 @@ def get_vcpu_cpu_map(instance_names=None, host_ssh=None, host=None,
         if isinstance(instance_names, str):
             instance_names = (instance_names,)
         extra_grep = '|grep -E "{}"'.format('|'.join(instance_names))
-    cmd = """ps-sched.sh|grep qemu{}|grep " CPU" |
-    awk '{{print $10" "$12" "$15 ;}}'""".format(extra_grep)
+    cmd = 'ps-sched.sh|grep qemu{}|grep " CPU" | '.format(extra_grep) + \
+          """awk '{{print $10" "$12" "$15 ;}}'"""
 
     if host_ssh:
         output = host_ssh.exec_cmd(cmd)[1]
