@@ -638,12 +638,12 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxCreds.get_password())
     download_deploy_manager_files(lab, server, load_path=load_path, deployment_mgr=deployment_mgr)
-
-    cmd = "test -e " + script_path
-    server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
-    server.ssh_conn.rsync(script_path + "/*",
-                               lab['controller-0 ip'],
-                               SYSADMIN_HOME, pre_opts=pre_opts)
+    if not deployment_mgr:
+        cmd = "test -e " + script_path
+        server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+        server.ssh_conn.rsync(script_path + "/*",
+                                   lab['controller-0 ip'],
+                                   SYSADMIN_HOME, pre_opts=pre_opts)
 
     cmd = "test -e " + lab_file_dir
     conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
