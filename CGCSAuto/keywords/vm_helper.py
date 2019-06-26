@@ -4060,8 +4060,8 @@ def get_affined_cpus_for_vm(vm_id, host_ssh=None, vm_host=None,
     Returns (list): such as [10, 30]
 
     """
-    cmd = '''ps-sched.sh|grep qemu|grep {}|grep -v grep|
-    awk '{{print $2;}}'|xargs -i /bin/sh -c "taskset -pc {{}}"'''
+    cmd = "ps-sched.sh|grep qemu|grep {}|grep -v grep|awk '{{print $2;}}'" + \
+          '|xargs -i /bin/sh -c "taskset -pc {{}}"'
 
     if host_ssh:
         if not vm_host or not instance_name:

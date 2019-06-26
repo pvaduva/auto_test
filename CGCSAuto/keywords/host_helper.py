@@ -2948,7 +2948,7 @@ def get_vcpus_per_proc(hosts=None, thread=None, con_ssh=None,
                                                         auth_info=auth_info,
                                                         con_ssh=con_ssh)
         with ssh_to_host(host, con_ssh=con_ssh) as host_ssh:
-            cmd = """ps-sched.sh|grep qemu|grep " CPU" |awk '{{print $10;}}'"""
+            cmd = "ps-sched.sh|grep qemu|grep ' CPU' |awk '{{print $10;}}'"
             cores = host_ssh.exec_cmd(cmd)[1]
             cores = [int(core.strip()) for core in cores.splitlines()]
 
