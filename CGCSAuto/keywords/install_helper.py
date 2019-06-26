@@ -4403,7 +4403,7 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
     if server_ssh.exec_cmd('test -d {}'.format(BuildServerPath.DEPLOY_MANAGER_PATH), rm_date=False)[0] == 0:
         server.ssh_conn.rsync(BuildServerPath.DEPLOY_MANAGER_PATH + "/*.yaml",
                                lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
-        if not deployment_mgr:
+        if deployment_mgr:
             server.ssh_conn.rsync(BuildServerPath.DEPLOY_MANAGER_PATH + "/*.sh",
                                    lab['controller-0 ip'], SYSADMIN_HOME, pre_opts=pre_opts)
 
