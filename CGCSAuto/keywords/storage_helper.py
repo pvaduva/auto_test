@@ -1385,7 +1385,7 @@ def modify_controllerfs(fail_ok=False, auth_info=Tenant.get('admin_platform'), c
     return 0, msg
 
 
-def get_host_stors(host, field='uuid', auth_info=Tenant.get('admin_platform'), con_ssh=None):
+def get_host_stors(host, field='uuid', con_ssh=None, auth_info=Tenant.get('admin_platform')):
     """
     Get host storage values from system host-stor-list
     Args:
@@ -1401,7 +1401,7 @@ def get_host_stors(host, field='uuid', auth_info=Tenant.get('admin_platform'), c
     return table_parser.get_multi_values(table_, field, evaluate=True)
 
 
-def get_host_stor_values(host, stor_uuid, fields="size", auth_info=Tenant.get('admin_platform'), con_ssh=None):
+def get_host_stor_values(host, stor_uuid, fields="size", con_ssh=None, auth_info=Tenant.get('admin_platform')):
     """
     Returns the value of a particular filesystem.
 

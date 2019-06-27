@@ -107,7 +107,7 @@ class TestQoS:
 
         with host_helper.ssh_to_host(vm_host) as host_ssh:
 
-            sed_cmd = r"sed -n 's:.*<" + qos_spec + r">\(.*\)</" + qos_spec + r">.*:\\1:p' "
+            sed_cmd = "sed -n 's:.*<" + qos_spec + ">\(.*\)</" + qos_spec + ">.*:\\1:p' "
             dump_xml_cmd = "virsh dumpxml " + instance_name + " | " + sed_cmd
 
             code, dump_xml_output = host_ssh.exec_sudo_cmd(cmd=dump_xml_cmd)

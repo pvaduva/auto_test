@@ -787,7 +787,7 @@ def filter_table(table_, strict=True, regex=False, exclude=False, **kwargs):
     row_indexes = []
     first_iteration = True
     for header, values in kwargs.items():
-        if isinstance(values, str):
+        if not isinstance(values, (tuple, list)):
             values = [values]
         row_indexes_for_field = []
         for value in values:
