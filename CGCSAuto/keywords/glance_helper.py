@@ -734,7 +734,7 @@ def get_image_properties(image, property_keys, rtn_dict=False,
     if rtn_dict:
         return {k: properties[k] for k in property_keys}
     else:
-        return [properties[k] for k in property_keys]
+        return [properties.get(k) for k in property_keys]
 
 
 def get_image_values(image, fields, auth_info=Tenant.get('admin'), con_ssh=None,

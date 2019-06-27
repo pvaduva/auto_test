@@ -110,7 +110,7 @@ def test_create_snapshot_using_boot_from_volume_vm():
     image_uuid = vol_size = None
     for image in image_list:
         image_uuid = image
-        image_prop_s, image_prop_d = glance_helper.get_image_properties(
+        image_prop_s, image_prop_d = glance_helper.get_image_values(
             image_uuid, ("size", "disk_format"))
         if str(image_prop_s) == "0" or image_prop_d != "raw":
             continue
@@ -205,7 +205,7 @@ def test_attempt_to_delete_volume_associated_with_snapshot():
     image_uuid = vol_size = None
     for image in image_list:
         image_uuid = image
-        image_prop_s, image_prop_d = glance_helper.get_image_properties(
+        image_prop_s, image_prop_d = glance_helper.get_image_values(
             image_uuid, ("size", "disk_format"))
         if str(image_prop_s) == "0" or image_prop_d != "raw":
             continue
