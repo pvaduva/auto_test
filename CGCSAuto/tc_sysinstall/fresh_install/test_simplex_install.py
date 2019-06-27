@@ -98,13 +98,16 @@ def test_simplex_install(install_setup):
     else:
         fresh_install_helper.configure_controller_(controller0_node)
 
-    fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTITIAL)
+    deploy_mgr = fresh_install_helper.use_deploy_manager(controller0_node, lab)
+    if not deploy_mgr:
+        fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTITIAL)
+        fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        fresh_install_helper.unlock_active_controller(controller0_node)
+        controller0_node.telnet_conn.hostname = r"controller\-[01]"
+        controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
+    else:
+        fresh_install_helper.wait_for_deploy_mgr_controller_config(controller0_node, lab=lab)
 
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
-    fresh_install_helper.unlock_active_controller(controller0_node)
-
-    controller0_node.telnet_conn.hostname = r"controller\-[01]"
-    controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
@@ -117,8 +120,8 @@ def test_simplex_install(install_setup):
     fresh_install_helper.wait_for_hosts_ready(controller0_node.name, lab=lab)
 
     #fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
-
-    fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_LAST)
+    if not deploy_mgr:
+        fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_LAST)
 
     fresh_install_helper.attempt_to_run_post_install_scripts()
 

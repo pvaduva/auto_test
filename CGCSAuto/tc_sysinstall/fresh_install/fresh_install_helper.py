@@ -271,18 +271,19 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
 
-    ansible = True if controller0_node.telnet_conn.exec_cmd("test -f {}localhost.yml".format(HostLinuxUser.get_home()),
-                                                            fail_ok=True)[0] == 0 else False
+    deploy_mgr = use_deploy_manager(controller0_node, lab)
+    ansible = True if deploy_mgr or use_ansible(controller0_node) else False
+
     test_step = "Configure controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
         install_helper.controller_system_config(lab=lab, config_file=config_file,
                                                 con_telnet=controller0_node.telnet_conn, kubernetes=kubernetes,
-                                                banner=banner, branding=branding, ansible=ansible)
+                                                banner=banner, branding=branding, ansible=ansible,
+                                                deploy_manager=deploy_mgr)
 
     if controller0_node.ssh_conn is not None:
         controller0_node.ssh_conn.close()
-
     controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
     # WK Touch .this_didnt_work to avoid using heat for kubernetes
@@ -587,6 +588,10 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
 
 
 def run_lab_setup(con_ssh, conf_file=None, final_step=None, repeat=1, last_run=False):
+
+    lab = InstallVars.get_install_var('LAB')
+    deploy_mgr = use_deploy_manager(lab['controller-0'], lab)
+
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
     if conf_file is None:
@@ -1285,11 +1290,131 @@ def wait_for_hosts_to_be_online(hosts, lab=None):
 
     if not controller0_node.ssh_conn:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+    deploy_mgr = use_deploy_manager(controller0_node, lab=lab)
 
     LOG.info("Verifying {} is Locked, Disabled and Online ...".format(hosts))
-    system_helper.wait_for_hosts_states(hosts, check_interval=20, con_ssh=controller0_node.ssh_conn,
-                                        administrative=HostAdminState.LOCKED, operational=HostOperState.DISABLED,
-                                        availability=HostAvailState.ONLINE)
+    if not deploy_mgr:
+        system_helper.wait_for_hosts_states(hosts, check_interval=10, con_ssh=controller0_node.ssh_conn,
+                                            administrative=HostAdminState.LOCKED, operational=HostOperState.DISABLED,
+                                            availability=HostAvailState.ONLINE)
+    else:
+        end_time = time.time() + HostTimeout.REBOOT
+        while time.time() < end_time:
+
+            LOG.info("Verifying {} to be online ...")
+
+            offline_hosts = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'],
+                                                      namespace='deployment', resource_type='hosts',
+                                                      con_ssh=controller0_node.ssh_conn, availability='offline')
+            if not offline_hosts:
+                LOG.info("Waiting for hosts {} to become online".format(offline_hosts))
+                time.sleep(20)
+            else:
+                return
+        else:
+            msg = "Timed out waiting for {}  in online state"
+            LOG.warning(msg)
+            raise exceptions.HostTimeout(msg)
+
+
+def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=False):
+    """
+
+    Args:
+        controller0_node:
+        lab:
+        fail_ok:
+
+    Returns:
+
+    """
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    if controller0_node is None:
+        controller0_node = lab['controller-0']
+
+    test_step = "Wait for Deployment Mgr to configure active controller"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+        host_helper._wait_for_simplex_reconnect(con_ssh=controller0_node.ssh_conn, timeout=HostTimeout.CONTROLLER_UNLOCK)
+
+        LOG.info("Verifying for controller-0 to be online ...")
+        end_time = time.time() + HostTimeout.REBOOT
+        while time.time() < end_time:
+            available_host = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'], namespace='deployment',
+                                                       resource_type='hosts', con_ssh=controller0_node.ssh_conn,
+                                                       name='controller-0', availability='available')
+
+            #if not available_host or ('true' not in available_host[0]):
+            if not available_host:
+                LOG.info("Waiting for controller-0 to become available and true: {}"
+                         .format(list(available_host[0]) if available_host else available_host))
+                time.sleep(20)
+            else:
+                LOG.info("The controller-0 is available and insync: {}".format(list(available_host[0])))
+                return
+        else:
+            msg = "Timed out waiting for controller-0  to become available state after deployment"
+            if fail_ok:
+                LOG.warning(msg)
+                return False
+            raise exceptions.HostTimeout(msg)
+
+
+def wait_for_deploy_mgr_hosts_config(controller0_node, lab=None, fail_ok=False):
+    """
+
+    Args:
+        controller0_node:
+        lab:
+        fail_ok:
+
+    Returns:
+
+    """
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    if controller0_node is None:
+        controller0_node = lab['controller-0']
+    hosts = [host for host in lab['hosts'] if host != 'controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip, fail_ok=True)
+        ControllerClient.set_active_controller(controller0_node.ssh_conn)
+
+    test_step = "Wait for Deployment Mgr to configure other hosts"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+        LOG.info("Waiting for Deploy Mgr to configure and unlock hosts: {}  ...".format(hosts))
+        no_of_hosts_configured = 0
+        debug_msg = "Waiting for {} to become availability=available and insync=true: {}"
+        end_time = time.time() + HostTimeout.REBOOT
+        while time.time() < end_time:
+            hosts_states = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'], namespace='deployment',
+                                                     resource_type='hosts', con_ssh=controller0_node.ssh_conn,
+                                                     name=hosts, insync='true')
+
+            if not hosts_states or \
+                    any(host for host in hosts if host not in [host_state[0] for host_state in hosts_states]):
+                if len(hosts_states) > no_of_hosts_configured:
+                    LOG.info(debug_msg.format(hosts, list(hosts_states)))
+                    no_of_hosts_configured = len(hosts_states)
+                else:
+                    LOG.debug(debug_msg.format(hosts, list(hosts_states)))
+
+                time.sleep(20)
+            else:
+                LOG.info("All hosts are in available state and insync: {}".format(hosts_states))
+                return
+        else:
+            msg = "Timed out waiting for {} to become in available state and insync".format(hosts)
+            if fail_ok:
+                LOG.warning(msg)
+                return False
+            raise exceptions.HostTimeout(msg)
 
 
 def get_host_ceph_osd_devices_from_conf(active_controller_node, host, conf_file='lab_setup.conf'):
@@ -1597,3 +1722,119 @@ def check_ansible_configured_mgmt_interface(controller0_node, lab):
     if ansible and not simplex:
         LOG.info("LAB uses ansible and removing the lo mgmt interface in controller-0 if present; ")
         controller0_node.telnet_conn.exec_cmd("system host-if-modify {} lo -c none".format(host), fail_ok=True)
+
+
+def use_deploy_manager(controller0_node, lab):
+
+
+    if "DEPLOY_MGR" in InstallVars.get_install_vars().keys():
+        return InstallVars.get_install_var("DEPLOY_MGR")
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    if controller0_node.telnet_conn is None:
+        controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
+    deploy_config_file = "deployment-config.yaml"
+    #deploy_config_file_2 = "{}.yaml".format(lab['name'])
+
+    #cmd = "test -f {}{}".format(HostLinuxUser.get_home(), deploy_config_file_2)
+    cmd = "test -f {}{}".format(HostLinuxUser.get_home(), deploy_config_file)
+    deploy_mgr =  True if controller0_node.telnet_conn.exec_cmd(cmd, fail_ok=True)[0] == 0 else False
+    InstallVars.set_install_var(deploy_mgr=deploy_mgr)
+    return deploy_mgr
+
+
+def use_ansible(controller0_node):
+
+    if "ANSIBLE_CONFIG" in InstallVars.get_install_vars().keys():
+        return InstallVars.get_install_var("ANSIBLE_CONFIG")
+
+    if controller0_node.telnet_conn is None:
+        controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
+    local_host_file = "localhost.yml"
+    ansible_config =  True if controller0_node.telnet_conn.exec_cmd("test -f {}{}".format(HostLinuxUser.get_home(), local_host_file),
+                                                         fail_ok=True)[0] == 0 else False
+    InstallVars.set_install_var(ansible_config=ansible_config)
+    return ansible_config
+
+
+def wait_for_deployment_mgr_to_bulk_add_hosts(controller0_node, lab, fail_ok=False):
+
+    if not lab:
+        lab = InstallVars.get_install_var('LAB')
+
+    hosts_ = [host for host in lab["hosts"] if host != 'controller-0']
+
+    con_ssh = lab["controller-0"].ssh_conn
+
+    test_step = "Wait for Deployment Mgr to bulk add hosts"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+        LOG.info("Verifying {} are bulk added  ...".format(hosts_))
+        end_time = time.time() + 60
+        while time.time() < end_time:
+            added_hosts = kube_helper.get_resources(namespace='deployment', resource_type='hosts', con_ssh=con_ssh,
+                                                    name=hosts_)
+            if not added_hosts or any(host for host in hosts_ if host not in added_hosts):
+                LOG.info("Waiting for {} to be bulk added by Deployment Mgr"
+                         .format([host for host in hosts_ if host not in added_hosts]))
+                time.sleep(20)
+            else:
+                LOG.info("All hosts are bulk added by Deployment Mgr: {}".format(added_hosts))
+                return
+        else:
+            msg = "Timed out waiting for hosts: {} to be bulk added by Deployment Mgr".format(hosts_)
+            if fail_ok:
+                LOG.warning(msg)
+                return False
+            raise exceptions.HostTimeout(msg)
+
+
+def validate_deployment_mgr_install(controller0_node, lab, fail_ok=False):
+
+    if not lab:
+        lab = InstallVars.get_install_var('LAB')
+
+    hosts = lab["hosts"]
+    lab_name = lab['name']
+    if not controller0_node:
+        controller0_node = lab['controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+    ControllerClient.set_active_controller(controller0_node.ssh_conn)
+    con_ssh = controller0_node.ssh_conn
+    test_step = "Validate Deployment Mgr install"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+        LOG.info("Verifying Deployment Mgr install  ...")
+
+        added_hosts = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'], namespace='deployment',
+                                                     resource_type='hosts', con_ssh=con_ssh,
+                                                     name=hosts, insync='true')
+
+        if len(added_hosts) < len(hosts):
+            not_completed = [host for host in hosts if host not in [host_state[0] for host_state in added_hosts]]
+
+            msg = "Hosts {} are not in available and insync state.".format(not_completed)
+            LOG.warning(msg)
+        else:
+            LOG.info("All hosts are in available  and insync state: {}".format(added_hosts))
+
+        system_info = kube_helper.get_resources(field=['NAME', 'MODE', 'TYPE', 'INSYNC'], namespace='deployment',
+                                                resource_type='systems', con_ssh=con_ssh, insync='true')
+
+        if system_info and lab_name.replace('-', '_') == list(system_info[0])[0].replace('-', '_') \
+            and (list(system_info[0])[3] == 'true'):
+
+            LOG.info("Lab system: {} validated".format(system_info))
+        else:
+            msg = "Lab system info not as expected: {}".format(system_info)
+            LOG.warning(msg)
+
+        data_net_info = kube_helper.get_resources(field=['NAME', 'INSYNC'], namespace='deployment',
+                                                  resource_type='datanetworks', con_ssh=con_ssh)
+
+        if not data_net_info or any(data_info for data_info in data_net_info if 'true' not in data_info):
+            msg = "All Data networks are not insyc : {}".format(data_net_info)
+            LOG.warning(msg)

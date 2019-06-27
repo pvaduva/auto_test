@@ -121,9 +121,10 @@ def pytest_configure(config):
 
         if not helm_chart_path:
             helm_path_in_build = BuildServerPath.STX_HELM_CHARTS_CENGN if '/import/' in host_build_dir_path or '19.05' \
-                in host_build_dir_path else BuildServerPath.STX_HELM_CHARTS
-            helm_chart_path = os.path.join(BuildServerPath.STX_MASTER_CENGN_DIR, BuildServerPath.LATEST_BUILD,
-                                           helm_path_in_build)
+                in host_build_dir_path else BuildServerPath.TITANIUM_HELM_CHARTS
+            # helm_chart_path = os.path.join(BuildServerPath.STX_MASTER_CENGN_DIR, BuildServerPath.LATEST_BUILD,
+            #                                helm_path_in_build)
+            helm_chart_path = os.path.join(host_build_dir_path,  helm_path_in_build)
 
         if boot_type.lower() in ('usb_burn', 'pxe_iso', 'iso_feed') and not iso_path:
             iso_path_in_build = BuildServerPath.ISO_PATH_CENGN if '/import/' in host_build_dir_path \
