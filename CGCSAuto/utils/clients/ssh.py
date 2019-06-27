@@ -186,7 +186,6 @@ class SSHClient:
                     self.session.setwinsize(150, 250)
                     # self.session.maxread = 100000
                     self.send()
-                    self.send('unset PROMPT_COMMAND')
                     end_time = time.time() + 20
                     while time.time() < end_time:
                         index = self.expect(timeout=3, fail_ok=True)
@@ -196,7 +195,7 @@ class SSHClient:
                         LOG.warning(
                             "Still getting prompt from the buffer. Buffer "
                             "might not be cleared yet.")
-
+                    self.exec_cmd('unset PROMPT_COMMAND', get_exit_code=False)
                     self.exec_cmd('export TMOUT=0', get_exit_code=False)
                     return
 
