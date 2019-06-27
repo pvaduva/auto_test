@@ -86,7 +86,7 @@ def __clear_config_out_of_date_alarms(hosts):
         system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CONFIG_OUT_OF_DATE, entity_id="host={}".format(node))
 
 
-def set_dns_servers(subnet_list, dns_servers=None):
+def set_dns_servers(subnet_list, dns_servers=None, fail_ok=False):
     """
     Helper function to set dns servers on a list of subnets.
 
@@ -94,6 +94,7 @@ def set_dns_servers(subnet_list, dns_servers=None):
     - net-name: tenant to be used
     - subnet_list: list of tenants to modify
     - dns_servers: a list of DNS Servers
+    - fail_ok: bool
 
     """
     LOG.info("DNS servers are set to: {}".format(dns_servers))
@@ -105,7 +106,8 @@ def set_dns_servers(subnet_list, dns_servers=None):
     else:
         LOG.info("Setting DNS entries to: {}".format(dns_servers))
         for subnet in subnet_list:
-            network_helper.set_subnet(subnet, dns_servers=dns_servers)
+            network_helper.set_subnet(subnet, dns_servers=dns_servers,
+                                      fail_ok=fail_ok)
 
 
 @fixture(scope='function')
@@ -123,7 +125,7 @@ def func_recover(request):
         if UNRESTORED_DNS_SERVERS:
             LOG.fixture_step("Restoring DNS entries to: {}".format(UNRESTORED_DNS_SERVERS))
             subnet_list = network_helper.get_subnets(network=mgmt_net_id)
-            set_dns_servers(subnet_list, UNRESTORED_DNS_SERVERS)
+            set_dns_servers(subnet_list, UNRESTORED_DNS_SERVERS, fail_ok=True)
             UNRESTORED_DNS_SERVERS = []
 
         if system_helper.get_alarms(alarm_id=EventLogID.CONFIG_OUT_OF_DATE):
