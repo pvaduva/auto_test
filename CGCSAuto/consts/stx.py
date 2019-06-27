@@ -287,8 +287,7 @@ class Prompt:
     PASSWORD_PROMPT = r'.*assword\:[ ]?$|assword for .*:[ ]?$'
     LOGIN_PROMPT = "ogin:"
     SUDO_PASSWORD_PROMPT = 'Password: '
-    BUILD_SERVER_PROMPT_BASE = r'\[{}@{}~\].*\$'
-    #BUILD_SERVER_PROMPT_BASE = r'{}@{}\:~.*'
+    BUILD_SERVER_PROMPT_BASE = r'{}@{}\:~.*'
     TEST_SERVER_PROMPT_BASE = r'\[{}@.*\]\$ '
     # TIS_NODE_PROMPT_BASE = r'{}\:~\$ '
     TIS_NODE_PROMPT_BASE = r'{}[: ]?~.*$'
