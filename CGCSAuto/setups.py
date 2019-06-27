@@ -1687,7 +1687,6 @@ def initialize_server(server_hostname, prompt=None):
                             password=TestFileServer.PASSWORD,
                             initial_prompt=prompt)
     server_conn.connect()
-    server_conn.exec_cmd('unset PROMPT_COMMAND')
     server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
     server_dict = {"name": server_hostname, "prompt": prompt,
                    "ssh_conn": server_conn}

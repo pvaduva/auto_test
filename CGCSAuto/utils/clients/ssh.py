@@ -186,7 +186,7 @@ class SSHClient:
                     self.session.setwinsize(150, 250)
                     # self.session.maxread = 100000
                     self.send()
-
+                    self.send('unset PROMPT_COMMAND')
                     end_time = time.time() + 20
                     while time.time() < end_time:
                         index = self.expect(timeout=3, fail_ok=True)
@@ -431,7 +431,7 @@ class SSHClient:
             self.flush(10)
 
     def exec_cmd(self, cmd, expect_timeout=60, reconnect=False,
-                 reconnect_timeout=300, err_only=False, rm_date=True,
+                 reconnect_timeout=300, err_only=False, rm_date=False,
                  fail_ok=True, get_exit_code=True, blob=None, force_end=False,
                  searchwindowsize=None,
                  prefix_space=False):

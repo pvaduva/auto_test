@@ -3800,7 +3800,6 @@ def ssh_to_build_server(bld_srv=None, user=TestFileServer.USER,
     bld_server_conn = SSHClient(bld_srv['ip'], user=user, password=password,
                                 initial_prompt=prompt)
     bld_server_conn.connect()
-    bld_server_conn.exec_cmd('unset PROMPT_COMMAND')
 
     try:
         yield bld_server_conn
@@ -3835,7 +3834,6 @@ def ssh_to_test_server(test_srv=TestFileServer.SERVER,
     test_server_conn = SSHClient(test_srv, user=user, password=password,
                                  initial_prompt=prompt)
     test_server_conn.connect()
-    test_server_conn.exec_cmd('unset PROMPT_COMMAND')
 
     try:
         yield test_server_conn

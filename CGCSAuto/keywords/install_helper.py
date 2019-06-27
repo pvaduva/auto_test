@@ -2747,7 +2747,6 @@ def establish_ssh_connection(host, user=HostLinuxUser.get_user(),
         _ssh_conn = SSHClient(host, user=user, password=password,
                               initial_prompt=initial_prompt, timeout=360)
         _ssh_conn.connect(retry=retry)
-        _ssh_conn.exec_cmd('unset PROMPT_COMMAND')
         return _ssh_conn
 
     except Exception as e:
