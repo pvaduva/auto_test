@@ -911,10 +911,10 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, image_id=None,
         user_data = _create_cloud_init_if_conf(guest_os, nics_num=len(nics))
 
     if user_data and user_data.startswith('~'):
-        user_data.replace('~', HostLinuxUser.get_home(), 1)
+        user_data = user_data.replace('~', HostLinuxUser.get_home(), 1)
 
     if file and file.startswith('~'):
-        file.replace('~', HostLinuxUser.get_home(), 1)
+        file = file.replace('~', HostLinuxUser.get_home(), 1)
 
     # create cmd
     non_repeat_args = {'--flavor': flavor,
