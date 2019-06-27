@@ -1681,7 +1681,7 @@ def setup_remote_cli_client():
 # TODO: handle ip's as hostnames
 def initialize_server(server_hostname, prompt=None):
     if prompt is None:
-        prompt = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', '.*')
+        prompt = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', '')
 
     server_conn = SSHClient(server_hostname, user=TestFileServer.USER,
                             password=TestFileServer.PASSWORD,
