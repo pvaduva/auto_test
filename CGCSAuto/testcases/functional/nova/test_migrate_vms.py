@@ -72,7 +72,7 @@ def test_live_migrate_vm_positive(hosts_per_stor_backing, storage_backing, ephem
         - Delete created vm, volume, flavor
 
     """
-    if len(hosts_per_stor_backing[storage_backing]) < 2:
+    if len(hosts_per_stor_backing.get(storage_backing, [])) < 2:
         skip("Less than two hosts have {} storage backing".format(storage_backing))
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
@@ -132,7 +132,7 @@ def test_live_migrate_vm_negative(storage_backing, ephemeral, swap, vm_type, blo
         - Delete created vm, volume, flavor
 
     """
-    if len(hosts_per_stor_backing[storage_backing]) < 2:
+    if len(hosts_per_stor_backing.get(storage_backing, [])) < 2:
         skip("Less than two hosts have {} storage backing".format(storage_backing))
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, None, 1, vm_type)
@@ -207,7 +207,7 @@ def test_cold_migrate_vm(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_ty
         - Delete created vm, volume, flavor
 
     """
-    if len(hosts_per_stor_backing[storage_backing]) < 2:
+    if len(hosts_per_stor_backing.get(storage_backing, [])) < 2:
         skip("Less than two hosts have {} storage backing".format(storage_backing))
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, cpu_pol, vcpus, vm_type)
@@ -275,7 +275,7 @@ def test_migrate_vm_negative_no_other_host(hosts_per_stor_backing, storage_backi
         - Delete created vm, volume, flavor
 
     """
-    if len(hosts_per_stor_backing[storage_backing]) != 1:
+    if len(hosts_per_stor_backing.get(storage_backing, [])) != 1:
         skip("Number of {} hosts is not 1".format(storage_backing))
 
     vm_id = _boot_vm_under_test(storage_backing, ephemeral, swap, None, 2, boot_source)

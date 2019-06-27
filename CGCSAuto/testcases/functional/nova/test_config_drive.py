@@ -36,7 +36,7 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
     guest_os = 'cgcs-guest'
     # guest_os = 'tis-centos-guest'  # CGTS-6782
     img_id = glance_helper.get_guest_image(guest_os)
-    hosts_num = len(hosts_per_stor_backing['local_image'])
+    hosts_num = len(hosts_per_stor_backing.get('local_image', []))
     if hosts_num < 1:
         skip("No host with local_image storage backing")
 

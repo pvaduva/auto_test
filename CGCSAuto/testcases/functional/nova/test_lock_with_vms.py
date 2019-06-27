@@ -179,7 +179,7 @@ class TestLockWithVMsNegative:
         storages_to_test = []
         hosts_per_backing = host_helper.get_hosts_per_storage_backing()
         for storage_backing in ['local_image', 'remote']:
-            hosts = hosts_per_backing[storage_backing]
+            hosts = hosts_per_backing.get(storage_backing, [])
             if len(hosts) == 1:
                 storages_to_test.append(storage_backing)
 

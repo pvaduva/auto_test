@@ -114,7 +114,7 @@ class TestDefaultGuest:
             - Remove admin role from primary tenant (module)
 
         """
-        hosts = hosts_per_backing[storage_backing]
+        hosts = hosts_per_backing.get(storage_backing, [])
         if len(hosts) < 2:
             skip(SkipStorageBacking.LESS_THAN_TWO_HOSTS_WITH_BACKING.format(storage_backing))
 

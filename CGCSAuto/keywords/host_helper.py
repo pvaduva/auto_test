@@ -5304,4 +5304,4 @@ def get_storage_backing_with_max_hosts(rtn_down_hosts=False, con_ssh=None):
     hosts_per_backing = get_hosts_per_storage_backing(
         up_only=not rtn_down_hosts, con_ssh=con_ssh)
     default_backing = ProjVar.get_var('DEFAULT_INSTANCE_BACKING')
-    return default_backing, hosts_per_backing[default_backing]
+    return default_backing, hosts_per_backing.get(default_backing, [])
