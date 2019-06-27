@@ -1253,7 +1253,7 @@ def get_host_disks(host, field='uuid', auth_info=Tenant.get('admin_platform'), c
     table_ = table_parser.table(
         cli.system('host-disk-list --nowrap', host, ssh_client=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                    auth_info=auth_info)[1])
-    return table_parser.get_multi_values(table_, field, evalute=True, **kwargs)
+    return table_parser.get_multi_values(table_, field, evaluate=True, **kwargs)
 
 
 def get_host_disk_values(host, disk, fields, auth_info=Tenant.get('admin_platform'), con_ssh=None):
