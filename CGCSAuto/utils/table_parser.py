@@ -1092,6 +1092,8 @@ def convert_value_to_dict(value):
 
     parsed_dict = {}
     for item in value:
+        if '=' not in str(item):
+            continue
         k, v = item.split('=')
         v = v.strip()
         v = v[1:-1] if v == "'{}'".format(v[1:-1]) else v
