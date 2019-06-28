@@ -934,7 +934,6 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, image_id=None,
                        '--config-drive': str(
                            config_drive) if config_drive else None,
                        '--block-device-mapping': block_device_mapping,
-                       '--block-device': block_device,
                        '--security-groups': security_groups,
                        '--tags': tags,
                        '--poll': poll,
@@ -946,8 +945,9 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, image_id=None,
         '--meta': meta,
         '--nic': nics,
         '--hint': hint,
+        '--block-device': block_device,
     }
-    repeat_args = common.parse_args(repeat_args, repeat_arg=True)
+    repeat_args = common.parse_args(repeat_args, repeat_arg=True, vals_sep=',')
 
     pre_boot_vms = []
     if not (min_count is None and max_count is None):
