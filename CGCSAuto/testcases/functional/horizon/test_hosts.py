@@ -132,10 +132,10 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
     host_details_pg.go_to_overview_tab()
     horizon_vals = host_details_pg.host_detail_overview(host_table.driver).get_content()
     fields_map = host_details_pg.host_detail_overview(host_table.driver).OVERVIEW_INFO_HEADERS_MAP
-    cli_host_vals = system_helper.get_host_values(host_name, fields_map.keys(), rtn_dict=True)
+    cli_host_vals = system_helper.get_host_values(host_name, list(fields_map.keys()), rtn_dict=True)
     for field in fields_map:
         horizon_header = fields_map[field]
-        cli_host_val = cli_host_vals[field]
+        cli_host_val = str(cli_host_vals[field])
         horizon_val = horizon_vals.get(horizon_header)
         if horizon_val is None:
             horizon_val = 'None'
@@ -197,7 +197,7 @@ def test_horizon_host_details_display(host_inventory_pg, host_name):
                               host_details_pg.storage_pv_table]
     cli_storage_tables = []
     for cmd in cmd_list:
-        cli_storage_tables.append(table_parser.table(cli.system(cmd))[1])
+        cli_storage_tables.append(table_parser.table(cli.system(cmd)[1]))
 
     for i in range(len(horizon_storage_tables)):
         horizon_table = horizon_storage_tables[i]
