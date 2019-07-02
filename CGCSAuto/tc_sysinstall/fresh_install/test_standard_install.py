@@ -168,8 +168,9 @@ def test_standard_install(install_setup):
     fresh_install_helper.attempt_to_run_post_install_scripts()
 
     fresh_install_helper.reset_global_vars()
-
-    fresh_install_helper.validate_deployment_mgr_install(controller0_node, lab)
-
     fresh_install_helper.verify_install_uuid(lab)
+
+    if deploy_mgr:
+        fresh_install_helper.validate_deployment_mgr_install(controller0_node, lab)
+
 

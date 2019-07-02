@@ -158,3 +158,5 @@ def test_storage_install(install_setup):
 
     fresh_install_helper.reset_global_vars()
     fresh_install_helper.verify_install_uuid(lab)
+    if deploy_mgr:
+        fresh_install_helper.validate_deployment_mgr_install(controller0_node, lab)
