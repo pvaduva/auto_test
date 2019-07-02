@@ -75,7 +75,7 @@ def test_auth_log_sudo_cmd():
     con_ssh.exec_sudo_cmd(cmd, fail_ok=True)
 
     user = HostLinuxUser.get_user()
-    searching_for = ['sudo: notice  {}.*PWD=/home/{} ; USER=root ; '
+    searching_for = ['sudo: notice {}.*PWD=/home/{} ; USER=root ; '
                      'COMMAND=/usr/bin/ls -l'.format(user, user)]
     found = wait_for_log(log_path=log_path, ssh_client=con_ssh,
                          patterns=searching_for, start_time=start_time)
@@ -138,7 +138,7 @@ def test_auth_log_sudo_su():
     """
     con_ssh = ControllerClient.get_active_controller()
     user = HostLinuxUser.get_user()
-    searching_for = ['sudo: notice  {}.*PWD=/home/{} ; USER=root ; '
+    searching_for = ['sudo: notice {}.*PWD=/home/{} ; USER=root ; '
                      'COMMAND=/usr/bin/su \-'.format(user, user),
                      'su: notice \(to root\) {} on'.format(user),
                      # uses su-l:session because login_as_root calls 'sudo su -'
