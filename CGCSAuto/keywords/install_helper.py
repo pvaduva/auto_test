@@ -10,7 +10,7 @@ from consts.auth import HostLinuxUser, TestFileServer, Tenant, CliAuth
 from consts.stx import HostAvailState, Prompt, PREFIX_BACKUP_FILE, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, \
     BACKUP_FILE_DATE_STR, BackupRestore, \
-    PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH
+    PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH, VSwitchType
 from consts.filepaths import StxPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
@@ -667,6 +667,16 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     if conf_server.ssh_conn.exec_cmd('test -e {}'.format(local_install_override_file_path), rm_date=False)[0] == 0:
         conf_server.ssh_conn.rsync(local_install_override_file_path,
                                lab['controller-0 ip'],
+                               HostLinuxUser.get_home(), pre_opts=pre_opts)
+
+    vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
+    if vswitch_type == VSwitchType.AVS:
+        LOG.info("The vswitch type is avs; attempting to download the avs deployment config yaml file if exists")
+        avs_yaml_path = os.path.join(lab_file_dir, "deployment-config-avs.yaml")
+        if conf_server.ssh_conn.exec_cmd('test -e {}'.format(avs_yaml_path), rm_date=False)[0] == 0:
+            dest_path = '{}deployment-config.yaml'.format(HostLinuxUser.get_home())
+            conf_server.ssh_conn.rsync(avs_yaml_path,
+                               lab['controller-0 ip'], dest_path,
                                HostLinuxUser.get_home(), pre_opts=pre_opts)
 
     openstack_lab_files_dir = os.path.split(script_path)[0] + "/yow/openstack"
