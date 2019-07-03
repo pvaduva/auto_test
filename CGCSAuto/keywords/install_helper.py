@@ -888,7 +888,7 @@ def scp_logs_to_log_dir(log_paths, con_ssh=None, log_dir=None):
         log_exists = con_ssh.exec_cmd('test -f {}'.format(log))[0] == 0
         if log_exists:
             LOG.info("Copying {} to {}".format(log, log_dir))
-            common.scp_to_local(source_path=log, source_ip=con_ssh.host, dest_path=log_dir)
+            common.scp_to_local(source_path=log,source_server=con_ssh.host, dest_path=log_dir)
 
 
 def launch_vms_post_install():
