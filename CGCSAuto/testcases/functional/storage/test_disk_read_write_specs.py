@@ -186,7 +186,7 @@ class TestFlavor:
 
             # TODO: parse after virsh dump. Otherwise debugging is difficult upon test failure.
 
-            sed_cmd = r"sed -n 's:.*<"+disk_spec_str+r">\(.*\)</"+disk_spec_str+r">.*:\\1:p' "
+            sed_cmd = "sed -n 's:.*<"+disk_spec_str+">\(.*\)</"+disk_spec_str+">.*:\\1:p' "
 
             dump_xml_cmd = "virsh dumpxml " + instance_name + " | " + sed_cmd
             code, dump_xml_output = comp_ssh.exec_sudo_cmd(cmd=dump_xml_cmd)
