@@ -67,9 +67,6 @@ def get_if_info(host):
             used_by_ifs = eval(value[index_used_by_ifs])
             if_class = value[index_class]
             network_types = [if_class]
-            if if_class == 'platform':
-                net_type_str = host_helper.get_host_interface_values(host=host, interface=name, fields='networks')[0]
-                network_types = [net_type.strip() for net_type in net_type_str.split(sep=',')]
             attributes = value[index_attributes].split(',')
 
             if name in if_info:
@@ -99,7 +96,7 @@ def get_max_allowed_mtus(host='controller-0', network_type='oam', if_name='', if
     if not if_info:
         if_info = get_if_info(host=host)
 
-    if_names = [name for name in if_info if network_type in if_info[name]['network_type']]
+    if_names = [name for name in if_info if network_type in name]
     if not if_names:
         assert 0, 'Cannot find {} interface on host {}. Interface info: {}'.format(network_type, host, if_info)
 
@@ -179,7 +176,7 @@ def test_modify_mtu_oam_interface(mtu_range):
     if not expecting_pass:
         LOG.warn('Expecting to fail in changing MTU: changing to:{}, max-mtu:{}'.format(mtu, max_mtu))
 
-    oam_attributes = host_helper.get_host_interfaces(host=first_host, field='attributes', net_type='oam')
+    oam_attributes = host_helper.get_host_interfaces(host=first_host, field='attributes', name='oam', strict=False)
 
     # sample attributes: [MTU=9216,AE_MODE=802.3ad]
     pre_oam_mtu = int(oam_attributes[0].split(',')[0].split('=')[1])
@@ -248,7 +245,7 @@ def check_containers(prev_bad_pods, check_app):
 
     prev_bad_pods = None if not prev_bad_pods else prev_bad_pods
     res_pods = kube_helper.wait_for_pods_healthy(check_interval=10, name=prev_bad_pods, exclude=True,
-                                                 all_namespaces=True)[0]
+                                                 all_namespaces=True)
     assert (res_app and res_pods), "Application status or pods status check failed after modify and unlock host"
 
 
