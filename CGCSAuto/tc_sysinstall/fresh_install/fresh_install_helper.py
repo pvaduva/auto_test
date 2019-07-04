@@ -501,7 +501,7 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
             thread.join(timeout=InstallTimeout.INSTALL_LOAD)
 
         if wait_for_online:
-            wait_for_hosts_to_be_online(hosts=hostnames, lab=lab)
+            wait_for_hosts_to_be_online(hosts=hostnames, lab=lab, fail_ok=False)
             hosts_online = True
 
         if InstallVars.get_install_var("DEPLOY_OPENSTACK_FROM_CONTROLLER1") and 'controller-1' in hostnames \
@@ -1273,7 +1273,7 @@ def wait_for_hosts_ready(hosts, lab=None, timeout=1800):
         kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout)
 
 
-def wait_for_hosts_to_be_online(hosts, lab=None):
+def wait_for_hosts_to_be_online(hosts, lab=None, fail_ok=True):
     """
 
     Args:
@@ -1296,7 +1296,7 @@ def wait_for_hosts_to_be_online(hosts, lab=None):
     if not deploy_mgr:
         system_helper.wait_for_hosts_states(hosts, check_interval=10, con_ssh=controller0_node.ssh_conn,
                                             administrative=HostAdminState.LOCKED, operational=HostOperState.DISABLED,
-                                            availability=HostAvailState.ONLINE)
+                                            availability=HostAvailState.ONLINE, fail_ok=fail_ok)
     else:
         end_time = time.time() + HostTimeout.REBOOT
         while time.time() < end_time:

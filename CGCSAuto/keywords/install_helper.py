@@ -676,8 +676,7 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
         if conf_server.ssh_conn.exec_cmd('test -e {}'.format(avs_yaml_path), rm_date=False)[0] == 0:
             dest_path = '{}deployment-config.yaml'.format(HostLinuxUser.get_home())
             conf_server.ssh_conn.rsync(avs_yaml_path,
-                               lab['controller-0 ip'], dest_path,
-                               HostLinuxUser.get_home(), pre_opts=pre_opts)
+                               lab['controller-0 ip'], dest_path, pre_opts=pre_opts)
 
     openstack_lab_files_dir = os.path.split(script_path)[0] + "/yow/openstack"
 
