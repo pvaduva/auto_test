@@ -632,8 +632,10 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
 
     cmd = "test -e {}/deployment-config.yaml".format(lab_file_dir)
+    cmd1 = "test -e {}/deployment-config-avs.yaml".format(lab_file_dir)
     deployment_mgr = False
-    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0:
+    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0 or \
+                    conf_server.ssh_conn.exec_cmd(cmd1, rm_date=False)[0] == 0:
         deployment_mgr = True
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
