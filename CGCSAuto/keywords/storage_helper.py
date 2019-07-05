@@ -1083,7 +1083,8 @@ def get_host_partition_values(host, uuid, fields, con_ssh=None, auth_info=Tenant
 
     table_ = table_parser.table(out)
     values = []
-    for field in fields:
+
+    def convert(field):
         convert_to_gib = False
         if field == 'size_gib':
             field = 'size_mib'
@@ -1097,6 +1098,12 @@ def get_host_partition_values(host, uuid, fields, con_ssh=None, auth_info=Tenant
 
         values.append(param_value)
 
+    if isinstance(fields, str):
+        convert(fields)
+    else:
+        for field in fields:
+            convert(field)
+            
     return values
 
 
@@ -1215,8 +1222,10 @@ def wait_for_host_partition_status(host, uuid, final_status=PartitionStatus.READ
     end_time = time.time() + timeout
     prev_status = ''
     while time.time() < end_time:
-        status = get_host_partition_values(host, uuid, "status", con_ssh=con_ssh, auth_info=auth_info)[0]
-        assert status in valid_status, "Partition has unexpected state {}".format(status)
+        status = get_host_partition_values(host, uuid, "status", con_ssh=con_ssh, auth_info=auth_info)
+        if status is not None:  # status is 'None' if partition doesn't exist
+            status = status[0]
+            assert status in valid_status, "Partition has unexpected state {}".format(status)
 
         if status in final_status:
             LOG.info("Partition {} on host {} has reached state: {}".format(uuid, host, status))
