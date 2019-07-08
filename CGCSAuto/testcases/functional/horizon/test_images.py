@@ -1,3 +1,5 @@
+import time
+
 from pytest import fixture
 
 from consts import horizon
@@ -289,6 +291,10 @@ def test_filter_images(admin_images_pg):
     LOG.tc_step('Clear filter and set nonexistent image name and Check that 0 rows are displayed')
     nonexistent_image_name = "nonexistent_image_test"
     admin_images_pg.images_table.filter(nonexistent_image_name)
+    end_time = time.time() + 60
+    while time.time() < end_time:
+        if admin_images_pg.images_table.rows == []: # This will take about 10s
+            break
     assert admin_images_pg.images_table.rows == []
 
     admin_images_pg.images_table.clear()
