@@ -1,3 +1,5 @@
+import time
+
 from pytest import fixture
 
 from consts import horizon
@@ -281,17 +283,22 @@ def test_filter_images(admin_images_pg):
     LOG.tc_step('Go to Admin > Compute > Image')
     admin_images_pg = admin_imagespage.ImagesPage(images_pg.driver, port=images_pg.port)
     admin_images_pg.go_to_target_page()
+    image_table = admin_images_pg.images_table
 
     LOG.tc_step('Use filter by image name and Check that filtered table has the wanted image')
-    admin_images_pg.images_table.filter(image_name)
+    image_table.filter(image_name)
     assert admin_images_pg.is_image_present(image_name)
 
     LOG.tc_step('Clear filter and set nonexistent image name and Check that 0 rows are displayed')
     nonexistent_image_name = "nonexistent_image_test"
-    admin_images_pg.images_table.filter(nonexistent_image_name)
-    assert admin_images_pg.images_table.rows == []
+    image_table.filter(nonexistent_image_name)
+    end_time = time.time() + 60
+    while time.time() < end_time:
+        if image_table.rows == []: # This will take about 10s
+            break
+    assert image_table.rows == []
 
-    admin_images_pg.images_table.clear()
+    image_table.clear()
     horizon.test_result = True
 
 
