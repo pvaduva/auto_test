@@ -5,7 +5,7 @@ from keywords import system_helper, html_helper, common
 from utils.tis_log import LOG
 
 
-@fixture(scope='module')
+# @fixture(scope='module')
 def service_params(request):
     """
     Reset service parameter created in these tests to default value.
