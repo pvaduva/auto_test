@@ -116,6 +116,7 @@ def test_restapi_neutron_get_extensions():
         - Check that the data received is in a valid form
 
     """
+    skip('open stack rest api need DNS setup to run this test ')
     headers = get_headers()
     url = html_helper.create_url(IP_ADDR, HTTPPort.NEUTRON_PORT, HTTPPort.NEUTRON_VER, 'extensions')
     data = html_helper.get_request(url, headers=headers, verify=False)
