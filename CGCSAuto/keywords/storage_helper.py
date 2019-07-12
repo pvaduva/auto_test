@@ -264,7 +264,7 @@ def get_storage_group(host):
     """
     peers = system_helper.get_host_values(host, fields='peers')[0]
 
-    storage_group = re.search(r'(group-\d+)', peers)
+    storage_group = re.search(r'(group-\d+)', str(peers))
     msg = 'Unable to determine replication group for {}'.format(host)
     assert storage_group, msg
     storage_group = storage_group.group(0)

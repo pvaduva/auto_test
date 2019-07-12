@@ -1355,6 +1355,17 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
                 LOG.info("The controller-0 is available and insync: {}".format(list(available_host[0])))
                 return
         else:
+            sys_values= system_helper.get_system_values(fields=["system_mode", "system_type"],
+                                                         con_ssh=controller0_node.ssh_conn)
+            if "All-in-one" in sys_values and 'duplex' in sys_values[0]:
+                current_avail = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'],
+                                                          namespace='deployment', resource_type='hosts',
+                                                          con_ssh=controller0_node.ssh_conn, name='controller-0',
+                                                          availability=['degraded', 'available'])
+                if current_avail:
+                    LOG.info("The controller-0 is degraded/available and insync: {}".format(list(current_avail)))
+                    return
+
             msg = "Timed out waiting for controller-0  to become available state after deployment"
             if fail_ok:
                 LOG.warning(msg)
