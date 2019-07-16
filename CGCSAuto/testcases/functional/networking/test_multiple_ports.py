@@ -322,7 +322,7 @@ class TestMutiPortsPCI:
         base_vm_pci, flavor, base_nics, avail_sriov_net, avail_pcipt_net, pcipt_seg_ids, extra_pcipt_net, \
             = base_setup_pci
 
-        pcipt_included = False
+        pcipt_included = sriov_included = False
         internal_net_id = None
         for vif in vifs:
             if not isinstance(vif, str):
@@ -334,6 +334,7 @@ class TestMutiPortsPCI:
                 pcipt_included = True
                 continue
             elif 'pci-sriov' in vif:
+                sriov_included = True
                 if not avail_sriov_net:
                     skip(SkipHostIf.SRIOV_IF_UNAVAIL)
                 internal_net_id = avail_sriov_net
@@ -363,6 +364,15 @@ class TestMutiPortsPCI:
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal networks")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
 
+        vm_macs = network_helper.get_ports(server=vm_under_test, network=internal_net_id,
+                                           field='MAC Address')
+        vmacs = [mac for mac in vm_macs if not mac.strip().startswith('90:')]
+        with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_under_test) as vm_ssh:
+            prev_eths = []
+            for vm_mac in vmacs:
+                prev_eth = network_helper.get_eth_for_mac(ssh_client=vm_ssh, mac_addr=vm_mac)
+                prev_eths.append(prev_eth)
+
         for vm_actions in [['auto_recover'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
             if 'auto_recover' in vm_actions:
                 LOG.tc_step("Set vm to error state and wait for auto recovery complete, "
@@ -375,6 +385,22 @@ class TestMutiPortsPCI:
                     vm_helper.perform_action_on_vm(vm_under_test, action=action)
 
             vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_under_test)
+            if sriov_included and 'resume' in vm_actions:
+                # After suspend/resume, the eth name for sriov interface will change, this is a
+                # known upstream limitation. Work around it by rebooting the vm.
+                rebooted = False
+                with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_under_test) as vm_ssh:
+                    eth_names = []
+                    for vm_mac in vmacs:
+                        eth_name = network_helper.get_eth_for_mac(ssh_client=vm_ssh, mac_addr=vm_mac)
+                        eth_names.append(eth_name)
+                    if eth_names != prev_eths:
+                        rebooted = True
+                        vm_helper.sudo_reboot_from_vm(vm_id=vm_under_test, vm_ssh=vm_ssh,
+                                                      check_host_unchanged=False, force=False)
+                if rebooted:
+                    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_under_test)
+
             if pcipt_included:
                 LOG.tc_step("Bring up vlan interface for pci-passthrough vm {}.".format(vm_under_test))
                 vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_ids)

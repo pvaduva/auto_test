@@ -3928,7 +3928,7 @@ def wait_for_interfaces_up(vm_ssh, eth_names, check_interval=10, timeout=180,
 
 
 def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True,
-                        con_ssh=None):
+                        con_ssh=None, force=True):
     pre_vm_host = None
     if check_host_unchanged:
         pre_vm_host = get_vm_host(vm_id, con_ssh=con_ssh)
@@ -3937,7 +3937,8 @@ def sudo_reboot_from_vm(vm_id, vm_ssh=None, check_host_unchanged=True,
 
     def _sudo_reboot(vm_ssh_):
         extra_prompt = 'Broken pipe'
-        output = vm_ssh_.exec_sudo_cmd('reboot -f', get_exit_code=False,
+        cmd = 'reboot -f' if force else 'reboot'
+        output = vm_ssh_.exec_sudo_cmd(cmd, get_exit_code=False,
                                        extra_prompt=extra_prompt)[1]
         expt_string = 'The system is going down for reboot|Broken pipe'
         if re.search(expt_string, output):

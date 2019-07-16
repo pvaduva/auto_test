@@ -2210,6 +2210,31 @@ def add_host_interface(host, if_name, ports_or_ifs, if_type=None, pnet=None,
     return 0, msg
 
 
+def get_host_datanetworks(host, interface=None, field='datanetwork_name', con_ssh=None,
+                          auth_info=Tenant.get('admin_platform'), **kwargs):
+    """
+    Get host interface datanetwork values from 'system interface-datanetwork-list'
+    Args:
+        host:
+        interface:
+        field (str|tuple|list):
+        con_ssh:
+        auth_info:
+        **kwargs: table filter
+
+    Returns (list):
+
+    """
+    args = host
+    if interface:
+        args += ' {}'.format(interface)
+
+    code, output = cli.system('interface-datanetwork-list --nowrap', args, ssh_client=con_ssh,
+                              auth_info=auth_info)
+    table_ = table_parser.table(output)
+    return table_parser.get_multi_values(table_, field, **kwargs)
+
+
 def modify_host_interface(host, interface, pnet=None, ae_mode=None,
                           tx_hash_policy=None,
                           mtu=None, if_class=None, network=None, ipv4_mode=None,
@@ -2288,32 +2313,32 @@ def modify_host_interface(host, interface, pnet=None, ae_mode=None,
 def assign_interface_network(host, interface, network,
                              fail_ok=False, con_ssh=None,
                              auth_info=Tenant.get('admin_platform')):
-        """
-        Assign network type to given interface of a host
-        Args:
-            host:
-            interface:
-            network:
-            fail_ok:
-            con_ssh:
-            auth_info:
+    """
+    Assign network type to given interface of a host
+    Args:
+        host:
+        interface:
+        network:
+        fail_ok:
+        con_ssh:
+        auth_info:
 
-        Returns:
+    Returns:
 
-        """
+    """
 
-        args = '{} {} {}'.format(host, interface, network)
-        code, out = cli.system('interface-network-assign', args,
-                               ssh_client=con_ssh, fail_ok=fail_ok,
-                               auth_info=auth_info)
-        if code > 0:
-            return 1, out
+    args = '{} {} {}'.format(host, interface, network)
+    code, out = cli.system('interface-network-assign', args,
+                           ssh_client=con_ssh, fail_ok=fail_ok,
+                           auth_info=auth_info)
+    if code > 0:
+        return 1, out
 
-        msg = "{} interface {} is successfully assigned as network {}".format(
-            host, interface, network)
-        LOG.info(msg)
+    msg = "{} interface {} is successfully assigned as network {}".format(
+        host, interface, network)
+    LOG.info(msg)
 
-        return 0, msg
+    return 0, msg
 
 
 def compare_host_to_cpuprofile(host, profile_uuid):
@@ -3554,13 +3579,13 @@ def get_hosts_and_pnets_with_pci_devs(pci_type='pci-sriov', up_hosts_only=True,
         pnets_list_for_host = []
         for pci_type_ in pci_type:
 
-            pnets_list = get_host_interfaces(host_, field='data networks',
-                                             net_type=pci_type_,
-                                             con_ssh=con_ssh,
-                                             auth_info=sysinv_auth)
-            pnets_for_type = []
-            for pnets_ in pnets_list:
-                pnets_for_type += pnets_
+            host_ifs = get_host_interfaces(host_, field='name',
+                                           net_type=pci_type_,
+                                           con_ssh=con_ssh,
+                                           auth_info=sysinv_auth)
+            pnets_for_type = get_host_datanetworks(host_, field='datanetwork_name',
+                                                   con_ssh=con_ssh, auth_info=sysinv_auth,
+                                                   ifname=host_ifs)
 
             if not pnets_for_type:
                 LOG.info("{} {} interface data network not found".format(

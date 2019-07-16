@@ -34,9 +34,29 @@ def _test_set_mem_page_size_extra_specs(flavor_id_module, mem_page_size):
 @fixture(scope='module')
 def prepare_resource(add_admin_role_module):
     hypervisor = random.choice(host_helper.get_up_hypervisors())
+    vm_helper.delete_vms()
     flavor = nova_helper.create_flavor(name='flavor-1g', ram=1024, cleanup='module')[1]
     vol_id = cinder_helper.create_volume('vol-mem_page_size', cleanup='module')[1]
+
     return hypervisor, flavor, vol_id
+
+
+def _wait_for_all_app_hp_avail(host, timeout=360):
+    headers = ['app_hp_total_2M', 'app_hp_avail_2M', 'app_hp_total_1G', 'app_hp_avail_1G']
+    end_time = time.time() + timeout + 20
+    while time.time() < end_time:
+        mems = host_helper.get_host_memories(host, headers=headers)
+        for proc, mems_for_proc in mems.items():
+            total_2m, avail_2m, total_1g, avail_1g = mems_for_proc
+            if total_2m != avail_2m or total_1g != avail_1g:
+                break
+        else:
+            LOG.info('All app huge pages are available on {}'.format(host))
+            return
+
+        time.sleep(20)
+
+    assert 0, 'app_hp_total is not the same as app_hp_avail within {}s'.format(timeout)
 
 
 def _get_expt_indices(mempage_size):
@@ -71,32 +91,40 @@ def is_host_mem_sufficient(host, mempage_size=None, mem_gib=1):
     return False, host_mems_per_proc
 
 
-def check_mempage_change(vm, host, prev_host_mems, mempage_size=None, mem_gib=1, numa_node=None):
+def check_mempage_change(vm, host, prev_host_mems, mempage_size=None, mem_gib=1, numa_node=None,
+                         timeout=360):
     expt_mempage_indics = _get_expt_indices(mempage_size)
     if numa_node is None:
         numa_node = vm_helper.get_vm_numa_nodes_via_ps(vm_id=vm, host=host)[0]
 
     prev_host_mems = prev_host_mems[numa_node]
-    current_host_mems = host_helper.get_host_memories(host, headers=MEMPAGE_HEADERS)[numa_node]
 
-    if 0 in expt_mempage_indics:
-        if current_host_mems[1:] == prev_host_mems[1:] and \
-                abs(prev_host_mems[0] - current_host_mems[0]) <= mem_gib*512*1024/4:
-            return
+    end_time = time.time() + timeout + 30
+    while time.time() < end_time:
+        current_host_mems = host_helper.get_host_memories(host, headers=MEMPAGE_HEADERS)[numa_node]
 
-    for i in expt_mempage_indics:
-        if i == 0:
-            continue
+        if 0 in expt_mempage_indics:
+            if current_host_mems[1:] == prev_host_mems[1:] and \
+                    abs(prev_host_mems[0] - current_host_mems[0]) <= mem_gib*512*1024/4:
+                return
 
-        expt_pagecount = 1 if i == 2 else 1024
-        if prev_host_mems[i] - expt_pagecount == current_host_mems[i]:
-            LOG.info("{} {} memory page reduced by {}GiB as expected".format(host, MEMPAGE_HEADERS[i], mem_gib))
-            return
+        for i in expt_mempage_indics:
+            if i == 0:
+                continue
 
-        LOG.info("{} {} memory pages - Previous: {}, current: {}".format(host, MEMPAGE_HEADERS[i],
-                                                                         prev_host_mems[i], current_host_mems[i]))
+            expt_pagediff = 1 if i == 2 else mem_gib*1024/2
+            if prev_host_mems[i] - expt_pagediff == current_host_mems[i]:
+                LOG.info("{} {} memory page reduced by {}GiB as expected".format(
+                    host, MEMPAGE_HEADERS[i], mem_gib))
+                return
 
-    assert 0, "{} available vm {} memory page count did not change as expected".format(host, mempage_size)
+            LOG.info("{} {} memory pages - Previous: {}, current: {}".format(
+                host, MEMPAGE_HEADERS[i], prev_host_mems[i], current_host_mems[i]))
+
+        time.sleep(30)
+
+    assert 0, "{} available vm {} memory page count did not change to expected within {}s".format(
+        host, mempage_size, timeout)
 
 
 @mark.parametrize('mem_page_size', [
@@ -134,6 +162,7 @@ def test_vm_mem_pool_default_config(prepare_resource, mem_page_size):
 
     """
     hypervisor, flavor_1g, volume_ = prepare_resource
+    _wait_for_all_app_hp_avail(host=hypervisor)
 
     LOG.tc_step("Set memory page size extra spec in flavor")
     nova_helper.set_flavor(flavor_1g, **{FlavorSpec.CPU_POLICY: 'dedicated',
@@ -187,6 +216,13 @@ def get_hosts_to_configure(candidates):
     return hosts_selected, hosts_to_configure
 
 
+@fixture()
+def reset_host_app_mems():
+    vm_helper.delete_vms()
+    for host in host_helper.get_up_hypervisors():
+        _wait_for_all_app_hp_avail(host=host)
+
+
 class TestConfigMempage:
 
     MEM_CONFIGS = [None, 'any', 'large', 'small', '2048', '1048576']
@@ -194,10 +230,13 @@ class TestConfigMempage:
     @fixture(scope='class')
     def add_1g_and_4k_pages(self, request, config_host_class, skip_for_one_proc, add_cgcsauto_zone,
                             add_admin_role_module):
-        storage_backing, candidate_hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
+
+        storage_backing, candidate_hosts = host_helper.get_storage_backing_with_max_hosts()
 
         if len(candidate_hosts) < 2:
             skip("Less than two up hosts have same storage backing")
+
+        vm_helper.delete_vms()
 
         LOG.fixture_step("Check mempage configs for hypervisors and select host to use or configure")
         hosts_selected, hosts_to_configure = get_hosts_to_configure(candidate_hosts)
@@ -275,7 +314,8 @@ class TestConfigMempage:
         return mem_page_size
 
     @mark.parametrize('image_mem_page_size', MEM_CONFIGS)
-    def test_boot_vm_mem_page_size(self, flavor_2g, flavor_mem_page_size, image_mempage, image_mem_page_size):
+    def test_boot_vm_mem_page_size(self, flavor_2g, flavor_mem_page_size, image_mempage,
+                                   image_mem_page_size, reset_host_app_mems):
         """
         Test boot vm with various memory page size setting in flavor and image.
 
@@ -338,7 +378,7 @@ class TestConfigMempage:
         param('large'),
         param('small', marks=mark.nightly),
     ])
-    def test_schedule_vm_mempage_config(self, flavor_2g, mem_page_size):
+    def test_schedule_vm_mempage_config(self, flavor_2g, mem_page_size, reset_host_app_mems):
         """
         Test memory used by vm is taken from the expected memory pool and the vm was scheduled on the correct
         host/processor
