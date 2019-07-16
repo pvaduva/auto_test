@@ -2649,9 +2649,8 @@ def get_vm_pid(instance_name, host_ssh):
 
     """
     code, vm_pid = host_ssh.exec_sudo_cmd(
-        """ps aux | grep --color='never' {} | grep -v grep | awk '{{print 
-        $2}}'""".format(
-            instance_name))
+        "ps aux | grep --color='never' {} | grep -v grep | awk '{{print $2}}'".
+        format(instance_name))
     if code != 0:
         raise exceptions.SSHExecCommandFailed(
             "Failed to get pid for vm: {}".format(instance_name))

@@ -2754,7 +2754,7 @@ def __update_ml2_extension_drivers(drivers, enable=True,
         conf:
           plugins:
             ml2_conf:
-              ml2: 
+              ml2:
                 extension_drivers: {}
         """.format(new_value)
         yaml_file = os.path.join(HostLinuxUser.get_home(), 'ml2_drivers.yaml')

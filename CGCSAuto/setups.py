@@ -1325,7 +1325,7 @@ def set_session(con_ssh):
             sw_version = '-'.join(ProjVar.get_var('SW_VERSION'))
             build_info = ProjVar.get_var('BUILD_INFO')
             build_id = build_info['BUILD_ID']
-            bs_ = build_info('BUILD_SERVER')
+            bs_ = build_info('BUILD_HOST')
             session_id = upload_results.upload_test_session(
                 lab_name=ProjVar.get_var('LAB')['name'],
                 build_id=build_id,
