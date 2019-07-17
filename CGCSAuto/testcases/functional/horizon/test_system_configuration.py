@@ -256,7 +256,7 @@ def test_horizon_sysconfig_controllerfs_cancel_edit(sys_config_pg):
     cli_headers = list(headers_map)
     for name in storage_names:
         expt_horzion = {}
-        cli_values = storage_helper.get_controllerfs_values(filesystem=name, fields=cli_headers)[0]
+        cli_values = storage_helper.get_controllerfs_values(filesystem=name, fields=cli_headers)
         for i in range(len(cli_headers)):
             horizon_header = headers_map[cli_headers[i]]
             expt_horzion[horizon_header] = cli_values[i]

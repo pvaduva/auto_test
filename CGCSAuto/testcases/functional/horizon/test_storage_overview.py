@@ -24,7 +24,7 @@ def storage_overview_pg(storage_precheck, admin_home_pg):
 
 
 @mark.usefixtures('storage_precheck')
-def test_horizon_storage_overview_service_display(storage_overview_pg):
+def test_horizon_storage_overview_display(storage_overview_pg):
     """
     Tests the storage overview display:
 
@@ -40,7 +40,6 @@ def test_horizon_storage_overview_service_display(storage_overview_pg):
         - Test host and rank table display
         - Test osd.# table and status display
     """
-    storage_overview_pg.go_to_services_tab()
     con_ssh = ControllerClient.get_active_controller()
     LOG.tc_step('Check storage cluster UUID, ceph health and storage usage display')
     cli_storage_service_info = []
@@ -79,7 +78,7 @@ def test_horizon_storage_overview_service_display(storage_overview_pg):
         horizon_rank_val = storage_overview_pg.get_storage_overview_monitor_info(host_name, 'Rank')
         assert horizon_rank_val == cli_rank_val, '{} rank display incorrectly'.format(host_name)
 
-    LOG.info('Host and rank table table display correct')
+    LOG.info('Host and rank table display correct')
 
     LOG.tc_step('Test osd table and status display')
     osd_list = storage_helper.get_osds()
