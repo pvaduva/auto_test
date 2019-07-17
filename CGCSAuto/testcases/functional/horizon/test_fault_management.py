@@ -1,3 +1,5 @@
+import time
+
 from pytest import fixture, mark
 
 from utils.horizon.regions import messages
@@ -31,10 +33,19 @@ def test_suppress_event(events_suppression_pg, event_id):
         - Check for success message
     """
     events_suppression_pg.suppress_event(event_id)
-    assert events_suppression_pg.find_message_and_dismiss(messages.SUCCESS)
-    assert not events_suppression_pg.find_message_and_dismiss(messages.ERROR)
+    end_time = time.time() + 30  # Waiting the success message, sometime it will take around 2s so set timeout 30s
+    while time.time() < end_time:
+        if events_suppression_pg.find_message_and_dismiss(messages.SUCCESS):
+            break
+        elif events_suppression_pg.find_message_and_dismiss(messages.ERROR):
+            assert "Failed to suppress event: {}".format(event_id)
 
     events_suppression_pg.unsuppress_event(event_id)
-    assert events_suppression_pg.find_message_and_dismiss(messages.SUCCESS)
-    assert not events_suppression_pg.find_message_and_dismiss(messages.ERROR)
+    end_time = time.time() + 30
+    while time.time() < end_time:
+        if events_suppression_pg.find_message_and_dismiss(messages.SUCCESS):
+            break
+        elif events_suppression_pg.find_message_and_dismiss(messages.ERROR):
+            assert "Failed to unsuppress event: {}".format(event_id)
+
     horizon.test_result = True
