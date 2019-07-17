@@ -809,6 +809,7 @@ class AppStatus:
     UPLOADING = 'uploading'
     UPLOADED = 'uploaded'
     UPLOAD_FAILED = 'upload-failed'
+    APPLYING = 'applying'
     APPLIED = 'applied'
     APPLY_FAILED = 'apply-failed'
     REMOVE_FAILED = 'remove-failed'

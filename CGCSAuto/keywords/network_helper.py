@@ -871,7 +871,7 @@ def add_icmp_and_tcp_rules(security_group, auth_info=Tenant.get('admin'),
     """
     security_rules = get_security_group_rules(
         con_ssh=con_ssh, auth_info=auth_info, group=security_group,
-        protocol='ingress', **{'IP Protocol': ('tcp', 'icmp')})
+        ingress=True, **{'IP Protocol': ('tcp', 'icmp')})
     if len(security_rules) >= 2:
         LOG.info("Security group rules for {} already exist to allow ping and "
                  "ssh".format(security_group))

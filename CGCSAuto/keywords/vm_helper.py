@@ -759,7 +759,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, image_id=None,
         auth_info (dict):
         con_ssh (SSHClient):
         security_groups (str|list|tuple): add nova boot option
-        --security-groups $(sec_group_name)
+            --security-groups $(security_groups)
         nics (list): nics to be created for the vm
             each nic: <net-id=net-uuid,net-name=network-name,
             v4-fixed-ip=ip-addr,v6-fixed-ip=ip-addr,

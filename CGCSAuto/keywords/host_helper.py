@@ -940,6 +940,29 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK,
         is_controller = 'controller' in string_total
         is_compute = bool(re.search('compute|worker', string_total))
 
+        if check_webservice_up and is_controller:
+            if not wait_for_webservice_up(
+                    host, fail_ok=fail_ok, con_ssh=con_ssh,
+                    auth_info=auth_info, use_telnet=use_telnet,
+                    con_telnet=con_telnet, timeout=300)[0]:
+                return 7, "Host web-services is not active in system " \
+                          "servicegroup-list"
+
+        if check_subfunc and is_controller and is_compute:
+            # wait for subfunction states to be operational enabled and
+            # available for AIO node
+            if not system_helper.wait_for_host_values(
+                    host, timeout=300, fail_ok=fail_ok, con_ssh=con_ssh,
+                    auth_info=auth_info, use_telnet=use_telnet,
+                    con_telnet=con_telnet,
+                    subfunction_oper=HostOperState.ENABLED,
+                    subfunction_avail=HostAvailState.AVAILABLE):
+                err_msg = "Host subfunctions operational and availability " \
+                          "did not change to enabled and available" \
+                          " within timeout"
+                LOG.warning(err_msg)
+                return 9, err_msg
+
         if check_hypervisor_up and is_compute:
             if container_helper.is_stx_openstack_deployed(
                     con_ssh=con_ssh, auth_info=auth_info,
@@ -960,29 +983,6 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK,
                 # now to unblock test case.
                 # Workaround for CGTS-10715.
                 wait_for_tasks_affined(host, con_ssh=con_ssh, fail_ok=True)
-
-        if check_webservice_up and is_controller:
-            if not wait_for_webservice_up(
-                    host, fail_ok=fail_ok, con_ssh=con_ssh,
-                    auth_info=auth_info, use_telnet=use_telnet,
-                    con_telnet=con_telnet, timeout=300)[0]:
-                return 7, "Host web-services is not active in system " \
-                          "servicegroup-list"
-
-        if check_subfunc and is_controller and is_compute:
-            # wait for subfunction states to be operational enabled and
-            # available
-            if not system_helper.wait_for_host_values(
-                    host, timeout=90, fail_ok=fail_ok, con_ssh=con_ssh,
-                    auth_info=auth_info, use_telnet=use_telnet,
-                    con_telnet=con_telnet,
-                    subfunction_oper=HostOperState.ENABLED,
-                    subfunction_avail=HostAvailState.AVAILABLE):
-                err_msg = "Host subfunctions operational and availability " \
-                          "did not change to enabled and available" \
-                          " within timeout"
-                LOG.warning(err_msg)
-                return 9, err_msg
 
     if check_containers and not use_telnet:
         from keywords import kube_helper, container_helper
@@ -1030,8 +1030,7 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK,
                 LOG.warning(err_msg)
                 return 8, err_msg
 
-    LOG.info(
-        "Host {} is successfully unlocked and in available state".format(host))
+    LOG.info("Host {} is successfully unlocked and in available state".format(host))
     return 0, "Host is unlocked and in available state."
 
 
@@ -1930,7 +1929,7 @@ def _get_actual_mems(host):
         mem_avail, total_1g, pending_1g = displayed_mems[proc]
         actual_1g = total_1g if pending_1g is None else pending_1g
 
-        args = '-2M {} {} {}'.format(mem_avail, host, proc)
+        args = '-2M {} -1G 0 {} {}'.format(mem_avail, host, proc)
         code, output = cli.system('host-memory-modify', args, fail_ok=True)
         if code == 0:
             raise exceptions.SysinvError(
@@ -2941,7 +2940,7 @@ def wait_for_host_in_instance_backing(host, storage_backing, timeout=120,
 
         time.sleep(check_interval)
 
-    err_msg = "Timed out waiting for {} to appear in {} host-aggregate".format(
+    err_msg = "Timed out waiting for {} to convert to {} instance backing".format(
         host, storage_backing)
     if fail_ok:
         LOG.warning(err_msg)
@@ -3307,7 +3306,6 @@ def get_hosts_per_storage_backing(up_only=True, con_ssh=None,
                 aggregate_name = STORAGE_AGGREGATE[inst_backing]
                 if aggregate_name not in aggregates:
                     nova_helper.create_aggregate(name=aggregate_name,
-                                                 avail_zone='nova',
                                                  check_first=False,
                                                  con_ssh=con_ssh,
                                                  auth_info=auth_info)

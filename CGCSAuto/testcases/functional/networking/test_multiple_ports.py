@@ -45,16 +45,19 @@ def _boot_multiports_vm(flavor, mgmt_net_id, vifs, net_id, net_type, base_vm, pc
     nics, glance_vif = _append_nics_for_net(vifs, net_id=net_id, nics=nics)
     img_id = None
     if glance_vif:
-        img_id = glance_helper.create_image(name=glance_vif, hw_vif_model=glance_vif, cleanup='function')[1]
+        img_id = glance_helper.create_image(name=glance_vif, hw_vif_model=glance_vif,
+                                            cleanup='function')[1]
 
     LOG.tc_step("Boot a test_vm with following nics on same networks as base_vm: {}".format(nics))
-    vm_under_test = vm_helper.boot_vm(name='multiports', nics=nics, flavor=flavor, cleanup='function',
+    vm_under_test = vm_helper.boot_vm(name='multiports', nics=nics, flavor=flavor,
+                                      cleanup='function',
                                       image_id=img_id)[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
     if pcipt_seg_id:
         LOG.tc_step("Add vlan to pci-passthrough interface for VM.")
-        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_id, init_conf=True)
+        vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_id,
+                                                   init_conf=True)
 
     LOG.tc_step("Ping test_vm's own {} network ips".format(net_type))
     vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=net_type)
@@ -86,7 +89,8 @@ class TestMutiPortsBasic:
                 {'net-id': internal_net_id}]
 
         LOG.fixture_step("(class) Boot a base vm with following nics: {}".format(nics))
-        base_vm = vm_helper.boot_vm(name='multiports_base', flavor=flavor_id, nics=nics, cleanup='class',
+        base_vm = vm_helper.boot_vm(name='multiports_base', flavor=flavor_id, nics=nics,
+                                    cleanup='class',
                                     reuse_vol=False)[1]
 
         vm_helper.wait_for_vm_pingable_from_natbox(base_vm)
@@ -105,14 +109,16 @@ class TestMutiPortsBasic:
         Test vm actions on vm with multiple ports with given vif models on the same tenant network
 
         Args:
-            vifs (tuple): each item in the tuple is 1 nic to be added to vm with specified (vif_mode, pci_address)
+            vifs (tuple): each item in the tuple is 1 nic to be added to vm with
+                specified (vif_mode, pci_address)
             base_setup (list): test fixture to boot base vm
 
         Setups:
             - create a flavor with dedicated cpu policy (class)
             - choose one tenant network and one internal network to be used by test (class)
             - boot a base vm - vm1 with above flavor and networks, and ping it from NatBox (class)
-            - Boot a vm under test - vm2 with above flavor and with multiple ports on same tenant network with base vm,
+            - Boot a vm under test - vm2 with above flavor and with multiple ports on same tenant
+                network with base vm,
             and ping it from NatBox      (class)
             - Ping vm2's own data network ips        (class)
             - Ping vm2 from vm1 to verify management and data networks connection    (class)
@@ -128,7 +134,8 @@ class TestMutiPortsBasic:
         base_vm, flavor, mgmt_net_id, tenant_net_id, internal_net_id = base_setup
 
         vm_under_test, nics = _boot_multiports_vm(flavor=flavor, mgmt_net_id=mgmt_net_id, vifs=vifs,
-                                                  net_id=tenant_net_id, net_type='data', base_vm=base_vm)
+                                                  net_id=tenant_net_id, net_type='data',
+                                                  base_vm=base_vm)
 
         for vm_actions in [['auto_recover'],
                            ['cold_migrate'],
@@ -136,12 +143,14 @@ class TestMutiPortsBasic:
                            ['suspend', 'resume'],
                            ['hard_reboot']]:
             if vm_actions[0] == 'auto_recover':
-                LOG.tc_step("Set vm to error state and wait for auto recovery complete, then verify ping from "
-                            "base vm over management and data networks")
+                LOG.tc_step("Set vm to error state and wait for auto recovery complete, "
+                            "then verify ping from base vm over management and data networks")
                 vm_helper.set_vm_state(vm_id=vm_under_test, error_state=True, fail_ok=False)
-                vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE, fail_ok=True, timeout=600)
+                vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE,
+                                             fail_ok=True, timeout=600)
             else:
-                LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
+                LOG.tc_step("Perform following action(s) on vm {}: {}".format(
+                    vm_under_test, vm_actions))
                 for action in vm_actions:
                     if 'migrate' in action and system_helper.is_aio_simplex():
                         continue
@@ -159,9 +168,10 @@ class TestMutiPortsBasic:
             # LOG.tc_step("Verify vm pci address preserved after {}".format(vm_actions))
             # check_helper.check_vm_pci_addr(vm_under_test, nics)
 
-            LOG.tc_step("Verify ping from base_vm to vm_under_test over management and data networks still works "
-                        "after {}".format(vm_actions))
-            vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
+            LOG.tc_step("Verify ping from base_vm to vm_under_test over management and data "
+                        "networks still works after {}".format(vm_actions))
+            vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm,
+                                       net_types=['mgmt', 'data'])
 
     @mark.p2
     @mark.parametrize('vifs', [
@@ -179,7 +189,8 @@ class TestMutiPortsBasic:
             - create a flavor with dedicated cpu policy (class)
             - choose one tenant network and one internal network to be used by test (class)
             - boot a base vm - vm1 with above flavor and networks, and ping it from NatBox (class)
-            - Boot a vm under test - vm2 with above flavor and with multiple ports on same tenant network with base vm,
+            - Boot a vm under test - vm2 with above flavor and with multiple ports on same tenant
+                network with base vm,
             and ping it from NatBox     (class)
             - Ping vm2's own data network ips       (class)
             - Ping vm2 from vm1 to verify management and data networks connection   (class)
@@ -197,27 +208,30 @@ class TestMutiPortsBasic:
 
         base_vm, flavor, mgmt_net_id, tenant_net_id, internal_net_id = base_setup
         vm_under_test, nics = _boot_multiports_vm(flavor=flavor, mgmt_net_id=mgmt_net_id, vifs=vifs,
-                                                  net_id=tenant_net_id, net_type='data', base_vm=base_vm)
+                                                  net_id=tenant_net_id, net_type='data',
+                                                  base_vm=base_vm)
 
         host = vm_helper.get_vm_host(vm_under_test)
 
         LOG.tc_step("Reboot vm host {}".format(host))
         vm_helper.evacuate_vms(host=host, vms_to_check=vm_under_test, ping_vms=True)
 
-        LOG.tc_step("Verify ping from base_vm to vm_under_test over management and data networks still works after "
-                    "evacuation.")
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm, net_types=['mgmt', 'data'])
+        LOG.tc_step("Verify ping from base_vm to vm_under_test over management and data networks "
+                    "still works after evacuation.")
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm,
+                                   net_types=['mgmt', 'data'])
 
 
 class TestMutiPortsPCI:
 
     @fixture(scope='class')
     def base_setup_pci(self):
-        LOG.fixture_step("(class) Get an internal network that supports both pci-sriov and pcipt vif to boot vm")
-        avail_pcipt_nets, is_cx4 = network_helper.get_pci_vm_network(pci_type='pci-passthrough',
-                                                                     net_name='internal0-net', rtn_all=True)
-        avail_sriov_nets, _ = network_helper.get_pci_vm_network(pci_type='pci-sriov',
-                                                                net_name='internal0-net', rtn_all=True)
+        LOG.fixture_step("(class) Get an internal network that supports both pci-sriov and "
+                         "pcipt vif to boot vm")
+        avail_pcipt_nets, is_cx4 = network_helper.get_pci_vm_network(
+            pci_type='pci-passthrough', net_name='internal0-net', rtn_all=True)
+        avail_sriov_nets, _ = network_helper.get_pci_vm_network(
+            pci_type='pci-sriov', net_name='internal0-net', rtn_all=True)
 
         if not avail_pcipt_nets and not avail_sriov_nets:
             skip(SkipHostIf.PCI_IF_UNAVAIL)
@@ -227,8 +241,8 @@ class TestMutiPortsPCI:
         pcipt_seg_ids = {}
         if avail_nets:
             avail_net_name = avail_nets[-1]
-            avail_net, segment_id = network_helper.get_network_values(network=avail_net_name,
-                                                                      fields=('id', 'provider:segmentation_id'))
+            avail_net, segment_id = network_helper.get_network_values(
+                network=avail_net_name, fields=('id', 'provider:segmentation_id'))
             internal_nets = [avail_net]
             pcipt_seg_ids[avail_net_name] = segment_id
             avail_pcipt_net = avail_sriov_net = avail_net
@@ -256,54 +270,63 @@ class TestMutiPortsPCI:
 
         if avail_pcipt_nets and is_cx4:
             extra_pcipt_net_name = avail_nets[0] if avail_nets else avail_pcipt_nets[0]
-            extra_pcipt_net, seg_id = network_helper.get_network_values(network=extra_pcipt_net_name,
-                                                                        fields=('id', 'provider:segmentation_id'))
+            extra_pcipt_net, seg_id = network_helper.get_network_values(
+                network=extra_pcipt_net_name, fields=('id', 'provider:segmentation_id'))
             if extra_pcipt_net not in internal_nets:
                 nics.append({'net-id': extra_pcipt_net})
                 pcipt_seg_ids[extra_pcipt_net_name] = seg_id
 
         LOG.fixture_step("(class) Create a flavor with dedicated cpu policy.")
-        flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048, cleanup='class')[1]
-        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated', FlavorSpec.PCI_NUMA_AFFINITY: 'preferred'}
+        flavor_id = nova_helper.create_flavor(name='dedicated', vcpus=2, ram=2048,
+                                              cleanup='class')[1]
+        extra_specs = {FlavorSpec.CPU_POLICY: 'dedicated',
+                       FlavorSpec.PCI_NUMA_AFFINITY: 'preferred'}
         nova_helper.set_flavor(flavor=flavor_id, **extra_specs)
 
         LOG.fixture_step("(class) Boot a base pci vm with following nics: {}".format(nics))
-        base_vm_pci = vm_helper.boot_vm(name='multiports_pci_base', flavor=flavor_id, nics=nics, cleanup='class')[1]
+        base_vm_pci = vm_helper.boot_vm(name='multiports_pci_base', flavor=flavor_id, nics=nics,
+                                        cleanup='class')[1]
 
         LOG.fixture_step("(class) Ping base PCI vm interfaces")
         vm_helper.wait_for_vm_pingable_from_natbox(base_vm_pci)
-        vm_helper.ping_vms_from_vm(to_vms=base_vm_pci, from_vm=base_vm_pci, net_types=['data', 'internal'])
+        vm_helper.ping_vms_from_vm(to_vms=base_vm_pci, from_vm=base_vm_pci,
+                                   net_types=['data', 'internal'])
 
-        return base_vm_pci, flavor_id, base_nics, avail_sriov_net, avail_pcipt_net, pcipt_seg_ids, extra_pcipt_net
+        return base_vm_pci, flavor_id, base_nics, avail_sriov_net, avail_pcipt_net, \
+            pcipt_seg_ids, extra_pcipt_net
 
     @mark.parametrize('vifs', [
         # param('virtio', 'avp', 'pci-passthrough')),
-        # mark.p2(['virtio_x7', 'pci-sriov_x7']),       This test requires compute configured with 8+ sriov vif
+        # mark.p2(['virtio_x7', 'pci-sriov_x7']),   # requires compute configured with 8+ sriov vif
         # mark.p2(['virtio_x6', 'avp_x6', 'pci-passthrough']),
         # param('virtio_x5', 'avp_x5', 'pci-sriov_x2')),
         param(('virtio', 'pci-sriov', 'pci-passthrough'), marks=mark.p3),
         param(('pci-passthrough',), marks=mark.nightly),   # Covered by test_pcipt_sriov.py
         param(('pci-sriov', ), marks=mark.nightly),  # Covered by test_pcipt_sriov.py
-        param(('virtio_x2', 'avp_x2', 'e1000_x2', 'pci-passthrough', 'pci-sriov_x2'), marks=mark.domain_sanity),
+        param(('virtio_x2', 'avp_x2', 'e1000_x2', 'pci-passthrough', 'pci-sriov_x2'),
+              marks=mark.domain_sanity),
         # param('avp', 'pci-passthrough', 'pci-sriov_x2')),
     ], ids=id_params)
-    def test_multiports_on_same_network_pci_vm_actions(self, check_avs_pattern, base_setup_pci, vifs):
+    def test_multiports_on_same_network_pci_vm_actions(self, check_avs_pattern, base_setup_pci,
+                                                       vifs):
         """
         Test vm actions on vm with multiple ports with given vif models on the same tenant network
 
         Args:
-            base_setup_pci (tuple): base_vm_pci, flavor, mgmt_net_id, tenant_net_id, internal_net_id, seg_id
+            base_setup_pci (tuple): base_vm_pci, flavor, mgmt_net_id, tenant_net_id,
+                internal_net_id, seg_id
             vifs (list): list of vifs to add to same internal net
 
         Setups:
             - Create a flavor with dedicated cpu policy (class)
             - Choose management net, one tenant net, and internal0-net1 to be used by test (class)
-            - Boot a base pci-sriov vm - vm1 with above flavor and networks, ping it from NatBox (class)
+            - Boot a base pci-sriov vm - vm1 with above flavor and networks, ping it
+                from NatBox (class)
             - Ping vm1 from itself over data, and internal networks
 
         Test Steps:
-            - Boot a vm under test - vm2 with above flavor and with multiple ports on same tenant network with vm1,
-                and ping it from NatBox
+            - Boot a vm under test - vm2 with above flavor and with multiple ports on same tenant
+                network with vm1, and ping it from NatBox
             - Ping vm2's own data and internal network ips
             - Ping vm2 from vm1 to verify management and data networks connection
             - Perform one of the following actions on vm2
@@ -319,8 +342,8 @@ class TestMutiPortsPCI:
             - Delete created vms and flavor
         """
 
-        base_vm_pci, flavor, base_nics, avail_sriov_net, avail_pcipt_net, pcipt_seg_ids, extra_pcipt_net, \
-            = base_setup_pci
+        base_vm_pci, flavor, base_nics, avail_sriov_net, avail_pcipt_net, pcipt_seg_ids, \
+            extra_pcipt_net = base_setup_pci
 
         pcipt_included = sriov_included = False
         internal_net_id = None
@@ -347,22 +370,28 @@ class TestMutiPortsPCI:
 
         img_id = None
         if glance_vif:
-            img_id = glance_helper.create_image(name=glance_vif, hw_vif_model=glance_vif, cleanup='function')[1]
+            img_id = glance_helper.create_image(name=glance_vif, hw_vif_model=glance_vif,
+                                                cleanup='function')[1]
 
         LOG.tc_step("Boot a vm with following vifs on same internal net: {}".format(vifs))
-        vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor, cleanup='function',
+        vm_under_test = vm_helper.boot_vm(name='multiports_pci', nics=nics, flavor=flavor,
+                                          cleanup='function',
                                           reuse_vol=False, image_id=img_id)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
         if pcipt_included:
             LOG.tc_step("Add vlan to pci-passthrough interface for VM.")
-            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_ids, init_conf=True)
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test,
+                                                       net_seg_id=pcipt_seg_ids,
+                                                       init_conf=True)
 
         LOG.tc_step("Ping vm's own data and internal network ips")
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test,
+                                   net_types=['data', 'internal'])
 
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal networks")
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci,
+                                   net_types=['mgmt', 'data', 'internal'])
 
         vm_macs = network_helper.get_ports(server=vm_under_test, network=internal_net_id,
                                            field='MAC Address')
@@ -373,14 +402,18 @@ class TestMutiPortsPCI:
                 prev_eth = network_helper.get_eth_for_mac(ssh_client=vm_ssh, mac_addr=vm_mac)
                 prev_eths.append(prev_eth)
 
-        for vm_actions in [['auto_recover'], ['cold_migrate'], ['pause', 'unpause'], ['suspend', 'resume']]:
+        for vm_actions in [['auto_recover'], ['cold_migrate'], ['pause', 'unpause'],
+
+                           ['suspend', 'resume']]:
             if 'auto_recover' in vm_actions:
                 LOG.tc_step("Set vm to error state and wait for auto recovery complete, "
                             "then verify ping from base vm over management and internal networks")
                 vm_helper.set_vm_state(vm_id=vm_under_test, error_state=True, fail_ok=False)
-                vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE, fail_ok=False, timeout=600)
+                vm_helper.wait_for_vm_values(vm_id=vm_under_test, status=VMStatus.ACTIVE,
+                                             fail_ok=False, timeout=600)
             else:
-                LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, vm_actions))
+                LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test,
+                                                                              vm_actions))
                 for action in vm_actions:
                     vm_helper.perform_action_on_vm(vm_under_test, action=action)
 
@@ -392,7 +425,8 @@ class TestMutiPortsPCI:
                 with vm_helper.ssh_to_vm_from_natbox(vm_id=vm_under_test) as vm_ssh:
                     eth_names = []
                     for vm_mac in vmacs:
-                        eth_name = network_helper.get_eth_for_mac(ssh_client=vm_ssh, mac_addr=vm_mac)
+                        eth_name = network_helper.get_eth_for_mac(ssh_client=vm_ssh,
+                                                                  mac_addr=vm_mac)
                         eth_names.append(eth_name)
                     if eth_names != prev_eths:
                         rebooted = True
@@ -402,12 +436,16 @@ class TestMutiPortsPCI:
                     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_under_test)
 
             if pcipt_included:
-                LOG.tc_step("Bring up vlan interface for pci-passthrough vm {}.".format(vm_under_test))
-                vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_ids)
+                LOG.tc_step("Bring up vlan interface for pci-passthrough vm {}.".format(
+                    vm_under_test))
+                vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test,
+                                                           net_seg_id=pcipt_seg_ids)
 
-            LOG.tc_step("Verify ping from base_vm to vm_under_test over management and internal networks still works "
+            LOG.tc_step("Verify ping from base_vm to vm_under_test over management and "
+                        "internal networks still works "
                         "after {}".format(vm_actions))
-            vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'internal'])
+            vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci,
+                                       net_types=['mgmt', 'internal'])
 
     @mark.parametrize('vifs', [
         ('pci-sriov',),
@@ -415,7 +453,8 @@ class TestMutiPortsPCI:
         param(('avp', 'virtio', 'pci-passthrough', 'pci-sriov'), marks=mark.domain_sanity),
         # (['avp', 'pci-sriov', 'pci-passthrough', 'pci-sriov', 'pci-sriov']),
     ], ids=id_params)
-    def test_multiports_on_same_network_pci_evacuate_vm(self, check_avs_pattern, base_setup_pci, vifs):
+    def test_multiports_on_same_network_pci_evacuate_vm(self, check_avs_pattern,
+                                                        base_setup_pci, vifs):
         """
         Test evacuate vm with multiple ports on same network
 
@@ -427,7 +466,8 @@ class TestMutiPortsPCI:
             - create a flavor with dedicated cpu policy (module)
             - choose one tenant network and one internal network to be used by test (module)
             - boot a base vm - vm1 with above flavor and networks, and ping it from NatBox (module)
-            - Boot a vm under test - vm2 with above flavor and with multiple ports on same tenant network with base vm,
+            - Boot a vm under test - vm2 with above flavor and with multiple ports on same
+                tenant network with base vm,
             and ping it from NatBox     (class)
             - Ping vm2's own data network ips       (class)
             - Ping vm2 from vm1 to verify management and internal networks connection   (class)
@@ -441,8 +481,8 @@ class TestMutiPortsPCI:
         Teardown:
             - Delete created vms and flavor
         """
-        base_vm_pci, flavor, base_nics, avail_sriov_net, avail_pcipt_net, pcipt_seg_ids, extra_pcipt_net, \
-            = base_setup_pci
+        base_vm_pci, flavor, base_nics, avail_sriov_net, avail_pcipt_net, pcipt_seg_ids, \
+            extra_pcipt_net = base_setup_pci
 
         internal_net_id = None
         pcipt_included = False
@@ -464,20 +504,23 @@ class TestMutiPortsPCI:
             nics.append({'net-id': internal_net_id, 'vif-model': vif})
 
         LOG.tc_step("Boot a vm with following vifs on same network internal0-net1: {}".format(vifs))
-        vm_under_test = vm_helper.boot_vm(name='multiports_pci_evac', nics=nics, flavor=flavor, cleanup='function',
-                                          reuse_vol=False)[1]
+        vm_under_test = vm_helper.boot_vm(name='multiports_pci_evac', nics=nics, flavor=flavor,
+                                          cleanup='function', reuse_vol=False)[1]
         vm_helper.wait_for_vm_pingable_from_natbox(vm_under_test, fail_ok=False)
 
         if pcipt_included:
             LOG.tc_step("Add vlan to pci-passthrough interface.")
-            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_ids, init_conf=True)
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test,
+                                                       net_seg_id=pcipt_seg_ids, init_conf=True)
 
         LOG.tc_step("Ping vm's own data and internal network ips")
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test, net_types=['data', 'internal'])
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test,
+                                   net_types=['data', 'internal'])
         vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_under_test)
 
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal networks")
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'data', 'internal'])
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci,
+                                   net_types=['mgmt', 'data', 'internal'])
 
         host = vm_helper.get_vm_host(vm_under_test)
 
@@ -485,9 +528,12 @@ class TestMutiPortsPCI:
         vm_helper.evacuate_vms(host=host, vms_to_check=vm_under_test, ping_vms=True)
 
         if pcipt_included:
-            LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".format(vm_under_test))
-            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test, net_seg_id=pcipt_seg_ids)
+            LOG.tc_step("Add/Check vlan interface is added to pci-passthrough device for vm {}.".
+                        format(vm_under_test))
+            vm_helper.add_vlan_for_vm_pcipt_interfaces(vm_id=vm_under_test,
+                                                       net_seg_id=pcipt_seg_ids)
 
-        LOG.tc_step("Verify ping from base_vm to vm_under_test over management and internal networks still works after "
-                    "evacuation.")
-        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci, net_types=['mgmt', 'internal'])
+        LOG.tc_step("Verify ping from base_vm to vm_under_test over management and "
+                    "internal networks still works after evacuation.")
+        vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci,
+                                   net_types=['mgmt', 'internal'])

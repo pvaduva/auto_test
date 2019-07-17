@@ -98,8 +98,8 @@ class TestPacketTypeSecurity:
 
         vm_test, vm_observer = vm_helper.launch_vm_pair(
             vm_type,
-            primary_kwargs=dict(sec_group_name=sg_primary),
-            secondary_kwargs=dict(sec_group_name=sg_secondary))
+            primary_kwargs=dict(security_groups=sg_primary),
+            secondary_kwargs=dict(security_groups=sg_secondary))
 
         with vm_helper.traffic_between_vms([(vm_test, vm_observer)], ixncfg=IxiaPath.CFG_UDP) as session:
             LOG.tc_step("Verify UDP traffic is not allowed")
@@ -157,8 +157,8 @@ class TestPacketTypeSecurity:
 
         vm_test, vm_observer = vm_helper.launch_vm_pair(
             vm_type,
-            primary_kwargs=dict(sec_group_name=sg_primary),
-            secondary_kwargs=dict(sec_group_name=sg_secondary))
+            primary_kwargs=dict(security_groups=sg_primary),
+            secondary_kwargs=dict(security_groups=sg_secondary))
 
         LOG.info("Delete security group associated with running VM, verify it fails")
         code, output = network_helper.delete_security_group(sg_primary, fail_ok=True)

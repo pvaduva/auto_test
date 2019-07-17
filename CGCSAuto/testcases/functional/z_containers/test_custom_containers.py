@@ -344,9 +344,7 @@ def deploy_delete_kubectl_app(request):
     return app_name, pod_name
 
 
-@mark.sanity
-@mark.cpe_sanity
-@mark.sx_sanity
+@mark.platform_sanity
 def test_host_operations_with_custom_kubectl_app(deploy_delete_kubectl_app):
     """
     Test create, delete custom app via kubectl run cmd

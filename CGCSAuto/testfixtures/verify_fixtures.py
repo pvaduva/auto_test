@@ -63,6 +63,13 @@ def __verify_alarms(request, scope):
         LOG.info("Check applications status...")
         new_bad_apps = [item for item in post_apps_status if
                         item[1] != AppStatus.APPLIED]
+        if new_bad_apps:
+            applying_apps = [item[0] for item in post_apps_status if item[1] == AppStatus.APPLYING]
+            if applying_apps:
+                LOG.info('Wait for {} to apply'.format(applying_apps))
+                container_helper.wait_for_apps_status(apps=applying_apps, status=AppStatus.APPLIED,
+                                                      check_interval=20, timeout=600)
+            new_bad_apps = [item for item in new_bad_apps if item[0] not in applying_apps]
         assert not new_bad_apps, "Applications no longer applied after test " \
                                  "{}: {}".format(scope, new_bad_apps)
         # check no new alarms
