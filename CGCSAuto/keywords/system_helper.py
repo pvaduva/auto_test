@@ -2626,12 +2626,18 @@ def modify_spectre_meltdown_version(version='spectre_meltdown_all',
 
 
 def is_avs(con_ssh=None):
+    vswitch_type = get_vswitch_type(con_ssh=con_ssh)
+    return 'avs' in vswitch_type  # Possible values: 'avs', 'none', 'ovs-dpdk'
+
+
+def get_vswitch_type(con_ssh=None, auth_info=Tenant.get('admin_platform')):
     vswitch_type = ProjVar.get_var('VSWITCH_TYPE')
     if vswitch_type is None:
-        vswitch_type = get_system_values(fields='vswitch_type',
+        vswitch_type = get_system_values(fields='vswitch_type', auth_info=auth_info,
                                          con_ssh=con_ssh)[0]
         ProjVar.set_var(VSWITCH_TYPE=vswitch_type)
-    return 'avs' in vswitch_type  # Possible values: 'avs', 'none', 'ovs-dpdk'
+
+    return vswitch_type
 
 
 def get_controller_uptime(con_ssh, auth_info=Tenant.get('admin_platform')):

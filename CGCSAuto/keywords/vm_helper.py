@@ -749,13 +749,11 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, image_id=None,
         user_data (str|list):
         vm_host (str): which host to place the vm
         avail_zone (str): availability zone for vm host, Possible values:
-        'nova', 'stxauto', etc
-        block_device (dict|list|tuple): dist or list of dict, each dictionary
-        is a block device.
-            e.g, {'source': 'volume', 'volume_id': xxxx, ...}
+            'nova', 'stxauto', etc
+        block_device (dict|list|tuple): dict or list of dict, each dictionary
+            is a block device. e.g, {'source': 'volume', 'volume_id': xxxx, ...}
         block_device_mapping (str):  Block device mapping in the format
-        '<dev-name>=<id>:<type>:<size(GB)>:<delete-on-
-                                terminate>'.
+            '<dev-name>=<id>:<type>:<size(GB)>:<delete-on-terminate>'.
         auth_info (dict):
         con_ssh (SSHClient):
         security_groups (str|list|tuple): add nova boot option
@@ -945,7 +943,7 @@ def boot_vm(name=None, flavor=None, source=None, source_id=None, image_id=None,
         '--meta': meta,
         '--nic': nics,
         '--hint': hint,
-        '--block-device': block_device,
+        '--block-device': [block_device] if isinstance(block_device, dict) else block_device
     }
     repeat_args = common.parse_args(repeat_args, repeat_arg=True, vals_sep=',')
 

@@ -61,7 +61,8 @@ def security_groups():
     group_ids = []
     group_name = 'test_pkt_typ_sec_rul_enf'
     for auth_info in (Tenant.get_primary(), Tenant.get_secondary()):
-        group_id = network_helper.create_security_group(group_name, auth_info=auth_info, cleanup='module')[1]
+        group_id = network_helper.create_security_group(group_name, auth_info=auth_info,
+                                                        cleanup='module')[1]
         network_helper.add_icmp_and_tcp_rules(group_name, auth_info=auth_info, cleanup='module')
         group_ids.append(group_id)
 
@@ -101,7 +102,8 @@ class TestPacketTypeSecurity:
             primary_kwargs=dict(security_groups=sg_primary),
             secondary_kwargs=dict(security_groups=sg_secondary))
 
-        with vm_helper.traffic_between_vms([(vm_test, vm_observer)], ixncfg=IxiaPath.CFG_UDP) as session:
+        with vm_helper.traffic_between_vms([(vm_test, vm_observer)], ixncfg=IxiaPath.CFG_UDP) \
+                as session:
             LOG.tc_step("Verify UDP traffic is not allowed")
             succ, val = common.wait_for_val_from_func(0, 30, 5, session.get_frames_delta)
             assert not succ, "udp traffic successfully passed through"
@@ -128,7 +130,8 @@ class TestPacketTypeSecurity:
         vm_helper.add_security_group(vm_test, sg_primary, auth_info=Tenant.get('admin'))
         vm_helper.add_security_group(vm_observer, sg_secondary, auth_info=Tenant.get('admin'))
 
-        with vm_helper.traffic_between_vms([(vm_test, vm_observer)], ixncfg=IxiaPath.CFG_UDP) as session:
+        with vm_helper.traffic_between_vms([(vm_test, vm_observer)], ixncfg=IxiaPath.CFG_UDP) \
+                as session:
             LOG.tc_step("Verify UDP traffic is not allowed")
             succ, val = common.wait_for_val_from_func(0, 30, 5, session.get_frames_delta)
             assert not succ, "udp traffic successfully passed through"
@@ -168,14 +171,16 @@ class TestPacketTypeSecurity:
         LOG.info(output)
         assert code, "in-use security group {} deletion succeeded".format(sg_secondary)
 
-        with vm_helper.traffic_between_vms([(vm_test, vm_observer)], ixncfg=IxiaPath.CFG_UDP) as session:
+        with vm_helper.traffic_between_vms([(vm_test, vm_observer)], ixncfg=IxiaPath.CFG_UDP) \
+                as session:
             LOG.tc_step("Verify UDP traffic is not allowed")
             succ, val = common.wait_for_val_from_func(0, 30, 5, session.get_frames_delta)
             assert not succ, "udp traffic successfully passed through"
 
             LOG.tc_step("Allow UDP traffic on the fly and verify traffic comes back to normal")
             with udp_allow(*security_groups):
-                session.get_frames_delta(stable=True)   # raises if the delta is increasing (i.e., udp denied)
+                # raises if the delta is increasing (i.e., udp denied)
+                session.get_frames_delta(stable=True)
 
             LOG.tc_step("Verify UDP traffic is no longer allowed")
             succ, val = common.wait_for_val_from_func(0, 30, 5, session.get_frames_delta)
@@ -209,8 +214,10 @@ def test_security_group_and_rule_create_reject_when_max_reached():
 
     # nova_helper.get_quotas uses nova quota-show, which does not include secgroup* fields
     LOG.tc_step("Retrive quota and usage information")
-    max_secgroups, max_rules = vm_helper.get_quotas(quotas=('secgroups', 'secgroup-rules'), auth_info=auth_info)
-    LOG.info("Tenant Quota Retrieved: secgroups={} secgroup-rules={}".format(max_secgroups, max_rules))
+    max_secgroups, max_rules = vm_helper.get_quotas(quotas=('secgroups', 'secgroup-rules'),
+                                                    auth_info=auth_info)
+    LOG.info("Tenant Quota Retrieved: secgroups={} secgroup-rules={}".format(max_secgroups,
+                                                                             max_rules))
 
     LOG.tc_step("Retrieve usage for security groups")
     groups_list = network_helper.get_security_groups(auth_info=auth_info)
@@ -221,7 +228,8 @@ def test_security_group_and_rule_create_reject_when_max_reached():
     sec_group = None
     for i in range(max_secgroups - in_use_secgroups):
         # take the last security group for rules creation
-        sec_group = network_helper.create_security_group('test_max_reached_creation_fail', auth_info=auth_info,
+        sec_group = network_helper.create_security_group('test_max_reached_creation_fail',
+                                                         auth_info=auth_info,
                                                          cleanup='function')[1]
     assert sec_group
 
@@ -246,9 +254,10 @@ def test_security_group_and_rule_create_reject_when_max_reached():
                                                   cleanup='function')
 
     LOG.tc_step("Verify security rule creation fail as quota is reached")
-    code, msg = network_helper.create_security_group_rule(sec_group, remote_ip='255.255.255.254/32',
-                                                          protocol='udp', ingress=True, auth_info=auth_info,
-                                                          fail_ok=True, cleanup='function')
+    code, msg = network_helper.create_security_group_rule(
+        sec_group, remote_ip='255.255.255.254/32',
+        protocol='udp', ingress=True, auth_info=auth_info,
+        fail_ok=True, cleanup='function')
 
     assert code == 1, "creation after max quota reached succeeded"
 
@@ -257,10 +266,10 @@ def test_security_group_and_rule_create_reject_when_max_reached():
 def udp_allow(sg_primary, sg_secondary):
     LOG.info("Creating rules to allow UDP ingress for {} and {}".format(sg_primary, sg_secondary))
     auth_info = Tenant.get('admin')
-    udp_primary = network_helper.create_security_group_rule(sg_primary, remote_ip='0.0.0.0/0', ingress=True,
-                                                            protocol='udp', auth_info=auth_info)[1]
-    udp_secondary = network_helper.create_security_group_rule(sg_primary, remote_ip='0.0.0.0/0', ingress=True,
-                                                              protocol='udp', auth_info=auth_info)[1]
+    udp_primary = network_helper.create_security_group_rule(
+        sg_primary, remote_ip='0.0.0.0/0', ingress=True, protocol='udp', auth_info=auth_info)[1]
+    udp_secondary = network_helper.create_security_group_rule(
+        sg_primary, remote_ip='0.0.0.0/0', ingress=True, protocol='udp', auth_info=auth_info)[1]
     yield sg_primary, sg_secondary
 
     LOG.info("Deleting UDP ingress rules for {} and {}".format(sg_primary, sg_secondary))
@@ -319,7 +328,8 @@ def ensure_vms_on_same_host(vms):
         LOG.info("All VMs in the list sit on {}, skipping".format(most_common))
     else:
         LOG.info(
-            "Most VMs ({}) in the list sit on {}, migrating the other instances".format(num_most_common, most_common))
+            "Most VMs ({}) in the list sit on {}, migrating the other instances".format(
+                num_most_common, most_common))
         ensure_vms_on_host(vms, most_common)
     return most_common
 
@@ -334,11 +344,13 @@ def test_qos_weight_enforced(request, avs_required, skip_if_25g):
         - Assign policies to different tenant networks for the primary tenant
         - Launch two pairs of DPDK VMs attached to differently weighted networks
         - Move VMs so that 1 HIGH and 1 LOW VM sits on each side
-        - Start pktgen, forward flow at 100%, backward flow at 1% to ensure vSwitch learns destination MACs
+        - Start pktgen, forward flow at 100%, backward flow at 1% to ensure vSwitch learns
+        destination MACs
         - Reset compute's vshell statistics counter
         - Wait
         - Collect from vshell for distribution
-        - Verify QoS weights are impacting drop rates of two tenant networks under stress-ed host (Rx(H) > Rx(L))
+        - Verify QoS weights are impacting drop rates of two tenant networks under stress-ed host
+        (Rx(H) > Rx(L))
 
     Test Teardown:
         - Delete qoses, vms, volumes, flavors
@@ -405,7 +417,8 @@ def test_qos_weight_enforced(request, avs_required, skip_if_25g):
         for (vm1, vm2), rate in zip([vms, reversed(list(vms))], [100, 1]):
 
             # resolve destination MACs here instead of using ARPs
-            # due to unsynchronized starting time, ARP packets could get lost when the vswitch is flooded
+            # due to unsynchronized starting time, ARP packets could get lost when the
+            # vswitch is flooded
             dst_ip = network_helper.get_tenant_ips_for_vms(vm2)[0]
             dst_mac = None
             for vm_id, info in vm_helper.get_vms_ports_info([vm2], rtn_subnet_id=True).items():
@@ -445,7 +458,8 @@ def test_qos_weight_enforced(request, avs_required, skip_if_25g):
     time.sleep(wait)
 
     # check vshell rx-es for vports;
-    LOG.tc_step("Verify QoS weights are impacting drop rates of two tenant networks under stress-ed host")
+    LOG.tc_step("Verify QoS weights are impacting drop rates of two tenant networks under "
+                "stress-ed host")
 
     # for post mortem analysis
     con_ssh.exec_cmd("vshell -H {} engine-stats-list".format(compute_a), fail_ok=False)
@@ -457,8 +471,10 @@ def test_qos_weight_enforced(request, avs_required, skip_if_25g):
     con_ssh.exec_cmd("vshell -H {} engine-stats-list".format(compute_b), fail_ok=False)
     con_ssh.exec_cmd("vshell -H {} interface-list".format(compute_b), fail_ok=False)
     con_ssh.exec_cmd("vshell -H {} port-stats-list".format(compute_b), fail_ok=False)
-    iface_stats = con_ssh.exec_cmd("vshell -H {} interface-stats-list".format(compute_b), fail_ok=False)[1]
-    nw_stats = con_ssh.exec_cmd("vshell -H {} network-stats-list".format(compute_b), fail_ok=False)[1]
+    iface_stats = con_ssh.exec_cmd("vshell -H {} interface-stats-list".format(compute_b),
+                                   fail_ok=False)[1]
+    nw_stats = con_ssh.exec_cmd("vshell -H {} network-stats-list".format(compute_b),
+                                fail_ok=False)[1]
 
     date_ip_high = network_helper.get_tenant_ips_for_vms(vms_high[1])[0]
     rx_high_id = network_helper.get_ports(fixed_ips={'ip-address': date_ip_high})[0]
@@ -472,15 +488,17 @@ def test_qos_weight_enforced(request, avs_required, skip_if_25g):
         assert int(flood) < 100000, "vswitch flooeded, setup is incorrect"
 
     # tx-packets, the amount host vswitch sent to the guest vnic
-    rx_high_bytes = int(table_parser.get_values(iface_stats_table, 'tx-bytes', uuid=rx_high_id)[0])
-    rx_low_bytes = int(table_parser.get_values(iface_stats_table, 'tx-bytes', uuid=rx_low_id)[0])
+    rx_high_bytes = int(table_parser.get_values(iface_stats_table, 'tx-bytes',
+                                                uuid=rx_high_id)[0])
+    rx_low_bytes = int(table_parser.get_values(iface_stats_table, 'tx-bytes',
+                                               uuid=rx_low_id)[0])
 
     LOG.info("high rx-bytes: {:>10}".format(rx_high_bytes))
     LOG.info("high rx-Gbps : {:>10.2f}".format(rx_high_bytes/125000000/wait))
     LOG.info(" low rx-bytes: {:>10}".format(rx_low_bytes))
     LOG.info(" low rx-Gbps : {:>10.2f}".format(rx_low_bytes/125000000/wait))
 
-    assert abs(rx_high_bytes/rx_low_bytes - weight_high/weight_low) < 0.3*weight_high/weight_low,   \
+    assert abs(rx_high_bytes/rx_low_bytes - weight_high/weight_low) < 0.3*weight_high/weight_low, \
         "weight policy deviated by more than 30%"
 
 
@@ -547,9 +565,11 @@ def test_qos_phb_enforced(vm_type, avs_required, skip_if_25g, update_network_quo
 
             mp = ['Precedence {}'.format(i) for i in range(8)]
             session.configure(
-                conf_element+'/stack:"ipv4-3"/field:"ipv4.header.priority.ds.phb.classSelectorPHB.classSelectorPHB-12"',
+                conf_element+'/stack:"ipv4-3"/field:"ipv4.header.priority.ds.'
+                             'phb.classSelectorPHB.classSelectorPHB-12"',
                 activeFieldChoice=True, fieldValue=mp[index])
-            track_by = session.getAttribute(trafficItem+'/tracking', 'trackBy') + ["ipv4ClassSelectorPhb0"]
+            track_by = session.getAttribute(trafficItem+'/tracking', 'trackBy') + \
+                ["ipv4ClassSelectorPhb0"]
             session.configure(trafficItem+'/tracking', trackBy=track_by)
 
         LOG.tc_step("Start traffic and keep increasing frameRate until vNIC starts dropping")
@@ -589,7 +609,8 @@ def test_qos_phb_enforced(vm_type, avs_required, skip_if_25g, update_network_quo
                     precedence, int(expected), int(results[precedence])))
 
                 # allow 1% deviation
-                if expected - 0.01 * total_framerates <= results[precedence] <= expected + 0.01 * total_framerates:
+                if expected - 0.01 * total_framerates <= results[precedence] <= expected + \
+                        0.01 * total_framerates:
                     pass
                 else:
                     fail = True
@@ -608,7 +629,8 @@ def test_qos_phb_enforced(vm_type, avs_required, skip_if_25g, update_network_quo
             host_ssh.exec_cmd("vshell interface-stats-list", fail_ok=False)
 
         LOG.tc_step("Verifying PHB policies enforced")
-        assert not fail, "framerates are not properly distributed by PHB weights after max. framerate reached"
+        assert not fail, "framerates are not properly distributed by PHB weights after max. " \
+                         "framerate reached"
 
 
 @mark.parametrize('vm_type', [
@@ -631,7 +653,8 @@ def test_jumbo_frames(vm_type, check_avs_pattern, update_network_quotas):
     """
     for tenant in [Tenant.get_primary(), Tenant.get_secondary()]:
         tenant_net = network_helper.get_tenant_net_id(auth_info=tenant)
-        if network_helper.get_network_values(tenant_net, fields='provider:network_type')[0] != 'vlan':
+        if network_helper.get_network_values(tenant_net,
+                                             fields='provider:network_type')[0] != 'vlan':
             skip("Tenant {}'s providernet is not on vlan".format(tenant['tenant']))
 
     LOG.tc_step("Launch a pair of test VMs")
@@ -639,14 +662,16 @@ def test_jumbo_frames(vm_type, check_avs_pattern, update_network_quotas):
         vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_primary())
     vm_test = vms[0]
     tenant_net = nics[1]['net-id']
-    providernet = network_helper.get_network_values(tenant_net, fields='provider:physical_network')[0]
+    providernet = network_helper.get_network_values(tenant_net,
+                                                    fields='provider:physical_network')[0]
     vm_test_mtu = int(system_helper.get_data_networks(name=providernet, field='mtu')[0])
 
     vms, nics = vm_helper.launch_vms(
         vm_type=vm_type, count=1, ping_vms=True, auth_info=Tenant.get_secondary())
     vm_observer = vms[0]
     tenant_net = nics[1]['net-id']
-    providernet = network_helper.get_network_values(tenant_net, fields='provider:physical_network')[0]
+    providernet = network_helper.get_network_values(tenant_net,
+                                                    fields='provider:physical_network')[0]
     vm_observer_mtu = int(system_helper.get_data_networks(name=providernet, field='mtu')[0])
 
     if vm_test_mtu != vm_observer_mtu:
@@ -677,7 +702,8 @@ def test_jumbo_frames(vm_type, check_avs_pattern, update_network_quotas):
             session.traffic_start()
             time.sleep(10)
 
-            loss = int(float(session.get_statistics('traffic item statistics', fail_ok=False)[0]['Loss %']))
+            loss = int(float(session.get_statistics('traffic item statistics',
+                                                    fail_ok=False)[0]['Loss %']))
             LOG.info("Observed Loss %: {}".format(loss))
 
             if mtu < flow_mtu:

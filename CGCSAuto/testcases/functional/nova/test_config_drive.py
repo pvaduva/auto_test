@@ -40,7 +40,8 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
     if hosts_num < 1:
         skip("No host with local_image storage backing")
 
-    volume_id = cinder_helper.create_volume(name='vol_inst1', source_id=img_id, guest_image=guest_os)[1]
+    volume_id = cinder_helper.create_volume(name='vol_inst1', source_id=img_id,
+                                            guest_image=guest_os)[1]
     ResourceCleanup.add('volume', volume_id, scope='function')
 
     block_device = {'source': 'volume', 'dest': 'volume', 'id': volume_id, 'device': 'vda'}
@@ -48,7 +49,8 @@ def test_vm_with_config_drive(hosts_per_stor_backing):
                               cleanup='function', guest_os=guest_os, meta={'foo': 'bar'})[1]
 
     LOG.tc_step("Confirming the config drive is set to True in vm ...")
-    assert str(vm_helper.get_vm_values(vm_id, "config_drive")[0]) == 'True', "vm config-drive not true"
+    assert str(vm_helper.get_vm_values(vm_id, "config_drive")[0]) == 'True', \
+        "vm config-drive not true"
 
     LOG.tc_step("Add date to config drive ...")
     check_vm_config_drive_data(vm_id)
@@ -103,7 +105,8 @@ def check_vm_config_drive_data(vm_id, ping_timeout=VMTimeout.PING_VM):
         assert mount, "{} is not mounted".format(dev)
 
         file_path = '{}/openstack/latest/meta_data.json'.format(mount)
-        content = vm_ssh.exec_cmd('python -m json.tool {} | grep foo'.format(file_path), fail_ok=False)[1]
+        content = vm_ssh.exec_cmd('python -m json.tool {} | grep foo'.format(file_path),
+                                  fail_ok=False)[1]
         assert '"foo": "bar"' in content
 
 
@@ -118,4 +121,5 @@ def check_vm_files_on_hypervisor(vm_id, vm_host, instance_name):
 
         output = host_ssh.exec_cmd('ls /run/libvirt/qemu')[1]
         libvirt = "{}.xml".format(instance_name)
-        assert libvirt in output, "{} is not found in /run/libvirt/qemu on {}".format(libvirt, vm_host)
+        assert libvirt in output, \
+            "{} is not found in /run/libvirt/qemu on {}".format(libvirt, vm_host)

@@ -112,10 +112,16 @@ def _convert_ht_cpe_req(ht_req, cpe_req):
 
 class TestVSwitchCPUReconfig:
 
+    @fixture(scope='class', autouse=True)
+    def skip_for_vswitch_none(self):
+        if system_helper.get_vswitch_type().lower() == 'none':
+            skip('vswitch cpu config is not applicable to vswitch type - none')
+
     @fixture(scope='class')
     def flavor_(self, host_to_config):
         storage_backing = host_to_config[-1]
-        flavor = nova_helper.create_flavor(name='flv_{}'.format(storage_backing), storage_backing=storage_backing)[1]
+        flavor = nova_helper.create_flavor(name='flv_{}'.format(storage_backing),
+                                           storage_backing=storage_backing)[1]
         ResourceCleanup.add('flavor', flavor, scope='class')
 
         return flavor

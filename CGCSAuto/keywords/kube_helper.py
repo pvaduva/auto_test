@@ -140,7 +140,7 @@ def get_pods(field='NAME', namespace=None, all_namespaces=False, pod_names=None,
         pod_names (str|list|tuple): Full pod name(s). When specified, labels
         and field_selectors will be ignored.
         labels (str|dict|None|list|tuple): label selectors. Used only if
-        full_names are unspecified.
+            full_names are unspecified.
             e.g., application=nova,component=compute
         field_selectors (str): Used only if full_names are unspecified.
             e.g., , 'spec.nodeName=controller-0,status.phase!=Running,
