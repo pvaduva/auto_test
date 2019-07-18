@@ -81,7 +81,7 @@ def get_events(event_type, limit=None, header='message_id', con_ssh=None,
     return table_parser.get_values(table_, header)
 
 
-def set_retention_period(period, fail_ok=True, check_first=True, con_ssh=None,
+def set_retention_period(period, fail_ok=False, check_first=True, con_ssh=None,
                          auth_info=Tenant.get('admin_platform')):
     """
     Sets the PM retention period in K8S settings
