@@ -12,7 +12,7 @@ from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module, unrese
 @fixture(scope='module', autouse=True)
 def revert(request):
     """ Revert to pre-test mnfa parameters after test """
-    skip("Force reboot hosts not ready to test")
+    #skip("Force reboot hosts not ready to test")
 
     if system_helper.is_aio_system():
         skip("Not applicable on small systems")
