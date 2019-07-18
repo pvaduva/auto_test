@@ -116,7 +116,7 @@ def test_create_snapshot_using_boot_from_volume_vm():
             continue
         else:
             divisor = 1024 * 1024 * 1024
-            image_size = int(image_prop_s['size'])
+            image_size = int(image_prop_s)
             vol_size = int(math.ceil(image_size / divisor))
             break
     else:
@@ -211,7 +211,7 @@ def test_attempt_to_delete_volume_associated_with_snapshot():
             continue
         else:
             divisor = 1024 * 1024 * 1024
-            image_size = int(image_prop_s['size'])
+            image_size = int(image_prop_s)
             vol_size = int(math.ceil(image_size / divisor))
             break
 
