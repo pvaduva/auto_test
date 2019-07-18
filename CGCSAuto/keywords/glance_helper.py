@@ -179,8 +179,13 @@ def get_image_file_info(img_file_path=None, guest_os=None, ssh_client=None):
                         GuestImages.IMAGE_FILES.keys()))
             # Assume ssh_client is test server client and image path is test
             # server path
-            img_file_path = "{}/{}".format(
-                GuestImages.DEFAULT['image_dir_file_server'], img_file_info[0])
+            if img_file_info[0]:
+                img_file_path = "{}/{}".format(
+                    GuestImages.DEFAULT['image_dir_file_server'], img_file_info[0])
+            else:
+                img_file_path = "{}/{}".format(GuestImages.DEFAULT['image_dir'], img_file_info[1])
+                if not ssh_client:
+                    ssh_client = ControllerClient.get_active_controller()
 
     def _get_img_dict(ssh_):
         img_info = ssh_.exec_cmd("qemu-img info --output json {}".format(

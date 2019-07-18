@@ -67,15 +67,18 @@ def check_correct_post_resize_value(original_disk_value, expected_increase, host
 
     if expected_increase < 0:
         # vm is on this host, backup image files may be created if not already existed
-        backup_val = math.ceil(glance_helper.get_image_size(guest_os=GuestImages.DEFAULT['guest'], virtual_size=False))
+        backup_val = math.ceil(glance_helper.get_image_size(guest_os=GuestImages.DEFAULT['guest'],
+                                                            virtual_size=False))
         assert expt_post-backup_val <= post_resize_value <= expt_post
     elif expected_increase > 0:
         # vm moved away from this host, or resized to smaller disk on same host, backup files will stay
         assert expt_post-1 <= post_resize_value <= expt_post+1, \
-            "disk_available_least on {} expected: {}+-1, actual: {}".format(host, expt_post, post_resize_value)
+            "disk_available_least on {} expected: {}+-1, actual: {}".format(
+                host, expt_post, post_resize_value)
     else:
         assert expt_post == post_resize_value, \
-            "{} disk_available_least value changed to {} unexpectedly".format(host, post_resize_value)
+            "{} disk_available_least value changed to {} unexpectedly".format(
+                host, post_resize_value)
 
     return post_resize_value
 
