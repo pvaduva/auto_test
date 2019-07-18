@@ -169,23 +169,22 @@ def get_image_file_info(img_file_path=None, guest_os=None, ssh_client=None):
     """
     if not img_file_path:
         if guest_os is None:
+            guest_os = GuestImages.DEFAULT['guest']
+
+        img_file_info = GuestImages.IMAGE_FILES.get(guest_os, None)
+        if not img_file_info:
             raise ValueError(
-                "Either img_file_path or guest_os has to be provided")
+                "Invalid guest_os provided. Choose from: {}".format(
+                    GuestImages.IMAGE_FILES.keys()))
+        # Assume ssh_client is test server client and image path is test
+        # server path
+        if img_file_info[0]:
+            img_file_path = "{}/{}".format(
+                GuestImages.DEFAULT['image_dir_file_server'], img_file_info[0])
         else:
-            img_file_info = GuestImages.IMAGE_FILES.get(guest_os, None)
-            if not img_file_info:
-                raise ValueError(
-                    "Invalid guest_os provided. Choose from: {}".format(
-                        GuestImages.IMAGE_FILES.keys()))
-            # Assume ssh_client is test server client and image path is test
-            # server path
-            if img_file_info[0]:
-                img_file_path = "{}/{}".format(
-                    GuestImages.DEFAULT['image_dir_file_server'], img_file_info[0])
-            else:
-                img_file_path = "{}/{}".format(GuestImages.DEFAULT['image_dir'], img_file_info[1])
-                if not ssh_client:
-                    ssh_client = ControllerClient.get_active_controller()
+            img_file_path = "{}/{}".format(GuestImages.DEFAULT['image_dir'], img_file_info[1])
+            if not ssh_client:
+                ssh_client = ControllerClient.get_active_controller()
 
     def _get_img_dict(ssh_):
         img_info = ssh_.exec_cmd("qemu-img info --output json {}".format(
@@ -1090,7 +1089,7 @@ def set_image(image, new_name=None, properties=None, min_disk=None,
         properties[ImageMetadata.VIF_MODEL] = hw_vif_model
     if properties:
         for key, val in properties.items():
-            args.append('--property {}="{}"'.format(key, val))
+            args.append('--property {}={}'.format(key, val))
             post_checks['properties'] = properties
 
     if tags:
