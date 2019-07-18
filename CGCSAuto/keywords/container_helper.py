@@ -609,7 +609,8 @@ def get_helm_overrides(field='overrides namespaces', app_name='stx-openstack', c
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.system('helm-override-list', app_name, ssh_client=con_ssh, auth_info=auth_info)[1])
+    table_ = table_parser.table(cli.system('helm-override-list', app_name,
+                                           ssh_client=con_ssh, auth_info=auth_info)[1])
 
     if charts:
         table_ = table_parser.filter_table(table_, **{'chart name': charts})
@@ -619,7 +620,8 @@ def get_helm_overrides(field='overrides namespaces', app_name='stx-openstack', c
     return vals
 
 
-def get_helm_override_values(chart, namespace, app_name='stx-openstack', fields=('combined_overrides',),
+def get_helm_override_values(chart, namespace, app_name='stx-openstack',
+                             fields=('combined_overrides',),
                              auth_info=Tenant.get('admin_platform'),
                              con_ssh=None):
     """
@@ -636,7 +638,8 @@ def get_helm_override_values(chart, namespace, app_name='stx-openstack', fields=
 
     """
     args = '{} {} {}'.format(app_name, chart, namespace)
-    table_ = table_parser.table(cli.system('helm-override-show', args, ssh_client=con_ssh, auth_info=auth_info)[1],
+    table_ = table_parser.table(cli.system('helm-override-show', args,
+                                           ssh_client=con_ssh, auth_info=auth_info)[1],
                                 rstrip_value=True)
 
     if isinstance(fields, str):
@@ -645,7 +648,11 @@ def get_helm_override_values(chart, namespace, app_name='stx-openstack', fields=
     values = []
     for field in fields:
         value = table_parser.get_value_two_col_table(table_, field=field, merge_lines=False)
-        values.append(yaml.load('\n'.join(value)))
+        if value == 'None':
+            value = None
+        else:
+            value = yaml.load('\n'.join(value))
+        values.append(value)
 
     return values
 
