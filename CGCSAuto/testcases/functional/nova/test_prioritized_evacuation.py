@@ -5,9 +5,8 @@ from datetime import datetime
 
 from pytest import mark, fixture, skip
 
-import keywords.host_helper
 from consts.stx import VMMetaData
-from keywords import vm_helper, nova_helper, common
+from keywords import vm_helper, nova_helper, common, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils.tis_log import LOG
 
@@ -31,7 +30,7 @@ def get_vm_priority_metadata(vm_id):
 
 def set_evacuate_priority(vm_id, priority, fail_ok=False):
     data = {VMMetaData.EVACUATION_PRIORITY: priority}
-    return vm_helper.set_vm(vm_id, fail_ok=fail_ok, **data)
+    return vm_helper.set_vm(vm_id, fail_ok=fail_ok, properties=data)
 
 
 def delete_evacuate_priority(vm_id, fail_ok=False):
@@ -69,7 +68,7 @@ class TestPrioritizedVMEvacuation:
     def setup_quota_and_hosts(self, request, add_admin_role_class, add_cgcsauto_zone):
         vm_helper.ensure_vms_quotas(vms_num=10, cores_num=50, vols_num=20)
 
-        storage_backing, target_hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
+        storage_backing, target_hosts = host_helper.get_storage_backing_with_max_hosts()
         if len(target_hosts) < 2:
             skip("Less than two up hosts have same storage backing")
 
@@ -94,8 +93,8 @@ class TestPrioritizedVMEvacuation:
         ('force_reboot', False, 'same_priority', 'same_vcpus', 'diff_mem', 'diff_root_disk', 'diff_swap_disk'),
         ('force_reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
     ])
-    def test_prioritized_vm_evacuations(self, operation, set_on_boot, prioritizing, vcpus, mem, root_disk, swap_disk,
-                                        setup_quota_and_hosts):
+    def test_prioritized_vm_evacuations(self, operation, set_on_boot, prioritizing, vcpus, mem,
+                                        root_disk, swap_disk, setup_quota_and_hosts):
         """
 
         Args:
@@ -120,7 +119,8 @@ class TestPrioritizedVMEvacuation:
         self.storage_backing, self.cgcsauto_hosts = setup_quota_and_hosts
         self.current_host = self.cgcsauto_hosts[0]
         self.vms_info = defaultdict()
-        self.init_vm_settings(operation, set_on_boot, prioritizing, vcpus, mem, root_disk, swap_disk)
+        self.init_vm_settings(operation, set_on_boot, prioritizing, vcpus, mem, root_disk,
+                              swap_disk)
         self.create_flavors()
         self.create_vms()
         self.check_vm_settings()
@@ -131,15 +131,16 @@ class TestPrioritizedVMEvacuation:
     def check_vm_settings(self):
         LOG.tc_step('Check if the evacuation-priority actually set')
         for vm_info in self.vms_info.values():
-            recovery_priority = get_vm_priority_metadata(vm_info['vm_id'])
+            vm_id = vm_info['vm_id']
+            recovery_priority = get_vm_priority_metadata(vm_id)
             if not recovery_priority:
                 assert vm_info['priority'] is None, \
-                    'Evacuation-Priority on VM is not set, expected priority:{}, actual:{}, vm_id:{}'.format(
-                        vm_info['priority'], recovery_priority, vm_info['vm_id'])
+                    'Evacuation-Priority for VM {} is unset. Expected:{}'.\
+                    format(vm_id, vm_info['priority'])
             else:
-                assert int(recovery_priority[VMMetaData.EVACUATION_PRIORITY]) == vm_info['priority'], \
-                    'Evacuation-Priority on VM is not set, expected priority:{}, actual:{}, vm_id:{}'.format(
-                        vm_info['priority'], recovery_priority, vm_info['vm_id'])
+                assert int(recovery_priority) == int(vm_info['priority']), \
+                    'Evacuation-Priority setting for {} incorrect. Expectet:{}, actual:{}'.\
+                    format(vm_id, vm_info['priority'], recovery_priority)
 
         LOG.info('OK, evacuation-priorities are correctly set')
 
@@ -154,13 +155,15 @@ class TestPrioritizedVMEvacuation:
         sorted_vm_infos = [v[1] for v in sorted_vm_infos]
         vm_attributes = zip(sorted_vm_infos, self.vcpus, self.mem, self.root_disk, self.swap_disk)
         sorted_attributes = sorted(vm_attributes,
-                                   key=lambda x: (x[0]['priority'], -1 * x[1], -1 * x[2], -1 * x[3], -1 * x[4]))
+                                   key=lambda x: (x[0]['priority'],
+                                                  -1 * x[1], -1 * x[2], -1 * x[3], -1 * x[4]))
 
         expected_orders = [(v[0]['vm_id'], v[0]['priority']) for v in sorted_attributes]
         verify_vim_evacuation_events(start_time=self.start_time, expected_orders=expected_orders)
 
     def trigger_evacuation(self):
-        LOG.tc_step('Triggering evacuation on host: {} via action:{}'.format(self.current_host, self.operation))
+        LOG.tc_step('Triggering evacuation on host: {} via action:{}'.format(self.current_host,
+                                                                             self.operation))
         action = self.operation.lower()
 
         self.start_time = common.lab_time_now()[1]
@@ -186,13 +189,15 @@ class TestPrioritizedVMEvacuation:
         LOG.tc_step('Launch VM for test')
 
         if not hasattr(TestPrioritizedVMEvacuation, 'vm_id'):
-            TestPrioritizedVMEvacuation.vm_id = vm_helper.boot_vm(avail_zone='cgcsauto', cleanup='class')[1]
+            TestPrioritizedVMEvacuation.vm_id = vm_helper.boot_vm(avail_zone='cgcsauto',
+                                                                  cleanup='class')[1]
 
         vm_id = TestPrioritizedVMEvacuation.vm_id
         LOG.info('OK, VM launched (or already existing) for test, vm-id:{}'.format(vm_id))
 
         if priority == 'random':
-            priority = 'ab' + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(3))
+            priority = 'ab' + ''.join(random.choice(string.ascii_letters + string.digits)
+                                      for _ in range(3))
         expecting_fail = True if expt_error else False
 
         if operation == 'set':
@@ -200,21 +205,24 @@ class TestPrioritizedVMEvacuation:
         else:
             priorities_set = get_vm_priority_metadata(vm_id)
             expecting_fail = True if not priorities_set else False
-            LOG.info('Attempt to delete evacuation-priority, expecting {}'.format('PASS' if expecting_fail else 'FAIL'))
+            LOG.info('Attempt to delete evacuation-priority, expecting {}'.format(
+                'PASS' if expecting_fail else 'FAIL'))
             code, output = delete_evacuate_priority(vm_id, fail_ok=expecting_fail)
 
         if not expecting_fail:
             assert 0 == code, \
-                'Fail to set Evacuation-priority:{} to VM:{}\ncode={}\noutput={}'.format(priority, vm_id, code, output)
-
-            LOG.info('OK, {} Evacuation-Priority was accepted, set to "{}" on VM:{}'.format(operation, priority, vm_id))
-        else:
-            assert 1 == code, \
-                'Fail to set Evacuation-priority:{} to VM:{}\ncode={}\noutput={}, expecting failing, but not'.format(
+                'Fail to set Evacuation-priority:{} to VM:{}\ncode={}\noutput={}'.format(
                     priority, vm_id, code, output)
 
-            LOG.info('OK, attempt to change Evacuation-Priority to:"{}" on VM:{} failed as expected'.format(
-                priority, vm_id))
+            LOG.info('OK, {} Evacuation-Priority was accepted, set to "{}" on VM:{}'.format(
+                operation, priority, vm_id))
+        else:
+            assert 1 == code, \
+                'Fail to set Evacuation-priority:{} to VM:{}\ncode={}\noutput={}, ' \
+                'expecting failing, but not'.format(priority, vm_id, code, output)
+
+            LOG.info('OK, attempt to change Evacuation-Priority to:"{}" on '
+                     'VM:{} failed as expected'.format(priority, vm_id))
 
         priorities_set = get_vm_priority_metadata(vm_id)
 
@@ -228,14 +236,16 @@ class TestPrioritizedVMEvacuation:
         if operation == 'set':
             if not expecting_fail:
                 assert actual_priority == priority, \
-                    'Failed to set Evacuation-Priority, expecting:{}, actual:{}'.format(priority, actual_priority)
+                    'Failed to set Evacuation-Priority, expecting:{}, actual:{}'.format(
+                        priority, actual_priority)
             else:
                 assert actual_priority is None or actual_priority != priority, \
-                    'Failed, expecting Evacuation-Priority not set, but not. expecting:{}, actual:{}'.format(
-                        priority, actual_priority)
+                    'Failed, expecting Evacuation-Priority not set, but not. ' \
+                    'expecting:{}, actual:{}'.format(priority, actual_priority)
         else:
             assert actual_priority is None, \
-                'Failed, expecting Evacuation-Priority been deleted, but not. actual:{}'.format(actual_priority)
+                'Failed, expecting Evacuation-Priority been deleted, but not. ' \
+                'actual:{}'.format(actual_priority)
 
     def create_vms(self):
         LOG.tc_step('Create VMs')
@@ -248,13 +258,14 @@ class TestPrioritizedVMEvacuation:
 
             name = vm_name_format.format(sn)
             if self.set_on_boot and sn < num_priorities:
-                vm_id = vm_helper.boot_vm(name,
-                                          meta={VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]},
-                                          flavor=self.vms_info[sn]['flavor_id'],
-                                          source='volume',
-                                          avail_zone='cgcsauto',
-                                          vm_host=self.current_host,
-                                          cleanup='function')[1]
+                vm_id = vm_helper.boot_vm(
+                    name=name,
+                    meta={VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]},
+                    flavor=self.vms_info[sn]['flavor_id'],
+                    source='volume',
+                    avail_zone='cgcsauto',
+                    vm_host=self.current_host,
+                    cleanup='function')[1]
             else:
                 vm_id = vm_helper.boot_vm(name,
                                           flavor=self.vms_info[sn]['flavor_id'],
@@ -263,7 +274,8 @@ class TestPrioritizedVMEvacuation:
                                           vm_host=self.current_host,
                                           cleanup='function')[1]
                 if sn < num_priorities:
-                    vm_helper.set_vm(vm_id, {VMMetaData.EVACUATION_PRIORITY: self.prioritizing[sn]})
+                    vm_helper.set_vm(vm_id, properties={VMMetaData.EVACUATION_PRIORITY:
+                                                        self.prioritizing[sn]})
 
             LOG.info('OK, VM{} created: id={}\n'.format(sn, vm_id))
             self.vms_info[sn].update(vm_id=vm_id, vm_name=name, priority=self.prioritizing[sn])
@@ -292,9 +304,11 @@ class TestPrioritizedVMEvacuation:
             self.vms_info.update({sn: {'flavor_name': name, 'flavor_id': flavor_id}})
 
             # TODO create volume
-        LOG.info('OK, flavors created:\n{}\n'.format([vm['flavor_id'] for vm in self.vms_info.values()]))
+        LOG.info('OK, flavors created:\n{}\n'.format([vm['flavor_id'] for vm in
+                                                      self.vms_info.values()]))
 
-    def init_vm_settings(self, operation, set_on_boot, prioritizing, vcpus, mem, root_disk, swap_disk):
+    def init_vm_settings(self, operation, set_on_boot, prioritizing, vcpus, mem,
+                         root_disk, swap_disk):
         self.operation = operation
         self.set_on_boot = set_on_boot
 
@@ -308,7 +322,8 @@ class TestPrioritizedVMEvacuation:
             self.prioritizing = [DEF_PRIORITY] * NUM_VM
 
         if 'diff' in vcpus:
-            self.vcpus = random.sample(range(NUM_VM * DEF_NUM_VCPU + 1, DEF_NUM_VCPU, -1 * DEF_NUM_VCPU), NUM_VM)
+            self.vcpus = random.sample(
+                range(NUM_VM * DEF_NUM_VCPU + 1, DEF_NUM_VCPU, -1 * DEF_NUM_VCPU), NUM_VM)
         else:
             self.vcpus = [DEF_NUM_VCPU] * NUM_VM
 
@@ -338,5 +353,6 @@ class TestPrioritizedVMEvacuation:
             # no swap disk
             self.swap_disk = [0] * NUM_VM
 
-        LOG.info('OK, will boot VMs with settings:\npriorities={}\nvcpus={}\nmem={}\nroot_disk={}\nswap_dis={}'.
+        LOG.info('Creating VMs with following settings:\npriorities={}\nvcpus={}'
+                 '\nmem={}\nroot_disk={}\nswap_dis={}'.
                  format(self.prioritizing, self.vcpus, self.mem, self.root_disk, self.swap_disk))

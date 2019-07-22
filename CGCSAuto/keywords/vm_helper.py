@@ -38,8 +38,8 @@ from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
-def set_vm(vm_id, name=None, state=None, con_ssh=None, auth_info=None,
-           fail_ok=False, **properties):
+def set_vm(vm_id, name=None, state=None, properties=None, con_ssh=None, auth_info=None,
+           fail_ok=False):
     """
     Set vm with given parameters - name, state, and/or properties
     Args:
@@ -49,7 +49,7 @@ def set_vm(vm_id, name=None, state=None, con_ssh=None, auth_info=None,
         con_ssh:
         auth_info:
         fail_ok:
-        **properties:
+        properties (dict|str|None):
 
     Returns (tuple):
         (0, )
@@ -77,7 +77,7 @@ def unset_vm(vm_id, properties, con_ssh=None, auth_info=None, fail_ok=False):
     Unset given properties for VM
     Args:
         vm_id:
-        properties:
+        properties (str|list|tuple|None):
         con_ssh:
         auth_info:
         fail_ok:
