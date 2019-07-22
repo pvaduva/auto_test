@@ -156,8 +156,8 @@ def test_create_snapshot_using_boot_from_volume_vm():
     # Creates an image
     LOG.tc_step("Upload cinder volume to image")
     image_name = "cinder_upload"
-    glance_helper.create_image(name=image_name, volume=snapshot_vol_id,
-                               auth_info=None, cleanup='function')
+    img_from_vol_id = glance_helper.create_image(name=image_name, volume=snapshot_vol_id,
+                                                 auth_info=None, cleanup='function')[1]
 
     image_filename = '{}/images/temp'.format(HostLinuxUser.get_home())
     LOG.tc_step("Download the image snapshot")
@@ -168,6 +168,16 @@ def test_create_snapshot_using_boot_from_volume_vm():
     # zero-size, download will report failure.
     LOG.tc_step("Delete the downloaded image")
     con_ssh.exec_cmd("rm {}".format(image_filename), fail_ok=False)
+
+    LOG.tc_step('Delete uploaded image')
+    glance_helper.delete_images(images=img_from_vol_id)
+
+    LOG.tc_step('Delete created cinder volume from vm snapshot')
+    cinder_helper.delete_volumes(snapshot_vol_id)
+
+    LOG.tc_step('Delete cinder snapshot and image snapshot from boot-from-volume vm')
+    glance_helper.delete_images(image_id)
+    cinder_helper.delete_volume_snapshots(snapshots=snapshot_id)
 
 
 def test_attempt_to_delete_volume_associated_with_snapshot():

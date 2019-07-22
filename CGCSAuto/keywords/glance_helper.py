@@ -325,7 +325,7 @@ def create_image(name=None, image_id=None, source_image_file=None, volume=None,
     Args:
         name (str): string to be included in image name
         image_id (str): id for the image to be created
-        source_image_file (str): local image file to create image from.
+        source_image_file (str|None): local image file to create image from.
         DefaultImage will be used if unset
         volume (str)
         disk_format (str): One of these: ami, ari, aki, vhd, vmdk, raw,
@@ -395,15 +395,14 @@ def create_image(name=None, image_id=None, source_image_file=None, volume=None,
         image_host_ssh = get_cli_client()
         create_auth = auth_info
 
-    if ensure_sufficient_space:
+    if ensure_sufficient_space and not volume:
         if not is_image_storage_sufficient(img_file_path=file_path,
                                            con_ssh=con_ssh,
                                            image_host_ssh=image_host_ssh)[0]:
             skip('Insufficient image storage for creating glance image '
                  'from {}'.format(file_path))
 
-    source_str = file_path
-
+    source_str = file_path if file_path else ''
     known_imgs = ['cgcs-guest', 'tis-centos-guest', 'ubuntu', 'cirros',
                   'opensuse', 'rhel', 'centos', 'win', 'ge_edge',
                   'vxworks', 'debian-8-m-agent']
@@ -415,9 +414,9 @@ def create_image(name=None, image_id=None, source_image_file=None, volume=None,
             name = img_str + '_' + name
             break
     else:
-        name_prefix = source_str.split(sep='/')[-1]
-        name_prefix = name_prefix.split(sep='.')[0]
-        name = name_prefix + '_' + name
+        if source_str:
+            name_prefix = str(source_str.split(sep='/')[-1]).split(sep='.')[0]
+            name = name_prefix + '_' + name
 
     name = common.get_unique_name(name_str=name, existing_names=get_images(),
                                   resource_type='image')
@@ -465,7 +464,8 @@ def create_image(name=None, image_id=None, source_image_file=None, volume=None,
         raise
 
     table_ = table_parser.table(output)
-    actual_id = table_parser.get_value_two_col_table(table_, 'id')
+    field = 'image_id' if volume else 'id'
+    actual_id = table_parser.get_value_two_col_table(table_, field)
     if cleanup and actual_id:
         ResourceCleanup.add('image', actual_id, scope=cleanup)
 

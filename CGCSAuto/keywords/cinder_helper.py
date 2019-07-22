@@ -527,6 +527,7 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
 
     """
     if volumes is None:
+        check_first = False
         volumes = get_volumes(status=('available', 'error'), auth_info=auth_info, con_ssh=con_ssh)
 
     LOG.info("Deleting volume(s): {}".format(volumes))
@@ -547,7 +548,9 @@ def delete_volumes(volumes=None, fail_ok=False, timeout=VolumeTimeout.DELETE, ch
             LOG.info(msg)
             return -1, msg
 
-        if not vols_to_del == volumes:
+        if set(vols_to_del) == set(volumes):
+            vols_to_del = volumes
+        else:
             LOG.info("Some volume(s) don't exist. Given volumes: {}. Volumes to delete: {}.".
                      format(volumes, vols_to_del))
     else:
@@ -629,7 +632,9 @@ def delete_volume_snapshots(snapshots=None, force=False, check_first=True, fail_
         return -1, msg
 
     args_ = '{}{}'.format('--force ' if force else '', ' '.join(snapshots_to_del))
-    code, output = cli.openstack('snapshot delete', args_, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    code, output = cli.openstack('volume snapshot delete', args_, ssh_client=con_ssh,
+                                 fail_ok=fail_ok,
+                                 auth_info=auth_info)
 
     if code == 1:
         return code, output
