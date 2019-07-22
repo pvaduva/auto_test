@@ -39,7 +39,7 @@ def provision_internal_dns(hosts):
     if code == -1:
         return
 
-    __clear_config_out_of_date_alarms(hosts=hosts)
+    # __clear_config_out_of_date_alarms(hosts=hosts)
 
 
 def deprovision_internal_dns(hosts):
@@ -70,7 +70,7 @@ def deprovision_internal_dns(hosts):
     if code == -1:
         return
 
-    __clear_config_out_of_date_alarms(hosts=hosts)
+    # __clear_config_out_of_date_alarms(hosts=hosts)
 
 
 def __clear_config_out_of_date_alarms(hosts):
