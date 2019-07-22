@@ -1264,13 +1264,22 @@ def wait_for_hosts_ready(hosts, lab=None, timeout=1800):
     if not controller0_node.ssh_conn:
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
 
-    ready, not_ready = kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout,
-                                                        fail_ok=True)
+    fip = lab.get("floating ip")
+    if fip:
+        fip_conn = install_helper.establish_ssh_connection(fip)
+        if not fip_conn:
+            LOG.warning("No connectivity using floating ip {}; attempting to resolve fip connectivity ...".format(fip))
+            setups.arp_for_fip(lab, controller0_node.ssh_conn)
+        else:
+            fip_conn.close()
 
-    if not ready:
-        LOG.warning("Nodes {} not ready checking floating ip issue ...".format(not_ready))
-        setups.arp_for_fip(lab, controller0_node.ssh_conn)
-        kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout)
+    # ready, not_ready = kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout,
+    #                                                    fail_ok=True)
+    kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout)
+    # if not ready:
+    #     LOG.warning("Nodes {} not ready checking floating ip issue ...".format(not_ready))
+    #     setups.arp_for_fip(lab, controller0_node.ssh_conn)
+    #     kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout)
 
 
 def wait_for_hosts_to_be_online(hosts, lab=None, fail_ok=True):
@@ -1367,61 +1376,6 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
                     return
 
             msg = "Timed out waiting for controller-0  to become available state after deployment"
-            if fail_ok:
-                LOG.warning(msg)
-                return False
-            raise exceptions.HostTimeout(msg)
-
-
-def wait_for_deploy_mgr_hosts_config(controller0_node, lab=None, fail_ok=False):
-    """
-
-    Args:
-        controller0_node:
-        lab:
-        fail_ok:
-
-    Returns:
-
-    """
-
-    if lab is None:
-        lab = InstallVars.get_install_var("LAB")
-
-    if controller0_node is None:
-        controller0_node = lab['controller-0']
-    hosts = [host for host in lab['hosts'] if host != 'controller-0']
-
-    if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip, fail_ok=True)
-        ControllerClient.set_active_controller(controller0_node.ssh_conn)
-
-    test_step = "Wait for Deployment Mgr to configure other hosts"
-    LOG.tc_step(test_step)
-    if do_step(test_step):
-        LOG.info("Waiting for Deploy Mgr to configure and unlock hosts: {}  ...".format(hosts))
-        no_of_hosts_configured = 0
-        debug_msg = "Waiting for {} to become availability=available and insync=true: {}"
-        end_time = time.time() + HostTimeout.REBOOT
-        while time.time() < end_time:
-            hosts_states = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'], namespace='deployment',
-                                                     resource_type='hosts', con_ssh=controller0_node.ssh_conn,
-                                                     name=hosts, insync='true')
-
-            if not hosts_states or \
-                    any(host for host in hosts if host not in [host_state[0] for host_state in hosts_states]):
-                if len(hosts_states) > no_of_hosts_configured:
-                    LOG.info(debug_msg.format(hosts, list(hosts_states)))
-                    no_of_hosts_configured = len(hosts_states)
-                else:
-                    LOG.debug(debug_msg.format(hosts, list(hosts_states)))
-
-                time.sleep(20)
-            else:
-                LOG.info("All hosts are in available state and insync: {}".format(hosts_states))
-                return
-        else:
-            msg = "Timed out waiting for {} to become in available state and insync".format(hosts)
             if fail_ok:
                 LOG.warning(msg)
                 return False
@@ -1849,3 +1803,208 @@ def validate_deployment_mgr_install(controller0_node, lab, fail_ok=False):
         if not data_net_info or any(data_info for data_info in data_net_info if 'true' not in data_info):
             msg = "All Data networks are not insyc : {}".format(data_net_info)
             LOG.warning(msg)
+
+
+def wait_for_deploy_mgr_lab_config(controller0_node, lab=None, fail_ok=False):
+
+    test_step = "Wait for Deployment Mgr to configure other hosts"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+
+        wait_for_deploy_mgr_hosts_config(controller0_node, lab=lab, fail_ok=fail_ok)
+        wait_for_deploy_mgr_system_config(controller0_node, lab=lab, timeout=30, fail_ok=fail_ok)
+        wait_for_deploy_mgr_data_networks_config(controller0_node, lab=lab, timeout=30, fail_ok=fail_ok)
+
+
+def wait_for_deploy_mgr_hosts_config(controller0_node, lab=None, fail_ok=False):
+    """
+
+    Args:
+        controller0_node:
+        lab:
+        fail_ok:
+
+    Returns:
+
+    """
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    if controller0_node is None:
+        controller0_node = lab['controller-0']
+    hosts = [host for host in lab['hosts'] if host != 'controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip, fail_ok=True)
+        ControllerClient.set_active_controller(controller0_node.ssh_conn)
+
+    LOG.info("Waiting for Deploy Mgr to configure and unlock hosts: {}  ...".format(hosts))
+    no_of_hosts_configured = 0
+    debug_msg = "Waiting for {} to become availability=available and insync=true: {}"
+    end_time = time.time() + HostTimeout.REBOOT
+    while time.time() < end_time:
+        hosts_states = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'], namespace='deployment',
+                                                 resource_type='hosts', con_ssh=controller0_node.ssh_conn,
+                                                 name=hosts, insync='true')
+
+        if not hosts_states or \
+                any(host for host in hosts if host not in [host_state[0] for host_state in hosts_states]):
+            if len(hosts_states) > no_of_hosts_configured:
+                LOG.info(debug_msg.format(hosts, list(hosts_states)))
+                no_of_hosts_configured = len(hosts_states)
+            else:
+                LOG.debug(debug_msg.format(hosts, list(hosts_states)))
+
+            time.sleep(20)
+        else:
+            LOG.info("All hosts are in available state and insync: {}".format(hosts_states))
+            return
+    else:
+        msg = "Timed out waiting for {} to become in available state and insync".format(hosts)
+        if fail_ok:
+            LOG.warning(msg)
+            return False
+        raise exceptions.HostTimeout(msg)
+
+
+def wait_for_deploy_mgr_system_config(controller0_node, lab=None, timeout=30, fail_ok=False):
+    """
+
+    Args:
+        controller0_node:
+        lab:
+        fail_ok:
+
+    Returns:
+
+    """
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    if controller0_node is None:
+        controller0_node = lab['controller-0']
+    hosts = [host for host in lab['hosts'] if host != 'controller-0']
+    lab_name = lab['name']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip, fail_ok=True)
+        ControllerClient.set_active_controller(controller0_node.ssh_conn)
+
+    LOG.info("Waiting for Deploy Mgr to configure {} system  ...".format(lab_name))
+
+    debug_msg = "Waiting for {} system insync=true".format(lab_name)
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+
+        system_state = kube_helper.get_resources(field=['NAME', 'INSYNC'], namespace='deployment',
+                                                 resource_type='system', con_ssh=controller0_node.ssh_conn,
+                                                 insync='true')
+
+        if not system_state:
+            time.sleep(10)
+        else:
+            LOG.info("{} system insync: {}".format(lab_name, system_state))
+            return
+    else:
+        msg = "Timed out waiting for {} system to become in available state and insync".format(lab_name)
+        if fail_ok:
+            LOG.warning(msg)
+            return False
+        raise exceptions.HostTimeout(msg)
+
+
+def wait_for_deploy_mgr_data_networks_config(controller0_node, lab=None, timeout=30, fail_ok=False):
+    """
+
+    Args:
+        controller0_node:
+        lab:
+        fail_ok:
+
+    Returns:
+
+    """
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    if controller0_node is None:
+        controller0_node = lab['controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip, fail_ok=True)
+        ControllerClient.set_active_controller(controller0_node.ssh_conn)
+
+    configured_data_nets = system_helper.get_data_networks(con_ssh=controller0_node.ssh_conn)
+    LOG.info("Waiting for Deploy Mgr to configure {} data networks ...".format(configured_data_nets))
+
+    debug_msg = "Waiting for {} data networks insync=true".format(configured_data_nets)
+    end_time = time.time() + timeout
+
+    while time.time() < end_time:
+
+        d_states = kube_helper.get_resources(field=['NAME', 'INSYNC'], namespace='deployment',
+                                                 resource_type='datanetworks', con_ssh=controller0_node.ssh_conn,
+                                                 name=configured_data_nets, insync='true')
+
+        if not d_states or \
+                any(p for p in configured_data_nets if p not in [d_state[0] for d_state in d_states]):
+            time.sleep(10)
+        else:
+            LOG.info("{} datanetworks insync: {}".format(configured_data_nets, d_states ))
+            return
+    else:
+        msg = "Timed out waiting for {} data networks to become insync".format(configured_data_nets)
+        if fail_ok:
+            LOG.warning(msg)
+            return False
+        raise exceptions.HostTimeout(msg)
+
+
+def wait_for_deploy_mgr_platform_networks_config(controller0_node, lab=None, timeout=30, fail_ok=False):
+    """
+
+    Args:
+        controller0_node:
+        lab:
+        fail_ok:
+
+    Returns:
+
+    """
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    if controller0_node is None:
+        controller0_node = lab['controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip, fail_ok=True)
+        ControllerClient.set_active_controller(controller0_node.ssh_conn)
+
+    configured_data_nets = system_helper.get_data_networks(con_ssh=controller0_node.ssh_conn)
+    LOG.info("Waiting for Deploy Mgr to configure {} data networks ...".format(configured_data_nets))
+
+    debug_msg = "Waiting for {} data networks insync=true".format(configured_data_nets)
+    end_time = time.time() + timeout
+
+    while time.time() < end_time:
+
+        p_states = kube_helper.get_resources(field=['NAME', 'INSYNC'], namespace='deployment',
+                                             resource_type='platformnetworks', con_ssh=controller0_node.ssh_conn,
+                                             insync='true')
+
+        if not p_states:
+            time.sleep(10)
+        else:
+            LOG.info("platform networks insync: {}".format(configured_data_nets, p_states ))
+            return
+    else:
+        msg = "Timed out waiting for platform networks to become insync"
+        if fail_ok:
+            LOG.warning(msg)
+            return False
+        raise exceptions.HostTimeout(msg)
