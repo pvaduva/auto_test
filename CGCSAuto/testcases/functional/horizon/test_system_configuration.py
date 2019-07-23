@@ -1,4 +1,4 @@
-from pytest import fixture, skip, mark
+from pytest import fixture
 
 from consts import horizon
 from utils import cli, table_parser
@@ -8,14 +8,8 @@ from utils.horizon.pages.admin.platform import systemconfigurationpage
 from keywords import system_helper, storage_helper
 
 
-@fixture(scope='module')
-def storage_precheck():
-    if not system_helper.is_storage_system():
-        skip("This test only applies to storage nodes")
-
-
 @fixture()
-def sys_config_pg(storage_precheck, admin_home_pg):
+def sys_config_pg(admin_home_pg):
     LOG.fixture_step('Go to Admin > Platform > System Configuration')
     system_configuration_pg = systemconfigurationpage.SystemConfigurationPage(admin_home_pg.driver)
     system_configuration_pg.go_to_target_page()
@@ -268,7 +262,6 @@ def test_horizon_sysconfig_controllerfs_cancel_edit(sys_config_pg):
     horizon.test_result = True
 
 
-@mark.usefixtures('storage_precheck')
 def test_horizon_sysconfig_ceph_storage_pools_cancel_edit(sys_config_pg):
     """
     Test ceph storage pools edit and display:
