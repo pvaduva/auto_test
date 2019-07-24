@@ -30,9 +30,6 @@ def _wait_for_measurements(meter, resource_type, extra_query, start_time, overla
         time.sleep(check_interval)
 
 
-@mark.cpe_sanity
-@mark.sanity
-@mark.sx_nightly
 @mark.parametrize('meter', [
     'image.size'
 ])
@@ -88,8 +85,7 @@ def check_event_in_tenant_or_admin(resource_id, event_type):
         assert False, "{} event for resource {} was not found under admin or tenant".format(event_type, resource_id)
 
 
-@mark.sanity
-# Hardcode the parameter even though unused so sanity test name can show the meters tested
+# Hardcode the parameter even though unused so test name can show the meters tested
 @mark.parametrize('meters', [
     'router_subnet_image_vswitch'
 ])
@@ -100,7 +96,7 @@ def test_ceilometer_meters_exist(meters):
     1. Check via 'openstack metric list' or 'ceilometer event-list'
     2. Check meters for router, subnet, image, and vswitch exists
     """
-    skip('CGTS-10102: Disable TC until US116020 completes')
+    # skip('CGTS-10102: Disable TC until US116020 completes')
     time_create = system_helper.get_host_values('controller-1', 'created_at')[0]
     current_isotime = datetime.utcnow().isoformat(sep='T')
 
