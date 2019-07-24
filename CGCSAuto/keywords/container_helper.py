@@ -648,7 +648,7 @@ def get_helm_override_values(chart, namespace, app_name='stx-openstack',
     values = []
     for field in fields:
         value = table_parser.get_value_two_col_table(table_, field=field, merge_lines=False)
-        if value == 'None':
+        if isinstance(value, str) and value.strip().lower() == 'none':
             value = None
         else:
             value = yaml.load('\n'.join(value))
