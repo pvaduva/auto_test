@@ -1,33 +1,38 @@
-import copy
 import random
 import re
 import time
+import copy
 from string import ascii_lowercase, ascii_uppercase, digits, ascii_letters
 
 from pytest import mark, skip, fixture
 
 from consts.auth import Tenant
-from keywords import keystone_helper
-from utils.cli import openstack
-from utils.clients.ssh import ControllerClient
+from keywords import keystone_helper, container_helper, kube_helper
+from utils import cli
 from utils.tis_log import LOG
+from utils.clients.ssh import ControllerClient
 
-TEST_USER_NAME = 'keystoneuser'
+
+# Password rule restrictions. This is based on the default config on STX system
+# password_regex = r'^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:]).{7,}$'
 
 SPECIAL_CHARACTERS = r'!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:'
 MIN_PASSWORD_LEN = 7
-
 # Reduce password length due to upsteam issue https://bugs.launchpad.net/keystone/+bug/1735250
 # MAX_PASSWORD_LEN = 4096
 MAX_PASSWORD_LEN = 128
 
-NUM_TRACKED_PASSWORD = 2
-# WAIT_BETWEEN_CHANGE = 60
+# keystone.conf security_compliance configs
+LOCKOUT_DURATION = 300
+FAILURE_ATTEMPTS = 5
+UNIQUE_LAST_COUNT = 2
+
+# Test user
+TEST_USER_NAME = 'stxtestuser'
+TEST_PASSWORD = 'Password*Rule1Test'
+USED_PASSWORDS = {}
 WAIT_BETWEEN_CHANGE = 6
 
-USER_LOCKED_OUT_TIME = 300
-USERS_INFO = {}
-USER_NUM = 0
 
 # use this simple "dictionary" for now, because no english dictionary installed on test server
 SIMPLE_WORD_DICTIONARY = '''
@@ -42,68 +47,32 @@ their various senses will be very helpful, since most quotations in the
 original 1913 dictionary are now well over 100 years old
 '''
 
-password_regex = r'^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*()<>{}+=_\\\[\]\-?|~`,.;:]).{7,}$'
 
-
-@fixture(scope="module", autouse=True)
-def cleanup_users(request):
-
-    def _cleanup_users():
-        white_list = ['admin', 'tenant1', 'tenant2']
-        users_to_delete = [user for user in USERS_INFO if user not in white_list]
-        LOG.info('Deleting users after testing: {}\n'.format(users_to_delete))
-        delete_users(users_to_delete)
-        for user in users_to_delete:
-            USERS_INFO.pop(user, None)
-
-    request.addfinalizer(_cleanup_users)
-
-
-def delete_users(users):
-    if users and len(users) > 0:
-        command = 'user delete {}'.format(' '.join(users))
-        openstack(command, fail_ok=False, auth_info=Tenant.get('admin'))
-
-
-def save_used_password(user_name, password):
-    user_info = USERS_INFO.get(user_name, {})
-
-    if 'used_passwords' in user_info:
-        user_info['used_passwords'].append(password)
-        if len(user_info['used_passwords']) > NUM_TRACKED_PASSWORD:
-            user_info.pop(0)
+def save_used_password(keystone, password):
+    if keystone not in USED_PASSWORDS:
+        USED_PASSWORDS[keystone] = [password]
     else:
-        user_info['used_passwords'] = [password]
+        used_passwords = USED_PASSWORDS[keystone]
+        used_passwords.append(password)
+        if len(used_passwords) > UNIQUE_LAST_COUNT:
+            used_passwords.pop(0)
 
-    USERS_INFO[user_name] = user_info
+    LOG.info('{} keystone user {} password saved. \nUsed passwords: {}'.format(
+        keystone, TEST_USER_NAME, USED_PASSWORDS[keystone]))
 
 
-def is_last_used(password, user_name=None, depth=NUM_TRACKED_PASSWORD):
-    if not user_name:
-        for user_name in USERS_INFO.keys():
-            user_info = USERS_INFO[user_name]
-            if 'used_passwords' in user_info:
-                used_passwords = user_info['used_passwords']
-                if used_passwords:
-                    if len(used_passwords) >= depth \
-                            and password in used_passwords[-1*depth:]:
-                        return True
-                    elif password in used_passwords:
-                        return True
-    else:
-        user_info = USERS_INFO[user_name]
-        if 'used_passwords' in user_info:
-            used_passwords = user_info['used_passwords']
-            if used_passwords:
-                if len(used_passwords) >= NUM_TRACKED_PASSWORD:
-                    return password in used_passwords[-1 * depth:]
-                else:
-                    return password in used_passwords
+def is_last_used(password, keystone, depth=UNIQUE_LAST_COUNT):
+    used_passwords = USED_PASSWORDS.get(keystone, [])
+    if used_passwords:
+        if len(used_passwords) >= UNIQUE_LAST_COUNT:
+            return password in used_passwords[-1 * depth:]
+        else:
+            return password in used_passwords
 
     return False
 
 
-def get_valid_password(user_name=None):
+def get_valid_password(keystone):
     total_length = random.randint(MIN_PASSWORD_LEN, MAX_PASSWORD_LEN)
     password = None
     frequently_used_words = re.split(r'\W', SIMPLE_WORD_DICTIONARY.strip())
@@ -126,7 +95,8 @@ def get_valid_password(user_name=None):
         lower_case = random.sample(ascii_lowercase, min(lower_case_len, len(ascii_lowercase)))
         upper_case = random.sample(ascii_uppercase, min(upper_case_len, len(ascii_uppercase)))
         password_digits = random.sample(digits, min(digit_len, len(digits)))
-        special_char = random.sample(SPECIAL_CHARACTERS, min(special_char_len, len(SPECIAL_CHARACTERS)))
+        special_char = random.sample(SPECIAL_CHARACTERS, min(special_char_len,
+                                                             len(SPECIAL_CHARACTERS)))
 
         actual_len = len(lower_case) + len(upper_case) + len(password_digits) + len(special_char)
 
@@ -136,10 +106,12 @@ def get_valid_password(user_name=None):
 
         password = ''.join(password)
         if actual_len != len(password):
-            LOG.warn('actual_len:{}, password len:{}, password:{}\n'.format(actual_len, len(password), password))
+            LOG.warn('actual_len:{}, password len:{}, password:{}\n'.format(
+                actual_len, len(password), password))
 
         if len(password) < total_length:
-            password += ''.join(random.choice(alphabet) for _ in range(total_length - len(password)+1))
+            password += \
+                ''.join(random.choice(alphabet) for _ in range(total_length - len(password)+1))
 
         # START OF TEMP WORKAROUND FOR CGTS-8504 AND CGTS-9067
         list_of_chars = list(password)
@@ -166,7 +138,8 @@ def get_valid_password(user_name=None):
         password = ''.join(list_of_chars)
         # END OF TEMP WORKAROUND FOR CGTS-8504 AND CGTS-9067
 
-        if not is_last_used(password, user_name=user_name) and password not in frequently_used_words:
+        if not is_last_used(password, keystone=keystone) and password not in \
+                frequently_used_words:
             break
 
     if attempt < 60:
@@ -178,77 +151,53 @@ def get_valid_password(user_name=None):
 
 
 def multiple_attempts_generator():
-    LOG.tc_step('Attempt with wrong passwords multiple times')
+    LOG.info('Attempt with wrong passwords multiple times')
     invalid_password = ''.join(random.sample(ascii_letters, MIN_PASSWORD_LEN - 1))
 
     while True:
-        (times, user_name, is_admin), _ = yield
-
-        LOG.info('Attempt to login with INVALID password {} times, user_name:{}, is_admin\n'.format(
-            times, user_name, is_admin))
-
-        current_password = USERS_INFO[user_name]['used_passwords'][-1]
-
-        for n in range(int(times)):
-            verify_login(user_name, invalid_password, is_admin=is_admin, expecting_pass=False)
-            LOG.info('OK, failed to login with INVALID password failed as expected, tried:{} times\n'.format(n+1))
+        count, keystone, is_admin, user_name = yield
+        current_password = USED_PASSWORDS[keystone][-1]
+        for n in range(int(count)):
+            verify_user(user_name, invalid_password, is_admin=is_admin, expect_fail=True,
+                        keystone=keystone)
+            LOG.info('Command rejected with INVALID password as expected, count: {}'.format(n+1))
             time.sleep(10)
 
         time.sleep(20)
 
-        LOG.info('After failed {} times, the account should be locked and even with valid password.'.format(times))
-        verify_login(user_name, current_password, is_admin=is_admin, expecting_pass=False)
+        LOG.tc_step('Verify {} keystone user {} is locked out after {} failed '
+                    'attempts'.format(keystone, user_name, count))
+        verify_user(user_name, current_password, is_admin=is_admin, expect_fail=True,
+                    keystone=keystone)
 
-        LOG.info('OK, as expected, login with VALID password failed, user:{}, is admin:{}, password:{}\n'.format(
-            user_name, is_admin, current_password))
+        LOG.tc_step('Wait for {} seconds and verify account is unlocked'.format(
+            LOCKOUT_DURATION + WAIT_BETWEEN_CHANGE))
 
-        LOG.info('Wait for {} seconds before the user account is unlocked\n'.format(
-            USER_LOCKED_OUT_TIME + WAIT_BETWEEN_CHANGE))
-
-        time.sleep(USER_LOCKED_OUT_TIME + WAIT_BETWEEN_CHANGE)
-
-        LOG.info('Check if user is unlocked after waiting for {} seconds, is admin:{}'.format(
-            USER_LOCKED_OUT_TIME, is_admin))
-
-        verify_login(user_name, current_password, is_admin=is_admin, expecting_pass=True)
-        LOG.info('OK, user is unlocked after waiting for {} seconds, user:{}, passsword:{}, is admin:{}\n'.format(
-            USER_LOCKED_OUT_TIME, user_name, current_password, is_admin))
+        time.sleep(LOCKOUT_DURATION + WAIT_BETWEEN_CHANGE)
+        verify_user(user_name, current_password, is_admin=is_admin, expect_fail=False,
+                    keystone=keystone)
+        LOG.info('OK, {} keystone user is unlocked after {} seconds'.format(keystone,
+                                                                            LOCKOUT_DURATION))
 
         yield
 
 
-def dictionary_generator():
-    frequently_used_words = [w for w in re.split(r'\W', SIMPLE_WORD_DICTIONARY.strip()) if w.strip()]
-
-    while True:
-        (args, user_name, _), expecting_pass = yield
-
-        if not expecting_pass:
-            password = random.choice(frequently_used_words)
-
-        else:
-            while True:
-                password = get_valid_password()
-                if not is_last_used(password, user_name=user_name):
-                    break
-
-        yield password
-
-
 def special_char_generator():
     while True:
-        (args, user_name, _), expecting_pass = yield
+        (args, keystone, _), expecting_pass = yield
 
-        password = list(get_valid_password())
+        password = list(get_valid_password(keystone=keystone))
 
         if not expecting_pass:
 
-            special_to_letter = dict(zip(SPECIAL_CHARACTERS, ascii_letters[:len(SPECIAL_CHARACTERS)+1]))
-            password = ''.join(special_to_letter[c] if c in SPECIAL_CHARACTERS else c for c in password)
+            special_to_letter = \
+                dict(zip(SPECIAL_CHARACTERS, ascii_letters[:len(SPECIAL_CHARACTERS)+1]))
+            password = \
+                ''.join(special_to_letter[c] if c in SPECIAL_CHARACTERS else c for c in password)
         else:
             while True:
-                password = get_valid_password()
-                if not is_last_used(password):
+                password = get_valid_password(keystone=keystone)
+                if not is_last_used(password, keystone=keystone):
                     break
 
         yield password
@@ -256,27 +205,29 @@ def special_char_generator():
 
 def case_numerical_generator():
     while True:
-        (args, user_name, _), expecting_pass = yield
+        (args, keystone, _), expecting_pass = yield
 
-        password = list(get_valid_password())
+        password = list(get_valid_password(keystone=keystone))
 
         if not expecting_pass:
             if args == 'lower':
-                password = ''.join(c.upper() if c.isalpha() else c for c in password if not c.isalpha() or c.islower())
+                password = ''.join(c.upper() if c.isalpha() else c for c in password
+                                   if not c.isalpha() or c.islower())
             elif args == 'upper':
-                password = ''.join(c.lower() if c.isalpha() else c for c in password if not c.isalpha() or c.isupper())
+                password = ''.join(c.lower() if c.isalpha() else c for c in password
+                                   if not c.isalpha() or c.isupper())
             elif args == 'digit':
                 digit_to_letter = dict(zip('0123456789', 'abcdefghij'))
                 password = ''.join(digit_to_letter[c] if c.isdigit() else c for c in password)
             else:
-                skip('Unknown args: case_numerical_generator: user_name={}, args={}, expecting_pass={}\n'.format(
-                    user_name, args, expecting_pass))
+                skip('Unknown args: case_numerical_generator: user_name={}, args={}, '
+                     'expecting_pass={}\n'.format(keystone, args, expecting_pass))
                 return
 
         else:
             while True:
-                password = get_valid_password()
-                if not is_last_used(password, user_name=user_name):
+                password = get_valid_password(keystone=keystone)
+                if not is_last_used(password, keystone=keystone):
                     break
 
         yield password
@@ -284,12 +235,12 @@ def case_numerical_generator():
 
 def change_history_generator():
     while True:
-        (args, user_name, _), expecting_pass = yield
+        (args, keystone, _), expecting_pass = yield
 
-        used_passwords = USERS_INFO[user_name]['used_passwords']
+        used_passwords = USED_PASSWORDS[keystone]
         if not expecting_pass:
             if args == 'not_last_2':
-                password = random.choice(used_passwords)
+                password = used_passwords[0]
 
             elif args == '3_diff':
                 previous = used_passwords[-1]
@@ -316,7 +267,7 @@ def change_history_generator():
 
         else:
             while True:
-                password = get_valid_password()
+                password = get_valid_password(keystone=keystone)
                 if password not in used_passwords:
                     break
 
@@ -325,299 +276,316 @@ def change_history_generator():
 
 def length_generator():
     while True:
-        (args, user_name, _), expecting_pass = yield
+        (args, keystone, _), expecting_pass = yield
 
         password = ''
         for _ in range(30):
-            password = get_valid_password()
+            password = get_valid_password(keystone=keystone)
 
             if not expecting_pass:
                 password = password[:random.randint(1, MIN_PASSWORD_LEN-1)]
                 break
 
-            if not is_last_used(password, user_name=user_name):
+            if not is_last_used(password, keystone=keystone):
                 break
 
         yield password
 
 
-def run_cmd(cmd, **kwargs):
-    con_ssh = ControllerClient.get_active_controller()
-    return con_ssh.exec_cmd(cmd, **kwargs)
+def verify_user(user_name, password, is_admin=True, expect_fail=False, keystone=None):
 
+    scenario = ' and expect failure' if expect_fail else ''
+    LOG.info('Run {} OpenStack command with {} role {}'.format(
+        keystone, 'admin' if is_admin else 'member', scenario))
 
-def generate_user_name(prefix=TEST_USER_NAME, length=3):
-    global USER_NUM
-
-    USER_NUM += 1
-
-    return '{}{:03d}_{}'.format(prefix, USER_NUM, ''.join(random.sample(ascii_lowercase, length)))
-
-
-def check_user_account(user_name, password, expecting_work=True):
-    LOG.tc_step('Checking if user account is enabled, user:{} password:{}\n'.format(user_name, password))
-
-    LOG.tc_step('OK, user account is checked {} for user:{} password:{}\n'.format(
-        'WORKING' if expecting_work else 'Not working', user_name, password))
-
-
-def verify_login(user_name, password, is_admin=True, expecting_pass=True):
-    LOG.info('Attempt to login as user:{}, expecting pass:{}, password:{}\n'.format(
-        user_name, expecting_pass, password))
-    auth_info = get_user_auth_info(user_name, password, in_admin_project=is_admin)
-
+    dict_name = '{}_platform'.format(user_name) if keystone == 'platform' else user_name
+    auth_info = Tenant.get(dict_name)
+    auth_info = copy.deepcopy(auth_info)
+    auth_info['password'] = password
     if is_admin:
         command = 'endpoint list'
-        LOG.debug('auth_info={}'.format(auth_info))
-        code, output = openstack(command, fail_ok=True, auth_info=auth_info)
+        code, output = cli.openstack(command, fail_ok=expect_fail, auth_info=auth_info)
     else:
         command = 'user show {}'.format(user_name)
-        LOG.info('TODO: command:openstack {}\n'.format(command))
-        code, output = openstack(command, fail_ok=True, auth_info=auth_info)
+        code, output = cli.openstack(command, fail_ok=expect_fail, auth_info=auth_info)
 
-    message = 'expecting:{}, command=\n{}\nas user:{}, password:{}\nauth_info:{}\ncode:{}, output:{}\n'.format(
-        expecting_pass, command, user_name, password, auth_info, code, output)
+    message = 'command:{}\nauth_info:{}\noutput:{}'.format(command, auth_info, output)
 
-    if 0 == code:
-        assert expecting_pass, 'Acutally logged in, while expecting NOT: ' + message
-    else:
-        assert not expecting_pass, 'Failed to log in, while ' + message
-
-    LOG.info('OK, {} as user:{}, expecting pass:{}, password:{}\ncomand:{}\noutput:{}\n'.format(
-        'logged in' if expecting_pass else 'failed to log in', user_name, expecting_pass, password, command, output))
+    if expect_fail:
+        assert 1 == code, "OpenStack command ran successfully while rejection is " \
+                          "expected: {}".format(message)
 
 
-def get_user_auth_info(user_name, password, project=None, in_admin_project=False):
-    if in_admin_project:
-        auth_info = copy.copy(Tenant.get('admin'))
+def change_user_password(user_name, password, keystone, by_admin=True, expect_fail=None):
 
-    elif not project:
-        auth_info = copy.copy(Tenant.get_primary())
+    scenario = 'Change platform keystone user password with rule {} unsatisfied'.format(
+        expect_fail) if expect_fail else 'Change platform keyword user password to a valid password'
 
-    else:
-        auth_info = copy.copy(Tenant.get_primary())
+    if by_admin and expect_fail == 'not_last_used':
+        scenario += ', but still allowed when operated by admin user'
+        expect_fail = None
 
-    auth_info['user'] = user_name
-    auth_info['password'] = password
+    LOG.info(scenario)
 
-    return auth_info
-
-
-def add_role(user_name, password, project=Tenant.get('admin')):
-    LOG.info('Attempt to add role: user_name:{}, password:{}, project:{}\n'.format(user_name, password, project))
-
-    if project == 'admin':
-        role_name = 'admin'
-    else:
-        role_name = 'member'
-
-    project_id = keystone_helper.get_projects(field='ID', name=project)[0]
-
-    role_id = keystone_helper.get_roles(role_name)[0]
-
-    command = 'role add --project {} --user {} {}'.format(project_id, user_name, role_id)
-    openstack(command, fail_ok=False, auth_info=Tenant.get('admin'))
-
-
-def create_user(user_name, role, del_if_existing=False, project_name_id=None, project_dommain='default',
-                domain='default', password='Li69nux*', email='', description='', enable=True, con_ssh=None,
-                auth_info=Tenant.get('admin'), fail_ok=False):
-
-    existing_users = keystone_helper.get_users(auth_info=auth_info,
-                                               con_ssh=con_ssh)
-    if user_name in existing_users:
-        existing_user = existing_users[0]
-        LOG.info('User already existing: {}\n'.format(existing_user))
-        if del_if_existing:
-            LOG.info('Delete the existing user: {}\n'.format(existing_user))
-            delete_users([user_name])
-        else:
-            return 1, existing_user
-
-    options = {
-        'password': password,
-        'project': project_name_id,
-        'project-domain': project_dommain,
-        'domain': domain,
-        'email': email,
-        'description': description,
-    }
-
-    args = []
-    for k, v in options.items():
-        if v:
-            args.append('{}="{}"'.format(k, v))
-    args.append('enable' if enable else 'disable')
-    args.append('or-show')
-
-    args = '--{} {}'.format(' --'.join(args), user_name)
-    code, output = openstack('user create', args, fail_ok=True, auth_info=auth_info, ssh_client=con_ssh)
-    assert code == 0 or fail_ok, 'Failed to create user:{}, error code:{}, output:\n{}'.format(user_name, code, output)
-
-    is_addmin = False
-    if code != 0:
-        LOG.info('Failed to create user:{}, error code:{}, output:{}\n'.format(user_name, code, output))
-        assert fail_ok, 'Failed to create user:{}, error code:{}, output:{}\n'.format(user_name, code, output)
-    else:
-        if role == 'admin':
-            is_addmin = True
-            user_of_admin = Tenant.get('admin')['user']
-            role_of_admin = keystone_helper.get_role_assignments(project=Tenant.get('admin')['tenant'],
-                                                                 user=user_of_admin)[0]
-            LOG.info('attempt to add role to user:{}, with role from admin:{}, role:{}\n'.format(
-                user_name, user_of_admin, role_of_admin))
-
-            add_role(user_name, password, project=Tenant.get('admin')['tenant'])
-            LOG.info('OK, successfully add user to role:{}, user:{}\n'.format(Tenant.get('admin'), user_name))
-
-        else:
-            is_addmin = False
-            project = Tenant.get_primary()
-            user_of_primary_tenant = project['user']
-            role_of_primary_tenant = keystone_helper.get_role_assignments(project=project_name_id,
-                                                                          user=user_of_primary_tenant)[0]
-            add_role(user_name, password, project=project['tenant'])
-
-            LOG.info('OK, successfully add user to role:{}, user:{}\n'.format(role_of_primary_tenant, user_name))
-
-    return code, output, is_addmin
-
-
-def change_user_password(user_name, original_password, password, by_admin=True, expecting_pass=True):
-    LOG.info('Attempt to change password, expecting-pass:{}'
-             ', user:{}, original-password:{}, new-password:{}, by-admin:{}\n'.format(
-                expecting_pass, user_name, original_password, password, by_admin))
+    dict_name = '{}_platform'.format(user_name) if keystone == 'platform' else user_name
+    user_auth = Tenant.get(dict_name)
+    original_password = user_auth['password']
 
     if by_admin:
-        command = "user set --password '{}' {}".format(password, user_name)
+        admin_auth = Tenant.get('admin_platform') if keystone == 'platform' else Tenant.get('admin')
+        code, output = keystone_helper.set_user(user=user_name, password=password, project='admin',
+                                                auth_info=admin_auth, fail_ok=expect_fail)
     else:
-        command = "user password set --original-password '{}' --password '{}'".format(original_password, password)
-
-    auth_info = get_user_auth_info(user_name, original_password, in_admin_project=by_admin)
-
-    code, output = openstack(command, fail_ok=True, auth_info=auth_info)
-
-    message = '\nuser:{}, password:{}, expecting:{}\ncode={}\noutput=\n{}\nUSED:{}\n'.format(
-        user_name, password, expecting_pass, code, output, USERS_INFO)
+        code, output = keystone_helper.set_current_user_password(
+            fail_ok=expect_fail, original_password=original_password, new_password=password,
+            auth_info=user_auth)
 
     if code == 0:
-        assert expecting_pass, 'Fail, expecting been rejected to change password, but not.{}'.format(message)
-    else:
-        assert not expecting_pass, 'Fail, expecting pass, but not. {}'.format(message)
+        save_used_password(keystone, password=password)
 
-    LOG.info('OK, password is changed {} as expected. length of password:{}'.format(
-        'accepted' if expecting_pass else 'reject' + message, len(password)))
+    if expect_fail:
+        assert 1 == code, "{} keystone user password change accepted unexpectedly with " \
+                          "password rule violated: {}".format(keystone, password)
+
+    LOG.info('{} keystone password change {} as expected'.format(
+        keystone, 'rejected' if expect_fail else 'accepted'))
 
     return code, output
 
 
-PASSWORD_RULE_INFO = {
-    'minimum_7_chars': (length_generator, ''),
-    'not_last_used': (change_history_generator, 'not_last_2'),
-    'at_least_1_lower_case': (case_numerical_generator, 'lower'),
-    'at_least_1_upper_case': (case_numerical_generator, 'upper'),
-    'at_least_1_digit': (case_numerical_generator, 'digit'),
-    'at_least_1_special_case': (special_char_generator, ''),
+PASSWORD_RULE_INFO = [
+    ('minimum_7_chars', (length_generator, '')),
+    ('at_least_1_lower_case', (case_numerical_generator, 'lower')),
+    ('at_least_1_upper_case', (case_numerical_generator, 'upper')),
+    ('at_least_1_digit', (case_numerical_generator, 'digit')),
+    ('at_least_1_special_case', (special_char_generator, '')),
+    ('not_last_used', (change_history_generator, 'not_last_2')),
 
-    'not_in_dictionary': (dictionary_generator, ''),
-    'at_least_3_char_diff': (change_history_generator, '3_diff'),
-    'not_simple_reverse': (change_history_generator, 'reversed'),
-    'disallow_only_1_case_diff': (change_history_generator, '3_diff'),
-    'lockout_5_minute_after_5_tries': (multiple_attempts_generator, 5),
-}
+    # ('lockout_after_failed_tries', (multiple_attempts_generator, 5)),
+    # ('at_least_3_char_diff', (change_history_generator, '3_diff')),
+    # ('not_simple_reverse', (change_history_generator, 'reversed')),
+    # ('disallow_only_1_case_diff', (change_history_generator, '3_diff')),
+    # ('not_simple_word', (dictionary_generator, '')),
+]
 
 
-@mark.parametrize(('role', 'password_rule'), [
-    ('admin', 'minimum_7_chars'),
-    ('non_admin', 'minimum_7_chars'),
+KEYSTONES = ['platform', 'stx-openstack']
 
-    ('admin', 'at_least_1_lower_case'),
-    ('non_admin', 'at_least_1_lower_case'),
 
-    ('admin', 'at_least_1_upper_case'),
-    ('non_admin', 'at_least_1_upper_case'),
+@fixture(scope='module', params=KEYSTONES)
+def create_test_user(request):
+    keystone = request.param
+    if keystone == 'stx-openstack' and not container_helper.is_stx_openstack_deployed():
+        skip('stx-openstack is not applied')
 
-    ('admin', 'at_least_1_digit'),
-    ('non_admin', 'at_least_1_digit'),
+    LOG.fixture_step("Creating {} keystone user {} for password rules testing".format(
+        keystone, TEST_USER_NAME))
+    auth_info = Tenant.get('admin_platform') if keystone == 'platform' else Tenant.get('admin')
+    existing_users = keystone_helper.get_users(field='Name', auth_info=auth_info)
+    if TEST_USER_NAME in existing_users:
+        keystone_helper.delete_users(TEST_USER_NAME, auth_info=auth_info)
 
-    ('admin', 'at_least_1_special_case'),
-    ('non_admin', 'at_least_1_special_case'),
+    keystone_helper.create_user(name=TEST_USER_NAME, password=TEST_PASSWORD,
+                                auth_info=auth_info, project='admin')
+    save_used_password(keystone, TEST_PASSWORD)
+    keystone_helper.add_or_remove_role(add_=True, role='member', user=TEST_USER_NAME,
+                                       auth_info=auth_info, project='admin')
 
-    ('admin', 'not_in_dictionary'),
-    ('non_admin', 'not_in_dictionary'),
+    def delete():
+        LOG.fixture_step("Delete keystone test {}".format(TEST_USER_NAME))
+        keystone_helper.delete_users(TEST_USER_NAME, auth_info=auth_info)
 
-    # ('admin', 'not_last_used'),       # not officially supported
-    ('non_admin', 'not_last_used'),
+    request.addfinalizer(delete)
 
-    # ('non_admin', 'at_least_3_char_diff'),    # not officially supported
-    # ('non_admin', 'not_simple_reverse'),      # not officially supported
-    # ('non_admin', 'disallow_only_1_case_diff'),   # not officially supported
-    # ('non_admin', 'lockout_5_minute_after_5_tries'),  # not working 2017-08-29 : not locked even right after 5 fail...
-    # ('admin', 'lockout_5_minute_after_5_tries'),    # not working,
-])
-def test_keystone_user_password_rules(role, password_rule):
+    return keystone
 
-    if password_rule not in PASSWORD_RULE_INFO:
-        skip('Unknown password rule')
+
+class TestKeystonePassword:
+    @mark.parametrize(('role', 'scenario'), [
+        ('admin_role', 'change_by_admin_user'),
+        ('admin_role', 'change_by_current_user'),
+        ('member_role', 'change_by_current_user'),
+        ('member_role', 'change_by_admin_user'),
+    ])
+    def test_keystone_password_rules(self, create_test_user, role, scenario):
+        keystone = create_test_user
+        user_name = TEST_USER_NAME
+        is_admin = True if role == 'admin_role' else False
+        assign_role(keystone=keystone, user_name=user_name, role=role, is_admin=is_admin)
+
+        random.seed()
+        by_admin = True if 'admin_user' in scenario else False
+        for item in PASSWORD_RULE_INFO:
+            rule, generator_args = item
+
+            LOG.tc_step('Verify {} keystone password rule {} when {}'.format(
+                keystone, rule, scenario))
+            password_gen, args = generator_args
+
+            password_producer = password_gen()
+            password_producer.send(None)
+            send_args = (args, keystone, is_admin)
+            valid_pwd = password_producer.send((send_args, True))
+            change_user_password(user_name, valid_pwd, by_admin=is_admin, keystone=keystone)
+            verify_user(user_name, valid_pwd, is_admin=is_admin, keystone=keystone)
+
+            next(password_producer)
+            invalid_pwd = password_producer.send((send_args, False))
+            wait = WAIT_BETWEEN_CHANGE + 1
+            LOG.info('Wait for {} seconds to test {} violation'.format(wait, rule))
+            time.sleep(wait)
+            change_user_password(user_name, invalid_pwd, expect_fail=rule,
+                                 by_admin=by_admin, keystone=keystone)
+
+            LOG.info('Password rule {} verified passed'.format(rule))
+
+    @fixture(scope='class')
+    def configure_keystone_lockout(self, create_test_user):
+        keystone = create_test_user
+        set_keystone_lockout(keystone, lockout_duration=LOCKOUT_DURATION,
+                             failure_attempts=FAILURE_ATTEMPTS)
+        return keystone
+
+    @mark.parametrize('role', [
+        'admin_role',
+        'member_role'
+    ])
+    def test_keystone_account_lockout(self, configure_keystone_lockout, role):
+        keystone = configure_keystone_lockout
+        user_name = TEST_USER_NAME
+        is_admin = True if role == 'admin_role' else False
+        assign_role(keystone=keystone, user_name=user_name, role=role, is_admin=is_admin)
+
+        random.seed()
+        LOG.tc_step('Set {} keystone lockout_duration to 300 and lockout_failure_attempts to 5 for '
+                    'testing purpose'.format(keystone))
+        set_keystone_lockout(keystone=keystone, lockout_duration=LOCKOUT_DURATION,
+                             failure_attempts=5)
+
+        LOG.tc_step('Attempt to run {} keystone command using incorrect password multiple times '
+                    'and ensure account is locked out'.format(keystone))
+        args = (5, keystone, is_admin, user_name)
+        password_producer = multiple_attempts_generator()
+        password_producer.send(None)
+        password_producer.send(args)
+
+
+def assign_role(keystone, user_name, role, is_admin):
+    is_platform = True if keystone == 'platform' else False
+
+    LOG.tc_step('Assign test user {} with {}'.format(user_name, role))
+    admin_auth = Tenant.get('admin_platform') if is_platform else Tenant.get('admin')
+    keystone_helper.add_or_remove_role(add_=is_admin, role='admin', user=user_name,
+                                       auth_info=admin_auth, project='admin')
+
+    user_dict_name = '{}_platform'.format(user_name) if is_platform else user_name
+    password = Tenant.get(user_dict_name)['password']
+    LOG.tc_step('Run {} OpenStack command using {}/{} and ensure it works'.format(
+        keystone, user_name, password))
+    verify_user(user_name, password, is_admin=is_admin, keystone=keystone)
+
+
+def __set_non_platform_lockout(current_values, expt_values):
+    app_name = 'stx-openstack'
+    service = 'keystone'
+    namespace = 'openstack'
+    section = 'conf.keystone.security_compliance'
+    fields = ['lockout_duration', 'lockout_failure_attempts']
+    kv_pairs = {}
+    for i in range(2):
+        if current_values[i] != expt_values[i]:
+            kv_pairs['{}.{}'.format(section, fields[i])] = expt_values[i]
+
+    if not kv_pairs:
+        LOG.info('stx-openstack keystone lockout values already set to: {}'.format(expt_values))
         return
 
-    random.seed()
+    container_helper.update_helm_override(
+        chart=service, namespace=namespace, reset_vals=False,
+        kv_pairs=kv_pairs)
 
-    user_name = generate_user_name()
-    LOG.tc_step('Creating user:{}\n'.format(user_name))
+    override_info = container_helper.get_helm_override_values(
+        chart=service, namespace=namespace, fields='user_overrides')
+    LOG.debug('override_info:{}'.format(override_info))
 
-    password = 'Li69nux*'
-    code, message, is_admin = create_user(user_name, role, fail_ok=False, password=password)
-    save_used_password(user_name, password)
-    LOG.info('OK, successfully created user:{}\n'.format(user_name))
+    container_helper.apply_app(
+        app_name=app_name, check_first=False, applied_timeout=1800)
 
-    LOG.tc_step('Make sure we can login with user/password: {}/{}\n'.format(user_name, password))
-    verify_login(user_name, password, expecting_pass=True, is_admin=is_admin)
+    post_values = get_lockout_values(keystone='stx-openstack')
+    assert expt_values == post_values, "lockout values did not set to expected after helm " \
+                                       "override update"
+    LOG.info('stx-openstack keystone lockout values set successfully')
 
-    LOG.info('OK, we can login as user:{}'.format(user_name))
 
-    LOG.tc_step('Modify password for user:{}, testing passowrd rule:{}'.format(user_name, password_rule))
-    rule = password_rule
+def __set_platform_lockout(current_values, expt_values):
+    conf_file = '/etc/keystone/keystone.conf'
+    fields = ['lockout_duration', 'lockout_failure_attempts']
+    con_ssh = ControllerClient.get_active_controller()
+    for i in range(2):
+        if current_values[i] == expt_values[i]:
+            continue
 
-    producer, args = PASSWORD_RULE_INFO[rule]
-    send_args = (args, user_name, is_admin)
+        field = fields[i]
+        con_ssh.exec_sudo_cmd("sed -i 's/^{}.*=.*/{} = {}/g' "
+                              "{}".format(field, field, expt_values[i], conf_file), fail_ok=False)
 
-    # password_producer = eval(producer + '()')
-    password_producer = producer()
-    password_producer.send(None)
+    post_values = get_lockout_values('platform')
+    assert expt_values == post_values, "platform keystone lockout values unexpected after sed"
 
-    if rule == 'lockout_5_minute_after_5_tries':
-        password_producer.send((send_args, user_name))
+    LOG.info("Restart platform keystone service after changing keystone config")
+    con_ssh.exec_sudo_cmd('sm-restart-safe service keystone', fail_ok=False)
+    time.sleep(30)
+
+
+def set_keystone_lockout(keystone, lockout_duration=300, failure_attempts=5):
+    current_values = get_lockout_values(keystone=keystone)
+    expt_values = [lockout_duration, failure_attempts]
+    if current_values == expt_values:
+        return
+
+    if keystone == 'platform':
+        __set_platform_lockout(current_values, expt_values)
+    else:
+        __set_non_platform_lockout(current_values, expt_values)
+
+
+def get_lockout_values(keystone):
+    conf_file = '/etc/keystone/keystone.conf'
+    fields = ['lockout_duration', 'lockout_failure_attempts']
+    section = 'security_compliance'
+    config_fields = {section: fields}
+
+    LOG.info('Getting {} keystone account lockout values'.format(keystone))
+
+    if keystone == 'platform':
+        con_ssh = ControllerClient.get_active_controller()
+        code, out = con_ssh.exec_sudo_cmd('grep -E "^{}|^{}" {}'.format(
+            fields[0], fields[1], conf_file))
+        assert code == 0, "platform keystone lockout is not configured"
+        for field in fields:
+            assert field in out, "platform keystone {} is not configured".format(field)
+
+        values_dict = {}
+        for line in out.splitlines():
+            key, val = line.split(sep='=')
+            values_dict[key.strip()] = int(val.strip())
+        values = [values_dict[field] for field in fields]
 
     else:
-        valid_pwd = password_producer.send((send_args, True))
-        LOG.info('Attempt to set with valid to user:{}, expecting PASS, by admin:{}, length, password:{}\n'.format(
-            user_name, is_admin, len(valid_pwd), valid_pwd))
+        configs = kube_helper.get_openstack_configs(
+            conf_file=conf_file, configs=config_fields,
+            label_app='keystone', label_component='api')
 
-        change_user_password(user_name, password, valid_pwd, expecting_pass=True, by_admin=is_admin)
-        save_used_password(user_name, valid_pwd)
+        values = [(item.get(section, fields[0], fallback=None),
+                   item.get(section, fields[1], fallback=None))
+                  for item in list(configs.values())]
 
-        LOG.info('OK, VALID password was accepted as expected, user:{}, length:{} password:{}\n'.format(
-            user_name, len(valid_pwd), valid_pwd))
+        assert len(set(values)) == 1, 'keystone conf differs in different keystone api pods'
+        values = values[0]
+        for value in values:
+            assert value is not None, "{} keystone account lockout is not " \
+                                      "configured".format(keystone)
+        values = [int(val.strip()) for val in values]
 
-        verify_login(user_name, valid_pwd, expecting_pass=True, is_admin=is_admin)
-
-        next(password_producer)
-        invalid_pwd = password_producer.send((send_args, False))
-
-        LOG.info('Expecting FAIL, to set with INVALID user:{}, current password:{}\nnew password:{} \n'.format(
-            user_name, valid_pwd, invalid_pwd))
-
-        wait = WAIT_BETWEEN_CHANGE + 1
-
-        time.sleep(wait)
-
-        LOG.info('after wait {} seconds, attempt to change password with an INVALID password:{}\n'
-                 'user_name:{}, current password:{}, is admin:{}, expecting FAIL'.format(
-                    wait, invalid_pwd, user_name, valid_pwd, is_admin))
-
-        change_user_password(user_name, valid_pwd, invalid_pwd, expecting_pass=False, by_admin=is_admin)
-
-        LOG.info('OK, INVALID password:{} to user:{} was REJECTED as expected\n'.format(invalid_pwd, user_name))
-
-        LOG.info('All password settings passed')
+    LOG.info("Lockout configs in {} keystone.conf: {}".format(keystone, values))
+    return values
