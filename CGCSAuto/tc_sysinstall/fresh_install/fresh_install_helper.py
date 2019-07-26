@@ -1266,20 +1266,15 @@ def wait_for_hosts_ready(hosts, lab=None, timeout=1800):
 
     fip = lab.get("floating ip")
     if fip:
-        fip_conn = install_helper.establish_ssh_connection(fip)
+        LOG.info("Checking floating ip: {} connectivity  ...".format(fip))
+        fip_conn = install_helper.establish_ssh_connection(fip, fail_ok=True)
         if not fip_conn:
             LOG.warning("No connectivity using floating ip {}; attempting to resolve fip connectivity ...".format(fip))
             setups.arp_for_fip(lab, controller0_node.ssh_conn)
         else:
             fip_conn.close()
 
-    # ready, not_ready = kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout,
-    #                                                    fail_ok=True)
     kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout)
-    # if not ready:
-    #     LOG.warning("Nodes {} not ready checking floating ip issue ...".format(not_ready))
-    #     setups.arp_for_fip(lab, controller0_node.ssh_conn)
-    #     kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout)
 
 
 def wait_for_hosts_to_be_online(hosts, lab=None, fail_ok=True):
