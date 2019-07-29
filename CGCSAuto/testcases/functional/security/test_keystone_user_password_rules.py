@@ -408,6 +408,27 @@ class TestKeystonePassword:
         ('member_role', 'change_by_admin_user'),
     ])
     def test_keystone_password_rules(self, create_test_user, role, scenario):
+        """
+        Test keystone password rules when attempt to change the password
+        Args:
+            create_test_user:
+            role:
+            scenario (str): operator for the password change
+
+        Setups:
+            - Create a platform/stx-openstack keystone user (class)
+
+        Test Steps:
+            - Assign member/admin role to test user
+            - Ensure test user can run openstack command
+            - Attempt to change the test user password using current user or the default keystone
+                admin user
+            - Ensure the valid password is accepted while the invalid ones are rejected
+
+        Teardown:
+            - Remove test user (class)
+
+        """
         keystone = create_test_user
         user_name = TEST_USER_NAME
         is_admin = True if role == 'admin_role' else False
@@ -451,6 +472,28 @@ class TestKeystonePassword:
         'member_role'
     ])
     def test_keystone_account_lockout(self, configure_keystone_lockout, role):
+        """
+        Test keystone password rules when attempt to change the password
+        Args:
+            configure_keystone_lockout:
+            role:
+
+        Setups:
+            - Create a platform/stx-openstack keystone user (class)
+            - Check lockout config exists in keystone.conf (class)
+            - Set lockout configs to 5 failed attempts and 300 lockout duration for testing purpose
+
+        Test Steps:
+            - Assign member/admin role to test user
+            - Attempt to run openstack command using incorrect passwords for 5 times
+            - Check test account is locked by running openstack command using correct password
+            - Wait for lockout duration
+            - Check user is unlocked
+
+        Teardown:
+            - Remove test user (class)
+
+        """
         keystone = configure_keystone_lockout
         user_name = TEST_USER_NAME
         is_admin = True if role == 'admin_role' else False
