@@ -450,16 +450,6 @@ def pytest_configure(config):
     # set resultlog save location
     config.option.resultlog = ProjVar.get_var("PYTESTLOG_PATH")
 
-    # Repeat test params
-    file_or_dir = config.getoption('file_or_dir')
-    origin_file_dir = list(file_or_dir)
-    if count > 1:
-        print("Repeat following tests {} times: {}".format(count, file_or_dir))
-        del file_or_dir[:]
-        for f_or_d in origin_file_dir:
-            for i in range(count):
-                file_or_dir.append(f_or_d)
-
 
 def pytest_addoption(parser):
     testconf_help = "Absolute path for testcase config file. Template can be " \
@@ -1124,7 +1114,6 @@ def pytest_unconfigure(config):
 
 
 def pytest_collection_modifyitems(items):
-    # print("Collection modify")
     move_to_last = []
     absolute_last = []
 
@@ -1172,6 +1161,11 @@ def pytest_collection_modifyitems(items):
     for i in absolute_last:
         items.remove(i)
         items.append(i)
+
+    # Repeat collected test cases x times
+    if count and count > 1:
+        print('Run collected test cases {} times'.format(count))
+        items[:] = items * count
 
 
 def pytest_generate_tests(metafunc):
@@ -1240,15 +1234,6 @@ def prefix_remote_cli():
 @pytest.fixture(scope='session', autouse=True)
 def compliance_suite():
     return
-
-
-# Note! parametrized repeat is replaced with test list modification
-# @pytest.fixture(autouse=True)
-# def autorepeat(request):
-#     try:
-#         return request.param
-#     except:
-#         return None
 
 
 @pytest.fixture(autouse=True)
