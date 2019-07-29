@@ -75,16 +75,17 @@ def test_horizon_storage_overview_display(storage_overview_pg):
     LOG.tc_step('Test osd table and status display')
     osd_list = storage_helper.get_osds()
     for osd_id in osd_list:
-        expt_horizon = {}
-        for header in storage_overview_pg.osds_table.column_names:
-            host_name = storage_helper.get_osd_host(osd_id)
-            osd_name = 'osd.{}'.format(osd_id)
-            expt_horizon['Host'] = host_name
-            expt_horizon['Name'] = osd_name
-            expt_horizon['Status'] = 'up'
-            if not storage_helper.is_osd_up(osd_id, con_ssh):
-                expt_horizon['Status'] = 'down'
-            horizon_val = storage_overview_pg.get_storage_overview_osd_info(osd_name, header)
-            assert expt_horizon[header] == horizon_val, '{}{} display incorrect'.format(osd_name, header)
+        if osd_id is not None:
+            expt_horizon = {}
+            for header in storage_overview_pg.osds_table.column_names:
+                host_name = storage_helper.get_osd_host(osd_id)
+                osd_name = 'osd.{}'.format(osd_id)
+                expt_horizon['Host'] = host_name
+                expt_horizon['Name'] = osd_name
+                expt_horizon['Status'] = 'up'
+                if not storage_helper.is_osd_up(osd_id, con_ssh):
+                    expt_horizon['Status'] = 'down'
+                horizon_val = storage_overview_pg.get_storage_overview_osd_info(osd_name, header)
+                assert expt_horizon[header] == horizon_val, '{}{} display incorrect'.format(osd_name, header)
     LOG.info('Osd table display correct')
     horizon.test_result = True
