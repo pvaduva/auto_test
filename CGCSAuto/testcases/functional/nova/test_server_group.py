@@ -18,6 +18,9 @@ MSG = 'HELLO SRV GRP MEMBERS!'
 def check_system():
     storage_backing, hosts = host_helper.get_storage_backing_with_max_hosts()
     up_hypervisors = host_helper.get_up_hypervisors()
+    if not up_hypervisors:
+        skip('No up hypervisor on system')
+
     vm_helper.ensure_vms_quotas(vms_num=10, cores_num=20, vols_num=10)
 
     return hosts, storage_backing, up_hypervisors
@@ -69,7 +72,7 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
     """
     hosts, storage_backing, up_hypervisors = check_system
     host_count = len(hosts)
-    if host_count == 1 and policy == 'anti_affinity':
+    if host_count < 2 and policy == 'anti_affinity':
         skip("Skip anti_affinity strict for system with 1 up host in storage aggregate")
 
     flavor_id, srv_grp_id = create_flavor_and_server_group(storage_backing=storage_backing, policy=policy)

@@ -5,7 +5,6 @@ import random
 from pytest import fixture, mark, skip, param
 
 from utils.tis_log import LOG
-from consts.filepaths import CompConfPath
 from consts.stx import FlavorSpec, ImageMetadata, NovaCLIOutput
 from keywords import nova_helper, vm_helper, system_helper, cinder_helper, host_helper, \
     glance_helper
@@ -196,7 +195,7 @@ def test_vm_mem_pool_default_config(prepare_resource, mem_page_size):
 def get_hosts_to_configure(candidates):
     hosts_selected = [None, None]
     hosts_to_configure = [None, None]
-    max_4k, expt_p1_4k, max_1g, expt_p1_1g = 2*1048576/4, 2.2*1048576/4, 1, 2
+    expt_4k, expt_1g = VM_MEM_GIB*1048576/4, VM_MEM_GIB
     for host in candidates:
         host_mems = host_helper.get_host_memories(host, headers=MEMPAGE_HEADERS)
         if 1 not in host_mems:
@@ -206,10 +205,10 @@ def get_hosts_to_configure(candidates):
         proc0_mems, proc1_mems = host_mems[0], host_mems[1]
         p0_4k, p1_4k, p0_1g, p1_1g = proc0_mems[0], proc1_mems[0], proc0_mems[2], proc1_mems[2]
 
-        if p0_4k <= max_4k and p0_1g <= max_1g:
-            if not hosts_selected[1] and p1_4k > expt_p1_4k and p1_1g <= max_1g:
+        if p0_4k < expt_4k and p0_1g < expt_1g:
+            if not hosts_selected[1] and p1_4k >= expt_4k and p1_1g < expt_1g:
                 hosts_selected[1] = host
-            elif not hosts_selected[0] and p1_4k < max_4k and p1_1g >= expt_p1_1g:
+            elif not hosts_selected[0] and p1_4k < expt_4k and p1_1g >= expt_1g:
                 hosts_selected[0] = host
 
         if None not in hosts_selected:
@@ -233,8 +232,10 @@ def reset_host_app_mems():
         _wait_for_all_app_hp_avail(host=host)
 
 
-class TestConfigMempage:
+VM_MEM_GIB = 10
 
+
+class TestConfigMempage:
     MEM_CONFIGS = [None, 'any', 'large', 'small', '2048', '1048576']
 
     @fixture(scope='class')
@@ -255,16 +256,17 @@ class TestConfigMempage:
         if set(hosts_to_configure) != {None}:
             def _modify(host):
                 is_1g = True if hosts_selected.index(host) == 0 else False
-                proc1_kwargs = {'gib_1g': 2, 'gib_4k_range': (None, 2)} if is_1g else \
-                    {'gib_1g': 0, 'gib_4k_range': (2, None)}
-                kwargs = {'gib_1g': 0, 'gib_4k_range': (None, 2)}, proc1_kwargs
+                proc1_kwargs = \
+                    {'gib_1g': VM_MEM_GIB, 'gib_4k_range': (None, VM_MEM_GIB)} if is_1g else \
+                    {'gib_1g': 0, 'gib_4k_range': (10, None)}
+                kwargs = {'gib_1g': 0, 'gib_4k_range': (None, VM_MEM_GIB)}, proc1_kwargs
 
                 actual_mems = host_helper._get_actual_mems(host=host)
-                LOG.fixture_step("Modify {} proc0 to have 0 of 1G pages and <2GiB of 4K pages".
-                                 format(host))
+                LOG.fixture_step("Modify {} proc0 to have 0 of 1G pages and <{}GiB of 4K pages".
+                                 format(host, VM_MEM_GIB))
                 host_helper.modify_host_memory(host, proc=0, actual_mems=actual_mems, **kwargs[0])
-                LOG.fixture_step("Modify {} proc1 to have >=2GiB of {} pages".format(
-                    host, '1G' if is_1g else '4k'))
+                LOG.fixture_step("Modify {} proc1 to have >={}GiB of {} pages".format(
+                    host, VM_MEM_GIB, '1G' if is_1g else '4k'))
                 host_helper.modify_host_memory(host, proc=1, actual_mems=actual_mems, **kwargs[1])
 
             for host_to_config in hosts_to_configure:
@@ -278,11 +280,11 @@ class TestConfigMempage:
                 hosts_selected))
             _, hosts_unconfigured = get_hosts_to_configure(hosts_selected)
             assert not hosts_unconfigured[0], \
-                "Failed to configure {}. Expt: proc0:1g<2,4k<2gib; proc1:1g>=2,4k<2gib".format(
-                    hosts_unconfigured[0])
+                "Failed to configure {}. Expt: proc0:1g<{},4k<{}gib; proc1:1g>={},4k<{}gib".format(
+                    hosts_unconfigured[0], VM_MEM_GIB, VM_MEM_GIB, VM_MEM_GIB, VM_MEM_GIB)
             assert not hosts_unconfigured[1], \
-                "Failed to configure {}. Expt: proc0:1g<2,4k<2gib; proc1:1g<2,4k>=2gib".format(
-                    hosts_unconfigured[1])
+                "Failed to configure {}. Expt: proc0:1g<{},4k<{}gib; proc1:1g<{},4k>={}gib".format(
+                    hosts_unconfigured[1], VM_MEM_GIB, VM_MEM_GIB, VM_MEM_GIB, VM_MEM_GIB)
 
         LOG.fixture_step('(class) Add hosts to cgcsauto aggregate: {}'.format(hosts_selected))
         nova_helper.add_hosts_to_aggregate(aggregate='cgcsauto', hosts=hosts_selected)
@@ -297,10 +299,12 @@ class TestConfigMempage:
         return hosts_selected, storage_backing
 
     @fixture(scope='class')
-    def flavor_2g(self, add_1g_and_4k_pages):
+    def flavor_memconf(self, add_1g_and_4k_pages):
         hosts, storage_backing = add_1g_and_4k_pages
-        LOG.fixture_step("Create a 2G memory flavor to be used by mempage testcases")
-        flavor = nova_helper.create_flavor(name='flavor-2g', ram=2048,
+        LOG.fixture_step("Create a {}G memory flavor to be used by mempage "
+                         "testcases".format(VM_MEM_GIB))
+        flavor = nova_helper.create_flavor(name='flavor-mem{}g'.format(VM_MEM_GIB),
+                                           ram=1024*VM_MEM_GIB,
                                            storage_backing=storage_backing,
                                            cleanup='class')[1]
         return flavor, hosts, storage_backing
@@ -319,8 +323,8 @@ class TestConfigMempage:
             host_helper.get_host_memories(host, wait_for_update=False)
 
     @fixture(params=MEM_CONFIGS)
-    def flavor_mem_page_size(self, request, flavor_2g):
-        flavor_id = flavor_2g[0]
+    def flavor_mem_page_size(self, request, flavor_memconf):
+        flavor_id = flavor_memconf[0]
         mem_page_size = request.param
         skip_4k_for_ovs(mem_page_size)
 
@@ -332,20 +336,20 @@ class TestConfigMempage:
         return mem_page_size
 
     @mark.parametrize('image_mem_page_size', MEM_CONFIGS)
-    def test_boot_vm_mem_page_size(self, flavor_2g, flavor_mem_page_size, image_mempage,
+    def test_boot_vm_mem_page_size(self, flavor_memconf, flavor_mem_page_size, image_mempage,
                                    image_mem_page_size, reset_host_app_mems):
         """
         Test boot vm with various memory page size setting in flavor and image.
 
         Args:
-            flavor_2g (tuple): flavor id of a flavor with ram set to 2G, hosts configured
+            flavor_memconf (tuple): flavor id of a flavor with ram set to 10G, hosts configured
                 and storage_backing
             flavor_mem_page_size (str): memory page size extra spec value to set in flavor
             image_mempage (str): image id for tis image
             image_mem_page_size (str): memory page metadata value to set in image
 
         Setup:
-            - Create a flavor with 2G RAM (module)
+            - Create a flavor with 10G RAM (module)
             - Get image id of tis image (module)
 
         Test Steps:
@@ -361,7 +365,7 @@ class TestConfigMempage:
         """
         skip_4k_for_ovs(image_mem_page_size)
 
-        flavor_id, hosts, storage_backing = flavor_2g
+        flavor_id, hosts, storage_backing = flavor_memconf
 
         if image_mem_page_size is None:
             glance_helper.unset_image(image_mempage, properties=ImageMetadata.MEM_PAGE_SIZE)
@@ -401,13 +405,14 @@ class TestConfigMempage:
         param('large'),
         param('small', marks=mark.nightly),
     ])
-    def test_schedule_vm_mempage_config(self, flavor_2g, mem_page_size, reset_host_app_mems):
+    def test_schedule_vm_mempage_config(self, flavor_memconf, mem_page_size, reset_host_app_mems):
         """
         Test memory used by vm is taken from the expected memory pool and the vm was scheduled
         on the correct host/processor
 
         Args:
-            flavor_2g (tuple): flavor id of a flavor with ram set to 2G, hosts, storage_backing
+            flavor_memconf (tuple): flavor id of a flavor with ram set to 10G, hosts,
+                storage_backing
             mem_page_size (str): mem page size setting in flavor
 
         Setup:
@@ -415,20 +420,20 @@ class TestConfigMempage:
             - Add two hypervisors to the host aggregate
             - Host-0 configuration:
                 - Processor-0:
-                    - Insufficient 1g pages to boot vm that requires 2g
-                    - Insufficient 4k pages to boot vm that requires 2g
+                    - Insufficient 1g pages to boot vm that requires 10g
+                    - Insufficient 4k pages to boot vm that requires 10g
                 - Processor-1:
-                    - Sufficient 1g pages to boot vm that requires 2g
-                    - Insufficient 4k pages to boot vm that requires 2g
+                    - Sufficient 1g pages to boot vm that requires 10g
+                    - Insufficient 4k pages to boot vm that requires 10g
             - Host-1 configuration:
                 - Processor-0:
-                    - Insufficient 1g pages to boot vm that requires 2g
-                    - Insufficient 4k pages to boot vm that requires 2g
+                    - Insufficient 1g pages to boot vm that requires 10g
+                    - Insufficient 4k pages to boot vm that requires 10g
                 - Processor-1:
-                    - Insufficient 1g pages to boot vm that requires 2g
-                    - Sufficient 4k pages to boot vm that requires 2g
-            - Configure a compute to have 4 1G hugepages (module)
-            - Create a flavor with 2G RAM (module)
+                    - Insufficient 1g pages to boot vm that requires 10g
+                    - Sufficient 4k pages to boot vm that requires 10g
+            - Configure a compute to have 10 1G hugepages (module)
+            - Create a flavor with 10G RAM (module)
             - Create a volume with default values (module)
 
         Test Steps:
@@ -446,7 +451,7 @@ class TestConfigMempage:
         """
         skip_4k_for_ovs(mem_page_size)
 
-        flavor_id, hosts_configured, storage_backing = flavor_2g
+        flavor_id, hosts_configured, storage_backing = flavor_memconf
         LOG.tc_step("Set memory page size extra spec in flavor")
         nova_helper.set_flavor(flavor_id, **{FlavorSpec.CPU_POLICY: 'dedicated',
                                              FlavorSpec.MEM_PAGE_SIZE: mem_page_size})
@@ -482,7 +487,7 @@ class TestConfigMempage:
 
         LOG.tc_step("Calculate memory change on vm host - {}".format(vm_host))
         check_mempage_change(vm_id, vm_host, prev_host_mems=prev_computes_mems[vm_host],
-                             mempage_size=mem_page_size, mem_gib=2, numa_node=vm_node[0])
+                             mempage_size=mem_page_size, mem_gib=VM_MEM_GIB, numa_node=vm_node[0])
 
         LOG.tc_step("Ensure vm is pingable from NatBox")
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
@@ -494,7 +499,6 @@ def test_compute_mempage_vars(hosts=None):
         - Collect host mempage stats from system host-memory-list
         - Ensure the stats collected are reflected in following places:
             - nova hypervisor-show
-            - compute_extend.conf and compute_reserved.conf on compute host
             - /sys/devices/system/node/node*/hugepages/ on compute host
 
     Args:
@@ -541,15 +545,6 @@ def check_meminfo_via_sysinv_nova_cli(host, headers):
 
 
 def check_memconfs_on_host(host, cli_vars):
-    # compose expected vars for compute_extend.conf
-    expt_compute_extend = {
-        'vswitch_2M_pages': [],
-        'vswitch_1G_pages': [],
-        'vm_4K_pages': [],
-        'vm_2M_pages': [],
-        'vm_1G_pages': []
-    }
-
     expt_sys_hp = {
         '2048kB': {'nr': [], 'free': []},
         '1048576kB': {'nr': [], 'free': []}
@@ -563,27 +558,12 @@ def check_memconfs_on_host(host, cli_vars):
             vs_1g = 0
             vs_2m = vs_page
 
-        expt_compute_extend['vswitch_2M_pages'].append(str(vs_2m))
-        expt_compute_extend['vswitch_1G_pages'].append(str(vs_1g))
-        expt_compute_extend['vm_4K_pages'].append(str(vm_4k))
-        expt_compute_extend['vm_2M_pages'].append(str(vm_2m))
-        expt_compute_extend['vm_1G_pages'].append(str(vm_1g))
-
         expt_sys_hp['2048kB']['nr'].append(vm_2m + vs_2m)
         expt_sys_hp['1048576kB']['nr'].append(vm_1g + vs_1g)
         expt_sys_hp['2048kB']['free'].append(vm_avail_2m)
         expt_sys_hp['1048576kB']['free'].append(vm_avail_1g)
 
     with host_helper.ssh_to_host(hostname=host) as host_ssh:
-        comp_extend = CompConfPath.COMP_EXTEND
-        LOG.info("---Check mempage values in {} on {}".format(comp_extend, host))
-        output = host_ssh.exec_cmd('cat {}'.format(comp_extend), fail_ok=False)[1]
-        for key, expt_val in expt_compute_extend.items():
-            expt_val = ','.join(expt_val)
-            actual_val = re.findall('{}=(.*)'.format(key), output)[0].strip()
-            assert expt_val == actual_val, "{} in host-memory-list {}: {}; in {}: {}". \
-                format(key, host, expt_val, comp_extend, actual_val)
-
         LOG.info("---Check {} hugepages via /sys/devices/system/node/node*/hugepages/".format(host))
         for pagesize in expt_sys_hp:
             for mem_status in expt_sys_hp[pagesize]:
