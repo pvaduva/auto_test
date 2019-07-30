@@ -8,14 +8,15 @@ import setups
 from utils import cli
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
-from utils.clients.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient, NATBoxClient
+from consts.lab import NatBoxes
 from consts.auth import Tenant, HostLinuxUser, TestFileServer
 from consts.timeout import InstallTimeout, HostTimeout
 from consts.stx import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState, VSwitchType
 from consts.filepaths import BuildServerPath, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
 from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \
-    keystone_helper
+    keystone_helper, network_helper
 
 DEPLOY_TOOL = 'deploy'
 DEPLOY_SOUCE_PATH = '/folk/cgts/lab/bin/'
@@ -1267,12 +1268,19 @@ def wait_for_hosts_ready(hosts, lab=None, timeout=1800):
     fip = lab.get("floating ip")
     if fip:
         LOG.info("Checking floating ip: {} connectivity  ...".format(fip))
-        fip_conn = install_helper.establish_ssh_connection(fip, fail_ok=True)
-        if not fip_conn:
+        source_ip = NatBoxes.NAT_BOX_HW['ip']
+        NATBoxClient.set_natbox_client(source_ip)
+        nat_conn = NATBoxClient.get_natbox_client(source_ip)
+
+        pkt_loss_rate_ = network_helper.ping_server(server=fip,
+                                                    ssh_client=nat_conn,
+                                                    fail_ok=True)[0]
+        if pkt_loss_rate_ == 100:
+            LOG.warning('Failed to ping lab fip from natbox')
             LOG.warning("No connectivity using floating ip {}; attempting to resolve fip connectivity ...".format(fip))
             setups.arp_for_fip(lab, controller0_node.ssh_conn)
-        else:
-            fip_conn.close()
+
+        nat_conn.close()
 
     kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout)
 
