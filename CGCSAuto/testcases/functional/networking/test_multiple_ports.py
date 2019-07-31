@@ -6,8 +6,16 @@ from utils.tis_log import LOG
 
 from consts.stx import FlavorSpec, VMStatus
 from consts.reasons import SkipHostIf
-from keywords import vm_helper, nova_helper, network_helper, glance_helper, system_helper
+from keywords import vm_helper, nova_helper, network_helper, glance_helper, system_helper, \
+    host_helper
 from testfixtures.fixture_resources import ResourceCleanup
+
+
+@fixture(scope='module', autouse=True)
+def check_hypervisors():
+    hypervisors = host_helper.get_up_hypervisors()
+    if not hypervisors:
+        skip("No hypervisor available")
 
 
 def id_params(val):
@@ -388,6 +396,7 @@ class TestMutiPortsPCI:
         LOG.tc_step("Ping vm's own data and internal network ips")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=vm_under_test,
                                    net_types=['data', 'internal'])
+        vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_under_test)
 
         LOG.tc_step("Ping vm_under_test from base_vm over management, data, and internal networks")
         vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci,

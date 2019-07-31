@@ -15,6 +15,13 @@ from testfixtures.fixture_resources import ResourceCleanup
 from testfixtures.recover_hosts import HostsToRecover
 
 
+@fixture(scope='module', autouse=True)
+def check_hypervisors():
+    hypervisors = host_helper.get_up_hypervisors()
+    if not hypervisors:
+        skip("No hypervisor available")
+
+
 def id_gen(val):
     if isinstance(val, list):
         return '-'.join(val)

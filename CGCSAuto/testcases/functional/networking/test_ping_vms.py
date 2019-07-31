@@ -1,8 +1,9 @@
-from pytest import mark, param
+from pytest import mark, param, fixture, skip
 
 from utils.tis_log import LOG
 from consts.stx import FlavorSpec
-from keywords import vm_helper, glance_helper, nova_helper, network_helper, cinder_helper
+from keywords import vm_helper, glance_helper, nova_helper, network_helper, cinder_helper, \
+    host_helper
 
 
 def id_gen(val):
@@ -39,11 +40,20 @@ def _compose_nics(vifs, net_ids, image_id, guest_os):
     return nics
 
 
+@fixture(scope='module', autouse=True)
+def check_hyperviors():
+    if not host_helper.get_up_hypervisors():
+        skip('No hypervisor on system')
+
+
 @mark.parametrize(('guest_os', 'vm1_vifs', 'vm2_vifs'), [
     # ('cgcs-guest', 'avp', 'virtio'),
-    param('tis-centos-guest', 'virtio', 'virtio', marks=mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')),
-    param('tis-centos-guest', ('virtio', 'avp', 'virtio'), ('e1000', 'e1000', 'avp'), marks=mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')),
-    param('ubuntu_14', 'virtio', 'virtio', marks=mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')),
+    param('tis-centos-guest', 'virtio', 'virtio',
+          marks=mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')),
+    param('tis-centos-guest', ('virtio', 'avp', 'virtio'), ('e1000', 'e1000', 'avp'),
+          marks=mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')),
+    param('ubuntu_14', 'virtio', 'virtio',
+          marks=mark.priorities('cpe_sanity', 'sanity', 'sx_sanity')),
     ('ubuntu_14', 'e1000', 'virtio'),
 ], ids=id_gen)
 def test_ping_between_two_vms(guest_os, vm1_vifs, vm2_vifs, check_avs_pattern):

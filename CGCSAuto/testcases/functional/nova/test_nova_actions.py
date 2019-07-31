@@ -1,4 +1,4 @@
-from pytest import mark, skip, param
+from pytest import mark, skip, param, fixture
 
 from utils.tis_log import LOG
 from consts.stx import FlavorSpec, VMStatus
@@ -13,12 +13,20 @@ def id_gen(val):
         return '-'.join(val)
 
 
+@fixture(scope='module', autouse=True)
+def check_hyperviors():
+    hypervisors = host_helper.get_up_hypervisors()
+    if not hypervisors:
+        skip('No hypervisor on system')
+
+
 @mark.parametrize(('guest_os', 'cpu_pol', 'actions'), [
-    param('tis-centos-guest', 'dedicated', ['pause', 'unpause'], marks=mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')),
+    param('tis-centos-guest', 'dedicated', ['pause', 'unpause'],
+          marks=mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')),
     param('ubuntu_14', 'shared', ['stop', 'start'], marks=mark.sanity),
     param('ubuntu_14', 'dedicated', ['auto_recover'], marks=mark.sanity),
-    # param('cgcs-guest', 'dedicated', ['suspend', 'resume'], marks=mark.priorities('sanity', 'cpe_sanity')),
-    param('tis-centos-guest', 'dedicated', ['suspend', 'resume'], marks=mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')),
+    param('tis-centos-guest', 'dedicated', ['suspend', 'resume'],
+          marks=mark.priorities('sanity', 'cpe_sanity', 'sx_sanity')),
 ], ids=id_gen)
 def test_nova_actions(guest_os, cpu_pol, actions):
     """
