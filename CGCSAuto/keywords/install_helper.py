@@ -820,15 +820,16 @@ def add_storages(lab, server, load_path):
 
 
 def run_lab_setup(script='lab_setup', conf_file=None, con_ssh=None, timeout=3600):
-    return run_setup_script(script=script, config=True, conf_file=conf_file, con_ssh=con_ssh, timeout=timeout)
+    return run_setup_script(script=script, config=True, conf_file=conf_file, con_ssh=con_ssh,
+                            timeout=timeout)
 
 
 def run_infra_post_install_setup():
     return run_setup_script(script="lab_infra_post_install_setup", config=True)
 
 
-def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=None, timeout=3600, repeat=1,
-                     fail_ok=True, last_run=False):
+def run_setup_script(script="lab_setup", config=False, conf_file=None, con_ssh=None, timeout=3600,
+                     fail_ok=True):
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
@@ -849,9 +850,9 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
             else:
                 raise exceptions.InstallError(msg)
 
-    attempts = repeat
     cmd = "test -e {}/{}.sh".format(HostLinuxUser.get_home(), script)
     rc = con_ssh.exec_cmd(cmd, fail_ok=fail_ok)[0]
+
     if rc != 0:
         msg = "The {}.sh file missing from active controller".format(script)
         if fail_ok:
@@ -865,16 +866,7 @@ def run_setup_script(script="lab_setup", config=False, conf_file=None,  con_ssh=
         cmd = "cd; source /etc/platform/openrc; ./{}.sh".format(script)
 
     con_ssh.set_prompt(Prompt.ADMIN_PROMPT)
-    #rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout, fail_ok=fail_ok)
-    #if rc != 0:
-    rc = 1
-    attempts = attempts if not last_run else 3
-
-    while rc != 0 and attempts > 0:
-        rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout)
-        attempts -= 1
-        time.sleep(2)
-
+    rc, msg = con_ssh.exec_cmd(cmd, expect_timeout=timeout, fail_ok=fail_ok)
     if rc != 0:
         msg = " {} run failed: {}".format(script, msg)
         LOG.warning(msg)

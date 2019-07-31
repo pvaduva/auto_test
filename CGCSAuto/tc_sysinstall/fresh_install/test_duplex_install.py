@@ -116,6 +116,7 @@ def test_duplex_install(install_setup):
 
         fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTITIAL)
 
+
         fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
         fresh_install_helper.unlock_active_controller(controller0_node)
 
@@ -143,7 +144,7 @@ def test_duplex_install(install_setup):
         fresh_install_helper.wait_for_deploy_mgr_lab_config(controller0_node, lab=lab)
 
     fresh_install_helper.wait_for_hosts_ready(["controller-1"], lab=lab)
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn, last_run=True)
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     if lab.get("floating ip"):
         collect_sys_net_info(lab)

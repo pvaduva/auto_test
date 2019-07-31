@@ -588,7 +588,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def run_lab_setup(con_ssh, conf_file=None, final_step=None, repeat=1, last_run=False):
+def run_lab_setup(con_ssh, conf_file=None, final_step=None):
 
     lab = InstallVars.get_install_var('LAB')
     deploy_mgr = use_deploy_manager(lab['controller-0'], lab)
@@ -626,8 +626,8 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None, repeat=1, last_run=F
     LOG.tc_step(test_step)
     if do_step(test_step):
         LOG.info("running lab_setup.sh")
-        install_helper.run_setup_script(conf_file=conf_file, con_ssh=con_ssh, config=True, timeout=7200,
-                                        repeat=repeat, fail_ok=False, last_run=last_run)
+        install_helper.run_setup_script(config=True, conf_file=conf_file, con_ssh=con_ssh,
+                                        timeout=7200, fail_ok=False)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -797,12 +797,12 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     boot_hosts(boot_device, hostnames=hostnames, wait_for_online=False)
     host_helper.wait_for_hosts_ready(hostnames, con_ssh=subcloud_controller0.ssh_conn.ssh_conn)
 
-    run_lab_setup(conf_file=lab_setup_filename, con_ssh=subcloud_controller0.ssh_conn)
-    run_lab_setup(conf_file=lab_setup_filename, con_ssh=subcloud_controller0.ssh_conn)
+    run_lab_setup(con_ssh=subcloud_controller0.ssh_conn, conf_file=lab_setup_filename)
+    run_lab_setup(con_ssh=subcloud_controller0.ssh_conn, conf_file=lab_setup_filename)
 
     unlock_hosts(hostnames=hostnames, con_ssh=subcloud_controller0.ssh_conn)
 
-    run_lab_setup(conf_file=lab_setup_filename, con_ssh=subcloud_controller0.ssh_conn)
+    run_lab_setup(con_ssh=subcloud_controller0.ssh_conn, conf_file=lab_setup_filename)
 
     host_helper.wait_for_hosts_ready(hostnames, subcloud_controller0.name, con_ssh=subcloud_controller0.ssh_conn)
 

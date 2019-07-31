@@ -101,6 +101,7 @@ def test_simplex_install(install_setup):
     deploy_mgr = fresh_install_helper.use_deploy_manager(controller0_node, lab)
     if not deploy_mgr:
         fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTITIAL)
+
         fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
         fresh_install_helper.unlock_active_controller(controller0_node)
         controller0_node.telnet_conn.hostname = r"controller\-[01]"
@@ -112,7 +113,7 @@ def test_simplex_install(install_setup):
         controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
-    fresh_install_helper.run_lab_setup(controller0_node.ssh_conn, repeat=2)
+    fresh_install_helper.run_lab_setup(controller0_node.ssh_conn)
 
     if lab.get("floating ip"):
         setup_tis_ssh(lab)

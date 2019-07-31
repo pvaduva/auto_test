@@ -145,7 +145,7 @@ def test_storage_install(install_setup):
         fresh_install_helper.wait_for_deploy_mgr_lab_config(controller0_node, lab=lab)
 
     fresh_install_helper.wait_for_hosts_ready(hosts, lab=lab, timeout=900)
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn, last_run=True)
+    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     if lab.get("floating ip"):
         collect_sys_net_info(lab)
