@@ -1,12 +1,18 @@
 import time
 from threading import Event
-from pytest import fixture
+from pytest import fixture, mark, skip
 
-from keywords import nova_helper, vm_helper
+from keywords import nova_helper, vm_helper, host_helper
 from consts.stx import FlavorSpec
-from testfixtures.resource_mgmt import ResourceCleanup
 from utils.tis_log import LOG
 from utils.multi_thread import MThread
+
+
+@fixture(scope='module')
+def check_hypervisors():
+    hypervisors = host_helper.get_up_hypervisors()
+    if len(hypervisors) < 2:
+        skip("Less than two hypervisors for migration test")
 
 
 @fixture(scope='module')
@@ -57,7 +63,7 @@ def live_migrate_vm(end_time, end_event):
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id)
 
 
-def test_live_migrate_while_launch_delete_vms(flavors):
+def test_live_migrate_while_launch_delete_vms(check_hypervisors, flavors):
     """
     Launch/delete vms while live migrating another vm
     Args:
@@ -133,3 +139,36 @@ def test_launch_delete_vms(flavors):
 
     for thr in threads:
         thr.wait_for_thread_end()
+
+
+@mark.parametrize(('boot_source', 'count'), [
+    ('volume', 1000),
+    ('image', 1000)
+])
+def test_migrate_stress(check_hypervisors, boot_source, count):
+
+    LOG.tc_step("Launch a VM from {}".format(boot_source))
+    vm = vm_helper.boot_vm(name='{}-stress'.format(boot_source), cleanup='function')[1]
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+    block_mig = True if boot_source == 'image' else False
+    if not block_mig:
+        LOG.tc_step("Attempt to block migration on boot-from-volume VM and ensure if fails")
+        code = vm_helper.live_migrate_vm(vm_id=vm, block_migrate=True)[0]
+        assert 1 > code, "Block migration passed unexpectedly for boot-from-volume vm"
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+    LOG.tc_step("Live migrate and ping vm 1000 times")
+    for i in range(count):
+        LOG.info('Live migration iter{}'.format(i+1))
+        vm_helper.live_migrate_vm(vm)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+    LOG.tc_step("Cold migrate vm followed by live migrate {} times".format(count))
+    for i in range(count):
+        LOG.info('Cold+live migration iter{}'.format(i + 1))
+        vm_helper.cold_migrate_vm(vm_id=vm)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
+
+        vm_helper.live_migrate_vm(vm)
+        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
