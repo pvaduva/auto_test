@@ -148,7 +148,8 @@ def test_launch_delete_vms(flavors):
 def test_migrate_stress(check_hypervisors, boot_source, count):
 
     LOG.tc_step("Launch a VM from {}".format(boot_source))
-    vm = vm_helper.boot_vm(name='{}-stress'.format(boot_source), cleanup='function')[1]
+    vm = vm_helper.boot_vm(name='{}-stress'.format(boot_source), cleanup='function',
+                           source=boot_source)[1]
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
 
     block_mig = True if boot_source == 'image' else False
