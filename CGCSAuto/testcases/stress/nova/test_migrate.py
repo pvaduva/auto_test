@@ -155,7 +155,7 @@ def test_migrate_stress(check_hypervisors, boot_source, count):
     if not block_mig:
         LOG.tc_step("Attempt to block migration on boot-from-volume VM and ensure if fails")
         code = vm_helper.live_migrate_vm(vm_id=vm, block_migrate=True)[0]
-        assert 1 > code, "Block migration passed unexpectedly for boot-from-volume vm"
+        assert code > 0, "Block migration passed unexpectedly for boot-from-volume vm"
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm)
 
     LOG.tc_step("Live migrate and ping vm 1000 times")
