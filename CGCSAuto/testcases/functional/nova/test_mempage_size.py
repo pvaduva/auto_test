@@ -10,6 +10,7 @@ from keywords import nova_helper, vm_helper, system_helper, cinder_helper, host_
     glance_helper
 
 
+VM_MEM_GIB = 10
 MEMPAGE_HEADERS = ('app_total_4K', 'app_hp_avail_2M', 'app_hp_avail_1G')
 
 
@@ -92,7 +93,8 @@ def is_host_mem_sufficient(host, mempage_size=None, mem_gib=1):
     return False, host_mems_per_proc
 
 
-def check_mempage_change(vm, host, prev_host_mems, mempage_size=None, mem_gib=1, numa_node=None,
+def check_mempage_change(vm, host, prev_host_mems, mempage_size=None, mem_gib=VM_MEM_GIB,
+                         numa_node=None,
                          timeout=360):
     expt_mempage_indics = _get_expt_indices(mempage_size)
     if numa_node is None:
@@ -113,7 +115,7 @@ def check_mempage_change(vm, host, prev_host_mems, mempage_size=None, mem_gib=1,
             if i == 0:
                 continue
 
-            expt_pagediff = 1 if i == 2 else mem_gib*1024/2
+            expt_pagediff = mem_gib if i == 2 else mem_gib*1024/2
             if prev_host_mems[i] - expt_pagediff == current_host_mems[i]:
                 LOG.info("{} {} memory page reduced by {}GiB as expected".format(
                     host, MEMPAGE_HEADERS[i], mem_gib))
@@ -189,15 +191,17 @@ def test_vm_mem_pool_default_config(prepare_resource, mem_page_size):
                     format(hypervisor))
         assert 0 == code, "VM failed to launch with '{}' mempages".format(mem_page_size)
         check_mempage_change(vm_id, host=hypervisor, prev_host_mems=prev_host_mems,
-                             mempage_size=mem_page_size)
+                             mempage_size=mem_page_size, mem_gib=1)
 
 
 def get_hosts_to_configure(candidates):
     hosts_selected = [None, None]
     hosts_to_configure = [None, None]
     expt_4k, expt_1g = VM_MEM_GIB*1048576/4, VM_MEM_GIB
+    headers = list(MEMPAGE_HEADERS) + ['mem_avail(MiB)']
+    final_candidates = list(candidates)
     for host in candidates:
-        host_mems = host_helper.get_host_memories(host, headers=MEMPAGE_HEADERS)
+        host_mems = host_helper.get_host_memories(host, headers=headers)
         if 1 not in host_mems:
             LOG.info("{} has only 1 processor".format(host))
             continue
@@ -211,14 +215,23 @@ def get_hosts_to_configure(candidates):
             elif not hosts_selected[0] and p1_4k < expt_4k and p1_1g >= expt_1g:
                 hosts_selected[0] = host
 
+        if host not in hosts_selected:
+            p1_avail, p0_avail = proc1_mems[-1], proc0_mems[-1]
+            if p1_avail/1024 * 0.1 >= VM_MEM_GIB or p0_avail/1024 * 0.1 >= VM_MEM_GIB:
+                final_candidates.remove(host)
+
         if None not in hosts_selected:
             LOG.info("1G and 4k hosts already configured and selected: {}".format(hosts_selected))
             break
     else:
         for i in range(len(hosts_selected)):
             if hosts_selected[i] is None:
+                possible_hosts = list(set(final_candidates) - set(hosts_selected))
+                if not possible_hosts:
+                    skip('No host suitable to be reconfigured')
+
                 hosts_selected[i] = \
-                    hosts_to_configure[i] = list(set(candidates) - set(hosts_selected))[0]
+                    hosts_to_configure[i] = possible_hosts[0]
         LOG.info("Hosts selected: {}; To be configured: {}".format(
             hosts_selected, hosts_to_configure))
 
@@ -230,9 +243,6 @@ def reset_host_app_mems():
     vm_helper.delete_vms()
     for host in host_helper.get_up_hypervisors():
         _wait_for_all_app_hp_avail(host=host)
-
-
-VM_MEM_GIB = 10
 
 
 class TestConfigMempage:
@@ -260,7 +270,6 @@ class TestConfigMempage:
                     {'gib_1g': VM_MEM_GIB, 'gib_4k_range': (None, VM_MEM_GIB)} if is_1g else \
                     {'gib_1g': 0, 'gib_4k_range': (10, None)}
                 kwargs = {'gib_1g': 0, 'gib_4k_range': (None, VM_MEM_GIB)}, proc1_kwargs
-
                 actual_mems = host_helper._get_actual_mems(host=host)
                 LOG.fixture_step("Modify {} proc0 to have 0 of 1G pages and <{}GiB of 4K pages".
                                  format(host, VM_MEM_GIB))

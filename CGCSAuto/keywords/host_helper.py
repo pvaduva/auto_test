@@ -1928,18 +1928,19 @@ def _get_actual_mems(host):
     for proc in displayed_mems:
         mem_avail, total_1g, pending_1g = displayed_mems[proc]
         actual_1g = total_1g if pending_1g is None else pending_1g
-
-        args = '-2M {} -1G 0 {} {}'.format(mem_avail, host, proc)
-        code, output = cli.system('host-memory-modify', args, fail_ok=True)
-        if code == 0:
-            raise exceptions.SysinvError(
-                'system host-memory-modify is not rejected when 2M pages '
-                'exceeds mem_avail')
-
-        # Processor 0:No available space for 2M huge page allocation, max 2M
-        # VM pages: 27464
-        actual_mem = int(re.findall(r'max 2M pages: (\d+)', output)[0]) * 2
-        actual_mems[proc] = (actual_mem, actual_1g)
+        #
+        # args = '-2M {} -1G 0 {} {}'.format(mem_avail, host, proc)
+        # code, output = cli.system('host-memory-modify', args, fail_ok=True)
+        # if code == 0:
+        #     raise exceptions.SysinvError(
+        #         'system host-memory-modify is not rejected when 2M pages '
+        #         'exceeds mem_avail')
+        #
+        # # Processor 0:No available space for 2M huge page allocation, max 2M
+        # # VM pages: 27464
+        # actual_mem = int(re.findall(r'max 2M pages: (\d+)', output)[0]) * 2
+        # actual_mems[proc] = (actual_mem, actual_1g)
+        actual_mems[proc] = (mem_avail, actual_1g)
 
     return actual_mems
 

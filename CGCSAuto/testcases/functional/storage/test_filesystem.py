@@ -11,8 +11,7 @@ from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
-DRBDFS = ['backup', 'glance', 'database', 'scratch', 'extension', 'docker', 'etcd', 'docker-distribution']
-DRBDFS_CEPH = ['backup', 'database', 'scratch', 'extension']
+DRBDFS = ['glance', 'database', 'extension', 'etcd', 'docker-distribution']
 
 
 @fixture()
@@ -73,12 +72,7 @@ def test_increase_controllerfs():
     """
     drbdfs_val = {}
     LOG.tc_step("Determine the space available for each drbd filesystem")
-    if system_helper.is_storage_system():
-        drbd_filesystems = DRBDFS_CEPH
-    else:
-        drbd_filesystems = DRBDFS
-
-    for fs in drbd_filesystems:
+    for fs in DRBDFS:
         drbdfs_val[fs] = storage_helper.get_controllerfs_values(fs)[0]
         LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
         if fs == 'backup':
@@ -221,7 +215,7 @@ def test_controllerfs_mod_when_host_locked():
     HostsToRecover.add(target_host, scope="function")
 
     drbdfs_val = {}
-    fs = "backup"
+    fs = "database"
     LOG.tc_step("Determine the current filesystem size")
     drbdfs_val[fs] = storage_helper.get_controllerfs_values(fs)[0]
     LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))

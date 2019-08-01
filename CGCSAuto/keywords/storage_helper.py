@@ -1103,7 +1103,7 @@ def get_host_partition_values(host, uuid, fields, con_ssh=None, auth_info=Tenant
     else:
         for field in fields:
             convert(field)
-            
+
     return values
 
 
@@ -1323,32 +1323,33 @@ def get_hosts_rootfs(hosts, auth_info=Tenant.get('admin_platform'), con_ssh=None
 
     rootfs_uuid = {}
     for host in hosts:
-        rootfs_device = system_helper.get_host_values(host, 'rootfs_device', auth_info=auth_info, con_ssh=con_ssh)[0]
+        rootfs_device = system_helper.get_host_values(host, 'rootfs_device', auth_info=auth_info,
+                                                      con_ssh=con_ssh)[0]
         LOG.debug("{} is using rootfs disk: {}".format(host, rootfs_device))
         key = 'device_path'
         if '/dev/disk' not in rootfs_device:
             key = 'device_node'
             rootfs_device = '/dev/{}'.format(rootfs_device)
 
-        disk_uuids = get_host_disks(host, 'uuid', auth_info=auth_info, con_ssh=con_ssh, **{key: rootfs_device})
+        disk_uuids = get_host_disks(host, 'uuid', auth_info=auth_info, con_ssh=con_ssh,
+                                    **{key: rootfs_device})
         rootfs_uuid[host] = disk_uuids
 
     LOG.info("Root disk UUIDS: {}".format(rootfs_uuid))
     return rootfs_uuid
 
 
-def get_controllerfs_list(field='Size in GiB', fs_name=None, con_ssh=None, auth_info=Tenant.get('admin_platform'),
-                          **filters):
-    table_ = table_parser.table(cli.system('controllerfs-list --nowrap', ssh_client=con_ssh, auth_info=auth_info)[1])
-
+def get_hostfs_list(host, field, fs_name=None, con_ssh=None, auth_info=Tenant.get('admin_platform'),
+                    **filters):
+    table_ = table_parser.table(
+        cli.system('host-fs-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info)[1])
     if fs_name:
         filters['FS Name'] = fs_name
-
     return table_parser.get_multi_values(table_, field, evaluate=True, **filters)
 
 
-def get_controllerfs_values(filesystem, fields='size', rtn_dict=False, auth_info=Tenant.get('admin_platform'),
-                            con_ssh=None):
+def get_hostfs_values(host, filesystem, fields='size', rtn_dict=False,
+                      auth_info=Tenant.get('admin_platform'), con_ssh=None):
     """
     Returns the value of a particular filesystem.
 
@@ -1359,12 +1360,45 @@ def get_controllerfs_values(filesystem, fields='size', rtn_dict=False, auth_info
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.system('controllerfs-show', filesystem, ssh_client=con_ssh, auth_info=auth_info)[1])
-    return table_parser.get_multi_values_two_col_table(table_, fields, rtn_dict=rtn_dict, evaluate=True)
+    args = '{} {}'.format(host, filesystem)
+    table_ = table_parser.table(cli.system('host-fs-show', args, ssh_client=con_ssh,
+                                           auth_info=auth_info)[1])
+    return table_parser.get_multi_values_two_col_table(table_, fields, rtn_dict=rtn_dict,
+                                                       evaluate=True)
+
+
+def get_controllerfs_list(field='Size in GiB', fs_name=None, con_ssh=None,
+                          auth_info=Tenant.get('admin_platform'), **filters):
+    table_ = table_parser.table(cli.system('controllerfs-list --nowrap', ssh_client=con_ssh,
+                                           auth_info=auth_info)[1])
+
+    if fs_name:
+        filters['FS Name'] = fs_name
+
+    return table_parser.get_multi_values(table_, field, evaluate=True, **filters)
+
+
+def get_controllerfs_values(filesystem, fields='size', rtn_dict=False,
+                            auth_info=Tenant.get('admin_platform'), con_ssh=None):
+    """
+    Returns the value of a particular filesystem.
+
+    Arguments:
+    - fields (str|list|tuple) - what value to get, e.g. size
+    - filesystem(str) - e.g. scratch, database, etc.
+
+    Returns (list):
+
+    """
+    table_ = table_parser.table(cli.system('controllerfs-show', filesystem, ssh_client=con_ssh,
+                                           auth_info=auth_info)[1])
+    return table_parser.get_multi_values_two_col_table(table_, fields, rtn_dict=rtn_dict,
+                                                       evaluate=True)
 
 
 def get_controller_fs_values(con_ssh=None, auth_info=Tenant.get('admin_platform')):
-    table_ = table_parser.table(cli.system('controllerfs-show', ssh_client=con_ssh, auth_info=auth_info)[1])
+    table_ = table_parser.table(cli.system('controllerfs-show', ssh_client=con_ssh,
+                                           auth_info=auth_info)[1])
 
     rows = table_parser.get_all_rows(table_)
     values = {}
@@ -1373,7 +1407,8 @@ def get_controller_fs_values(con_ssh=None, auth_info=Tenant.get('admin_platform'
     return values
 
 
-def modify_controllerfs(fail_ok=False, auth_info=Tenant.get('admin_platform'), con_ssh=None, **kwargs):
+def modify_controllerfs(fail_ok=False, auth_info=Tenant.get('admin_platform'), con_ssh=None,
+                        **kwargs):
     """
     Modifies the specified controller filesystem, e.g. scratch, database, etc.
 
@@ -1385,7 +1420,8 @@ def modify_controllerfs(fail_ok=False, auth_info=Tenant.get('admin_platform'), c
     attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
     args_ = ' '.join(attr_values_)
 
-    rc, out = cli.system("controllerfs-modify", args_, fail_ok=fail_ok, ssh_client=con_ssh, auth_info=auth_info)
+    rc, out = cli.system("controllerfs-modify", args_, fail_ok=fail_ok, ssh_client=con_ssh,
+                         auth_info=auth_info)
     if rc > 0:
         return 1, out
 

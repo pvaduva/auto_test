@@ -16,7 +16,7 @@ def get_valid_controllers():
 
 @fixture(scope='module')
 def check_nodes():
-    if not kube_helper.get_nodes(status='Ready', field='NAME', exclude=True, fail_ok=True):
+    if kube_helper.get_nodes(status='Ready', field='NAME', exclude=True, fail_ok=True):
         skip('Not all nodes are ready. Skip stx-openstack re-apply test.')
 
 

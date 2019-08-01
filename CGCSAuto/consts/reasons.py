@@ -26,6 +26,6 @@ class SkipHostIf:
 
 class SkipSysType:
     SMALL_FOOTPRINT = "Skip for small footprint lab"
-    LESS_THAN_TWO_CONTROLLERS = "Less than two controllers on system"
+    LESS_THAN_TWO_CONTROLLERS = "Less than two healthy controllers on system"
     SIMPLEX_SYSTEM = 'Not applicable to Simplex system'
     SIMPLEX_ONLY = 'Only applicable to Simplex system'

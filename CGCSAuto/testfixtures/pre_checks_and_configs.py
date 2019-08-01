@@ -4,11 +4,12 @@ import time
 from pytest import fixture, skip
 
 from consts.auth import Tenant
-from consts.stx import EventLogID, HostAvailState, AppStatus
+from consts.stx import EventLogID, HostAvailState, HostAdminState, AppStatus
 from consts.filepaths import HeatTemplate
 from consts.proj_vars import ProjVar, PatchingVars
 from consts.reasons import SkipSysType
-from keywords import system_helper, host_helper, keystone_helper, security_helper, container_helper, common, kube_helper
+from keywords import system_helper, host_helper, keystone_helper, security_helper, \
+    container_helper, common, kube_helper
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
@@ -83,10 +84,10 @@ def check_numa_num():
     return len(host_helper.get_host_procs(hostname=hypervisor[0]))
 
 
-@fixture(scope='session')
+@fixture(scope='module')
 def wait_for_con_drbd_sync_complete():
-    if len(system_helper.get_controllers()) < 2:
-        LOG.info("Less than two controllers on system. Do not wait for drbd sync")
+    if len(system_helper.get_controllers(administrative=HostAdminState.UNLOCKED)) < 2:
+        LOG.info("Less than two unlocked controllers on system. Do not wait for drbd sync")
         return False
 
     host = 'controller-1'
