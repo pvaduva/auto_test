@@ -11,7 +11,7 @@ from utils import cli, table_parser
 from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 
-DRBDFS = ['glance', 'database', 'extension', 'etcd', 'docker-distribution']
+DRBDFS = ['database', 'extension', 'etcd', 'docker-distribution']   # glance
 
 
 @fixture()
@@ -75,10 +75,7 @@ def test_increase_controllerfs():
     for fs in DRBDFS:
         drbdfs_val[fs] = storage_helper.get_controllerfs_values(fs)[0]
         LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
-        if fs == 'backup':
-            drbdfs_val[fs] = drbdfs_val[fs] + 4
-        else:
-            drbdfs_val[fs] = drbdfs_val[fs] + 1
+        drbdfs_val[fs] = drbdfs_val[fs] + 1
         LOG.info("Will attempt to increase the value of {} to {}".format(fs, drbdfs_val[fs]))
 
     LOG.tc_step("Increase the size of all filesystems")
@@ -250,8 +247,8 @@ def test_resize_drbd_filesystem_while_resize_inprogress():
 
     start_time = common.get_date_in_format()
     drbdfs_val = {}
-    fs = "backup"
-    LOG.tc_step("Increase the backup size before proceeding with rest of test")
+    fs = "extension"
+    LOG.tc_step("Increase the {} size before proceeding with rest of test".format(fs))
     drbdfs_val[fs] = storage_helper.get_controllerfs_values(fs)[0]
     LOG.info("Current value of {} is {}".format(fs, drbdfs_val[fs]))
     drbdfs_val[fs] = int(drbdfs_val[fs]) + 5
@@ -306,10 +303,10 @@ def test_modify_drdb_swact_then_reboot():
 
     Test Steps:
     - Determine how much free space we have available
-    - Increase backup
-    - Increase cgcs
+    - Increase datebase
+    - Increase extension
     - Initiate a controller swact
-    - Initate a controller reboot
+    - Initiate a controller reboot
 
     Assumptions:
     - None
@@ -335,8 +332,8 @@ def test_modify_drdb_swact_then_reboot():
 
     LOG.info("Current fs values are: {}".format(drbdfs_val))
 
-    LOG.tc_step("Increase the size of the backup and glance filesystem")
-    partition_name = "backup"
+    LOG.tc_step("Increase the size of the extension and database filesystem")
+    partition_name = "database"
     partition_value = drbdfs_val[partition_name]
     backup_freespace = math.trunc(float(free_space) / 10)
     new_partition_value = backup_freespace + int(partition_value)
