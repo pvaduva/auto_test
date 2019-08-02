@@ -151,12 +151,14 @@ def test_standard_install(install_setup):
         fresh_install_helper.unlock_hosts([host_ for host_ in hosts if 'compute' in host_],
                                           con_ssh=controller0_node.ssh_conn)
 
+        fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+
     else:
         fresh_install_helper.wait_for_deploy_mgr_lab_config(controller0_node,lab=lab)
 
-    fresh_install_helper.wait_for_hosts_ready(hosts, lab=lab)
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
-
+        fresh_install_helper.wait_for_hosts_ready(hosts, lab=lab)
+        fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+        
     if lab.get("floating ip"):
         collect_sys_net_info(lab)
         setup_tis_ssh(lab)
