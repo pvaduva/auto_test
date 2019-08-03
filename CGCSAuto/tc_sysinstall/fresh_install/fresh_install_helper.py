@@ -1246,7 +1246,7 @@ def verify_install_uuid(lab=None):
     return True
 
 
-def wait_for_hosts_ready(hosts, lab=None, timeout=1800):
+def wait_for_hosts_ready(hosts, lab=None, timeout=2400):
     """
 
     Args:
