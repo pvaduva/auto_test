@@ -1245,6 +1245,22 @@ def verify_install_uuid(lab=None):
 
     return True
 
+def send_arp_cmd(lab=None):
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    controller0_node = lab['controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+
+    fip = lab.get("floating ip")
+
+    if fip:
+        setups.arp_for_fip(lab, controller0_node.ssh_conn)
+
+
 
 def wait_for_hosts_ready(hosts, lab=None, timeout=2400):
     """

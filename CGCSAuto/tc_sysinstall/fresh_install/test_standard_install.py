@@ -151,6 +151,7 @@ def test_standard_install(install_setup):
         fresh_install_helper.unlock_hosts([host_ for host_ in hosts if 'compute' in host_],
                                           con_ssh=controller0_node.ssh_conn)
 
+        fresh_install_helper.send_arp_cmd()
         fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     else:
