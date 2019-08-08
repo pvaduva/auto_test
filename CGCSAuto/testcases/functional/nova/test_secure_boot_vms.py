@@ -9,6 +9,7 @@ from utils import exceptions
 
 
 def _check_secure_boot_on_vm(vm_id):
+    vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
     retry = 3
     count = 0
     in_vm = False
@@ -140,13 +141,15 @@ def test_lock_unlock_secure_boot_vm():
     ResourceCleanup.add('flavor', flavor_id)
     # boot a vm using the above image
     for image_id in image_ids:
-        volume_ids.append(cinder_helper.create_volume(source_id=image_id[0], size=5, cleanup='function')[1])
+        volume_ids.append(cinder_helper.create_volume(source_id=image_id[0], size=5,
+                                                      cleanup='function')[1])
 
     block_device_dic = [{'id': volume_ids[1], 'source': 'volume', 'bootindex': 0},
                         {'id': volume_ids[0], 'source': 'volume', 'bootindex': 1}]
 
     vm_id = vm_helper.boot_vm(name='sec-boot-vm', source='block_device', flavor=flavor_id,
-                              block_device=block_device_dic, cleanup='function', guest_os=guests_os[0])[1]
+                              block_device=block_device_dic, cleanup='function',
+                              guest_os=guests_os[0])[1]
 
     _check_secure_boot_on_vm(vm_id=vm_id)
 
@@ -173,21 +176,24 @@ def test_host_reboot_secure_boot_vm():
     volume_ids = []
     for guest_os, disk_format in zip(guests_os, disk_format):
         image_ids.append(create_image_with_metadata(guest_os=guest_os,
-                                                    property_key=ImageMetadata.FIRMWARE_TYPE, values=['uefi'],
-                                                    disk_format=disk_format, container_format='bare'))
+                                                    property_key=ImageMetadata.FIRMWARE_TYPE,
+                                                    values=['uefi'],
+                                                    disk_format=disk_format,
+                                                    container_format='bare'))
     # create a flavor
     flavor_id = nova_helper.create_flavor(vcpus=2, ram=1024, root_disk=5)[1]
     ResourceCleanup.add('flavor', flavor_id)
     # boot a vm using the above image
     for image_id in image_ids:
-        volume_ids.append(cinder_helper.create_volume(source_id=image_id[0], size=5, cleanup='function')[1])
+        volume_ids.append(cinder_helper.create_volume(source_id=image_id[0], size=5,
+                                                      cleanup='function')[1])
 
     block_device_dic = [{'id': volume_ids[1], 'source': 'volume', 'bootindex': 0},
                         {'id': volume_ids[0], 'source': 'volume', 'bootindex': 1}]
 
     vm_id = vm_helper.boot_vm(name='sec-boot-vm', source='block_device', flavor=flavor_id,
-                              block_device=block_device_dic, cleanup='function', guest_os=guests_os[0])[1]
-
+                              block_device=block_device_dic, cleanup='function',
+                              guest_os=guests_os[0])[1]
     _check_secure_boot_on_vm(vm_id=vm_id)
 
     compute_host = vm_helper.get_vm_host(vm_id=vm_id)

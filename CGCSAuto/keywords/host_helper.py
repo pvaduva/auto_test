@@ -1978,7 +1978,7 @@ def wait_for_memory_update(host, proc_id=None, expt_1g=None, timeout=420,
                 break
         else:
             if time.time() > pending_end_time:
-                LOG.info("Pending memories are None for at least 120 seconds")
+                LOG.info("Pending memories are None for more than 120 seconds")
                 break
         time.sleep(15)
     else:
