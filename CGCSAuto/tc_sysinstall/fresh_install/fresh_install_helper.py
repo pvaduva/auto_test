@@ -8,8 +8,7 @@ import setups
 from utils import cli
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
-from utils.clients.ssh import ControllerClient, NATBoxClient
-from utils.clients.local import LocalHostClient
+from utils.clients.ssh import ControllerClient, NATBoxClient, SSHFromSSH
 from consts.lab import NatBoxes
 from consts.auth import Tenant, HostLinuxUser, TestFileServer
 from consts.timeout import InstallTimeout, HostTimeout
@@ -1285,33 +1284,21 @@ def wait_for_hosts_ready(hosts, lab=None, timeout=2400):
     fip = lab.get("floating ip")
     if fip:
         LOG.info("Checking floating ip: {} connectivity  ...".format(fip))
-        localhost = LocalHostClient(connect=True)
+        source_ip = NatBoxes.NAT_BOX_HW['ip']
+        NATBoxClient.set_natbox_client(source_ip)
+        nat_conn = NATBoxClient.get_natbox_client(source_ip)
 
-        pkt_loss_rate_ = network_helper.ping_server(server=fip,
-                                                    ssh_client=localhost,
-                                                    fail_ok=True)[0]
-        arping = False
-        if pkt_loss_rate_ != 100:
-            fip = lab['floating ip']
-            code, output = controller0_node.ssh_conn.exec_cmd(
-                'ip addr | grep -B 4 {} | grep --color=never -E "BROADCAST|link/ether"'.format(fip))
-            mac = current_mac = ''
-            if output:
-                mac_str = output.splitlines()[-1]
-                mac = mac_str.strip().split()[1]
-            current_mac_str = localhost.exec_cmd('arp {}'.format(fip))[1]
-            if 'HWaddress' in current_mac_str:
-                current_mac = current_mac_str.splitlines()[-1].split()[2]
-            if (not current_mac) or (current_mac != mac):
-                LOG.error("OAM floating IP {} does not belong to controller-0!".format(fip))
-                arping = True
-
-        if pkt_loss_rate_ == 100 or arping:
+        try:
+            fip_ssh = SSHFromSSH(ssh_client=nat_conn, host=fip, user=HostLinuxUser.get_user(),
+                                 password=HostLinuxUser.get_password())
+            fip_ssh.close()
+        except:
+            LOG.warning('Failed to ping lab fip from natbox')
             LOG.warning("No connectivity using floating ip {}; attempting to resolve fip "
                         "connectivity ...".format(fip))
             setups.arp_for_fip(lab, controller0_node.ssh_conn)
 
-        localhost.close()
+        nat_conn.close()
 
     kube_helper.wait_for_nodes_ready(hosts, con_ssh=controller0_node.ssh_conn, timeout=timeout)
 
