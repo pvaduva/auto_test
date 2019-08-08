@@ -48,6 +48,8 @@ def test_horizon_storage_overview_display(storage_overview_pg):
 
     if health_status == 'HEALTH_ERR':
         health_details = health_details.split('HEALTH_ERR ')[1]
+    elif health_status == 'HEALTH_WARN':
+        health_details = health_details.split('HEALTH_WARN ')[1]
     cli_storage_service_info.append(health_details)
 
     horizon_ceph_info = storage_overview_pg.storage_service_info.get_content()

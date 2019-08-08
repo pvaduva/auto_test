@@ -32,6 +32,7 @@ def test_suppress_event(events_suppression_pg, event_id):
         - Unsuppress event
         - Check for success message
     """
+    LOG.tc_step('Suppress event {}.'.format(event_id))
     events_suppression_pg.suppress_event(event_id)
     end_time = time.time() + 30  # Waiting the success message, sometime it will take around 2s so set timeout 30s
     while time.time() < end_time:
@@ -40,6 +41,7 @@ def test_suppress_event(events_suppression_pg, event_id):
         elif events_suppression_pg.find_message_and_dismiss(messages.ERROR):
             assert "Failed to suppress event: {}".format(event_id)
 
+    LOG.tc_step('Unsuppress event {}.'.format(event_id))
     events_suppression_pg.unsuppress_event(event_id)
     end_time = time.time() + 30
     while time.time() < end_time:
