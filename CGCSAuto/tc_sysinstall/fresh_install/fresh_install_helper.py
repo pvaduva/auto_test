@@ -1291,6 +1291,7 @@ def wait_for_hosts_ready(hosts, lab=None, timeout=2400):
         try:
             fip_ssh = SSHFromSSH(ssh_client=nat_conn, host=fip, user=HostLinuxUser.get_user(),
                                  password=HostLinuxUser.get_password())
+            fip_ssh.connect(retry=True, retry_timeout=60, timeout=15)
             fip_ssh.close()
         except:
             LOG.warning('Failed to ping lab fip from natbox')
