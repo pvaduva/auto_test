@@ -22,6 +22,7 @@ import re
 import os
 import time
 import copy
+import math
 from contextlib import contextmanager
 from xml.etree import ElementTree
 
@@ -1920,13 +1921,13 @@ def get_values_virsh_xmldump(instance_name, host_ssh, tag_paths,
 
 
 def _get_actual_mems(host):
-    headers = ('mem_avail(MiB)', 'app_hp_total_1G', 'app_hp_pending_1G')
+    headers = ('mem_total(MiB)', 'app_hp_total_1G', 'app_hp_pending_1G')
     displayed_mems = get_host_memories(host=host, headers=headers,
                                        wait_for_update=False)
 
     actual_mems = {}
     for proc in displayed_mems:
-        mem_avail, total_1g, pending_1g = displayed_mems[proc]
+        mem_total, total_1g, pending_1g = displayed_mems[proc]
         actual_1g = total_1g if pending_1g is None else pending_1g
         #
         # args = '-2M {} -1G 0 {} {}'.format(mem_avail, host, proc)
@@ -1940,7 +1941,7 @@ def _get_actual_mems(host):
         # # VM pages: 27464
         # actual_mem = int(re.findall(r'max 2M pages: (\d+)', output)[0]) * 2
         # actual_mems[proc] = (actual_mem, actual_1g)
-        actual_mems[proc] = (mem_avail, actual_1g)
+        actual_mems[proc] = (mem_total, actual_1g)
 
     return actual_mems
 
@@ -2023,25 +2024,27 @@ def modify_host_memory(host, proc, gib_1g=None, gib_4k_range=None,
     args = ''
     if not actual_mems:
         actual_mems = _get_actual_mems(host=host)
-    mib_avail, page_1g = actual_mems[proc]
+    mib_total, page_1g = actual_mems[proc]
+    max_1g_2m_mib = math.floor(mib_total*0.9)
+    abs_min_4k_mib = mib_total - max_1g_2m_mib
 
     if gib_1g is not None:
         page_1g = gib_1g
         args += ' -1G {}'.format(gib_1g)
-    mib_avail_2m = mib_avail - page_1g * 1024
 
+    mib_avail_2m = max_1g_2m_mib - page_1g * 1024
     if gib_4k_range:
         min_4k, max_4k = gib_4k_range
         if not (min_4k is None and max_4k is None):
             if min_4k is None:
-                gib_4k_final = max(0, max_4k - 2)
+                mib_4k_final = max(abs_min_4k_mib, max_4k * 1024 - 2)
             elif max_4k is None:
-                gib_4k_final = min_4k + 2
+                mib_4k_final = max(abs_min_4k_mib, min_4k * 1024 + 2)
             else:
-                gib_4k_final = (min_4k + max_4k) / 2
-            mib_avail_2m = mib_avail_2m - gib_4k_final * 1024
+                mib_4k_final = max(abs_min_4k_mib, (min_4k + max_4k) * 1024 / 2)
+            mib_avail_2m = mib_total - mib_4k_final - page_1g * 1024
 
-    page_2m = int(mib_avail_2m / 2)
+    page_2m = math.floor(mib_avail_2m / 2)
     args += ' -2M {} {} {}'.format(page_2m, host, proc)
 
     code, output = cli.system('host-memory-modify', args, ssh_client=con_ssh,
