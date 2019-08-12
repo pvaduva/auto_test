@@ -182,7 +182,7 @@ def get_image_file_info(img_file_path=None, guest_os=None, ssh_client=None):
             img_file_path = "{}/{}".format(
                 GuestImages.DEFAULT['image_dir_file_server'], img_file_info[0])
         else:
-            img_file_path = "{}/{}".format(GuestImages.DEFAULT['image_dir'], img_file_info[1])
+            img_file_path = "{}/{}".format(GuestImages.DEFAULT['image_dir'], img_file_info[2])
             if not ssh_client:
                 ssh_client = ControllerClient.get_active_controller()
 

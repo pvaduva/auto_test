@@ -244,13 +244,14 @@ def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
     HostsToRecover.add(hostname, scope='function')
     html_helper.patch_request(url=url, headers=headers, data=lock_data, verify=False)
 
-    system_helper.wait_for_host_values(hostname, timeout=HostTimeout.LOCK, administrative=HostAdminState.LOCKED)
+    system_helper.wait_for_host_values(hostname, timeout=HostTimeout.LOCK,
+                                       administrative=HostAdminState.LOCKED)
 
     hostinfo = html_helper.get_request(url=url, headers=headers, verify=False)
     assert 'locked' == hostinfo['administrative'], "FAIL: Couldn't lock {}".format(hostname)
 
     LOG.tc_step("Modify {} vSwitch cpu using CLI".format(hostname))
-    res, out = host_helper.modify_host_cpu(hostname, 'vSwitch', p0=0, p1=2)
+    res, out = host_helper.modify_host_cpu(hostname, 'Platform', p0=2, p1=2)
     assert 0 == res, "FAIL: The cpus weren't even modified by cli"
 
     LOG.tc_step("Applying cpu profile with original config to {} via restAPI".format(hostname))
