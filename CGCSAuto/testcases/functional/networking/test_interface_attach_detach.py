@@ -345,6 +345,7 @@ def test_vm_with_max_vnics_attached_during_boot(base_vm, guest_os, nic_arg, boot
 
     LOG.tc_step('Resize vm to dest flavor and revert False')
     vm_helper.resize_vm(vm_under_test, dest_flavor_id, fail_ok=False)
+    vm_helper.configure_vm_vifs_on_same_net(vm_id=vm_under_test)
     _ping_vm_data(vm_under_test, base_vm_id, action='resize')
 
     LOG.tc_step("Perform following action(s) on vm {}: {}".format(vm_under_test, 'rebuild'))
