@@ -1,4 +1,3 @@
-import os
 import re
 
 from utils import lab_info
@@ -9,7 +8,6 @@ from utils.cgcs_reporter import download_results
 TEST_SERVER_HTTP_AUTOLOG = generate_report.TEST_SERVER_HTTP_AUTOLOG
 TMP_FILE = '/tmp/cgcs_sanity_email_report.html'
 FAILED_CASES_IN_DEFECT_TABLE = []
-TEST_CATEGORY = ["Setup", "Containers", "Platform", "Openstack"]
 REPORT_FORMAT = """
 <html><font face="arial" size="2">
 <b>Subject: </b>{} <br>
@@ -173,7 +171,8 @@ def _get_test_summary(tags):
         total_skipped += skipped
         section_name = _get_category_name_from_tag(tag)
         status = generate_report.get_overall_status(pass_rate)
-        summary = section_name.ljust(16) + str(passed) + "/" + str(failed+passed+skipped).ljust(3) + "(" + pass_rate + \
+        summary = section_name.ljust(28) + str(passed) + "/" + str(failed+passed+skipped).ljust(3) + "(" + pass_rate\
+                  + \
             ")".ljust(4) + status + "\n"
         summary_format += summary
     total = total_passed + total_failed + total_skipped
@@ -205,14 +204,25 @@ def _get_test_stastics(data=None):
 
 
 def _get_category_name_from_tag(tag):
-    for name in TEST_CATEGORY:
-        if name in tag:
-            return "Sanity-" + name
-        else:
-            return tag
+    category = ""
+    category = re.sub(r'_+[0-9].*$', "", tag)
+    return category
 
 
 def generate_sanity_report(recipients, *tags):
+    """
+    Usage:
+    /usr/bin/python3.4 -c 'from utils.cgcs_reporter import generate_sanity_report;
+    generate_sanity_report.generate_sanity_report("<recipients>", "<tag1>", <tag2>, <tag3>, ...)'
+
+    Args:
+        recipients:
+        *tags:
+
+    Returns:
+
+    """
+
     subject = write_report_file(list(tags))
     recipients = recipients.strip()
     if ' ' in recipients and ';' not in recipients:
