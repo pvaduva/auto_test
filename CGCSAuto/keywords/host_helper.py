@@ -3868,6 +3868,45 @@ def ssh_to_test_server(test_srv=TestFileServer.SERVER,
         test_server_conn.close()
 
 
+def get_host_pci_devices(host, dev_class='Co-processor'):
+    """
+    Get host pci devices info via lspci
+    Args:
+        host (str):
+        dev_class (str):
+
+    Returns (list of tuple):
+        [(pci_addr, vendor_name, device_name, vf_count), ... ]
+
+    """
+    with ssh_to_host(host) as host_ssh:
+        LOG.info("Getting the {} pci list for host {}".format(dev_class, host))
+        cmd = "lspci -mm | grep {} | grep --color=never ':00.0 '".format(dev_class)
+        rc, output = host_ssh.exec_cmd(cmd)
+
+        if rc != 0 or not output:
+            return []
+
+        devices = []
+        for line in output.splitlines():
+            dev_vals = [value[:-1] if value.endswith('"') else value for value in line.split(
+                sep=' "')]
+            pci_addr, _, vendor, device_name = dev_vals[:4]
+            v_pci_addr = pci_addr.split(sep='.')[0][:-1] # e.g., 09:00.0 > 09:0
+            vcmd = "lspci -mm| grep {}| grep -v ':00.0' | grep '{}'|grep '^{}'| wc -l".format(
+                dev_class, device_name, v_pci_addr)
+            vf_count = int(host_ssh.exec_cmd(vcmd)[1])
+            v_id_cmd = "lspci -nn | grep {}|grep -v ':00.0'|grep '{}'|grep '{}'|head -n 1".format(
+                dev_class, device_name, v_pci_addr)
+            vf_dev_id = host_ssh.exec_cmd(v_id_cmd)[1]
+            vf_dev_id = re.findall(r' \[(\S+):(\S+)\]', vf_dev_id)[0][1]
+
+            devices.append((pci_addr, vendor, device_name, vf_dev_id, vf_count))
+
+    return devices
+
+
+
 def get_host_co_processor_pci_list(hostname):
     host_pci_info = []
     with ssh_to_host(hostname) as host_ssh:
@@ -5142,7 +5181,7 @@ def get_host_devices(host, field='name', list_all=False, con_ssh=None,
     Get the parsed version of the output from system host-device-list <host>
     Args:
         host (str): host's name
-        field (str): field name to return value for
+        field (str|list|tuple): field name to return value for
         list_all (bool): whether to list all devices including the disabled ones
         con_ssh (SSHClient):
         auth_info (dict):
@@ -5198,7 +5237,10 @@ def modify_host_device(host, device, new_name=None, new_state=None,
         expt_vals.append(new_state)
         args += ' --enabled {}'.format(new_state)
 
-    if check_first and fields:
+    if not fields:
+        raise ValueError('Please specify new_name or new_state')
+
+    if check_first:
         vals = get_host_device_values(host, device, fields=fields,
                                       con_ssh=con_ssh, auth_info=auth_info)
         if vals == expt_vals:

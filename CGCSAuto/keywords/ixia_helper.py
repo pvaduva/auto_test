@@ -30,10 +30,12 @@ class IxiaResource(object):
     @classmethod
     def _acquire_imm(cls, ssh_client):
         for res in cls.resources:
-            r, msg = ssh_client.exec_cmd("test -f {}/{}".format(cls.nat_dest_path, cls._lock_name(res)), fail_ok=True)
+            r, msg = ssh_client.exec_cmd("test -f {}/{}".format(cls.nat_dest_path,
+                                                                cls._lock_name(res)), fail_ok=True)
             if r:   # file does not exist
                 ssh_client.exec_cmd("mkdir -p {}".format(cls.nat_dest_path), fail_ok=False)
-                ssh_client.exec_cmd("touch {}/{}".format(cls.nat_dest_path, cls._lock_name(res)), fail_ok=False)
+                ssh_client.exec_cmd("touch {}/{}".format(cls.nat_dest_path, cls._lock_name(res)),
+                                    fail_ok=False)
                 return res
 
     @classmethod
@@ -50,7 +52,8 @@ class IxiaResource(object):
         """
         with host_helper.ssh_to_test_server() as ssh_client:
             LOG.info("Acquiring a service port")
-            return common.wait_for_val_from_func(cls.resources, timeout, 5, cls._acquire_imm, ssh_client)
+            return common.wait_for_val_from_func(cls.resources, timeout, 5, cls._acquire_imm,
+                                                 ssh_client)
 
     @classmethod
     def release(cls, res):
@@ -120,7 +123,8 @@ class IxiaSession(object):
         else:
             return [self._ixnet.add(obj_ref, child, *add_args)]
 
-    def connect(self, tcl_server_port=None, tcl_server_ip=None, tcl_server_ver='8.10', port_timeout=60):
+    def connect(self, tcl_server_port=None, tcl_server_ip=None, tcl_server_ver='8.10',
+                port_timeout=60):
         """
         Connect to the IxNetwork Tcl Service Port.
         If tcl_server_port is None, guarantees exclusive access from other automation tests.
@@ -250,7 +254,8 @@ class IxiaSession(object):
             for chassis in self.getList(self.getRoot()+'/availableHardware', 'chassis'):
                 self._ixnet.remove(chassis)
 
-        chassis = self._ixnet.add(self.getRoot()+'availableHardware', 'chassis', '-hostname', chassis_ip)
+        chassis = self._ixnet.add(self.getRoot()+'availableHardware', 'chassis', '-hostname',
+                                  chassis_ip)
 
         self._ixnet.commit()
         chassis = self._ixnet.remapIds(chassis)[0]
@@ -298,7 +303,8 @@ class IxiaSession(object):
             # Unable to release ownership is ok when the configuration is blanked already
             pass
 
-    def connect_ports(self, ports=None, chassis=None, clear_ownership=True, existing=False, rtn_dict=False):
+    def connect_ports(self, ports=None, chassis=None, clear_ownership=True, existing=False,
+                      rtn_dict=False):
         """
         Connect physical ports on the chassis to virtual ports.
         In order to use the existing setups from ixncfgs, mark existing=True.
@@ -323,8 +329,8 @@ class IxiaSession(object):
 
         Returns (list|dict):
             vports created/existed in the configuration now
-            the order of vports is the same as specified in 'ports' (ports[i] is assigned to vports[i])
-            if rtn_dict is True, return a dictionary from port to vport associated
+            the order of vports is the same as specified in 'ports' (ports[i] is assigned to
+            vports[i]) if rtn_dict is True, return a dictionary from port to vport associated
         """
         if chassis is None:
             chassis = self._chassis
@@ -496,10 +502,12 @@ class IxiaSession(object):
                     if not r:
                         return False
                     else:
-                        LOG.info("{} resolved. MAC: {}".format(vport_, self.getAttribute(neighbor, 'neighborMac')))
+                        LOG.info("{} resolved. MAC: {}".format(vport_, self.getAttribute(
+                            neighbor, 'neighborMac')))
                 return True
 
-            r, val = common.wait_for_val_from_func(True, validate_timeout, 10, _validate, vport, interface)
+            r, val = common.wait_for_val_from_func(True, validate_timeout, 10, _validate, vport,
+                                                   interface)
             if not r:
                 raise IxiaError("Protocol Interface Validation Failed, ARP not resolved")
             LOG.info("Protocol Interface Validation Complete: {}".format(interface))
@@ -726,9 +734,11 @@ class IxiaSession(object):
         LOG.info("Starting all traffic")
         self._ixnet.execute('start', traffic)
 
-        succ, val = common.wait_for_val_from_func("started", timeout, 1, self.getAttribute, traffic, 'state')
+        succ, val = common.wait_for_val_from_func("started", timeout, 1, self.getAttribute,
+                                                  traffic, 'state')
         if not succ:
-            raise IxiaError("Traffic cannot become 'started' after {} seconds. state={}".format(timeout, val))
+            raise IxiaError("Traffic cannot become 'started' after {} seconds. state={}".format(
+                timeout, val))
 
     def traffic_stop(self, timeout=60):
         """
@@ -743,9 +753,11 @@ class IxiaSession(object):
         LOG.info("Stopping all traffic")
         self._ixnet.execute('stop', traffic)
 
-        succ, val = common.wait_for_val_from_func("stopped", timeout, 1, self.getAttribute, traffic, 'state')
+        succ, val = common.wait_for_val_from_func("stopped", timeout, 1, self.getAttribute,
+                                                  traffic, 'state')
         if not succ:
-            raise IxiaError("Traffic cannot become 'stopped' after {} seconds. state={}".format(timeout, val))
+            raise IxiaError("Traffic cannot become 'stopped' after {} seconds. state={}".format(
+                timeout, val))
 
     def clear(self):
         """
@@ -866,7 +878,8 @@ class IxiaSession(object):
         """
 
         # return filter(
-        #               (lambda hls: all(map((lambda kv: self.getAttribute(hls, kv[0]) == kv[1]), kwargs.items()))),
+        #               (lambda hls: all(map((lambda kv: self.getAttribute(hls, kv[0]) == kv[1]),
+        #               kwargs.items()))),
         #               self.getList(trafficItem, "highLevelStream"))
 
         for hls in self.getList(trafficItem, "highLevelStream"):
@@ -921,9 +934,11 @@ class IxiaSession(object):
 
             self._ixnet.execute("refresh", view)
             time.sleep(1)
-            succ, val = common.wait_for_val_from_func('true', timeout, 1, self.getAttribute, view+"/page", 'isReady')
+            succ, val = common.wait_for_val_from_func('true', timeout, 1, self.getAttribute,
+                                                      view+"/page", 'isReady')
             if not succ:
-                msg = "timeout occurred when waiting for view {} to become ready. isReady={}".format(view, val)
+                msg = "timeout occurred when waiting for view {} to become ready. isReady={}".\
+                    format(view, val)
                 if fail_ok:
                     LOG.warning(msg)
                     continue
@@ -956,8 +971,10 @@ class IxiaSession(object):
 
     def get_frames_delta(self, name=None, stable=False, timeout=300, interval=10):
         """
-        Equiv. to int(.get_statistics('traffic item statistics', fail_ok=False)[0]["Frames Delta"]) if stable=False
-        otherwise, this functions ensures the delta value is not changed before and after the interval
+        Equiv. to int(.get_statistics('traffic item statistics', fail_ok=False)[0]["Frames Delta"])
+        if stable=False
+        otherwise, this functions ensures the delta value is not changed before and after the
+        interval
         For tests with multiple traffic items, use wait_for_stable_value_from_func for stable=True
 
         Args:
@@ -976,7 +993,8 @@ class IxiaSession(object):
         """
         def _get_delta():
             if name is None:
-                delta = int(self.get_statistics('traffic item statistics', fail_ok=False)[0]['Frames Delta'])
+                delta = int(self.get_statistics('traffic item statistics',
+                                                fail_ok=False)[0]['Frames Delta'])
             else:
                 items = self.get_statistics('traffic item statistics', fail_ok=False)
                 for item in items:
@@ -990,7 +1008,8 @@ class IxiaSession(object):
             return delta
         if not stable:
             return _get_delta()
-        succ, val = self.wait_for_stable_value_from_func(_get_delta, timeout=timeout, interval=interval)
+        succ, val = self.wait_for_stable_value_from_func(_get_delta, timeout=timeout,
+                                                         interval=interval)
         if not succ:
             raise IxiaError("frames delta did not become stable after timeout")
         return val

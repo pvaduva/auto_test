@@ -1240,7 +1240,7 @@ def __get_multi_values(table_, fields, func, evaluate=False, dict_fields=None,
         parsers (dict|None): {<parsing_func1>: <valid_fields>, ...}
         **kwargs:
 
-    Returns:
+    Returns (list | list of tuple):
 
     """
     convert = False
