@@ -434,6 +434,10 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name=None):
             if isinstance(rootfs, str):
                 rootfs = [rootfs]
             for fs in rootfs:
+                num_of_rootfs_mounted = vm_ssh.exec_sudo_cmd ("mount | grep {} | wc -l".format(rootfs))[1]
+                if num_of_rootfs_mounted == 0:
+                    mount_cmd = "mount -t ext4 /dev/{} /".format(rootfs)
+                    vm_ssh.exec_sudo_cmd(mount_cmd)
                 cmd = "mount | grep {} | grep rw | wc -l".format(fs)
                 cmd_output = vm_ssh.exec_sudo_cmd(cmd)[1]
                 if cmd_output != '1':
