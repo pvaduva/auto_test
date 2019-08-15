@@ -1,7 +1,10 @@
+from time import sleep
+
+from pytest import skip
+
 from utils.horizon import basewebobject
 from utils.horizon.helper import HorizonDriver
 from consts.proj_vars import ProjVar
-from time import sleep
 
 
 class PageObject(basewebobject.BaseWebObject):
@@ -23,14 +26,24 @@ class PageObject(basewebobject.BaseWebObject):
     @property
     def base_url(self):
         from consts.auth import CliAuth
-        prefix = 'http'
         if CliAuth.get_var('HTTPS'):
             prefix = 'https'
-        oam_ip = ProjVar.get_var("LAB")['floating ip']
+            lab_name = ProjVar.get_var('LAB').get('name')
+            if not lab_name:
+                skip('Skip https testing on unknown lab')
+            domain = '{}.cumulus.wrs.com'.format(lab_name.split('yow-')[-1].replace('_', '-'))
+            if self.port and self.port == 31000:
+                domain = ProjVar.get_var('OPENSTACK_DOMAIN')
+                if not domain:
+                    skip('OpenStack endpoint domain not found in service parameters. Skip '
+                         'OpenStack horizon test with https.')
+        else:
+            prefix = 'http'
+            domain = ProjVar.get_var("LAB")['floating ip']
 
         if not self.port:
             self.port = 8080 if prefix == 'http' else 8443
-        base_url = '{}://{}:{}'.format(prefix, oam_ip, self.port)    # horizon url matt
+        base_url = '{}://{}:{}'.format(prefix, domain, self.port)    # horizon url matt
         if not base_url.endswith('/'):
             base_url += '/'
         return base_url

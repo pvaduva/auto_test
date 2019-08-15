@@ -1253,9 +1253,10 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None,
 
 
 def is_https(con_ssh):
-    return keystone_helper.is_https_enabled(con_ssh=con_ssh, source_openrc=True,
-                                            auth_info=Tenant.get(
-                                                'admin_platform'))
+    auth_info = Tenant.get('admin_platform')
+    is_https = keystone_helper.is_https_enabled(con_ssh=con_ssh, source_openrc=True,
+                                                auth_info=auth_info)
+    return is_https
 
 
 def get_version_and_patch_info():

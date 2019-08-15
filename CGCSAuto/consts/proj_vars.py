@@ -40,7 +40,8 @@ class ProjVar:
                   'INSTANCE_BACKING': {},
                   'OPENSTACK_DEPLOYED': None,
                   'DEFAULT_INSTANCE_BACKING': None,
-                  'STX_KEYFILE_PATH': '~/.ssh/id_rsa'
+                  'STX_KEYFILE_PATH': '~/.ssh/id_rsa',
+                  'OPENSTACK_DOMAIN': None
                   }
 
     @classmethod

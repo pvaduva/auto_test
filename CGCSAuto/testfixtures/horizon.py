@@ -8,12 +8,20 @@ from utils.horizon.helper import HorizonDriver
 from utils.tis_log import LOG
 
 from consts import horizon
-from consts.auth import Tenant
+from consts.auth import Tenant, CliAuth
 from consts.proj_vars import ProjVar
+from keywords import container_helper, system_helper
 
 
 @fixture(scope="session")
 def driver(request):
+    auth_info = Tenant.get('admin_platform')
+    if CliAuth.get_var('HTTPS') and container_helper.is_stx_openstack_deployed(auth_info=auth_info):
+        openstack_domain = system_helper.get_service_parameter_values(
+            service='openstack', section='helm', name='endpoint_domain', auth_info=auth_info)
+        domain = openstack_domain[0] if openstack_domain else None
+        ProjVar.set_var(openstack_domain=domain)
+
     driver_ = HorizonDriver.get_driver()
 
     def teardown():
