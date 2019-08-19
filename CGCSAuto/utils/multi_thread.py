@@ -10,7 +10,8 @@ from utils.tis_log import LOG
 
 TIMEOUT_ERR = "Thread did not terminate within timeout. Thread details: {} {} {}"
 EVENT_TIMEOUT = "Event did not occur within timeout."
-INFINITE_WAIT_EVENT_EXPECTED = "There is only one thread (Main Thread), waiting is likely to wait indefinitely"
+INFINITE_WAIT_EVENT_EXPECTED = "There is only one thread (Main Thread), waiting is likely to " \
+                               "wait indefinitely"
 
 
 class MThread(threading.Thread):
@@ -105,10 +106,9 @@ class MThread(threading.Thread):
             MThread.running_threads.append(self)
             LOG.info("Connecting to lab fip in new thread...")
             lab = ProjVar.get_var('lab')
-            lab_fip = lab['floating ip']
-            con_ssh = SSHClient(lab_fip)
-            con_ssh.connect(use_current=False)
-            ControllerClient.set_active_controller(con_ssh)
+
+            from keywords import common
+            con_ssh = common.ssh_to_stx(set_client=True)
 
             if ProjVar.get_var('IS_DC'):
                 LOG.info("Connecting to subclouds fip in new thread...")

@@ -45,7 +45,7 @@ def install_setup(request):
     if InstallVars.get_install_var("RESUME"):
         try:
             if active_con.ssh_conn is None:
-                active_con.ssh_conn = install_helper.establish_ssh_connection(active_con.host_ip)
+                active_con.ssh_conn = install_helper.ssh_to_controller(active_con.host_ip)
         except:
             pass
 
@@ -90,15 +90,14 @@ def test_standard_install(install_setup):
         skip("stopping at install step: {}".format(LOG.test_step))
 
     fresh_install_helper.install_controller(sys_type=SysType.REGULAR, patch_dir=patch_dir,
-                                            patch_server_conn=patch_server.ssh_conn, init_global_vars=True)
-    # controller0_node.telnet_conn.login()
-    # controller0_node.telnet_conn.flush()
-    # fresh_install_helper.set_software_version_var(use_telnet=True, con_telnet=controller0_node.telnet_conn)
+                                            patch_server_conn=patch_server.ssh_conn,
+                                            init_global_vars=True)
 
     lab_files_server = install_setup["servers"]["lab_files"]
     lab_files_dir = install_setup["directories"]["lab_files"]
     build_server = install_setup["servers"]["build"]
-    fresh_install_helper.download_lab_files(lab_files_server=lab_files_server, build_server=build_server,
+    fresh_install_helper.download_lab_files(lab_files_server=lab_files_server,
+                                            build_server=build_server,
                                             guest_server=guest_server, lab_files_dir=lab_files_dir,
                                             load_path=InstallVars.get_install_var("TIS_BUILD_DIR"),
                                             license_path=InstallVars.get_install_var("LICENSE"),
@@ -106,7 +105,8 @@ def test_standard_install(install_setup):
                                             helm_chart_server=helm_chart_server)
 
     if install_subcloud:
-        fresh_install_helper.configure_subcloud(controller0_node, lab_files_server, subcloud=install_subcloud,
+        fresh_install_helper.configure_subcloud(controller0_node, lab_files_server,
+                                                subcloud=install_subcloud,
                                                 final_step=final_step)
     else:
         fresh_install_helper.configure_controller_(controller0_node)
@@ -116,8 +116,8 @@ def test_standard_install(install_setup):
     if not deploy_mgr:
         fresh_install_helper.check_ansible_configured_mgmt_interface(controller0_node, lab)
 
-        fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTITIAL)
-
+        fresh_install_helper.collect_lab_config_yaml(lab, build_server,
+                                                     stage=fresh_install_helper.DEPLOY_INTITIAL)
 
         fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
         fresh_install_helper.unlock_active_controller(controller0_node)
@@ -129,7 +129,7 @@ def test_standard_install(install_setup):
         fresh_install_helper.wait_for_deploy_mgr_controller_config(controller0_node, lab=lab)
 
     if controller0_node.ssh_conn is None:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
     if not deploy_mgr:
@@ -138,7 +138,8 @@ def test_standard_install(install_setup):
         fresh_install_helper.wait_for_deployment_mgr_to_bulk_add_hosts(controller0_node, lab=lab)
 
     fresh_install_helper.boot_hosts(boot_device)
-    fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTERIM)
+    fresh_install_helper.collect_lab_config_yaml(lab, build_server,
+                                                 stage=fresh_install_helper.DEPLOY_INTERIM)
     if not deploy_mgr:
 
         fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
@@ -159,14 +160,15 @@ def test_standard_install(install_setup):
 
         fresh_install_helper.wait_for_hosts_ready(hosts, lab=lab)
         fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
-        
+
     if lab.get("floating ip"):
         collect_sys_net_info(lab)
         setup_tis_ssh(lab)
 
-    #fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
+    # fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
 
-    fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_LAST)
+    fresh_install_helper.collect_lab_config_yaml(lab, build_server,
+                                                 stage=fresh_install_helper.DEPLOY_LAST)
 
     fresh_install_helper.attempt_to_run_post_install_scripts()
 

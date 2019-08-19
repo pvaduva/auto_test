@@ -308,6 +308,7 @@ def pytest_configure(config):
     tenant_arg = config.getoption('tenant')
     horizon_visible = config.getoption('horizon_visible')
     remote_cli = config.getoption('remote_cli')
+    ipv6_oam = config.getoption('ipv6_oam')
 
     global change_admin
     change_admin = config.getoption('changeadmin')
@@ -357,6 +358,10 @@ def pytest_configure(config):
 
     lab, natbox = setups.setup_testcase_config(testcase_config, lab=lab,
                                                natbox=natbox)
+    if ipv6_oam:
+        ProjVar.set_var(IPV6_OAM=True)
+        lab = setups.convert_to_ipv6(lab=lab)
+
     tenant = tenant_arg.upper() if tenant_arg else 'TENANT1'
 
     # Log collection params
@@ -666,7 +671,8 @@ def pytest_addoption(parser):
     openstack_install_help = 'flag for openstack install or not; default is ' \
                              'false.'
     deploy_openstack_from_controller_1_help = ''
-    ipv6_install_help = 'flag for ipv6 install or not; default is false.'
+    ipv6_install_help = 'ipv6 OAM install; default is false.'
+    dc_ipv6_help = 'Install subclouds via IPv6'
     helm_chart_path_help = 'Full path to Helm charts files. Default is ' \
                            '<build-dir>/std/build-helm/stx'
     unmanaged_install_help = \
@@ -706,9 +712,6 @@ def pytest_addoption(parser):
     parser.addoption('--kubernetes', '--kuber', '--kub',
                      dest='kubernetes_config', action='store_true',
                      help=kuber_help)
-    parser.addoption('--dc-float-ip', '--dc_float_ip', '--dcfip',
-                     dest='dc_float_ip', action='store', default=None,
-                     help=dcfloatip_help)
     parser.addoption('--no-openstack', '--no-openstack-install',
                      dest='no_openstack',
                      action='store_true', default=False,
@@ -717,8 +720,6 @@ def pytest_addoption(parser):
                      dest='deploy_openstack_from_controller_1',
                      action='store_true', default=False,
                      help=deploy_openstack_from_controller_1_help)
-    parser.addoption('--ipv6',  dest='ipv6', action='store_true', default=False,
-                     help=ipv6_install_help)
     parser.addoption('--helm-chart-path', '--helmchartpath',
                      '--helm_chart_path', dest='helm_chart_path',
                      action='store', default=None,  help=helm_chart_path_help)
@@ -732,6 +733,15 @@ def pytest_addoption(parser):
     parser.addoption('--vswitch-type', '--vswitch', dest='vswitch_type',
                      action='store', default='ovs-dpdk',
                      help=vswitch_type_help)
+    parser.addoption('--ipv6-oam', '--ipv6', dest='ipv6_oam', action='store_true', default=False,
+                     help=ipv6_install_help)
+
+    # DC Options:
+    parser.addoption('--dc-float-ip', '--dc_float_ip', '--dcfip',
+                     dest='dc_float_ip', action='store', default=None,
+                     help=dcfloatip_help)
+    parser.addoption('--dc-ipv6',  dest='dc_ipv6', action='store_true', default=False,
+                     help=dc_ipv6_help)
 
     # Note --lab is also a lab fresh_install option, when config file
     # is not provided.

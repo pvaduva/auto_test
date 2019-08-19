@@ -25,8 +25,8 @@ from keywords import host_helper, nova_helper, system_helper, keystone_helper, \
     install_helper, vlm_helper, dc_helper, container_helper
 from utils import exceptions, lab_info
 from utils import local_host
-from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, \
-    NATBoxClient, PASSWORD_PROMPT, SSHFromSSH
+from utils.clients.ssh import SSHClient, CONTROLLER_PROMPT, ControllerClient, SSHFromSSH, \
+    NATBoxClient, PASSWORD_PROMPT
 from utils.clients.local import RemoteCLIClient
 from utils.clients.telnet import TELNET_LOGIN_PROMPT, TelnetClient
 from utils.node import create_node_boot_dict, create_node_dict, \
@@ -40,23 +40,24 @@ def less_than_two_controllers(con_ssh=None,
         system_helper.get_controllers(con_ssh=con_ssh, auth_info=auth_info)) < 2
 
 
+def convert_to_ipv6(lab):
+    lab = common.convert_to_ipv6(lab=lab)
+    return lab
+
+
 def setup_tis_ssh(lab):
     con_ssh = ControllerClient.get_active_controller(fail_ok=True)
+    if con_ssh:
+        return con_ssh
 
-    if con_ssh is None:
-        try:
-            con_ssh = SSHClient(lab['floating ip'], HostLinuxUser.get_user(),
-                                HostLinuxUser.get_password(),
-                                CONTROLLER_PROMPT)
-            con_ssh.connect(retry=True, retry_timeout=30)
-            ControllerClient.set_active_controller(con_ssh)
-        except:
-            if ProjVar.get_var('COLLECT_SYS_NET_INFO'):
-                LOG.error("SSH to lab fip failed. Collecting lab network info.")
-                collect_sys_net_info(lab=ProjVar.get_var('LAB'))
-            raise
-    # if 'auth_url' in lab:
-    #     Tenant._set_url(lab['auth_url'])
+    try:
+        con_ssh = common.ssh_to_stx(lab=lab, set_client=True)
+    except:
+        if ProjVar.get_var('COLLECT_SYS_NET_INFO') and not ProjVar.get_var('IPV6_OAM'):
+            LOG.error("SSH to lab fip failed. Collecting lab network info.")
+            collect_sys_net_info(lab=ProjVar.get_var('LAB'))
+        raise
+
     return con_ssh
 
 
@@ -298,7 +299,8 @@ def get_dc_labs_list(labs):
     if not labs:
         labs = get_labs_list()
 
-    dc_labs = [lab for lab in labs if any([k for k, v in lab.items() if 'subcloud' in k and isinstance(v, dict)])]
+    dc_labs = [lab for lab in labs if any([k for k, v in lab.items() if
+                                           'subcloud' in k and isinstance(v, dict)])]
     return dc_labs
 
 
@@ -694,10 +696,10 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False,
                        iso_path=None, security="standard",
                        low_latency=False, stop=None, kubernetes=False,
                        dc_float_ip=None, install_subcloud=None,
-                       no_openstack=False, ipv6_config=False,
+                       no_openstack=False, dc_ipv6=False,
                        helm_chart_path=None, no_manage=False,
                        deploy_openstack_from_controller_1=False,
-                       extract_deploy_config=False):
+                       extract_deploy_config=False, ipv6_oam=False):
 
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path "
@@ -770,6 +772,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False,
     float_ip = lab_info_['FLOATING_IP']
     if float_ip:
         lab_to_install['floating ip'] = float_ip
+
+    convert_to_ipv6(lab=lab_to_install)
 
     # Parse nodes info
     nodes_info = installconf['NODES']
@@ -1026,7 +1030,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False,
         kubernetes=kubernetes,
         deploy_openstack=not no_openstack,
         deploy_openstack_from_controller_1=deploy_openstack_from_controller_1,
-        ipv6_config=ipv6_config,
+        dc_ipv6=dc_ipv6,
+        ipv6_oam=ipv6_oam,
         helm_chart_path=helm_chart_path,
         helm_chart_server=helm_chart_server,
         no_manage=no_manage,
@@ -1254,9 +1259,9 @@ def get_info_from_lab_files(conf_server, conf_dir, lab_name=None,
 
 def is_https(con_ssh):
     auth_info = Tenant.get('admin_platform')
-    is_https = keystone_helper.is_https_enabled(con_ssh=con_ssh, source_openrc=True,
-                                                auth_info=auth_info)
-    return is_https
+    is_enabled = keystone_helper.is_https_enabled(con_ssh=con_ssh, source_openrc=True,
+                                                  auth_info=auth_info)
+    return is_enabled
 
 
 def get_version_and_patch_info():

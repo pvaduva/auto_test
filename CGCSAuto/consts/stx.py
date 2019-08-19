@@ -7,6 +7,8 @@
 
 from consts.proj_vars import ProjVar
 
+OAM_IP_v6 = '2620:10a:a001:a103::{}'
+
 # output of date. such as: Tue Mar  1 18:20:29 UTC 2016
 DATE_OUTPUT = r'[0-2]\d:[0-5]\d:[0-5]\d\s[A-Z]{3,}\s\d{4}$'
 
@@ -272,30 +274,30 @@ class Prompt:
     CONTROLLER_0 = r'.*controller\-0[:| ].*\$'
     CONTROLLER_1 = r'.*controller\-1[:| ].*\$'
     CONTROLLER_PROMPT = r'.*controller\-[01][:| ].*\$ '
+    COMPUTE_PROMPT = r'.*compute\-([0-9]){1,}\:~\$'
+    STORAGE_PROMPT = r'.*storage\-([0-9]){1,}\:~\$'
 
     VXWORKS_PROMPT = '-> '
 
+    # general prompt. Need to fill in keystone user name
     ADMIN_PROMPT = r'\[.*@controller\-[01].*\(keystone_admin\)\]\$'
     TENANT1_PROMPT = r'\[.*@controller\-[01] .*\(keystone_tenant1\)\]\$ '
     TENANT2_PROMPT = r'\[.*@controller\-[01] .*\(keystone_tenant2\)\]\$ '
     TENANT_PROMPT = r'\[.*@controller\-[01] .*\(keystone_{}\)\]\$ '  #
-    # general prompt. Need to fill in tenant name
-    REMOTE_CLI_PROMPT = r'\(keystone_{}\)\]\$ '  # remote cli prompt
 
-    COMPUTE_PROMPT = r'.*compute\-([0-9]){1,}\:~\$'
-    STORAGE_PROMPT = r'.*storage\-([0-9]){1,}\:~\$'
+    REMOTE_CLI_PROMPT = r'\(keystone_{}\)\]\$ '  # remote cli prompt
     PASSWORD_PROMPT = r'.*assword\:[ ]?$|assword for .*:[ ]?$'
     LOGIN_PROMPT = "ogin:"
     SUDO_PASSWORD_PROMPT = 'Password: '
-    BUILD_SERVER_PROMPT_BASE = r'\[{}@{}.*\]\$ '
-    TEST_SERVER_PROMPT_BASE = r'\[{}@.*\]\$ '
-    # TIS_NODE_PROMPT_BASE = r'{}\:~\$ '
-    TIS_NODE_PROMPT_BASE = r'{}[: ]?~.*$'
     ADD_HOST = r'.*\(yes/no\).*'
     ROOT_PROMPT = '.*root@.*'
     Y_N_PROMPT = r'.*\(y/n\)\?.*'
     YES_N_PROMPT = r'.*\[yes/N\]\: ?'
     CONFIRM_PROMPT = '.*confirm: ?'
+
+    BUILD_SERVER_PROMPT_BASE = r'\[{}@{}.*\]\$ '
+    TEST_SERVER_PROMPT_BASE = r'\[{}@.*\]\$ '
+    TIS_NODE_PROMPT_BASE = r'{}[: ]?~.*$'
 
 
 class NovaCLIOutput:

@@ -151,16 +151,20 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
     LOG.tc_step(test_step)
     if do_step(test_step):
         vlm_helper.power_off_hosts(lab["hosts"], lab=lab, count=2)
-        install_helper.boot_controller(lab=lab, small_footprint=is_cpe, boot_usb=usb, security=security,
+        install_helper.boot_controller(lab=lab, small_footprint=is_cpe, boot_usb=usb,
+                                       security=security,
                                        low_latency=low_latency, patch_dir_paths=patch_dir,
-                                       bld_server_conn=patch_server_conn, init_global_vars=init_global_vars)
+                                       bld_server_conn=patch_server_conn,
+                                       init_global_vars=init_global_vars)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def download_lab_files(lab_files_server, build_server, guest_server, sys_version=None, sys_type=None,
-                       lab_files_dir=None, load_path=None, guest_path=None, helm_chart_server=None, license_path=None,
+def download_lab_files(lab_files_server, build_server, guest_server, sys_version=None,
+                       sys_type=None,
+                       lab_files_dir=None, load_path=None, guest_path=None,
+                       helm_chart_server=None, license_path=None,
                        lab=None, final_step=None):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
 
@@ -183,7 +187,8 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
     heat_path = InstallVars.get_install_var("HEAT_TEMPLATES")
 
     if not heat_path:
-        sys_version = sys_version if sys_version in BuildServerPath.HEAT_TEMPLATES_EXTS else 'default'
+        sys_version = sys_version if sys_version in BuildServerPath.HEAT_TEMPLATES_EXTS \
+            else 'default'
         heat_path = os.path.join(load_path, BuildServerPath.HEAT_TEMPLATES_EXTS[sys_version])
 
     test_step = "Download lab files"
@@ -196,14 +201,16 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         LOG.info("Copying license")
         install_helper.download_license(lab, build_server, license_path, dest_name="license")
         LOG.info("Downloading lab config files")
-        install_helper.download_lab_config_files(lab, build_server, load_path, conf_server=lab_files_server,
+        install_helper.download_lab_config_files(lab, build_server, load_path,
+                                                 conf_server=lab_files_server,
                                                  lab_file_dir=lab_files_dir)
 
         LOG.info("Download helm charts to active controller ...")
         helm_chart_path = InstallVars.get_install_var("HELM_CHART_PATH")
         if not helm_chart_server:
             helm_chart_server = build_server
-        install_helper.download_stx_helm_charts(lab, helm_chart_server, stx_helm_charts_path=helm_chart_path)
+        install_helper.download_stx_helm_charts(lab, helm_chart_server,
+                                                stx_helm_charts_path=helm_chart_path)
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
@@ -279,13 +286,14 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
     LOG.tc_step(test_step)
     if do_step(test_step):
         install_helper.controller_system_config(lab=lab, config_file=config_file,
-                                                con_telnet=controller0_node.telnet_conn, kubernetes=kubernetes,
+                                                con_telnet=controller0_node.telnet_conn,
+                                                kubernetes=kubernetes,
                                                 banner=banner, branding=branding, ansible=ansible,
                                                 deploy_manager=deploy_mgr)
 
     if controller0_node.ssh_conn is not None:
         controller0_node.ssh_conn.close()
-    controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+    controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
     # WK Touch .this_didnt_work to avoid using heat for kubernetes
     controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
@@ -302,14 +310,16 @@ def unlock_active_controller(controller0_node, lab=None, final_step=None):
     LOG.tc_step(test_step)
     if do_step(test_step):
         if controller0_node.ssh_conn is None:
-            controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+            controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
-        sys_mode = system_helper.get_system_values(fields="system_mode", con_ssh=controller0_node.ssh_conn)[0]
+        sys_mode = system_helper.get_system_values(fields="system_mode",
+                                                   con_ssh=controller0_node.ssh_conn)[0]
         LOG.info("unlocking {}".format(controller0_node.name))
         host_helper.unlock_host(host=controller0_node.name,
                                 available_only=False if sys_mode == "duplex-direct" else True,
                                 con_ssh=controller0_node.ssh_conn, timeout=2400,
-                                check_hypervisor_up=False, check_webservice_up=False, check_subfunc=False,
+                                check_hypervisor_up=False, check_webservice_up=False,
+                                check_subfunc=False,
                                 check_first=False, con0_install=True)
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
@@ -317,7 +327,8 @@ def unlock_active_controller(controller0_node, lab=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def configure_controller(controller0_node, config_file='TiS_config.ini_centos', lab_setup_conf_file=None,
+def configure_controller(controller0_node, config_file='TiS_config.ini_centos',
+                         lab_setup_conf_file=None,
                          lab=None, banner=True, branding=True, final_step=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
@@ -328,11 +339,12 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
     LOG.tc_step(test_step)
     if do_step(test_step):
         install_helper.controller_system_config(lab=lab, config_file=config_file,
-                                                con_telnet=controller0_node.telnet_conn, kubernetes=kubernetes,
+                                                con_telnet=controller0_node.telnet_conn,
+                                                kubernetes=kubernetes,
                                                 banner=banner, branding=branding)
 
     if controller0_node.ssh_conn is None:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
     # WK Touch .this_didnt_work to avoid using heat for kubernetes
@@ -349,14 +361,17 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
     LOG.tc_step(test_step)
     if do_step(test_step):
         if controller0_node.ssh_conn is None:
-            controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+            controller0_node.ssh_conn = install_helper.ssh_to_controller(
+                controller0_node.host_ip)
 
-        sys_mode = system_helper.get_system_values(fields="system_mode", con_ssh=controller0_node.ssh_conn)[0]
+        sys_mode = system_helper.get_system_values(fields="system_mode",
+                                                   con_ssh=controller0_node.ssh_conn)[0]
         LOG.info("unlocking {}".format(controller0_node.name))
         host_helper.unlock_host(host=controller0_node.name,
                                 available_only=False if sys_mode == "duplex-direct" else True,
                                 con_ssh=controller0_node.ssh_conn, timeout=2400,
-                                check_hypervisor_up=False, check_webservice_up=False, check_subfunc=False,
+                                check_hypervisor_up=False, check_webservice_up=False,
+                                check_subfunc=False,
                                 check_first=False, con0_install=True)
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
@@ -364,7 +379,8 @@ def configure_controller(controller0_node, config_file='TiS_config.ini_centos', 
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='subcloud-1', lab=None, final_step=None):
+def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='subcloud-1',
+                       lab=None, final_step=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
 
@@ -387,23 +403,27 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
         # install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
         LOG.info("Auto_info before update: {}".format(Tenant.get('admin', 'RegionOne')))
         if not main_cloud_node.ssh_conn:
-            main_cloud_node.ssh_conn = install_helper.establish_ssh_connection(main_cloud_node.host_ip)
+            main_cloud_node.ssh_conn = install_helper.ssh_to_controller(
+                main_cloud_node.host_ip)
         install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
         LOG.info("Auto_info after update: {}".format(Tenant.get('admin', 'RegionOne')))
         dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
-                                           mgmt=SubcloudStatus.MGMT_UNMANAGED, con_ssh=main_cloud_node.ssh_conn)
+                                           mgmt=SubcloudStatus.MGMT_UNMANAGED,
+                                           con_ssh=main_cloud_node.ssh_conn)
 
-        LOG.info(" Subcloud {}  is in {}/{} status ... ".format(subcloud, SubcloudStatus.AVAIL_ONLINE,
-                                                                SubcloudStatus.MGMT_UNMANAGED))
+        LOG.info(" Subcloud {}  is in {}/{} status ... ".format(
+            subcloud, SubcloudStatus.AVAIL_ONLINE, SubcloudStatus.MGMT_UNMANAGED))
         no_manage = InstallVars.get_install_var("NO_MANAGE")
         if not no_manage:
             LOG.info("Managing subcloud {} ... ".format(subcloud))
             LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
             install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
-            dc_helper.manage_subcloud(subcloud=subcloud, con_ssh=main_cloud_node.ssh_conn, fail_ok=True)
+            dc_helper.manage_subcloud(subcloud=subcloud, con_ssh=main_cloud_node.ssh_conn,
+                                      fail_ok=True)
 
             dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
-                                               mgmt=SubcloudStatus.MGMT_MANAGED, sync=SubcloudStatus.SYNCED,
+                                               mgmt=SubcloudStatus.MGMT_MANAGED,
+                                               sync=SubcloudStatus.SYNCED,
                                                con_ssh=main_cloud_node.ssh_conn)
 
         LOG.info("Running config for subcloud {} ... ".format(subcloud))
@@ -412,13 +432,16 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
         run_lab_setup(con_ssh=subcloud_controller0_node.ssh_conn)
         if do_step("unlock_active_controller"):
             LOG.info("unlocking {}".format(subcloud_controller0_node.name))
-            host_helper.unlock_host(host=subcloud_controller0_node.name, con_ssh=subcloud_controller0_node.ssh_conn,
-                                    timeout=2400, check_hypervisor_up=False, check_webservice_up=False,
+            host_helper.unlock_host(host=subcloud_controller0_node.name,
+                                    con_ssh=subcloud_controller0_node.ssh_conn,
+                                    timeout=2400, check_hypervisor_up=False,
+                                    check_webservice_up=False,
                                     check_subfunc=True, check_first=False, con0_install=True)
 
         LOG.info("Installing license file for subcloud {} ... ".format(subcloud))
         subcloud_license_path = HostLinuxUser.get_home() + "license.lic"
-        system_helper.install_license(subcloud_license_path, con_ssh=subcloud_controller0_node.ssh_conn)
+        system_helper.install_license(subcloud_license_path,
+                                      con_ssh=subcloud_controller0_node.ssh_conn)
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
@@ -437,18 +460,20 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
     test_step = "Bulk add hosts"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        rc, added_hosts, msg = install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml", con_ssh=con_ssh)
+        rc, added_hosts, msg = install_helper.bulk_add_hosts(lab, "hosts_bulk_add.xml",
+                                                             con_ssh=con_ssh)
         assert rc == 0, msg
         LOG.info("system host-bulk-add added: {}".format(added_hosts))
         for host in hosts:
-            assert any(host in host_list for host_list in added_hosts), "The host_bulk_add command failed to all " \
-                                                                        "hosts {}".format(hosts)
+            assert any(host in host_list for host_list in added_hosts), \
+                "The host_bulk_add command failed to all hosts {}".format(hosts)
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None, wait_for_online=True):
+def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
+               wait_for_online=True):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Boot"
 
@@ -495,8 +520,10 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
     if do_step(test_step):
         hosts_online = False
         for hostname in hostnames:
-            threads.append(install_helper.open_vlm_console_thread(hostname, lab=lab, boot_interface=boot_device_dict,
-                                                                  wait_for_thread=False, vlm_power_on=True,
+            threads.append(install_helper.open_vlm_console_thread(hostname, lab=lab,
+                                                                  boot_interface=boot_device_dict,
+                                                                  wait_for_thread=False,
+                                                                  vlm_power_on=True,
                                                                   close_telnet_conn=True))
         for thread in threads:
             thread.join(timeout=InstallTimeout.INSTALL_LOAD)
@@ -505,8 +532,8 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
             wait_for_hosts_to_be_online(hosts=hostnames, lab=lab, fail_ok=False)
             hosts_online = True
 
-        if InstallVars.get_install_var("DEPLOY_OPENSTACK_FROM_CONTROLLER1") and 'controller-1' in hostnames \
-                and hosts_online:
+        if InstallVars.get_install_var("DEPLOY_OPENSTACK_FROM_CONTROLLER1") and \
+                'controller-1' in hostnames and hosts_online:
             controller0_node = lab['controller-0']
             controller1_node = lab['controller-1']
             if controller1_node.telnet_conn:
@@ -518,11 +545,13 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
             controller1_node.telnet_conn.close()
 
             if not controller0_node.ssh_conn:
-                controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+                controller0_node.ssh_conn = install_helper.ssh_to_controller(
+                    controller0_node.host_ip)
 
             pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
 
-            controller0_node.ssh_conn.rsync(HostLinuxUser.get_home() + '*', 'controller-1', HostLinuxUser.get_home(),
+            controller0_node.ssh_conn.rsync(HostLinuxUser.get_home() + '*', 'controller-1',
+                                            HostLinuxUser.get_home(),
                                             dest_user=HostLinuxUser.get_user(),
                                             dest_password=HostLinuxUser.get_password(),
                                             pre_opts=pre_opts)
@@ -578,11 +607,14 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
     LOG.tc_step(test_step)
     if do_step(test_step):
         if len(hostnames) == 1:
-            host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only, timeout=2400,
+            host_helper.unlock_host(hostnames[0], con_ssh=con_ssh, available_only=available_only,
+                                    timeout=2400,
                                     check_hypervisor_up=False, check_webservice_up=False)
-            kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh, timeout=HostTimeout.NODES_STATUS_READY)
+            kube_helper.wait_for_nodes_ready(hosts=hostnames, con_ssh=con_ssh,
+                                             timeout=HostTimeout.NODES_STATUS_READY)
         else:
-            host_helper.unlock_hosts(hostnames, con_ssh=con_ssh, fail_ok=False, check_nodes_ready=False)
+            host_helper.unlock_hosts(hostnames, con_ssh=con_ssh, fail_ok=False,
+                                     check_nodes_ready=False)
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -598,12 +630,15 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None):
     if conf_file is None:
         conf_file = 'lab_setup'
 
-    if vswitch_type in [VSwitchType.OVS_DPDK, VSwitchType.OVS, VSwitchType.NONE] and lab_setup_count == 0:
+    if vswitch_type in [VSwitchType.OVS_DPDK, VSwitchType.OVS, VSwitchType.NONE] and \
+            lab_setup_count == 0:
         if con_ssh.exec_cmd("test -f {}_ovs.conf".format(conf_file))[0] == 0:
             LOG.debug("setting up ovs lab_setup configuration")
-            con_ssh.exec_cmd("rm {}.conf; mv {}_ovs.conf {}.conf".format(conf_file, conf_file, conf_file))
+            con_ssh.exec_cmd("rm {}.conf; mv {}_ovs.conf {}.conf".format(conf_file,
+                                                                         conf_file, conf_file))
 
-        rc, output = con_ssh.exec_cmd("grep \'VSWITCH_TYPE=\' {}.conf".format(conf_file), fail_ok=True)
+        rc, output = con_ssh.exec_cmd("grep \'VSWITCH_TYPE=\' {}.conf".format(conf_file),
+                                      fail_ok=True)
         if rc == 0:
             vswitch_type_from_config = output.strip().split('"')[1]
         else:
@@ -613,12 +648,15 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None):
             con_ssh.exec_cmd("sed -i \'s/VSWITCH_TYPE=\"{}\"/VSWITCH_TYPE=\"{}\"/g\' {}.conf"
                              .format(vswitch_type_from_config, vswitch_type, conf_file))
         elif not vswitch_type_from_config:
-            con_ssh.exec_cmd("echo \'VSWITCH_TYPE=\"{}\"\' >> {}.conf".format(vswitch_type, conf_file))
+            con_ssh.exec_cmd("echo \'VSWITCH_TYPE=\"{}\"\' >> {}.conf".format(vswitch_type,
+                                                                              conf_file))
 
         if vswitch_type in [VSwitchType.NONE, VSwitchType.OVS]:
-            rc, output = con_ssh.exec_cmd("grep \'VSWITCH_PCPU=\' {}.conf".format(conf_file), fail_ok=True)
+            rc, output = con_ssh.exec_cmd("grep \'VSWITCH_PCPU=\' {}.conf".format(conf_file),
+                                          fail_ok=True)
             if rc == 0:
-                con_ssh.exec_cmd("sed -i \"s/VSWITCH_PCPU=./VSWITCH_PCPU=0/g\" {}.conf".format(conf_file))
+                con_ssh.exec_cmd("sed -i \"s/VSWITCH_PCPU=./VSWITCH_PCPU=0/g\" {}.conf".format(
+                    conf_file))
             else:
                 con_ssh.exec_cmd("echo \'VSWITCH_PCPU=0\' >> {}.conf".format(conf_file))
 
@@ -649,7 +687,8 @@ def check_heat_resources(con_ssh, sys_type=None, final_step=None):
 
 
 def clear_post_install_alarms(con_ssh=None):
-    system_helper.wait_for_alarms_gone([("400.001", None), ("800.001", None)], timeout=1800, check_interval=60,
+    system_helper.wait_for_alarms_gone([("400.001", None), ("800.001", None)], timeout=1800,
+                                       check_interval=60,
                                        con_ssh=con_ssh)
     alarm = system_helper.get_alarms(alarm_id='250.001', con_ssh=con_ssh)
     if alarm:
@@ -674,7 +713,8 @@ def get_resume_step(lab=None, install_progress_path=None):
     if lab is None:
         lab = ProjVar.get_var("LAB")
     if install_progress_path is None:
-        install_progress_path = "{}/../{}_install_progress.txt".format(ProjVar.get_var("LOG_DIR"), lab["short_name"])
+        install_progress_path = "{}/../{}_install_progress.txt".format(ProjVar.get_var("LOG_DIR"),
+                                                                       lab["short_name"])
 
     with open(install_progress_path, "r") as progress_file:
         lines = progress_file.readlines()
@@ -683,7 +723,8 @@ def get_resume_step(lab=None, install_progress_path=None):
                 return int(line.split("End step: ")[1].strip()) + 1
 
 
-def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_type='pxe', files_path=None, lab=None,
+def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_type='pxe',
+                      files_path=None, lab=None,
                       patch_dir=None, patch_server_conn=None, final_step=None):
     if not subcloud:
         raise ValueError("The subcloud name must be provided")
@@ -709,7 +750,8 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
         install_helper.mount_boot_server_iso(lab_dict=lab)
 
     else:
-        install_helper.set_network_boot_feed(build_server.ssh_conn, load_path, lab=lab, boot_server=boot_server)
+        install_helper.set_network_boot_feed(build_server.ssh_conn, load_path, lab=lab,
+                                             boot_server=boot_server)
 
     if InstallVars.get_install_var("WIPEDISK"):
         LOG.fixture_step("Attempting to wipe disks")
@@ -727,7 +769,8 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     install_helper.copy_files_to_subcloud(subcloud)
 
     system_version = install_helper.extract_software_version_from_string_path(load_path)
-    license_version = system_version if system_version in BuildServerPath.DEFAULT_LICENSE_PATH else 'default'
+    license_version = system_version if system_version in \
+                                        BuildServerPath.DEFAULT_LICENSE_PATH else 'default'
     sys_type = lab['system_mode']
     if sys_type == SysType.REGULAR:
         license_path = BuildServerPath.DEFAULT_LICENSE_PATH[license_version][0]
@@ -738,11 +781,13 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     else:
         license_path = BuildServerPath.DEFAULT_LICENSE_PATH[license_version][0]
 
-    install_helper.download_license(lab, build_server, license_path=license_path, dest_name='license')
+    install_helper.download_license(lab, build_server, license_path=license_path,
+                                    dest_name='license')
 
     subcloud_controller0 = lab['controller-0']
     if subcloud_controller0 and not subcloud_controller0.ssh_conn:
-        subcloud_controller0.ssh_conn = install_helper.establish_ssh_connection(subcloud_controller0.host_ip)
+        subcloud_controller0.ssh_conn = install_helper.establish_ssh_connection(
+            subcloud_controller0.host_ip)
 
     LOG.info("Running config for subcloud {} ... ".format(subcloud))
     install_helper.run_config_subcloud(subcloud, con_ssh=subcloud_controller0.ssh_conn)
@@ -767,11 +812,14 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     LOG.info("Running config for subcloud {} ... ".format(subcloud))
     short_name = lab['short_name']
 
-    lab_setup_filename_ext = short_name.replace('_', '').lower() if len(short_name.split('_')) <= 1 else \
+    lab_setup_filename_ext = short_name.replace('_', '').lower() if \
+        len(short_name.split('_')) <= 1 else \
         short_name.split('_')[0].lower() + short_name.split('_')[1]
-    lab_setup_filename = 'lab_setup_s{}_'.format(subcloud.split('-')[1]) + lab_setup_filename_ext + '.conf'
+    lab_setup_filename = 'lab_setup_s{}_'.format(subcloud.split('-')[1]) + \
+                         lab_setup_filename_ext + '.conf'
 
-    LOG.info("Running lab setup config file {} for subcloud {} ... ".format(lab_setup_filename, subcloud))
+    LOG.info("Running lab setup config file {} for subcloud {} ... ".format(
+        lab_setup_filename, subcloud))
 
     run_lab_setup(con_ssh=subcloud_controller0.ssh_conn, conf_file=lab_setup_filename)
 
@@ -787,7 +835,8 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     LOG.info("Installing other {} hosts ... ".format(subcloud))
 
     if not files_path:
-        system_version = system_version if system_version in BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS else 'default'
+        system_version = system_version \
+            if system_version in BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS else 'default'
         files_path = load_path + '/' + BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS[system_version]
 
     install_helper.download_hosts_bulk_add_xml_file(lab, build_server, files_path)
@@ -804,7 +853,8 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
 
     run_lab_setup(con_ssh=subcloud_controller0.ssh_conn, conf_file=lab_setup_filename)
 
-    host_helper.wait_for_hosts_ready(hostnames, subcloud_controller0.name, con_ssh=subcloud_controller0.ssh_conn)
+    host_helper.wait_for_hosts_ready(hostnames, subcloud_controller0.name,
+                                     con_ssh=subcloud_controller0.ssh_conn)
 
     LOG.info("Subcloud {} installed successfully ... ".format(subcloud))
 
@@ -831,14 +881,16 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
 
     ProjVar.set_var(SOURCE_OPENRC=True)
     if not controller0_node.ssh_conn.is_connected():
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
     existing_subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn)
     if name and 'subcloud' in name and name in existing_subclouds:
         LOG.info("Subcloud {} already exits; do nothing".format(name))
-        managed = dc_helper.get_subclouds(name=name, avail="managed", con_ssh=controller0_node.ssh_conn)
+        managed = dc_helper.get_subclouds(name=name, avail="managed",
+                                          con_ssh=controller0_node.ssh_conn)
         if name in managed:
-            LOG.info("Subcloud {} is in managed status; unamanage subcloud before install".format(name))
+            LOG.info("Subcloud {} is in managed status; unamanage subcloud before install".
+                     format(name))
             dc_helper.manage_subcloud(subcloud=name, con_ssh=controller0_node.ssh_conn)
 
         return 0, [name]
@@ -865,8 +917,8 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
     subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn)
     added_subclouds = [sub for sub in subclouds if sub not in existing_subclouds]
     if name not in added_subclouds:
-        msg = "Fail to add subcloud {}. Existing subclouds= {}; Added subclouds = {}".format(name, existing_subclouds,
-                                                                                             added_subclouds)
+        msg = "Fail to add subcloud {}. Existing subclouds= {}; Added subclouds = {}".\
+            format(name, existing_subclouds, added_subclouds)
         LOG.warning(msg)
         assert False, msg
 
@@ -877,13 +929,16 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
         else:
             subcloud_config = subcloud + ".config"
 
-        rc = controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(HostLinuxUser.get_home(), subcloud_config))[0]
+        rc = controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(HostLinuxUser.get_home(),
+                                                                      subcloud_config))[0]
         if rc == 0:
             config_generated.append(subcloud_config)
             config_path = HostLinuxUser.get_home() + subcloud
-            controller0_node.ssh_conn.exec_cmd("mv {}{} {}/".format(HostLinuxUser.get_home(), subcloud_config, config_path))
+            controller0_node.ssh_conn.exec_cmd("mv {}{} {}/".format(HostLinuxUser.get_home(),
+                                                                    subcloud_config, config_path))
         else:
-            msg = "Subcloud {} config file {} not generated or missing".format(subcloud, subcloud_config)
+            msg = "Subcloud {} config file {} not generated or missing".format(subcloud,
+                                                                               subcloud_config)
             LOG.warning(msg)
             assert False, msg
 
@@ -891,7 +946,8 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
         LOG.info("Subclouds added and config files generated successfully; subclouds: {}"
                  .format(list(zip(added_subclouds, config_generated))))
     else:
-        LOG.info("One or more subcloud config are missing, please try to generate the missing configs manually")
+        LOG.info("One or more subcloud config are missing, please try to generate the missing "
+                 "configs manually")
 
     return 0, added_subclouds
 
@@ -921,7 +977,8 @@ def install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=No
 
     added_subclouds = dc_helper.get_subclouds()
     assert all(subcloud in added_subclouds for subcloud in subclouds), \
-        "One or more subclouds in {} are not in the system subclouds: {}".format(subclouds, added_subclouds)
+        "One or more subclouds in {} are not in the system subclouds: {}".format(subclouds,
+                                                                                 added_subclouds)
 
     dc_lab = lab
     if not dc_lab:
@@ -936,8 +993,10 @@ def install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=No
         if do_step(test_step):
             if subcloud in subcloud_boots.keys():
                 boot_type = subcloud_boots.get(subcloud, 'pxe')
-                rc, msg = _install_subcloud(subcloud, load_path, build_server, patch_dir=patch_dir, boot_type=boot_type,
-                                            patch_server_conn=patch_server_conn, lab=dc_lab[subcloud],
+                rc, msg = _install_subcloud(subcloud, load_path, build_server, patch_dir=patch_dir,
+                                            boot_type=boot_type,
+                                            patch_server_conn=patch_server_conn,
+                                            lab=dc_lab[subcloud],
                                             final_step=final_step)
                 LOG.info(msg)
                 assert rc >= 0, msg
@@ -964,11 +1023,14 @@ def parse_subcloud_boot_info(subcloud_boot_info):
         if len(subcloud_boot) == 0:
             continue
         if len(subcloud_boot) == 1:
-            subcloud_boots[subcloud_boot[0]] = {'boot': 'pxe', 'boot_server': 'yow-tuxlab2'}
+            subcloud_boots[subcloud_boot[0]] = {'boot': 'pxe',
+                                                'boot_server': 'yow-tuxlab2'}
         elif len(subcloud_boot) == 2:
-            subcloud_boots[subcloud_boot[0]] = {'boot': subcloud_boot[1], 'boot_server': 'yow-tuxlab2'}
+            subcloud_boots[subcloud_boot[0]] = {'boot': subcloud_boot[1],
+                                                'boot_server': 'yow-tuxlab2'}
         else:
-            subcloud_boots[subcloud_boot[0]] = {'boot': subcloud_boot[1], 'boot_server': subcloud_boot[2]}
+            subcloud_boots[subcloud_boot[0]] = {'boot': subcloud_boot[1],
+                                                'boot_server': subcloud_boot[2]}
 
     return subcloud_boots
 
@@ -987,7 +1049,7 @@ def is_dcloud_system_controller_healthy(system_controller_lab):
 
     controller0_node = system_controller_lab['controller-0']
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
     if controller0_node.ssh_conn.is_connected():
         rc, health = system_helper.get_system_health_query(controller0_node.ssh_conn)
@@ -1003,7 +1065,8 @@ def is_dcloud_system_controller_healthy(system_controller_lab):
                              format(system_controller_lab['name']))
                     return True
 
-            LOG.info("System controller {} not  healthy: {}".format(system_controller_lab['name'], health))
+            LOG.info("System controller {} not  healthy: {}".format(system_controller_lab['name'],
+                                                                    health))
 
     else:
         LOG.warning("System controller not reachable: {}")
@@ -1023,7 +1086,7 @@ def is_dcloud_system_controller_ipv6(controller0_node):
         raise ValueError("The distributed cloud system controller lab dictionary must be provided")
 
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
     if controller0_node.ssh_conn.is_connected():
         install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
@@ -1105,8 +1168,8 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     patch_server = InstallVars.get_install_var("PATCH_SERVER")
     guest_server = InstallVars.get_install_var("GUEST_SERVER")
 
-    servers = list({file_server, iso_host, patch_server, guest_server, helm_chart_server}) if not subcloud else \
-        list({iso_host, patch_server, guest_server, helm_chart_server})
+    servers = list({file_server, iso_host, patch_server, guest_server, helm_chart_server}) \
+        if not subcloud else list({iso_host, patch_server, guest_server, helm_chart_server})
     LOG.fixture_step("Establishing connection to {}".format(servers))
 
     servers_map = {server_: setups.initialize_server(server_) for server_ in servers}
@@ -1119,18 +1182,18 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         install_sub = InstallVars.get_install_var("INSTALL_SUBCLOUD")
         file_server_obj = Node(host_ip=dc_float_ip, host_name='controller-0')
         file_server_obj.ssh_conn = install_helper.establish_ssh_connection(file_server_obj.host_ip)
-        ipv6_config = InstallVars.get_install_var("IPV6_CONFIG")
+        dc_ipv6 = InstallVars.get_install_var("DC_IPV6")
         v6 = is_dcloud_system_controller_ipv6(file_server_obj)
         if not v6:
-            if ipv6_config:
+            if dc_ipv6:
                 LOG.warning("The DC System controller is configured as IPV4; Switching to IPV4")
-                ipv6_config = False
+                dc_ipv6 = False
         else:
-            LOG.warning("The DC System controller is configured as IPV6; Configuring subcloud {} as IPV6"
-                        .format(install_sub))
-            ipv6_config = True
-        InstallVars.set_install_var(ipv6_config=ipv6_config)
-        add_subclouds(file_server_obj, name=install_sub, ip_ver=6 if ipv6_config else 4)
+            LOG.warning("The DC System controller is configured as IPV6; "
+                        "Configuring subcloud {} as IPV6".format(install_sub))
+            dc_ipv6 = True
+        InstallVars.set_install_var(dc_ipv6=dc_ipv6)
+        add_subclouds(file_server_obj, name=install_sub, ip_ver=6 if dc_ipv6 else 4)
     else:
         file_server_obj = servers_map.get(file_server, bs_obj)
 
@@ -1223,7 +1286,7 @@ def verify_install_uuid(lab=None):
     controller0_node = lab['controller-0']
 
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
     LOG.info("Getting the install uuid from controller-0")
     install_uuid = install_helper.get_host_install_uuid(controller0_node.name, controller0_node.ssh_conn)
@@ -1238,8 +1301,9 @@ def verify_install_uuid(lab=None):
     for host in hosts:
         with host_helper.ssh_to_host(host) as host_ssh:
             host_install_uuid = install_helper.get_host_install_uuid(host, host_ssh)
-            assert host_install_uuid == install_uuid, "The host {} install uuid {} is not same with controller-0 " \
-                                                      "uuid {}".format(host, host_install_uuid, install_uuid)
+            assert host_install_uuid == install_uuid, \
+                "The host {} install uuid {} is not same with controller-0 " \
+                "uuid {}".format(host, host_install_uuid, install_uuid)
             LOG.info("Host {} install uuid verified".format(host))
     LOG.info("Installation UUID {} verified in all lab hosts".format(install_uuid))
 
@@ -1253,7 +1317,7 @@ def send_arp_cmd(lab=None):
     controller0_node = lab['controller-0']
 
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
     fip = lab.get("floating ip")
 
@@ -1279,7 +1343,7 @@ def wait_for_hosts_ready(hosts, lab=None, timeout=2400):
     controller0_node = lab['controller-0']
 
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
     fip = lab.get("floating ip")
     if fip:
@@ -1320,13 +1384,15 @@ def wait_for_hosts_to_be_online(hosts, lab=None, fail_ok=True):
     controller0_node = lab['controller-0']
 
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
     deploy_mgr = use_deploy_manager(controller0_node, lab=lab)
 
     LOG.info("Verifying {} is Locked, Disabled and Online ...".format(hosts))
     if not deploy_mgr:
-        system_helper.wait_for_hosts_states(hosts, check_interval=10, con_ssh=controller0_node.ssh_conn,
-                                            administrative=HostAdminState.LOCKED, operational=HostOperState.DISABLED,
+        system_helper.wait_for_hosts_states(hosts, check_interval=10,
+                                            con_ssh=controller0_node.ssh_conn,
+                                            administrative=HostAdminState.LOCKED,
+                                            operational=HostOperState.DISABLED,
                                             availability=HostAvailState.ONLINE, fail_ok=fail_ok)
     else:
         end_time = time.time() + HostTimeout.REBOOT
@@ -1336,7 +1402,8 @@ def wait_for_hosts_to_be_online(hosts, lab=None, fail_ok=True):
 
             offline_hosts = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'],
                                                       namespace='deployment', resource_type='hosts',
-                                                      con_ssh=controller0_node.ssh_conn, availability='offline')
+                                                      con_ssh=controller0_node.ssh_conn,
+                                                      availability='offline')
             if not offline_hosts:
                 LOG.info("Waiting for hosts {} to become online".format(offline_hosts))
                 time.sleep(20)
@@ -1368,13 +1435,16 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
     test_step = "Wait for Deployment Mgr to configure active controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        host_helper._wait_for_simplex_reconnect(con_ssh=controller0_node.ssh_conn, timeout=HostTimeout.CONTROLLER_UNLOCK)
+        host_helper._wait_for_simplex_reconnect(con_ssh=controller0_node.ssh_conn,
+                                                timeout=HostTimeout.CONTROLLER_UNLOCK)
 
         LOG.info("Verifying for controller-0 to be online ...")
         end_time = time.time() + HostTimeout.REBOOT
         while time.time() < end_time:
-            available_host = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'], namespace='deployment',
-                                                       resource_type='hosts', con_ssh=controller0_node.ssh_conn,
+            available_host = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'],
+                                                       namespace='deployment',
+                                                       resource_type='hosts',
+                                                       con_ssh=controller0_node.ssh_conn,
                                                        name='controller-0', availability='available')
 
             #if not available_host or ('true' not in available_host[0]):
@@ -1383,18 +1453,22 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
                          .format(list(available_host[0]) if available_host else available_host))
                 time.sleep(20)
             else:
-                LOG.info("The controller-0 is available and insync: {}".format(list(available_host[0])))
+                LOG.info("The controller-0 is available and insync: {}".format(
+                    list(available_host[0])))
                 return
         else:
             sys_values= system_helper.get_system_values(fields=["system_mode", "system_type"],
                                                          con_ssh=controller0_node.ssh_conn)
             if "All-in-one" in sys_values and 'duplex' in sys_values[0]:
                 current_avail = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'],
-                                                          namespace='deployment', resource_type='hosts',
-                                                          con_ssh=controller0_node.ssh_conn, name='controller-0',
+                                                          namespace='deployment',
+                                                          resource_type='hosts',
+                                                          con_ssh=controller0_node.ssh_conn,
+                                                          name='controller-0',
                                                           availability=['degraded', 'available'])
                 if current_avail:
-                    LOG.info("The controller-0 is degraded/available and insync: {}".format(list(current_avail)))
+                    LOG.info("The controller-0 is degraded/available and insync: {}".format(
+                        list(current_avail)))
                     return
 
             msg = "Timed out waiting for controller-0  to become available state after deployment"
@@ -1417,7 +1491,8 @@ def get_host_ceph_osd_devices_from_conf(active_controller_node, host, conf_file=
     """
 
     if not active_controller_node.ssh_conn:
-        active_controller_node.ssh_conn = install_helper.establish_ssh_connection(active_controller_node.host_ip)
+        active_controller_node.ssh_conn = install_helper.ssh_to_controller(
+            active_controller_node.host_ip)
 
     devices_pci = []
     rc, output = active_controller_node.ssh_conn.exec_cmd("grep OSD_DEVICES {}".format(conf_file))
@@ -1456,7 +1531,8 @@ def add_ceph_ceph_mon_to_host(active_controller_node, host, final_step=None):
     """
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if not active_controller_node.ssh_conn:
-        active_controller_node.ssh_conn = install_helper.establish_ssh_connection(active_controller_node.host_ip)
+        active_controller_node.ssh_conn = install_helper.ssh_to_controller(
+            active_controller_node.host_ip)
     test_step = "adding ceph mon to {}".format(host)
     LOG.tc_step(test_step)
     if do_step(test_step):
@@ -1488,17 +1564,19 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf', final_step
     controller1_node = lab['controller-1']
     floating_ip = lab.get('floating ip')
 
-    active_node_ssh = install_helper.establish_ssh_connection(floating_ip, fail_ok=True)
+    active_node_ssh = install_helper.ssh_to_controller(floating_ip, fail_ok=True)
     if not active_node_ssh:
-        active_node_ssh = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        active_node_ssh = install_helper.ssh_to_controller(controller0_node.host_ip)
 
     ControllerClient.set_active_controller(active_node_ssh)
     test_step = "add ceph osds to controllers"
     LOG.tc_step(test_step)
     if do_step(test_step):
 
-        controller0_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node, controller0_node.name)
-        controller1_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node, controller1_node.name)
+        controller0_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node,
+                                                                     controller0_node.name)
+        controller1_disk_paths = get_host_ceph_osd_devices_from_conf(controller0_node,
+                                                                     controller1_node.name)
         assert len(controller0_disk_paths) > 0 and len(controller1_disk_paths) > 0, \
             "Unable to find OSD devices from conf file {} for the controllers".format(conf_file)
 
@@ -1516,7 +1594,8 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf', final_step
             if not host_helper.is_host_locked(host, con_ssh=active_node_ssh):
                 host_helper.lock_host(host, con_ssh=active_node_ssh)
 
-            disk_paths = controller1_disk_paths if host == 'controller-1' else controller0_disk_paths
+            disk_paths = controller1_disk_paths if host == 'controller-1' else \
+                controller0_disk_paths
 
             for disk_path in disk_paths:
                 disk_uuid = storage_helper.get_host_disks(host, device_path=disk_path,
@@ -1529,7 +1608,7 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf', final_step
             host_helper.swact_host(active_node.name, con_ssh=active_node_ssh)
             active_node = lab[host]
             active_node_ssh.close()
-            active_node_ssh = install_helper.establish_ssh_connection(floating_ip)
+            active_node_ssh = install_helper.ssh_to_controller(floating_ip)
             ControllerClient.set_active_controller(active_node_ssh)
 
         storage_helper.wait_for_ceph_health_ok()
@@ -1551,7 +1630,8 @@ def apply_node_labels(hosts, active_controller_node):
     if not active_controller_node:
         raise ValueError("Active controller node object must be provided")
     if not active_controller_node.ssh_conn:
-        active_controller_node.ssh_conn = install_helper.establish_ssh_connection(active_controller_node.host_ip)
+        active_controller_node.ssh_conn = install_helper.ssh_to_controller(
+            active_controller_node.host_ip)
 
     if isinstance(hosts, str):
         hosts = [hosts]
@@ -1561,11 +1641,15 @@ def apply_node_labels(hosts, active_controller_node):
     for host in hosts:
         LOG.info("Applying node label for host {}".format(host))
         if "controller" not in host:
-            cli.system(cmd.format(host), "openstack-compute-node=enabled", ssh_client=active_controller_node.ssh_conn)
-            cli.system(cmd.format(host), "openvswitch=enabled", ssh_client=active_controller_node.ssh_conn)
-            cli.system(cmd.format(host), "sriov=enabled", ssh_client=active_controller_node.ssh_conn)
+            cli.system(cmd.format(host), "openstack-compute-node=enabled",
+                       ssh_client=active_controller_node.ssh_conn)
+            cli.system(cmd.format(host), "openvswitch=enabled",
+                       ssh_client=active_controller_node.ssh_conn)
+            cli.system(cmd.format(host), "sriov=enabled",
+                       ssh_client=active_controller_node.ssh_conn)
         else:
-            cli.system(cmd.format(host), "openstack-control-plane=enabled", ssh_client=active_controller_node.ssh_conn)
+            cli.system(cmd.format(host), "openstack-control-plane=enabled",
+                       ssh_client=active_controller_node.ssh_conn)
 
 
 def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
@@ -1592,7 +1676,7 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
     controller0_node = lab['controller-0']
     lab_name = lab['name']
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
     ControllerClient.set_active_controller(controller0_node.ssh_conn)
 
     deploy_tool_full_path = HostLinuxUser.get_home() + DEPLOY_TOOL
@@ -1608,15 +1692,19 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
 
             pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
 
-            rc, output = server.ssh_conn.rsync(DEPLOY_SOUCE_PATH + DEPLOY_TOOL, controller0_node.host_ip,
-                                               HostLinuxUser.get_home(), dest_user=HostLinuxUser.get_user(),
-                                               dest_password=HostLinuxUser.get_password(), pre_opts=pre_opts,
+            rc, output = server.ssh_conn.rsync(DEPLOY_SOUCE_PATH + DEPLOY_TOOL,
+                                               controller0_node.host_ip,
+                                               HostLinuxUser.get_home(),
+                                               dest_user=HostLinuxUser.get_user(),
+                                               dest_password=HostLinuxUser.get_password(),
+                                               pre_opts=pre_opts,
                                                fail_ok=True)
             if rc != 0:
                 err_msg = err_msg + output
             run_deploy = True if rc == 0 else False
             if run_deploy:
-                controller0_node.ssh_conn.exec_cmd("mkdir -p {}deploy_yaml_files".format(HostLinuxUser.get_home()))
+                controller0_node.ssh_conn.exec_cmd("mkdir -p {}deploy_yaml_files".format(
+                    HostLinuxUser.get_home()))
         else:
             run_deploy = True
 
@@ -1628,19 +1716,25 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
         cmd2 = None
         if run_deploy:
             if stage == DEPLOY_INTITIAL:
-                cmd1 = "{} build -s {} -o {}_initial.yaml".format(deploy_tool_full_path, lab_name, lab_name)
+                cmd1 = "{} build -s {} -o {}_initial.yaml".format(deploy_tool_full_path,
+                                                                  lab_name, lab_name)
             elif stage == DEPLOY_INTERIM:
-                cmd1 = "{} build -s {} -o {}_before.yaml".format(deploy_tool_full_path, lab_name, lab_name)
+                cmd1 = "{} build -s {} -o {}_before.yaml".format(deploy_tool_full_path,
+                                                                 lab_name, lab_name)
             else:
-                cmd1 = "{} build -s {} -o {}.yaml --minimal-config".format(deploy_tool_full_path, lab_name, lab_name)
-                cmd2 = "{} build -s {} -o {}_full.yaml".format(deploy_tool_full_path, lab_name, lab_name)
+                cmd1 = "{} build -s {} -o {}.yaml --minimal-config".format(deploy_tool_full_path,
+                                                                           lab_name, lab_name)
+                cmd2 = "{} build -s {} -o {}_full.yaml".format(deploy_tool_full_path, lab_name,
+                                                               lab_name)
 
             if cmd1:
-                rc, output = controller0_node.ssh_conn.exec_cmd("source /etc/platform/openrc; " + cmd1)
+                rc, output = controller0_node.ssh_conn.exec_cmd(
+                    "source /etc/platform/openrc; " + cmd1)
                 if rc != 0:
                     LOG.warning("The deploy command {} failed: {}".format(cmd1, output))
             if cmd2:
-                rc, output = controller0_node.ssh_conn.exec_cmd("source /etc/platform/openrc; " + cmd2)
+                rc, output = controller0_node.ssh_conn.exec_cmd(
+                    "source /etc/platform/openrc; " + cmd2)
                 if rc != 0:
                     LOG.warning("The deploy command {} failed: {}".format(cmd2, output))
 
@@ -1655,16 +1749,18 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                     if rc == 0:
                         server.server_ip = server_ip.strip()
                 pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.PASSWORD)
-                rc, output = controller0_node.ssh_conn.rsync(yaml_files, server.server_ip, unfiltered_dest_results_path,
+                rc, output = controller0_node.ssh_conn.rsync(yaml_files, server.server_ip,
+                                                             unfiltered_dest_results_path,
                                                              dest_user=TestFileServer.USER,
                                                              dest_password=TestFileServer.PASSWORD,
                                                              extra_opts=["--chmod=Fugo=rw"],
                                                              pre_opts=pre_opts, fail_ok=True)
                 if rc != 0:
-                    LOG.warning("Fail to copy {} to  destination {}:{}".format(yaml_files, server.name,
-                                                                               unfiltered_dest_results_path))
+                    LOG.warning("Fail to copy {} to  destination {}:{}".format(
+                        yaml_files, server.name, unfiltered_dest_results_path))
                 else:
-                    controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(yaml_files, HostLinuxUser.get_home()))
+                    controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(
+                        yaml_files, HostLinuxUser.get_home()))
             if stage == DEPLOY_LAST:
                 cmd = "ls {}".format(last_file)
                 if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
@@ -1674,16 +1770,19 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                             server.server_ip = server_ip.strip()
 
                     pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.PASSWORD)
-                    rc, output = controller0_node.ssh_conn.rsync(last_file, server.server_ip, DEPLOY_RESULTS_DEST_PATH,
-                                                                 dest_user=TestFileServer.USER,
-                                                                 dest_password=TestFileServer.PASSWORD,
-                                                                 extra_opts=["--chmod=Fugo=rw"],
-                                                                 pre_opts=pre_opts, fail_ok=True)
+                    rc, output = controller0_node.ssh_conn.rsync(
+                        last_file, server.server_ip,
+                        DEPLOY_RESULTS_DEST_PATH,
+                        dest_user=TestFileServer.USER,
+                        dest_password=TestFileServer.PASSWORD,
+                        extra_opts=["--chmod=Fugo=rw"],
+                        pre_opts=pre_opts, fail_ok=True)
                     if rc != 0:
-                        LOG.warning("Fail to copy {} to  destination {}:{}".format(last_file, server.name,
-                                                                                   DEPLOY_RESULTS_DEST_PATH))
+                        LOG.warning("Fail to copy {} to  destination {}:{}".format(
+                            last_file, server.name, DEPLOY_RESULTS_DEST_PATH))
                     else:
-                        controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(last_file, HostLinuxUser.get_home()))
+                        controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(
+                            last_file, HostLinuxUser.get_home()))
 
     if LOG.test_step == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
@@ -1703,12 +1802,15 @@ def check_ansible_configured_mgmt_interface(controller0_node, lab):
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
 
-    ansible = True if controller0_node.telnet_conn.exec_cmd("test -f {}localhost.yml".format(HostLinuxUser.get_home()),
-                                                            fail_ok=True)[0] == 0 else False
+    ansible = True if controller0_node.telnet_conn.exec_cmd(
+        "test -f {}localhost.yml".format(HostLinuxUser.get_home()),
+        fail_ok=True)[0] == 0 else False
     simplex = install_helper.is_simplex(lab)
     if ansible and not simplex:
-        LOG.info("LAB uses ansible and removing the lo mgmt interface in controller-0 if present; ")
-        controller0_node.telnet_conn.exec_cmd("system host-if-modify {} lo -c none".format(host), fail_ok=True)
+        LOG.info("LAB uses ansible and removing the lo mgmt interface in controller-0 if "
+                 "present; ")
+        controller0_node.telnet_conn.exec_cmd("system host-if-modify {} lo -c none".format(host),
+                                              fail_ok=True)
 
 
 def use_deploy_manager(controller0_node, lab):
@@ -1739,8 +1841,9 @@ def use_ansible(controller0_node):
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
     local_host_file = "localhost.yml"
-    ansible_config =  True if controller0_node.telnet_conn.exec_cmd("test -f {}{}".format(HostLinuxUser.get_home(), local_host_file),
-                                                         fail_ok=True)[0] == 0 else False
+    ansible_config =  True if controller0_node.telnet_conn.exec_cmd(
+        "test -f {}{}".format(HostLinuxUser.get_home(), local_host_file), fail_ok=True)[0] == 0 \
+        else False
     InstallVars.set_install_var(ansible_config=ansible_config)
     return ansible_config
 
@@ -1760,7 +1863,8 @@ def wait_for_deployment_mgr_to_bulk_add_hosts(controller0_node, lab, fail_ok=Fal
         LOG.info("Verifying {} are bulk added  ...".format(hosts_))
         end_time = time.time() + 60
         while time.time() < end_time:
-            added_hosts = kube_helper.get_resources(namespace='deployment', resource_type='hosts', con_ssh=con_ssh,
+            added_hosts = kube_helper.get_resources(namespace='deployment', resource_type='hosts',
+                                                    con_ssh=con_ssh,
                                                     name=hosts_)
             if not added_hosts or any(host for host in hosts_ if host not in added_hosts):
                 LOG.info("Waiting for {} to be bulk added by Deployment Mgr"
@@ -1770,7 +1874,8 @@ def wait_for_deployment_mgr_to_bulk_add_hosts(controller0_node, lab, fail_ok=Fal
                 LOG.info("All hosts are bulk added by Deployment Mgr: {}".format(added_hosts))
                 return
         else:
-            msg = "Timed out waiting for hosts: {} to be bulk added by Deployment Mgr".format(hosts_)
+            msg = "Timed out waiting for hosts: {} to be bulk added by Deployment Mgr".format(
+                hosts_)
             if fail_ok:
                 LOG.warning(msg)
                 return False
@@ -1788,7 +1893,8 @@ def validate_deployment_mgr_install(controller0_node, lab, fail_ok=False):
         controller0_node = lab['controller-0']
 
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(
+            controller0_node.host_ip)
     ControllerClient.set_active_controller(controller0_node.ssh_conn)
     con_ssh = controller0_node.ssh_conn
     test_step = "Validate Deployment Mgr install"
@@ -1796,23 +1902,27 @@ def validate_deployment_mgr_install(controller0_node, lab, fail_ok=False):
     if do_step(test_step):
         LOG.info("Verifying Deployment Mgr install  ...")
 
-        added_hosts = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'], namespace='deployment',
-                                                     resource_type='hosts', con_ssh=con_ssh,
-                                                     name=hosts, insync='true')
+        added_hosts = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'],
+                                                namespace='deployment',
+                                                resource_type='hosts', con_ssh=con_ssh,
+                                                name=hosts, insync='true')
 
         if len(added_hosts) < len(hosts):
-            not_completed = [host for host in hosts if host not in [host_state[0] for host_state in added_hosts]]
+            not_completed = [host for host in hosts if host not in [host_state[0] for
+                                                                    host_state in added_hosts]]
 
             msg = "Hosts {} are not in available and insync state.".format(not_completed)
             LOG.warning(msg)
         else:
             LOG.info("All hosts are in available  and insync state: {}".format(added_hosts))
 
-        system_info = kube_helper.get_resources(field=['NAME', 'MODE', 'TYPE', 'INSYNC'], namespace='deployment',
-                                                resource_type='systems', con_ssh=con_ssh, insync='true')
+        system_info = kube_helper.get_resources(field=['NAME', 'MODE', 'TYPE', 'INSYNC'],
+                                                namespace='deployment',
+                                                resource_type='systems', con_ssh=con_ssh,
+                                                insync='true')
 
-        if system_info and lab_name.replace('-', '_') == list(system_info[0])[0].replace('-', '_') \
-            and (list(system_info[0])[3] == 'true'):
+        if system_info and lab_name.replace('-', '_') == \
+                list(system_info[0])[0].replace('-', '_') and (list(system_info[0])[3] == 'true'):
 
             LOG.info("Lab system: {} validated".format(system_info))
         else:
@@ -1822,7 +1932,8 @@ def validate_deployment_mgr_install(controller0_node, lab, fail_ok=False):
         data_net_info = kube_helper.get_resources(field=['NAME', 'INSYNC'], namespace='deployment',
                                                   resource_type='datanetworks', con_ssh=con_ssh)
 
-        if not data_net_info or any(data_info for data_info in data_net_info if 'true' not in data_info):
+        if not data_net_info or any(data_info for data_info in data_net_info if 'true' not in
+                                                                                data_info):
             msg = "All Data networks are not insyc : {}".format(data_net_info)
             LOG.warning(msg)
 
@@ -1835,7 +1946,8 @@ def wait_for_deploy_mgr_lab_config(controller0_node, lab=None, fail_ok=False):
 
         wait_for_deploy_mgr_hosts_config(controller0_node, lab=lab, fail_ok=fail_ok)
         wait_for_deploy_mgr_system_config(controller0_node, lab=lab, timeout=30, fail_ok=fail_ok)
-        wait_for_deploy_mgr_data_networks_config(controller0_node, lab=lab, timeout=30, fail_ok=fail_ok)
+        wait_for_deploy_mgr_data_networks_config(controller0_node, lab=lab, timeout=30,
+                                                 fail_ok=fail_ok)
 
 
 def wait_for_deploy_mgr_hosts_config(controller0_node, lab=None, fail_ok=False):
@@ -1858,7 +1970,8 @@ def wait_for_deploy_mgr_hosts_config(controller0_node, lab=None, fail_ok=False):
     hosts = [host for host in lab['hosts'] if host != 'controller-0']
 
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip, fail_ok=True)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(
+            controller0_node.host_ip, fail_ok=True)
         ControllerClient.set_active_controller(controller0_node.ssh_conn)
 
     LOG.info("Waiting for Deploy Mgr to configure and unlock hosts: {}  ...".format(hosts))
@@ -1866,12 +1979,15 @@ def wait_for_deploy_mgr_hosts_config(controller0_node, lab=None, fail_ok=False):
     debug_msg = "Waiting for {} to become availability=available and insync=true: {}"
     end_time = time.time() + HostTimeout.REBOOT
     while time.time() < end_time:
-        hosts_states = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'], namespace='deployment',
-                                                 resource_type='hosts', con_ssh=controller0_node.ssh_conn,
+        hosts_states = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'],
+                                                 namespace='deployment',
+                                                 resource_type='hosts',
+                                                 con_ssh=controller0_node.ssh_conn,
                                                  name=hosts, insync='true')
 
         if not hosts_states or \
-                any(host for host in hosts if host not in [host_state[0] for host_state in hosts_states]):
+                any(host for host in hosts if host not in
+                                              [host_state[0] for host_state in hosts_states]):
             if len(hosts_states) > no_of_hosts_configured:
                 LOG.info(debug_msg.format(hosts, list(hosts_states)))
                 no_of_hosts_configured = len(hosts_states)
@@ -1907,21 +2023,21 @@ def wait_for_deploy_mgr_system_config(controller0_node, lab=None, timeout=30, fa
 
     if controller0_node is None:
         controller0_node = lab['controller-0']
-    hosts = [host for host in lab['hosts'] if host != 'controller-0']
     lab_name = lab['name']
 
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip, fail_ok=True)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(
+            controller0_node.host_ip, fail_ok=True)
         ControllerClient.set_active_controller(controller0_node.ssh_conn)
 
     LOG.info("Waiting for Deploy Mgr to configure {} system  ...".format(lab_name))
 
-    debug_msg = "Waiting for {} system insync=true".format(lab_name)
     end_time = time.time() + timeout
     while time.time() < end_time:
 
         system_state = kube_helper.get_resources(field=['NAME', 'INSYNC'], namespace='deployment',
-                                                 resource_type='system', con_ssh=controller0_node.ssh_conn,
+                                                 resource_type='system',
+                                                 con_ssh=controller0_node.ssh_conn,
                                                  insync='true')
 
         if not system_state:
@@ -1930,14 +2046,16 @@ def wait_for_deploy_mgr_system_config(controller0_node, lab=None, timeout=30, fa
             LOG.info("{} system insync: {}".format(lab_name, system_state))
             return
     else:
-        msg = "Timed out waiting for {} system to become in available state and insync".format(lab_name)
+        msg = "Timed out waiting for {} system to become in available state and insync".format(
+            lab_name)
         if fail_ok:
             LOG.warning(msg)
             return False
         raise exceptions.HostTimeout(msg)
 
 
-def wait_for_deploy_mgr_data_networks_config(controller0_node, lab=None, timeout=30, fail_ok=False):
+def wait_for_deploy_mgr_data_networks_config(controller0_node, lab=None, timeout=30,
+                                             fail_ok=False):
     """
 
     Args:
@@ -1956,11 +2074,13 @@ def wait_for_deploy_mgr_data_networks_config(controller0_node, lab=None, timeout
         controller0_node = lab['controller-0']
 
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip, fail_ok=True)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(
+            controller0_node.host_ip, fail_ok=True)
         ControllerClient.set_active_controller(controller0_node.ssh_conn)
 
     configured_data_nets = system_helper.get_data_networks(con_ssh=controller0_node.ssh_conn)
-    LOG.info("Waiting for Deploy Mgr to configure {} data networks ...".format(configured_data_nets))
+    LOG.info("Waiting for Deploy Mgr to configure {} data networks ...".format(
+        configured_data_nets))
 
     debug_msg = "Waiting for {} data networks insync=true".format(configured_data_nets)
     end_time = time.time() + timeout
@@ -1968,11 +2088,13 @@ def wait_for_deploy_mgr_data_networks_config(controller0_node, lab=None, timeout
     while time.time() < end_time:
 
         d_states = kube_helper.get_resources(field=['NAME', 'INSYNC'], namespace='deployment',
-                                                 resource_type='datanetworks', con_ssh=controller0_node.ssh_conn,
-                                                 name=configured_data_nets, insync='true')
+                                             resource_type='datanetworks',
+                                             con_ssh=controller0_node.ssh_conn,
+                                             name=configured_data_nets, insync='true')
 
         if not d_states or \
-                any(p for p in configured_data_nets if p not in [d_state[0] for d_state in d_states]):
+                any(p for p in configured_data_nets if p not in
+                                                       [d_state[0] for d_state in d_states]):
             time.sleep(10)
         else:
             LOG.info("{} datanetworks insync: {}".format(configured_data_nets, d_states ))
@@ -1985,7 +2107,8 @@ def wait_for_deploy_mgr_data_networks_config(controller0_node, lab=None, timeout
         raise exceptions.HostTimeout(msg)
 
 
-def wait_for_deploy_mgr_platform_networks_config(controller0_node, lab=None, timeout=30, fail_ok=False):
+def wait_for_deploy_mgr_platform_networks_config(controller0_node, lab=None, timeout=30,
+                                                 fail_ok=False):
     """
 
     Args:
@@ -2004,11 +2127,13 @@ def wait_for_deploy_mgr_platform_networks_config(controller0_node, lab=None, tim
         controller0_node = lab['controller-0']
 
     if not controller0_node.ssh_conn:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip, fail_ok=True)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip,
+                                                                     fail_ok=True)
         ControllerClient.set_active_controller(controller0_node.ssh_conn)
 
     configured_data_nets = system_helper.get_data_networks(con_ssh=controller0_node.ssh_conn)
-    LOG.info("Waiting for Deploy Mgr to configure {} data networks ...".format(configured_data_nets))
+    LOG.info("Waiting for Deploy Mgr to configure {} data networks ...".format(
+        configured_data_nets))
 
     debug_msg = "Waiting for {} data networks insync=true".format(configured_data_nets)
     end_time = time.time() + timeout
@@ -2016,7 +2141,8 @@ def wait_for_deploy_mgr_platform_networks_config(controller0_node, lab=None, tim
     while time.time() < end_time:
 
         p_states = kube_helper.get_resources(field=['NAME', 'INSYNC'], namespace='deployment',
-                                             resource_type='platformnetworks', con_ssh=controller0_node.ssh_conn,
+                                             resource_type='platformnetworks',
+                                             con_ssh=controller0_node.ssh_conn,
                                              insync='true')
 
         if not p_states:

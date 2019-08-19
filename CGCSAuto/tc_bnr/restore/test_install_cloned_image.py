@@ -22,17 +22,21 @@ def install_clone_setup():
     install_cloned_info = {'usb_verified': False,
                            'build_server': None,
                            'hostnames': [k for k, v in lab.items() if isinstance(v, node.Node)],
-                           'system_mode': 'duplex' if len(lab['controller_nodes']) == 2 else "simplex"
+                           'system_mode':
+                               'duplex' if len(lab['controller_nodes']) == 2 else "simplex"
                            }
 
     controller_node = lab['controller-0']
     controller_conn = None
-    extra_controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
+    extra_controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(
+        lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
     local_client = LocalHostClient(connect=True)
     if local_client.ping_server(controller_node.host_ip, fail_ok=True)[0] == 100:
         try:
-            controller_conn = install_helper.establish_ssh_connection(controller_node.host_ip, fail_ok=True,
-                                                                      initial_prompt=extra_controller_prompt)
+            controller_conn = install_helper.ssh_to_controller(
+                controller_node.host_ip,
+                fail_ok=True,
+                initial_prompt=extra_controller_prompt)
         except:
             LOG.info("SSH connection to {} not yet available yet ..".format(controller_node.name))
 
@@ -50,8 +54,11 @@ def install_clone_setup():
     bld_server_attr['server_ip'] = bld_server['ip']
     bld_server_attr['prompt'] = r'{}@{}\:(.*)\$ '.format(TestFileServer.USER, bld_server['name'])
 
-    bld_server_conn = install_helper.establish_ssh_connection(bld_server_attr['name'], user=TestFileServer.USER,
-                                                              password=TestFileServer.PASSWORD, initial_prompt=bld_server_attr['prompt'])
+    bld_server_conn = install_helper.establish_ssh_connection(
+        bld_server_attr['name'],
+        user=TestFileServer.USER,
+        password=TestFileServer.PASSWORD,
+        initial_prompt=bld_server_attr['prompt'])
 
     bld_server_conn.exec_cmd("bash")
     bld_server_conn.set_prompt(bld_server_attr['prompt'])
@@ -79,7 +86,8 @@ def test_install_cloned_image(install_clone_setup):
     LOG.tc_step("Booting controller-0 ... ")
 
     if controller0_node.telnet_conn is None:
-        controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node, install_output_dir)
+        controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node,
+                                                                          install_output_dir)
         try:
             controller0_node.telnet_conn.login()
         except:
@@ -132,7 +140,8 @@ def test_install_cloned_image(install_clone_setup):
     if system_mode == 'duplex':
         LOG.tc_step("Booting controller-1 ... ")
         boot_interfaces = lab['boot_device_dict']
-        install_helper.open_vlm_console_thread('controller-1', boot_interface=boot_interfaces, vlm_power_on=True,
+        install_helper.open_vlm_console_thread('controller-1', boot_interface=boot_interfaces,
+                                               vlm_power_on=True,
                                                wait_for_thread=True)
 
         LOG.info("waiting for {} to boot ...".format(controller1))
@@ -207,7 +216,8 @@ def verify_usb(conn_ssh):
             if all(f in output for f in clone_files):
                 return True
             else:
-                LOG.info("Plugged USB {} does not appear to contain cloned image iso file".format(usb_device_name))
+                LOG.info("Plugged USB {} does not appear to contain cloned image iso file".format(
+                    usb_device_name))
                 return False
     else:
         LOG.info(" SSH connection with controller-0 is not available; USB cannot be checked ....")

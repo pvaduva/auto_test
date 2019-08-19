@@ -11,7 +11,7 @@ from consts.stx import MULTI_REGION_MAP
 from consts.auth import HostLinuxUser
 from consts.proj_vars import ProjVar
 from consts.timeout import HostTimeout
-from keywords import pm_helper, system_helper, host_helper
+from keywords import pm_helper, system_helper, host_helper, common
 from utils import cli, table_parser
 from utils.clients.ssh import SSHClient, ControllerClient
 from utils.tis_log import LOG
@@ -1148,9 +1148,7 @@ def _monitor_process(process, total_time, interval=5):
 
     global _final_processes_status
 
-    con_ssh = SSHClient(ProjVar.get_var('lab')['floating ip'])
-    con_ssh.connect(use_current=False)
-    ControllerClient.set_active_controller(con_ssh)
+    con_ssh = common.ssh_to_stx(set_client=True)
 
     used_pids = []
     died_pids = []

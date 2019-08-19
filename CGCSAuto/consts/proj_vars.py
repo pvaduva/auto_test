@@ -41,7 +41,8 @@ class ProjVar:
                   'OPENSTACK_DEPLOYED': None,
                   'DEFAULT_INSTANCE_BACKING': None,
                   'STX_KEYFILE_PATH': '~/.ssh/id_rsa',
-                  'OPENSTACK_DOMAIN': None
+                  'OPENSTACK_DOMAIN': None,
+                  'IPV6_OAM': None,
                   }
 
     @classmethod
@@ -132,11 +133,12 @@ class InstallVars:
                          install_subcloud=None,
                          deploy_openstack=True,
                          deploy_openstack_from_controller_1=False,
-                         ipv6_config=False,
+                         dc_ipv6=False,
                          helm_chart_path=None,
                          helm_chart_server=None,
                          no_manage=False,
-                         extract_deploy_config=False):
+                         extract_deploy_config=False,
+                         ipv6_oam=False):
 
         cls.__var_dict = {
             'LAB': lab,
@@ -152,7 +154,7 @@ class InstallVars:
             "DEPLOY_OPENSTACK": deploy_openstack,
             "DEPLOY_OPENSTACK_FROM_CONTROLLER1":
                 deploy_openstack_from_controller_1,
-            "IPV6_CONFIG": ipv6_config,
+            "DC_IPV6": dc_ipv6,
             # TIS BUILD info
             'BUILD_SERVER': build_server,
             'TIS_BUILD_DIR': host_build_dir,
@@ -192,7 +194,8 @@ class InstallVars:
             'CONTROLLER0_CEPH_MON_DEVICE': controller0_ceph_mon_device,
             'CONTROLLER1_CEPH_MON_DEVICE': controller1_ceph_mon_device,
             'CEPH_MON_GIB': ceph_mon_gib,
-            'EXTRACT_DEPLOY_CONFIG': extract_deploy_config
+            'EXTRACT_DEPLOY_CONFIG': extract_deploy_config,
+            'IPV6_OAM': ipv6_oam,
         }
 
     @classmethod

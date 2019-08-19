@@ -59,7 +59,7 @@ def install_setup(request):
     if InstallVars.get_install_var("RESUME"):
         try:
             if active_con.ssh_conn is None:
-                active_con.ssh_conn = install_helper.establish_ssh_connection(active_con.host_ip)
+                active_con.ssh_conn = install_helper.ssh_to_controller(active_con.host_ip)
         except:
             pass
 
@@ -113,7 +113,7 @@ def test_distributed_cloud_install(install_setup):
     lab_files_server = install_setup["servers"]["lab_files"]
     build_server = install_setup["servers"]["build"]
     load_path = InstallVars.get_install_var("TIS_BUILD_DIR")
-    ipv6_install = InstallVars.get_install_var("IPV6_CONFIG")
+    ipv6_install = InstallVars.get_install_var("DC_IPV6")
 
     fresh_install_helper.download_lab_files(lab=central_region_lab, lab_files_server=lab_files_server,
                                             build_server=build_server,
@@ -131,7 +131,7 @@ def test_distributed_cloud_install(install_setup):
     controller0_node.telnet_conn.hostname = "controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
     file_path = load_path + "/lab/yow/{}".format(central_region_lab['name'].replace('yow-', ''))
     LOG.info("Downloading central region's hosts bulk add xml file from path: {}".format(file_path))

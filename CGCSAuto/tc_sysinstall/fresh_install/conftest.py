@@ -10,7 +10,7 @@ from consts.proj_vars import InstallVars, ProjVar
 from consts.filepaths import BuildServerPath
 from consts.stx import VSwitchType
 from tc_sysinstall.fresh_install import fresh_install_helper
-from keywords import host_helper
+from keywords import host_helper, common
 
 ########################
 # Command line options #
@@ -49,26 +49,28 @@ def pytest_configure(config):
     kubernetes = config.getoption('kubernetes_config')
     no_openstack = config.getoption('no_openstack')
     deploy_openstack_from_controller_1 = config.getoption('deploy_openstack_from_controller_1')
-    ipv6_config = config.getoption('ipv6')
+    dc_ipv6 = config.getoption('dc_ipv6')
     helm_chart_path = config.getoption('helm_chart_path')
     no_manage = config.getoption('no_manage')
     extract_deploy_config = config.getoption('extract_deploy_config')
     vswitch_type = config.getoption('vswitch_type')
+    ipv6_oam = config.getoption('ipv6_oam')
 
-    if lab_arg:
-        lab_dict = setups.get_lab_dict(lab_arg)
-        lab_name = lab_dict['name']
-        if 'yow' in lab_name:
-            lab_name = lab_name[4:]
-        else:
-            lab_dict = None
-            lab_name = None
-    else:
+    if not lab_arg:
         raise ValueError("Lab name must be provided")
 
     vswitch_types = [VSwitchType.OVS, VSwitchType.OVS_DPDK, VSwitchType.AVS, VSwitchType.NONE]
     if vswitch_type not in vswitch_types:
-        raise ValueError("Invalid vswitch type {}; Valid types are: {} ".format(vswitch_type, vswitch_types))
+        raise ValueError("Invalid vswitch type {}; Valid types are: {} ".format(vswitch_type,
+                                                                                vswitch_types))
+
+    lab_dict = setups.get_lab_dict(lab_arg)
+    lab_name = lab_dict['name']
+    if 'yow' in lab_name:
+        lab_name = lab_name[4:]
+    else:
+        lab_dict = None
+        lab_name = None
 
     is_subcloud, sublcoud_name, dc_float_ip = setups.is_lab_subcloud(lab_dict)
 
@@ -87,7 +89,8 @@ def pytest_configure(config):
             # Take in-house StarlingX_Upstream_build
             tis_builds_dir = tis_builds_dir if tis_builds_dir else ''
             tis_build_dir = tis_build_dir if tis_build_dir else BuildServerPath.LATEST_BUILD
-            host_build_dir_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, tis_builds_dir, tis_build_dir)
+            host_build_dir_path = os.path.join(BuildServerPath.DEFAULT_WORK_SPACE, tis_builds_dir,
+                                               tis_build_dir)
 
         host_build_dir_path = os.path.normpath(host_build_dir_path)
         if host_build_dir_path.endswith('/latest_build'):
@@ -112,22 +115,25 @@ def pytest_configure(config):
 
         if not heat_templates:
             if BuildServerPath.BldsDirNames.TC_19_05_BUILD in host_build_dir_path:
-                heat_templates = os.path.join(BuildServerPath.EAR_HOST_BUILD_PATH, BuildServerPath.HEAT_TEMPLATES)
+                heat_templates = os.path.join(BuildServerPath.EAR_HOST_BUILD_PATH,
+                                              BuildServerPath.HEAT_TEMPLATES)
             else:
-                heat_templates = os.path.join(BuildServerPath.STX_HOST_BUILDS_DIR, 'latest_full_build',
+                heat_templates = os.path.join(BuildServerPath.STX_HOST_BUILDS_DIR,
+                                              'latest_full_build',
                                               BuildServerPath.HEAT_TEMPLATES)
         elif not os.path.isabs(heat_templates):
             heat_templates = os.path.join(host_build_dir_path, heat_templates)
 
         if not helm_chart_path:
-            helm_path_in_build = BuildServerPath.STX_HELM_CHARTS_CENGN if '/import/' in host_build_dir_path or '19.05' \
+            helm_path_in_build = BuildServerPath.STX_HELM_CHARTS_CENGN \
+                if '/import/' in host_build_dir_path or '19.05' \
                 in host_build_dir_path else BuildServerPath.TITANIUM_HELM_CHARTS
-            # helm_chart_path = os.path.join(BuildServerPath.STX_MASTER_CENGN_DIR, BuildServerPath.LATEST_BUILD,
-            #                                helm_path_in_build)
+
             helm_chart_path = os.path.join(host_build_dir_path,  helm_path_in_build)
 
         if boot_type.lower() in ('usb_burn', 'pxe_iso', 'iso_feed') and not iso_path:
-            iso_path_in_build = BuildServerPath.ISO_PATH_CENGN if '/import/' in host_build_dir_path \
+            iso_path_in_build = BuildServerPath.ISO_PATH_CENGN \
+                if '/import/' in host_build_dir_path \
                 else BuildServerPath.ISO_PATH
             iso_path = os.path.join(host_build_dir_path, iso_path_in_build)
 
@@ -146,10 +152,12 @@ def pytest_configure(config):
             lab=lab_arg, skip=skiplist, resume=resume_install, wipedisk=wipedisk, drop=drop_num,
             installconf_path=install_conf, controller0_ceph_mon_device=controller0_ceph_mon_device,
             controller1_ceph_mon_device=controller1_ceph_mon_device, ceph_mon_gib=ceph_mon_gib,
-            boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat, stop=stop_step,
-            patch_dir=patch_dir, vswitch_type=vswitch_type, boot_server=boot_server, dc_float_ip=dc_float_ip,
+            boot=boot_type, iso_path=iso_path, security=security, low_latency=low_lat,
+            stop=stop_step,
+            patch_dir=patch_dir, vswitch_type=vswitch_type, boot_server=boot_server,
+            dc_float_ip=dc_float_ip, ipv6_oam=ipv6_oam,
             install_subcloud=sublcoud_name, kubernetes=kubernetes,
-            no_openstack=no_openstack, ipv6_config=ipv6_config,
+            no_openstack=no_openstack, dc_ipv6=dc_ipv6,
             helm_chart_path=helm_chart_path, no_manage=no_manage,
             deploy_openstack_from_controller_1=deploy_openstack_from_controller_1,
             extract_deploy_config=extract_deploy_config)
@@ -182,7 +190,8 @@ def pytest_configure(config):
 
 
 def pytest_runtest_teardown(item):
-    install_testcases = ["test_simplex_install.py", "test_duplex_install.py", "test_standard_install.py",
+    install_testcases = ["test_simplex_install.py", "test_duplex_install.py",
+                         "test_standard_install.py",
                          "test_storage_install.py", "test_distributed_cloud_install.py"]
     for install_testcase in install_testcases:
         if install_testcase in item.nodeid:

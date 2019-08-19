@@ -12,6 +12,7 @@
 import os
 import re
 import time
+import ipaddress
 from contextlib import contextmanager
 from datetime import datetime
 
@@ -19,8 +20,10 @@ import pexpect
 
 from consts.auth import Tenant, TestFileServer, HostLinuxUser
 from consts.proj_vars import ProjVar
+from consts.build_server import YOW_TUXLAB2
+from consts.stx import OAM_IP_v6, Prompt
 from utils import exceptions
-from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, \
+from utils.clients.ssh import ControllerClient, NATBoxClient, SSHClient, SSHFromSSH, \
     get_cli_client
 from utils.tis_log import LOG
 
@@ -861,3 +864,55 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None,
     finally:
         if current_host != original_host:
             remote_ssh.close()
+
+
+def __get_ip_version(ip_addr):
+    try:
+        ip_version = ipaddress.ip_address(ip_addr).version
+    except ValueError:
+        ip_version = None
+
+    return ip_version
+
+
+def convert_to_ipv6(lab):
+    for ip_type in ('floating ip', 'controller-0 ip', 'controller-1 ip'):
+        if ip_type in lab:
+            ipv4_ip = lab[ip_type]
+            if __get_ip_version(ipv4_ip) == 4:
+                second_last, suffix = str(ipv4_ip).rsplit('.')[-2:]
+                if second_last == '151':
+                    suffix = '1{}'.format(suffix)
+                lab[ip_type] = OAM_IP_v6.format(suffix)
+    LOG.info('{} IPv6 OAM ip: {}'.format(lab['short_name'], lab['floating ip']))
+    return lab
+
+
+def ssh_to_stx(lab=None, set_client=False):
+    if not lab:
+        lab = ProjVar.get_var('LAB')
+
+    user = HostLinuxUser.get_user()
+    password = HostLinuxUser.get_password()
+    if ProjVar.get_var('IPV6_OAM'):
+        lab = convert_to_ipv6(lab)
+        LOG.info("SSH to IPv6 system {} via tuxlab2".format(lab['short_name']))
+        tuxlab2_ip = YOW_TUXLAB2['ip']
+        tux_user = TestFileServer.USER
+        tuxlab_prompt = r'{}@{}\:(.*)\$ '.format(tux_user, YOW_TUXLAB2['name'])
+        tuxlab2_ssh = SSHClient(host=tuxlab2_ip, user=tux_user,
+                                password=TestFileServer.PASSWORD, initial_prompt=tuxlab_prompt)
+        tuxlab2_ssh.connect(retry_timeout=300, retry_interval=30, timeout=60)
+        con_ssh = SSHFromSSH(ssh_client=tuxlab2_ssh, host=lab['floating ip'],
+                             user=user, password=password,
+                             initial_prompt=Prompt.CONTROLLER_PROMPT)
+    else:
+        con_ssh = SSHClient(lab['floating ip'], user=HostLinuxUser.get_user(),
+                            password=HostLinuxUser.get_password(),
+                            initial_prompt=Prompt.CONTROLLER_PROMPT)
+
+    con_ssh.connect(retry=True, retry_timeout=30, use_current=False)
+    if set_client:
+        ControllerClient.set_active_controller(con_ssh)
+
+    return con_ssh

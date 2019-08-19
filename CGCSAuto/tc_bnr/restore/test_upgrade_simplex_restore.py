@@ -54,7 +54,7 @@ def test_upgrade_restore(restore_setup):
     if not con_ssh:
         LOG.info("Establish ssh connection with {}".format(controller0))
         controller_prompt = Prompt.TIS_NODE_PROMPT_BASE.format(lab['name'].split('_')[0]) + '|' + Prompt.CONTROLLER_0
-        controller_node.ssh_conn = install_helper.establish_ssh_connection(controller_node.host_ip,
+        controller_node.ssh_conn = install_helper.ssh_to_controller(controller_node.host_ip,
                                                                            initial_prompt=controller_prompt)
         controller_node.ssh_conn.deploy_ssh_key()
         con_ssh = controller_node.ssh_conn
@@ -78,7 +78,7 @@ def test_upgrade_restore(restore_setup):
     LOG.info('re-connect to the active controller using ssh')
     con_ssh.close()
     time.sleep(60)
-    con_ssh = install_helper.establish_ssh_connection(controller_node.host_ip, retry=True)
+    con_ssh = install_helper.ssh_to_controller(controller_node.host_ip, retry=True)
     controller_node.ssh_conn = con_ssh
     ControllerClient.set_active_controller(con_ssh)
 

@@ -44,7 +44,7 @@ def install_setup(request):
     if InstallVars.get_install_var("RESUME"):
         try:
             if active_con.ssh_conn is None:
-                active_con.ssh_conn = install_helper.establish_ssh_connection(active_con.host_ip)
+                active_con.ssh_conn = install_helper.ssh_to_controller(active_con.host_ip)
         except:
             pass
 
@@ -118,7 +118,7 @@ def test_storage_install(install_setup):
         fresh_install_helper.wait_for_deploy_mgr_controller_config(controller0_node, lab=lab)
 
     if controller0_node.ssh_conn is None:
-        controller0_node.ssh_conn = install_helper.establish_ssh_connection(controller0_node.host_ip)
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
     if not deploy_mgr:
