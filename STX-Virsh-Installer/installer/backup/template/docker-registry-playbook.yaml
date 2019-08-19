@@ -1,0 +1,30 @@
+- name: Docker Registry Playbook
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Creates docker registry certificate directory
+      file:
+        path: /etc/docker/certs.d/tis-lab-registry.cumulus.wrs.com:9001
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Upload docker registry root certificate
+      copy:
+        src: /folk/cgts/lab/cumulus-docker-registry-ca-cert.pem
+        dest: /etc/docker/certs.d/tis-lab-registry.cumulus.wrs.com:9001/ca.crt
+        owner: root
+        group: root
+        mode: 0644
+      when: inventory_hostname != 'localhost'
+
+    - name: Copy docker registry root certificate
+      copy:
+        src: "{{ lookup('env', 'HOME') }}/cumulus-docker-registry-ca-cert.pem"
+        dest: /etc/docker/certs.d/tis-lab-registry.cumulus.wrs.com:9001/ca.crt
+        owner: root
+        group: root
+        mode: 0644
+      when: inventory_hostname == 'localhost'

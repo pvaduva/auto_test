@@ -1,0 +1,9 @@
+
+
+deployment_config: "{{ lookup('env', 'HOME') }}/deployment-config.yaml"
+
+
+
+
+
+
