@@ -17,27 +17,35 @@ def get_vif_type():
 @fixture(scope='module', autouse=True)
 def hosts_pci_device_info():
     # get lab host list
-    hosts_device_info = {}
+    actual_hosts_device_info = {}
     compute_hosts = host_helper.get_up_hypervisors()
     for host in compute_hosts:
         device_info = host_helper.get_host_pci_devices(host, dev_class='Co-processor')
         if device_info:
-            hosts_device_info[host] = device_info
-    LOG.info("Hosts device info: {}".format(hosts_device_info))
+            actual_hosts_device_info[host] = device_info
+    LOG.info("Hosts device info: {}".format(actual_hosts_device_info))
 
-    if not hosts_device_info:
+    if not actual_hosts_device_info:
         skip("co-processor PCI device not found")
 
+    hosts_device_info = {}
     sys_host_fields = ('address', 'name', 'vendor id', 'device id')
-    for host in hosts_device_info:
+    for host in actual_hosts_device_info:
         sys_devs = host_helper.get_host_devices(host, field=sys_host_fields)
-        actual_pci_devs = hosts_device_info[host]
+        actual_pci_devs = actual_hosts_device_info[host]
         hosts_device_info[host] = []
         for dev_info in actual_pci_devs:
             actual_pci_addr, actual_vendor_name, actual_dev_name, vf_dev_id, vf_count = dev_info
             actual_pci_addr = '0000:{}'.format(actual_pci_addr)
             assert actual_pci_addr in sys_devs[0], "Existing Co-processor pci device is not " \
                                                    "listed in system host-device-list"
+
+            hosts_with_dev = [host_ for host_, devs_ in actual_hosts_device_info.items() if
+                              actual_dev_name in [dev[2] for dev in devs_]]
+            if len(hosts_with_dev) < len(actual_hosts_device_info):
+                LOG.info('QAT dev {} is only configured on {}'.format(actual_dev_name,
+                                                                      hosts_with_dev))
+                continue
 
             dev_name = actual_dev_name.split(maxsplit=1)[0].lower()
             index = sys_devs[0].index(actual_pci_addr)
@@ -54,7 +62,10 @@ def hosts_pci_device_info():
             hosts_device_info[host].append(dev_info_dict)
 
     hosts_device_info = {k: v for k, v in hosts_device_info.items() if v}
+    if not hosts_device_info:
+        skip('No common QAT device configured on computes. Skip test.')
 
+    LOG.info('QAT devices to use for test: {}'.format(hosts_device_info))
     vm_helper.ensure_vms_quotas(vms_num=20)
     return hosts_device_info
 
@@ -142,21 +153,13 @@ def test_ea_vm_with_crypto_vfs(_flavors, hosts_pci_device_info):
     Args:
         _flavors:
         hosts_pci_device_info:
-        enable_device_and_unlock_compute:
-
-    Returns:
 
     """
     # hosts = list(hosts_pci_device_info.keys())
     vm_name = 'vm_with_pci_device'
     mgmt_net_id = network_helper.get_mgmt_net_id()
-    tenant_net_id = network_helper.get_tenant_net_id()
-    internal_net_id = network_helper.get_internal_net_id()
-    vif_type = get_vif_type()
 
-    nics = [{'net-id': mgmt_net_id},
-            {'net-id': tenant_net_id, 'vif-model': vif_type},
-            {'net-id': internal_net_id, 'vif-model': 'pci-sriov'}]
+    nics = [{'net-id': mgmt_net_id}]
 
     flavor_id = _flavors['flavor_qat_vf_1']
     LOG.tc_step("Boot a vm  {} with pci-sriov nics and flavor flavor_qat_vf_1".format(vm_name))
