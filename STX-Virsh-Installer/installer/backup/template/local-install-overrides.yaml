@@ -1,5 +1,0 @@
----
-ssl_ca_cert: "{{ lookup('env', 'HOME') }}/cumulus-docker-registry-ca-cert.pem"
-deployment_manager_chart: "{{ lookup('env', 'HOME') }}/titanium-deployment-manager.tgz"
-deployment_manager_overrides: "{{ lookup('env', 'HOME') }}/titanium-deployment-manager-overrides.yaml"
-deployment_config: "{{ lookup('env', 'HOME') }}/deployment-config.yaml"
