@@ -23,41 +23,6 @@ def host_inventory_pg(admin_home_pg, request):
     return host_inventory_pg
 
 
-def format_uptime(uptime):
-    """
-    Uptime displays in horizon may display like this format:
-        2 weeks, 10 hours
-        2 hours, 2 minutes
-        45 minutes
-        ...
-    """
-    uptime = int(uptime)
-    min_ = 60
-    hour = min_ * 60
-    day = hour * 24
-    week = day * 7
-    month = week * 4
-
-    uptime_months = uptime // month
-    uptime_weeks = uptime % month // week
-    uptime_days = uptime % month % week // day
-    uptime_hours = uptime % month % week % day // hour
-    uptime_mins = uptime % month % week % day % hour // min_
-
-    if uptime < min_:
-        return '0 minutes'
-    elif uptime < hour:
-        return '{} minute'.format(uptime_mins)
-    elif uptime < day:
-        return '{} hour, {} minute'.format(uptime_hours, uptime_mins)
-    elif uptime < week:
-        return '{} day, {} hour'.format(uptime_days, uptime_hours)
-    elif uptime < month:
-        return '{} week, {} day'.format(uptime_weeks, uptime_days)
-    elif uptime > week:
-        return '{} month'.format(uptime_months, uptime_weeks)
-
-
 @mark.platform_sanity
 def test_horizon_host_inventory_display(host_inventory_pg):
     """
@@ -83,7 +48,6 @@ def test_horizon_host_inventory_display(host_inventory_pg):
         headers_map = host_inventory_pg.hosts_table(host_name).get_cli_horizon_mapping()
         fields = list(headers_map.keys())
         cli_values = system_helper.get_host_values(host_name, fields, rtn_dict=True)
-        cli_values['uptime'] = format_uptime(cli_values['uptime'])
         if cli_values.get('peers'):
             cli_values['peers'] = cli_values.get('peers').get('name')
 
@@ -93,7 +57,7 @@ def test_horizon_host_inventory_display(host_inventory_pg):
             horizon_field = headers_map[cli_field]
             horizon_val = horizon_vals[horizon_field]
             if cli_field == 'uptime':
-                assert re.match(r'\d+ [dhm]', horizon_val)
+                assert re.match(r'\d+ [wdhm]', horizon_val)
             else:
                 assert str(cli_val).lower() in horizon_val.lower(), \
                     '{} {} display incorrectly, expect: {} actual: {}'.\
