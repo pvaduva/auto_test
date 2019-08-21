@@ -1,32 +1,21 @@
-import time
-
 from utils.tis_log import LOG
 from consts.stx import GuestImages, ImageMetadata
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
-from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, system_helper
+from keywords import vm_helper, nova_helper, host_helper, cinder_helper, glance_helper, \
+    system_helper
 from testfixtures.fixture_resources import ResourceCleanup
-from utils import exceptions
 
 
 def _check_secure_boot_on_vm(vm_id):
     vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm_id)
-    retry = 3
-    count = 0
-    in_vm = False
-    while count <= retry and not in_vm:
-        try:
-            with vm_helper.ssh_to_vm_from_natbox(vm_id, username='ubuntu', password='ubuntu', retry_timeout=800,
-                                                 timeout=800) as vm_ssh:
-                in_vm = True
-                code, output = vm_ssh.exec_cmd('mokutil --sb-state', fail_ok=False)
-                assert "SecureBoot enabled" in output, "Vm did not boot in secure mode: {}".format(output)
-        except exceptions.SSHException:
-            time.sleep(60)
-            with vm_helper.ssh_to_vm_from_natbox(vm_id, username='ubuntu', password='ubuntu', retry_timeout=800,
-                                                 timeout=800) as vm_ssh:
-                code, output = vm_ssh.exec_cmd('mokutil --sb-state', fail_ok=False)
-                assert "SecureBoot enabled" in output, "Vm did not boot in secure mode: {}".format(output)
-        count += 1
+
+    with vm_helper.ssh_to_vm_from_natbox(vm_id, username='ubuntu', password='ubuntu',
+                                         retry_timeout=360, timeout=60) as vm_ssh:
+        code, output = vm_ssh.exec_cmd('mokutil --sb-state', fail_ok=False)
+        assert "SecureBoot enabled" in output, "Vm did not boot in secure mode: {}".format(output)
+        # vm_ssh.exec_cmd('cat /var/log/cloud-init.log', expect_timeout=300)
+        # vm_ssh.exec_cmd('cat /var/log/cloud-init-output.log')
+        vm_ssh.exec_cmd('sync')
 
 
 def create_image_with_metadata(guest_os, property_key, values, disk_format, container_format):
@@ -60,7 +49,8 @@ def create_image_with_metadata(guest_os, property_key, values, disk_format, cont
             image_path = glance_helper.scp_guest_image(img_os=guest_os)
 
             image_id = glance_helper.create_image(source_image_file=image_path, cleanup='function',
-                                                  disk_format=disk_format, container_format=container_format,
+                                                  disk_format=disk_format,
+                                                  container_format=container_format,
                                                   **{property_key: value})[1]
             image_ids.append(image_id)
 
@@ -77,7 +67,8 @@ def create_image_with_metadata(guest_os, property_key, values, disk_format, cont
 
 def test_vm_actions_secure_boot_vm():
     """
-    This is to test a vm that is booted with secure boot and do the vm actions such as reboot, migrations
+    This is to test a vm that is booted with secure boot and do the vm actions such as reboot,
+    migrations
 
     :return:
 
@@ -88,26 +79,31 @@ def test_vm_actions_secure_boot_vm():
     volume_ids = []
     for guest_os, disk_format in zip(guests_os, disk_format):
         image_ids.append(create_image_with_metadata(guest_os=guest_os,
-                                                    property_key=ImageMetadata.FIRMWARE_TYPE, values=['uefi'],
-                                                    disk_format=disk_format, container_format='bare'))
+                                                    property_key=ImageMetadata.FIRMWARE_TYPE,
+                                                    values=['uefi'],
+                                                    disk_format=disk_format,
+                                                    container_format='bare'))
     # create a flavor
     flavor_id = nova_helper.create_flavor(vcpus=2, ram=1024, root_disk=5)[1]
     ResourceCleanup.add('flavor', flavor_id)
     # boot a vm using the above image
     for image_id in image_ids:
-        volume_ids.append(cinder_helper.create_volume(source_id=image_id[0], size=5, cleanup='function')[1])
+        volume_ids.append(cinder_helper.create_volume(source_id=image_id[0], size=5,
+                                                      cleanup='function')[1])
 
     block_device_dic = [{'id': volume_ids[1], 'source': 'volume', 'bootindex': 0},
                         {'id': volume_ids[0], 'source': 'volume', 'bootindex': 1}]
 
     vm_id = vm_helper.boot_vm(name='sec-boot-vm', source='block_device', flavor=flavor_id,
-                              block_device=block_device_dic, cleanup='function', guest_os=guests_os[0])[1]
+                              block_device=block_device_dic, cleanup='function',
+                              guest_os=guests_os[0])[1]
 
     _check_secure_boot_on_vm(vm_id=vm_id)
     if system_helper.is_aio_simplex():
         vm_actions_list = ('reboot', ['pause', 'unpause'], ['suspend', 'resume'])
     else:
-        vm_actions_list = ('reboot', ['pause', 'unpause'], ['suspend', 'resume'], 'live_migrate', 'cold_migrate',
+        vm_actions_list = ('reboot', ['pause', 'unpause'], ['suspend', 'resume'],
+                           'live_migrate', 'cold_migrate',
                            'cold_mig_revert')
 
     for vm_actions in vm_actions_list:
@@ -134,8 +130,10 @@ def test_lock_unlock_secure_boot_vm():
     volume_ids = []
     for guest_os, disk_format in zip(guests_os, disk_format):
         image_ids.append(create_image_with_metadata(guest_os=guest_os,
-                                                    property_key=ImageMetadata.FIRMWARE_TYPE, values=['uefi'],
-                                                    disk_format=disk_format, container_format='bare'))
+                                                    property_key=ImageMetadata.FIRMWARE_TYPE,
+                                                    values=['uefi'],
+                                                    disk_format=disk_format,
+                                                    container_format='bare'))
     # create a flavor
     flavor_id = nova_helper.create_flavor(vcpus=2, ram=1024, root_disk=5)[1]
     ResourceCleanup.add('flavor', flavor_id)
