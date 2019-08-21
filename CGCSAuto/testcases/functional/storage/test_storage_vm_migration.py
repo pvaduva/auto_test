@@ -430,14 +430,12 @@ def is_vm_filesystem_rw(vm_id, rootfs='vda', vm_image_name=None):
         mgmt_net = network_helper.get_mgmt_net_id()
         dhcp_host = network_helper.get_network_agents(field='Host', network=mgmt_net)
 
+        if isinstance(rootfs, str):
+            rootfs = [rootfs]
+        for fs in rootfs:
+            vm_helper.mount_attached_volume(vm_id=vm_id, rootfs=fs)
         with vm_helper.ssh_to_vm_from_natbox(vm_id, vm_image_name=vm_image_name, retry_timeout=300) as vm_ssh:
-            if isinstance(rootfs, str):
-                rootfs = [rootfs]
             for fs in rootfs:
-                num_of_rootfs_mounted = vm_ssh.exec_sudo_cmd ("mount | grep {} | wc -l".format(rootfs))[1]
-                if num_of_rootfs_mounted == 0:
-                    mount_cmd = "mount -t ext4 /dev/{} /".format(rootfs)
-                    vm_ssh.exec_sudo_cmd(mount_cmd)
                 cmd = "mount | grep {} | grep rw | wc -l".format(fs)
                 cmd_output = vm_ssh.exec_sudo_cmd(cmd)[1]
                 if cmd_output != '1':
