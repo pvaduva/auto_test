@@ -132,8 +132,7 @@ def pre_restore_checkup():
             result, mount_point = install_helper.is_usb_mounted(usb_device=usb_part_name,
                                                                 con_ssh=controller_conn)
             if not result:
-                assert install_helper.mount_usb(usb_device=usb_part_name,
-                                                con_ssh=controller_conn), \
+                assert install_helper.mount_usb(usb_device=usb_part_name, con_ssh=controller_conn), \
                     "Unable to mount USB partition {}".format(usb_part_name)
 
             tis_backup_files = install_helper.get_titanium_backup_filenames_usb(
@@ -750,8 +749,7 @@ def test_restore(restore_setup):
         system_backup_path = "{}{}".format(HostLinuxUser.get_home(), system_backup_file)
 
     compute_configured = install_helper.restore_controller_system_config(
-        system_backup=system_backup_path,
-        tel_net_session=controller_node.telnet_conn, is_aio=is_aio_lab)[2]
+        system_backup=system_backup_path, is_aio=is_aio_lab)[2]
 
     # return
 

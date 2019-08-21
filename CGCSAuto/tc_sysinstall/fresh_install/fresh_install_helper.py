@@ -133,7 +133,8 @@ def do_step(step_name=None):
     return do
 
 
-def install_controller(security=None, low_latency=None, lab=None, sys_type=None, usb=None, patch_dir=None,
+def install_controller(security=None, low_latency=None, lab=None, sys_type=None, usb=None,
+                       patch_dir=None,
                        patch_server_conn=None, final_step=None, init_global_vars=False):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     if lab is None:
@@ -269,7 +270,8 @@ def set_guest_image_var(sys_version=None):
     return guest_path
 
 
-def configure_controller_(controller0_node, config_file='TiS_config.ini_centos', lab=None, banner=True, branding=True,
+def configure_controller_(controller0_node, config_file='TiS_config.ini_centos', lab=None,
+                          banner=True, branding=True,
                           final_step=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
@@ -327,9 +329,9 @@ def unlock_active_controller(controller0_node, lab=None, final_step=None):
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def configure_controller(controller0_node, config_file='TiS_config.ini_centos',
-                         lab_setup_conf_file=None,
-                         lab=None, banner=True, branding=True, final_step=None):
+def configure_controller_dc(controller0_node, config_file='TiS_config.ini_centos',
+                            lab_setup_conf_file=None,
+                            lab=None, banner=True, branding=True, final_step=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
     kubernetes = InstallVars.get_install_var("KUBERNETES")
@@ -1289,7 +1291,8 @@ def verify_install_uuid(lab=None):
         controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
     LOG.info("Getting the install uuid from controller-0")
-    install_uuid = install_helper.get_host_install_uuid(controller0_node.name, controller0_node.ssh_conn)
+    install_uuid = install_helper.get_host_install_uuid(controller0_node.name,
+                                                        controller0_node.ssh_conn)
     LOG.info("The install uuid from controller-0 = {}".format(install_uuid))
 
     LOG.info("Verify all hosts have the same install uuid {}".format(install_uuid))

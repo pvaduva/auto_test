@@ -10,7 +10,7 @@ from consts.proj_vars import InstallVars, ProjVar
 from consts.filepaths import BuildServerPath
 from consts.stx import VSwitchType
 from tc_sysinstall.fresh_install import fresh_install_helper
-from keywords import host_helper, common
+from keywords import host_helper
 
 ########################
 # Command line options #
@@ -68,9 +68,6 @@ def pytest_configure(config):
     lab_name = lab_dict['name']
     if 'yow' in lab_name:
         lab_name = lab_name[4:]
-    else:
-        lab_dict = None
-        lab_name = None
 
     is_subcloud, sublcoud_name, dc_float_ip = setups.is_lab_subcloud(lab_dict)
 
@@ -94,8 +91,8 @@ def pytest_configure(config):
 
         host_build_dir_path = os.path.normpath(host_build_dir_path)
         if host_build_dir_path.endswith('/latest_build'):
-            build_id = build_info.get_latest_host_build_dir(build_server=build_server,
-                                                            latest_build_simlink=host_build_dir_path)
+            build_id = build_info.get_latest_host_build_dir(
+                build_server=build_server, latest_build_simlink=host_build_dir_path)
             host_build_dir_path = host_build_dir_path[:-len('latest_build')] + build_id
 
         files_server = build_server

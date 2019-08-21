@@ -866,7 +866,7 @@ def ssh_to_remote_node(host, username=None, password=None, prompt=None,
             remote_ssh.close()
 
 
-def __get_ip_version(ip_addr):
+def get_ip_version(ip_addr):
     try:
         ip_version = ipaddress.ip_address(ip_addr).version
     except ValueError:
@@ -875,15 +875,22 @@ def __get_ip_version(ip_addr):
     return ip_version
 
 
+def convert_ipv4_to_ipv6(ipv4_ip):
+    ip = ipv4_ip
+    if get_ip_version(ipv4_ip) == 4:
+        second_last, suffix = str(ipv4_ip).rsplit('.')[-2:]
+        if second_last == '151':
+            suffix = '1{}'.format(suffix)
+        ip = OAM_IP_v6.format(suffix)
+    return ip
+
+
 def convert_to_ipv6(lab):
     for ip_type in ('floating ip', 'controller-0 ip', 'controller-1 ip'):
         if ip_type in lab:
             ipv4_ip = lab[ip_type]
-            if __get_ip_version(ipv4_ip) == 4:
-                second_last, suffix = str(ipv4_ip).rsplit('.')[-2:]
-                if second_last == '151':
-                    suffix = '1{}'.format(suffix)
-                lab[ip_type] = OAM_IP_v6.format(suffix)
+            if get_ip_version(ipv4_ip) == 4:
+                lab[ip_type] = convert_ipv4_to_ipv6(ipv4_ip)
     LOG.info('{} IPv6 OAM ip: {}'.format(lab['short_name'], lab['floating ip']))
     return lab
 

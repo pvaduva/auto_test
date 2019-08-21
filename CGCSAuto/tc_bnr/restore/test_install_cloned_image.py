@@ -100,7 +100,7 @@ def test_install_cloned_image(install_clone_setup):
                     controller0_node.telnet_conn = None
 
     if controller0_node.telnet_conn:
-        install_helper.wipe_disk_hosts(hostnames,  close_telnet_conn=False)
+        install_helper.wipe_disk_hosts(hostnames)
 
     # power off hosts
     LOG.tc_step("Powring off system hosts ... ")

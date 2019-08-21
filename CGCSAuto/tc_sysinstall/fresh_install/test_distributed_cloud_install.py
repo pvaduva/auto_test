@@ -125,8 +125,8 @@ def test_distributed_cloud_install(install_setup):
     # TODO Change config and lab setup files to common name
     # config_file_ext = ''.join(central_region_lab['short_name'].split('_')[0:2])
     config_file = 'TiS_config_ipv6.ini_centos' if ipv6_install else 'TiS_config.ini_centos'
-    fresh_install_helper.configure_controller(controller0_node, config_file=config_file, lab=central_region_lab,
-                                              banner=False, branding=False)
+    fresh_install_helper.configure_controller_dc(controller0_node, config_file=config_file, lab=central_region_lab,
+                                                 banner=False, branding=False)
 
     controller0_node.telnet_conn.hostname = "controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)

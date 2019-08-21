@@ -4,7 +4,7 @@ import os.path
 import configparser
 import copy
 import re
-from keywords import vlm_helper
+from keywords import vlm_helper, common
 from consts.proj_vars import ProjVar
 from utils.tis_log import LOG
 
@@ -105,6 +105,10 @@ def create_node_dict(nodes, personality, vbox=False):
         node_info_dict['name'] = name
         node_info_dict['personality'] = personality
         node_info_dict['barcode'] = node
+        host_ip = node_info_dict.get('host_ip')
+        if host_ip and ProjVar.get_var('IPV6_OAM'):
+            node_info_dict['host_ip'] = common.convert_ipv4_to_ipv6(ipv4_ip=host_ip)
+
         node_dict[name] = Node(**node_info_dict)
         i += 1
 
@@ -184,9 +188,3 @@ class Node(object):
 
     def __str__(self):
         return str(vars(self))
-
-
-class Controller(Node):
-    """Controller representation."""
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
