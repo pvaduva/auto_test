@@ -1,0 +1,12 @@
+dns_servers:
+  - 128.224.144.130
+  - 8.8.8.8
+password_change_responses:
+  yes/no: 'yes'
+  sysadmin*: 'sysadmin'
+  \(current\) UNIX password: 'sysadmin'
+  (?i)New password: 'Li69nux*'
+  (?i)Retype new password: 'Li69nux*'
+ssl_ca_cert: "{{ lookup('env', 'LAB_DIR') }}/pki/cumulus-docker-registry-ca-cert.pem"
+deployment_manager_chart: /folk/cgts/lab/deployment-manager/titanium-deployment-manager-0.2.0.tgz
+deployment_manager_overrides: "{{ lookup('env', 'LAB_DIR') }}/deployment-manager/helm-chart-overrides.yaml"

@@ -1,0 +1,12 @@
+- hosts: all
+  gather_facts: false
+  tasks:
+    - fail:
+      # This is here to ensure that no one accidentally attempts to
+      # install remotely against *all* hosts in the inventory file.
+        msg: "Too many hosts specified; constrain the list of hosts with --limit"
+      when: play_hosts | length | int > 4
+
+- import_playbook: "{{ lookup('env', 'BOOTSTRAP_PLAYBOOK') | default('/usr/share/ansible/stx-ansible/playbooks/bootstrap/bootstrap.yml', true) }}"
+- import_playbook: user-ssh-public-key-playbook.yaml
+- import_playbook: "{{ lookup('env', 'DEPLOYMENT_MANAGER') | default('.', true) }}/titanium-deployment-manager-playbook.yaml"

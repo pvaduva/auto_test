@@ -1,0 +1,5 @@
+manager:
+  image:
+    repository: tis-lab-registry.cumulus.wrs.com:9001/titanium/deployment-manager
+    tag: latest
+    pullPolicy: IfNotPresent
