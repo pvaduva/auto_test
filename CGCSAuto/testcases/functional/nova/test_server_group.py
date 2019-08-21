@@ -27,8 +27,10 @@ def check_system():
 
 
 def create_flavor_and_server_group(storage_backing=None, policy=None):
-    LOG.tc_step("Create a flavor{}".format(' with {} aggregate'.format(storage_backing) if storage_backing else ''))
-    flavor_id = nova_helper.create_flavor('srv_grp', storage_backing=storage_backing, cleanup='function')[1]
+    LOG.tc_step("Create a flavor{}".format(' with {} aggregate'.format(storage_backing)
+                                           if storage_backing else ''))
+    flavor_id = nova_helper.create_flavor('srv_grp', storage_backing=storage_backing,
+                                          cleanup='function')[1]
 
     srv_grp_id = None
     if policy is not None:
@@ -39,12 +41,11 @@ def create_flavor_and_server_group(storage_backing=None, policy=None):
     return flavor_id, srv_grp_id
 
 
-# TC2915 + TC2915 + TC_6566 + TC2917
 # server group messaging is removed since STX
 @mark.parametrize(('policy', 'vms_num'), [
     param('affinity', 2, marks=mark.priorities('nightly', 'domain_sanity', 'sx_nightly')),
     ('soft_anti_affinity', 3),
-    param('anti_affinity', 2, marks=mark.priorities('nightly', 'domain_sanity')),   # For system with 2+ hypervisors
+    param('anti_affinity', 2, marks=mark.priorities('nightly', 'domain_sanity')),
     ('soft_affinity', 3),
 ])
 def test_server_group_boot_vms(policy, vms_num, check_system):
@@ -64,7 +65,8 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
         - Verify vm(s) booted successfully and is a member of the server group
         - Verify that all vms have the server group listed in nova show
         - If more than 1 hypervisor available:
-            - Attempt to live/cold migrate one of the vms, and check they succeed/fail based on server group setting
+            - Attempt to live/cold migrate one of the vms, and check they succeed/fail based on
+                server group setting
 
     Teardown:
         - Delete created vms, flavor, server group
@@ -75,7 +77,8 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
     if host_count < 2 and policy == 'anti_affinity':
         skip("Skip anti_affinity strict for system with 1 up host in storage aggregate")
 
-    flavor_id, srv_grp_id = create_flavor_and_server_group(storage_backing=storage_backing, policy=policy)
+    flavor_id, srv_grp_id = create_flavor_and_server_group(storage_backing=storage_backing,
+                                                           policy=policy)
     vm_hosts = []
     members = []
     failed_num = 0
@@ -83,8 +86,8 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
         failed_num = vms_num - host_count
         vms_num = host_count
 
-    LOG.tc_step("Boot {} vm(s) with flavor {} in server group {} and ensure they are successfully booted.".
-                format(vms_num, flavor_id, srv_grp_id))
+    LOG.tc_step("Boot {} vm(s) with flavor {} in server group {} and ensure they are "
+                "successfully booted.".format(vms_num, flavor_id, srv_grp_id))
 
     for i in range(vms_num):
         vm_id = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
@@ -92,28 +95,26 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
 
         LOG.tc_step("Check vm {} is in server group {}".format(vm_id, srv_grp_id))
         members = nova_helper.get_server_group_info(srv_grp_id, headers='Members')[0]
-        assert vm_id in members, "VM {} is not a member of server group {}".format(vm_id, srv_grp_id)
-
-        # Deprecated:
-        # server_group_output = nova_helper.get_vm_nova_show_values(vm_id, ['wrs-sg:server_group'])[0]
-        # assert srv_grp_id in server_group_output, \
-        #     'Server group info does not appear in nova show for vm {}'.format(vm_id)
+        assert vm_id in members, "VM {} is not a member of server group {}".format(vm_id,
+                                                                                   srv_grp_id)
 
         vm_hosts.append(vm_helper.get_vm_host(vm_id))
 
     for i in range(failed_num):
         LOG.tc_step("Boot vm{} in server group {} that's expected to fail".format(i, srv_grp_id))
-        code, vm_id, err = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id, hint={'group': srv_grp_id},
+        code, vm_id, err = vm_helper.boot_vm(name='srv_grp', flavor=flavor_id,
+                                             hint={'group': srv_grp_id},
                                              fail_ok=True, cleanup='function')
 
         vm_helper.get_vm_fault_message(vm_id)
         assert 1 == code, "Boot vm is not rejected"
 
     unique_vm_hosts = list(set(vm_hosts))
-    if policy == 'affinity' or host_count == 1:
+    if policy in ('affinity', 'soft_affinity') or host_count == 1:
         assert 1 == len(unique_vm_hosts)
     else:
-        assert len(unique_vm_hosts) == min(vms_num, host_count), "Improper VM hosts for anti-affinity policy"
+        assert len(unique_vm_hosts) == min(vms_num, host_count), \
+            "Improper VM hosts for anti-affinity policy"
 
     assert len(members) == vms_num
 
@@ -125,7 +126,8 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
         expt_fail = policy == 'affinity' or (policy == 'anti_affinity' and host_count-vms_num < 1)
 
         for action in ('live_migrate', 'cold_migrate'):
-            LOG.tc_step("Attempt to {} VMs and ensure it {}".format(action, 'fails' if expt_fail else 'pass'))
+            LOG.tc_step("Attempt to {} VMs and ensure it {}".format(
+                action, 'fails' if expt_fail else 'pass'))
             vm_hosts_after_mig = []
             for vm in members:
                 code, output = vm_helper.perform_action_on_vm(vm, action=action, fail_ok=True)
@@ -140,8 +142,8 @@ def test_server_group_boot_vms(policy, vms_num, check_system):
             if policy == 'affinity':
                 assert len(list(set(vm_hosts_after_mig))) == 1
             elif policy == 'anti_affinity':
-                assert len(list(set(vm_hosts_after_mig))) == vms_num, "Some VMs are on same host with " \
-                                                                      "strict anti-affinity polity"
+                assert len(list(set(vm_hosts_after_mig))) == vms_num, \
+                    "Some VMs are on same host with strict anti-affinity polity"
 
 
 def _wait_for_srv_grp_msg(vm_id, msg, timeout, res_events, listener_event, sent_event):
@@ -170,7 +172,8 @@ def _wait_for_srv_grp_msg(vm_id, msg, timeout, res_events, listener_event, sent_
 
 def trigger_srv_grp_msg(vm_id, action, timeout=60, sent_event=None, rcv_event=None):
     if action == 'message':
-        _send_srv_grp_msg(vm_id=vm_id, msg=MSG, timeout=timeout, sent_event=sent_event, rcv_event=rcv_event)
+        _send_srv_grp_msg(vm_id=vm_id, msg=MSG, timeout=timeout, sent_event=sent_event,
+                          rcv_event=rcv_event)
     elif action == 'pause':
         vm_helper.pause_vm(vm_id=vm_id)
         sent_event.set()
@@ -213,15 +216,18 @@ def check_server_group_messaging_enabled(vms, action):
     try:
         for vm in vms:
             listener_event.clear()
-            new_thread = MThread(_wait_for_srv_grp_msg, vm, msg, timeout=timeout, res_events=res_events,
+            new_thread = MThread(_wait_for_srv_grp_msg, vm, msg, timeout=timeout,
+                                 res_events=res_events,
                                  listener_event=listener_event, sent_event=sent_event)
             new_thread.start_thread(timeout=timeout+30)
             vm_threads.append(new_thread)
             listener_event.wait_for_event()
 
         time.sleep(5)
-        # this 60 seconds timeout is hardcoded for action == 'message' scenario to send the message out
-        sender_thread = MThread(trigger_srv_grp_msg, vm_sender, action, timeout=60, sent_event=sent_event,
+        # this 60 seconds timeout is hardcoded for action == 'message' scenario to send
+        # the message out
+        sender_thread = MThread(trigger_srv_grp_msg, vm_sender, action, timeout=60,
+                                sent_event=sent_event,
                                 rcv_event=res_events)
         sender_thread.start_thread(timeout=timeout)
 
@@ -247,7 +253,8 @@ def check_server_group_messaging_disabled(vms):
             assert code > 0
 
 
-# Deprecated - align with upstream. Remove test to reduce upstream test. anti_affinity with max count will fail.
+# Deprecated - align with upstream. Remove test to reduce upstream test. anti_affinity with
+# max count will fail.
 # TC2913, TC2915
 @mark.parametrize(('policy', 'min_count', 'max_count'), [
     # ('soft_affinity', 3, 4),  # TODO: add after cutover to stein
@@ -284,7 +291,8 @@ def _test_server_group_launch_vms_in_parallel(policy, min_count, max_count, chec
     flavor_id, srv_grp_id = create_flavor_and_server_group(policy=policy)
 
     LOG.tc_step("Boot vms with {} server group policy and min/max count".format(policy))
-    code, vms, msg = vm_helper.boot_vm(name='srv_grp_parallel', flavor=flavor_id, hint={'group': srv_grp_id},
+    code, vms, msg = vm_helper.boot_vm(name='srv_grp_parallel', flavor=flavor_id,
+                                       hint={'group': srv_grp_id},
                                        fail_ok=True, min_count=min_count, max_count=max_count,
                                        cleanup='function')
 
@@ -300,14 +308,17 @@ def _test_server_group_launch_vms_in_parallel(policy, min_count, max_count, chec
             assert expt_err in fault
 
     elif policy == 'anti_affinity' and max_count > host_count:
-        LOG.tc_step("Check anti-affinity strict vms_count=host_count when min_count <= hosts_count <= max_count")
+        LOG.tc_step("Check anti-affinity strict vms_count=host_count when "
+                    "min_count <= hosts_count <= max_count")
         assert 0 == code, msg
         assert host_count == len(vms), "VMs number is not the same as qualified hosts number"
 
     else:
-        LOG.tc_step("Check vms_count=max_count when policy={} and host_count={}".format(policy, host_count))
+        LOG.tc_step("Check vms_count=max_count when policy={} and host_count={}".format(
+            policy, host_count))
         assert 0 == code, msg
-        assert max_count == len(vms), "Expecting vms booted is the same as max count when max count <= group size"
+        assert max_count == len(vms), "Expecting vms booted is the same as max count when " \
+                                      "max count <= group size"
 
     # if code == 0:
     LOG.tc_step("Check vms are in server group {}: {}".format(srv_grp_id, vms))

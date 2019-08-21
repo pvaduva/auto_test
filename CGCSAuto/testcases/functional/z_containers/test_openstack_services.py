@@ -22,7 +22,8 @@ def check_nodes():
 
 def check_openstack_pods_healthy(host, timeout):
     with host_helper.ssh_to_host(hostname=host) as con_ssh:
-        kube_helper.wait_for_pods_healthy(namespace='stx-openstack', con_ssh=con_ssh, timeout=timeout)
+        kube_helper.wait_for_pods_healthy(namespace='stx-openstack', con_ssh=con_ssh,
+                                          timeout=timeout)
 
 
 @mark.sanity
@@ -42,9 +43,11 @@ def test_openstack_services_healthy():
     status = container_helper.get_apps(application='stx-openstack')[0]
     if not status:
         skip('Openstack application is not uploaded.')
-    assert status == AppStatus.APPLIED, "stx-openstack is in {} status instead of applied".format(status)
+    assert status == AppStatus.APPLIED, "stx-openstack is in {} status instead of " \
+                                        "applied".format(status)
 
-    LOG.tc_step("Check openstack pods are in running or completed status via kubectl get on all controllers")
+    LOG.tc_step("Check openstack pods are in running or completed status via kubectl get on all "
+                "controllers")
     controllers = get_valid_controllers()
     for host in controllers:
         check_openstack_pods_healthy(host=host, timeout=60)
@@ -99,7 +102,8 @@ def test_reapply_stx_openstack_no_change(stx_openstack_required, check_nodes, co
     LOG.tc_step("Re-apply stx-openstack application")
     container_helper.apply_app(app_name='stx-openstack')
 
-    LOG.tc_step("Check openstack pods in good state on all controllers after stx-openstack re-applied")
+    LOG.tc_step("Check openstack pods in good state on all controllers after stx-openstack "
+                "re-applied")
     for host in get_valid_controllers():
         check_openstack_pods_healthy(host=host, timeout=120)
 
@@ -120,10 +124,12 @@ def reset_if_modified(request):
         post_status = container_helper.get_apps(application=app_name, field='status')[0]
         if not post_status.endswith('ed'):
             LOG.fixture_step("Wait for application apply finish")
-            container_helper.wait_for_apps_status(apps=app_name, status=AppStatus.APPLIED, timeout=1800,
+            container_helper.wait_for_apps_status(apps=app_name, status=AppStatus.APPLIED,
+                                                  timeout=1800,
                                                   check_interval=15, fail_ok=False)
 
-        user_overrides = container_helper.get_helm_override_values(chart='nova', namespace='openstack',
+        user_overrides = container_helper.get_helm_override_values(chart='nova',
+                                                                   namespace='openstack',
                                                                    fields='user_overrides')[0]
         if not user_overrides or user_overrides == 'None':
             LOG.info("No change in nova user_overrides. Do nothing.")
@@ -131,35 +137,47 @@ def reset_if_modified(request):
 
         LOG.fixture_step("Update nova helm-override to reset values")
         container_helper.update_helm_override(chart='nova', namespace='openstack', reset_vals=True)
-        user_overrides = container_helper.get_helm_override_values(chart='nova', namespace='openstack',
+        user_overrides = container_helper.get_helm_override_values(chart='nova',
+                                                                   namespace='openstack',
                                                                    fields='user_overrides')[0]
         assert not user_overrides, "nova helm user_overrides still exist after reset-values"
 
         LOG.fixture_step("Re-apply stx-openstack application and ensure it is applied")
-        container_helper.apply_app(app_name='stx-openstack', check_first=False, applied_timeout=1800)
+        container_helper.apply_app(app_name='stx-openstack', check_first=False,
+                                   applied_timeout=1800)
 
         check_cmd = 'grep foo {}'.format(conf_path)
-        LOG.fixture_step("Ensure user_override is removed from {} in nova-compute containers".format(conf_path))
+        LOG.fixture_step("Ensure user_override is removed from {} in nova-compute "
+                         "containers".format(conf_path))
         for host in valid_hosts:
             with host_helper.ssh_to_host(host) as host_ssh:
-                LOG.info("Wait for nova-cell-setup completed on {}".format(host))
-                kube_helper.wait_for_openstack_pods_status(application='nova', component='cell-setup', con_ssh=host_ssh,
-                                                           status=PodStatus.COMPLETED)
+                LOG.info("Wait for nova-compute pods running on {}".format(host))
+                kube_helper.wait_for_openstack_pods_status(application='nova',
+                                                           component='compute',
+                                                           con_ssh=host_ssh,
+                                                           status=PodStatus.RUNNING)
 
                 LOG.info("Check new release generated for nova compute pods on {}".format(host))
                 nova_compute_pods = kube_helper.get_openstack_pods(field='NAME', application='nova',
-                                                                   component='compute', con_ssh=host_ssh)[0]
+                                                                   component='compute',
+                                                                   con_ssh=host_ssh)[0]
                 nova_compute_pods = sorted(nova_compute_pods)
                 if NEW_NOVA_COMPUTE_PODS:
-                    assert NEW_NOVA_COMPUTE_PODS != nova_compute_pods, "No new release generated after reset values"
+                    assert NEW_NOVA_COMPUTE_PODS != nova_compute_pods, \
+                        "No new release generated after reset values"
 
-                LOG.info("Check custom conf is removed from {} in nova compute container on {}".format(conf_path, host))
+                LOG.info("Check custom conf is removed from {} in nova compute "
+                         "container on {}".format(conf_path, host))
                 for nova_compute_pod in nova_compute_pods:
-                    code, output = kube_helper.exec_cmd_in_container(cmd=check_cmd, pod=nova_compute_pod, fail_ok=True,
-                                                                     con_ssh=host_ssh, namespace='openstack',
+                    code, output = kube_helper.exec_cmd_in_container(cmd=check_cmd,
+                                                                     pod=nova_compute_pod,
+                                                                     fail_ok=True,
+                                                                     con_ssh=host_ssh,
+                                                                     namespace='openstack',
                                                                      container_name='nova-compute')
-                    assert code == 1, "{} on {} still contains user override info after reset nova helm-override " \
-                                      "values and reapply stx-openstack app: {}".format(conf_path, host, output)
+                    assert code == 1, "{} on {} still contains user override info after " \
+                                      "reset nova helm-override values and reapply stx-openstack " \
+                                      "app: {}".format(conf_path, host, output)
     request.addfinalizer(reset)
 
     return valid_hosts, conf_path
@@ -181,7 +199,8 @@ def test_stx_openstack_helm_override_update_and_reset(check_nodes, reset_if_modi
     Test Steps:
         - Update nova helm-override default conf
         - Check nova helm-override is updated in system helm-override-show
-        - Re-apply stx-openstack application and ensure it is applied (in applied status and alarm cleared)
+        - Re-apply stx-openstack application and ensure it is applied (in applied status and
+            alarm cleared)
         - On all controller(s):
             - Check nova compute pods names are changed in kubectl get
             - Check actual nova-compute.conf is updated in all nova-compute containers
@@ -201,7 +220,8 @@ def test_stx_openstack_helm_override_update_and_reset(check_nodes, reset_if_modi
     LOG.tc_step("Check nova helm-override is updated in system helm-override-show")
     fields = ('combined_overrides', 'system_overrides', 'user_overrides')
     combined_overrides, system_overrides, user_overrides = \
-        container_helper.get_helm_override_values(chart='nova', namespace='openstack', fields=fields)
+        container_helper.get_helm_override_values(chart='nova', namespace='openstack',
+                                                  fields=fields)
 
     assert 'bar' == user_overrides['conf']['nova'].get('DEFAULT', {}).get('foo'), \
         "{} is not shown in user overrides".format(new_conf)
@@ -210,38 +230,41 @@ def test_stx_openstack_helm_override_update_and_reset(check_nodes, reset_if_modi
     assert not system_overrides['conf']['nova'].get('DEFAULT', {}).get('foo'), \
         "User override {} listed in system overrides unexpectedly".format(new_conf)
 
-    prev_nova_cell_setup_pods = kube_helper.get_openstack_pods(application='nova', component='cell-setup',
-                                                               fail_ok=False)
-    prev_count = len(prev_nova_cell_setup_pods)
-    prev_nova_compute_pods = sorted(kube_helper.get_openstack_pods(application='nova', component='compute'))
+    prev_nova_compute_pods = sorted(kube_helper.get_openstack_pods(application='nova',
+                                                                   component='compute'))
 
     LOG.tc_step("Re-apply stx-openstack application and ensure it is applied")
-    container_helper.apply_app(app_name='stx-openstack', check_first=False, applied_timeout=1800, fail_ok=False,
+    container_helper.apply_app(app_name='stx-openstack', check_first=False, applied_timeout=1800,
+                               fail_ok=False,
                                check_interval=10)
 
     post_names = None
     for host in valid_hosts:
         with host_helper.ssh_to_host(hostname=host) as host_ssh:
-            LOG.tc_step("Wait for all nova-cell-setup pods reach completed status on {}".format(host))
-            kube_helper.wait_for_openstack_pods_status(application='nova', component='cell-setup',
-                                                       status=PodStatus.COMPLETED,
+            LOG.tc_step("Wait for all nova-compute pods running on {}".format(host))
+            kube_helper.wait_for_openstack_pods_status(application='nova', component='compute',
+                                                       status=PodStatus.RUNNING,
                                                        con_ssh=host_ssh)
 
-            LOG.tc_step("Check nova compute pods names are changed in kubectl get on {}".format(host))
-            post_nova_cell_setup_pods = kube_helper.get_openstack_pods(application='nova', component='cell-setup',
-                                                                       con_ssh=host_ssh)
-            post_nova_compute_pods = sorted(kube_helper.get_openstack_pods(application='nova', component='compute',
+            LOG.tc_step("Check nova compute pods names are changed in "
+                        "kubectl get on {}".format(host))
+            post_nova_compute_pods = sorted(kube_helper.get_openstack_pods(application='nova',
+                                                                           component='compute',
                                                                            con_ssh=host_ssh))
 
-            assert prev_count+1 == len(post_nova_cell_setup_pods), "No new nova cell setup pod created"
             if post_names:
-                assert post_nova_compute_pods == post_names,  "nova compute pods names differ on two controllers"
+                assert post_nova_compute_pods == post_names,  \
+                    "nova compute pods names differ on two controllers"
             else:
                 post_names = post_nova_compute_pods
-                assert prev_nova_compute_pods != post_names, "No new release generated for nova compute pods"
+                assert prev_nova_compute_pods != post_names, \
+                    "No new release generated for nova compute pods"
 
-            LOG.tc_step("Check actual {} is updated in nova-compute containers on {}".format(conf_path, host))
+            LOG.tc_step("Check actual {} is updated in nova-compute containers on {}".format(
+                conf_path, host))
             check_cmd = 'grep foo {}'.format(conf_path)
             for nova_compute_pod in post_nova_compute_pods:
-                kube_helper.exec_cmd_in_container(cmd=check_cmd, pod=nova_compute_pod, fail_ok=False, con_ssh=host_ssh,
-                                                  namespace='openstack', container_name='nova-compute')
+                kube_helper.exec_cmd_in_container(cmd=check_cmd, pod=nova_compute_pod,
+                                                  fail_ok=False, con_ssh=host_ssh,
+                                                  namespace='openstack',
+                                                  container_name='nova-compute')
