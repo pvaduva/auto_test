@@ -4,7 +4,8 @@ from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.reasons import SkipSysType
 from consts.kpi_vars import Swact, SwactUncontrolled, KPI_DATE_FORMAT
-from keywords import host_helper, system_helper, vm_helper, network_helper, common, kube_helper
+from keywords import host_helper, system_helper, vm_helper, network_helper, common, kube_helper, \
+    container_helper
 
 
 @mark.sanity
@@ -77,8 +78,9 @@ def test_swact_controllers(wait_for_con_drbd_sync_complete):
                                      timeout=30)
 
 
+@mark.kpi
 @mark.platform_sanity
-def test_swact_controller_platform(wait_for_con_drbd_sync_complete):
+def test_swact_controller_platform(wait_for_con_drbd_sync_complete, collect_kpi):
     """
     Verify swact active controller
 
@@ -98,6 +100,10 @@ def test_swact_controller_platform(wait_for_con_drbd_sync_complete):
     pre_active_controller, pre_standby_controller = system_helper.get_active_standby_controllers()
     assert pre_standby_controller, "No standby controller available"
 
+    init_time = None
+    if collect_kpi:
+        init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
+
     LOG.tc_step("Swact active controller and ensure active controller is changed")
     host_helper.swact_host(hostname=pre_active_controller)
 
@@ -105,22 +111,17 @@ def test_swact_controller_platform(wait_for_con_drbd_sync_complete):
     kube_helper.wait_for_nodes_ready(hosts=(pre_active_controller, pre_standby_controller),
                                      timeout=30)
 
-
-@mark.kpi
-def test_swact_controlled_kpi(collect_kpi):
-    if not collect_kpi:
-        skip("KPI only test. Skip due to kpi collection is not enabled.")
-    start_host, end_host = system_helper.get_active_standby_controllers()
-    if not end_host:
-        skip("No standby host to swact to")
-
-    init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
-    host_helper.swact_host(hostname=start_host)
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Swact.NAME, init_time=init_time,
-                              log_path=Swact.LOG_PATH, end_pattern=Swact.END, host=end_host,
-                              start_host=start_host,
-                              start_pattern=Swact.START, start_path=Swact.START_PATH, uptime=1,
-                              fail_ok=False)
+    if collect_kpi:
+        kpi_name = Swact.NAME
+        if container_helper.is_stx_openstack_deployed():
+            kpi_name += '_platform'
+        kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+                                  init_time=init_time,
+                                  log_path=Swact.LOG_PATH, end_pattern=Swact.END,
+                                  host=pre_standby_controller,
+                                  start_host=pre_active_controller,
+                                  start_pattern=Swact.START, start_path=Swact.START_PATH, uptime=1,
+                                  fail_ok=False)
 
 
 @mark.kpi
@@ -133,7 +134,10 @@ def test_swact_uncontrolled_kpi(collect_kpi):
 
     init_time = common.get_date_in_format(date_format=KPI_DATE_FORMAT)
     host_helper.reboot_hosts(hostnames=start_host)
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=SwactUncontrolled.NAME,
+    kpi_name = SwactUncontrolled.NAME
+    if container_helper.is_stx_openstack_deployed():
+        kpi_name += '_platform'
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                               init_time=init_time,
                               log_path=SwactUncontrolled.LOG_PATH,
                               end_pattern=SwactUncontrolled.END, host=end_host,

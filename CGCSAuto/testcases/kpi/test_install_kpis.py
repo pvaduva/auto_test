@@ -69,7 +69,8 @@ def test_config_controller_kpi(collect_kpi):
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                               log_path=log_path, lab_name=lab_name, host=host,
                               start_pattern=start_pattern,
-                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15, fail_ok=False)
+                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15,
+                              fail_ok=False)
 
 
 @mark.kpi
@@ -79,7 +80,7 @@ def test_lab_setup_kpi(collect_kpi):
     """
 
     if not collect_kpi:
-        skip("KPI only test.  Skip due to kpi collection is not enabled")
+        skip("KPI only test. Skip due to kpi collection is not enabled")
 
     lab_name = ProjVar.get_var("LAB_NAME")
     log_path = LabSetup.LOG_PATH
@@ -91,12 +92,14 @@ def test_lab_setup_kpi(collect_kpi):
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
                               log_path=log_path, lab_name=lab_name, host=host,
                               start_pattern=start_pattern,
-                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15, fail_ok=False)
+                              end_pattern=end_pattern, sudo=True, topdown=True, uptime=15,
+                              fail_ok=False)
 
 
+# Taken out since we no longer use heat to configure labs.
 @mark.kpi
 @mark.usefixtures("heat_precheck")
-def test_heat_kpi(collect_kpi):
+def _test_heat_kpi(collect_kpi):
     """
     Time to launch heat stacks.  Only applies to labs where .heat_resources is
     present.

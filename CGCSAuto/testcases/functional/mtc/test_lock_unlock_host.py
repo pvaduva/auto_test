@@ -9,7 +9,7 @@ from utils.kpi import kpi_log_parser
 from consts.stx import HostOperState, HostAvailState
 from consts.kpi_vars import HostLock, HostUnlock, KPI_DATE_FORMAT
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import host_helper, system_helper, common
+from keywords import host_helper, system_helper, common, container_helper
 
 
 @mark.platform_sanity
@@ -28,14 +28,16 @@ def test_lock_active_controller_reject(no_simplex):
 
     # lock standby controller node and verify it is successfully locked
     LOG.tc_step("Lock active controller and ensure it fail to lock")
-    exit_code, cmd_output = host_helper.lock_host(active_controller, fail_ok=True, swact=False, check_first=False)
-    assert exit_code == 1, 'Expect locking active controller to be rejected. Actual: {}'.format(cmd_output)
+    exit_code, cmd_output = host_helper.lock_host(active_controller, fail_ok=True, swact=False,
+                                                  check_first=False)
+    assert exit_code == 1, 'Expect locking active controller to be rejected. ' \
+                           'Actual: {}'.format(cmd_output)
     status = system_helper.get_host_values(active_controller, 'administrative')[0]
     assert status == 'unlocked', "Fail: The active controller was locked."
 
 
 @mark.parametrize('host_type', [
-    param('controller', marks=mark.priorities('platform_sanity', 'sanity', 'cpe_sanity', 'kpi')),
+    param('controller', marks=mark.priorities('platform_sanity', 'kpi')),
     param('compute', marks=mark.priorities('platform_sanity', 'kpi')),
     param('storage', marks=mark.priorities('platform_sanity', 'kpi')),
 ])
@@ -67,7 +69,8 @@ def test_lock_unlock_host(host_type, collect_kpi):
         elif host_type == 'storage' and not system_helper.is_storage_system():
             skip("System does not have storage nodes")
 
-        hosts = system_helper.get_hosts(personality=host_type, availability=HostAvailState.AVAILABLE,
+        hosts = system_helper.get_hosts(personality=host_type,
+                                        availability=HostAvailState.AVAILABLE,
                                         operational=HostOperState.ENABLED)
 
         assert hosts, "No good {} host on system".format(host_type)
@@ -81,27 +84,38 @@ def test_lock_unlock_host(host_type, collect_kpi):
     time.sleep(20)
 
     # unlock standby controller node and verify controller node is successfully unlocked
-    LOG.tc_step("Unlock {} host - {} and ensure it is successfully unlocked".format(host_type, host))
+    LOG.tc_step("Unlock {} host - {} and ensure it is successfully unlocked".format(host_type,
+                                                                                    host))
     host_helper.unlock_host(host)
 
     if collect_kpi:
         LOG.info("Collect kpi for lock/unlock {}".format(host_type))
-        code_lock, out_lock = kpi_log_parser.record_kpi(local_kpi_file=collect_kpi,
-                                                        kpi_name=HostLock.NAME.format(host_type),
-                                                        host=None, log_path=HostLock.LOG_PATH,
-                                                        end_pattern=HostLock.END.format(host),
-                                                        start_pattern=HostLock.START.format(host),
-                                                        start_path=HostLock.START_PATH,
-                                                        init_time=init_time)
+        lock_kpi_name = HostLock.NAME.format(host_type)
+        unlock_kpi_name = HostUnlock.NAME.format(host_type)
+        if not container_helper.is_stx_openstack_deployed():
+            lock_kpi_name += '_platform'
+            unlock_kpi_name += '_platform'
+
+        code_lock, out_lock = kpi_log_parser.record_kpi(
+            local_kpi_file=collect_kpi,
+            kpi_name=lock_kpi_name,
+            host=None, log_path=HostLock.LOG_PATH,
+            end_pattern=HostLock.END.format(host),
+            start_pattern=HostLock.START.format(host),
+            start_path=HostLock.START_PATH,
+            init_time=init_time)
 
         time.sleep(30)      # delay in sysinv log vs nova hypervisor list
-        code_unlock, out_unlock = kpi_log_parser.record_kpi(local_kpi_file=collect_kpi,
-                                                            kpi_name=HostUnlock.NAME.format(host_type), host=None,
-                                                            log_path=HostUnlock.LOG_PATH,
-                                                            end_pattern=HostUnlock.END[host_type].format(host),
-                                                            init_time=init_time,
-                                                            start_pattern=HostUnlock.START.format(host),
-                                                            start_path=HostUnlock.START_PATH)
+        code_unlock, out_unlock = kpi_log_parser.record_kpi(
+            local_kpi_file=collect_kpi,
+            kpi_name=unlock_kpi_name, host=None,
+            log_path=HostUnlock.LOG_PATH,
+            end_pattern=HostUnlock.END[host_type].format(host),
+            init_time=init_time,
+            start_pattern=HostUnlock.START.format(host),
+            start_path=HostUnlock.START_PATH)
 
-        assert code_lock == 0, 'Failed to collect kpi for host-lock {}. Error: \n'.format(host, out_lock)
-        assert code_unlock == 0, 'Failed to collect kpi for host-unlock {}. Error: \n'.format(host, out_lock)
+        assert code_lock == 0, 'Failed to collect kpi for host-lock {}. ' \
+                               'Error: \n'.format(host, out_lock)
+        assert code_unlock == 0, 'Failed to collect kpi for host-unlock {}. ' \
+                                 'Error: \n'.format(host, out_lock)

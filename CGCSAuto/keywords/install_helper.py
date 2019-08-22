@@ -3335,8 +3335,10 @@ def get_git_name(lab_name):
     return lab_name
 
 
-def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None, close_telnet=False,
-                             banner=True, branding=True, kubernetes=False, subcloud=False, ansible=False,
+def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos", lab=None,
+                             close_telnet=False,
+                             banner=True, branding=True, kubernetes=False, subcloud=False,
+                             ansible=False,
                              deploy_manager=False):
     """
     Runs the config_controller command on the active_controller host
@@ -3387,18 +3389,12 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             msg = "The controller configuration file {}  not found in {}".format(config_file, HostLinuxUser.get_home())
             raise exceptions.InstallError(msg)
         if deploy_manager:
-            # cmd = 'ansible-playbook lab-install-playbook.yaml -e "deployment_config=deployment-config.yaml ' \
-            #       'deployment_manager_overrides=helm-chart-overrides.yaml"'
             cmd = 'ansible-playbook lab-install-playbook.yaml -e "@local-install-overrides.yaml"'
 
             con_telnet.set_prompt(r'.*:~\$\s?')
 
         elif not ansible:
             extra_option = '--force'
-            # extra_option = '--force' \
-            #     if con_telnet.exec_sudo_cmd("config_controller --help | grep \'\\-\\-force\'", fail_ok=True)[0] == 0 \
-            #     else ''
-
             config_cmd = "config_region" if InstallVars.get_install_var("MULTI_REGION") \
                 else "config_controller {}--config-file".format('--kubernetes ' if kubernetes else '')\
                 if not subcloud else "config_subcloud"
@@ -3411,7 +3407,9 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             con_telnet.set_prompt(r'.*:~\$\s?')
 
         os.environ["TERM"] = "xterm"
-        rc, output = con_telnet.exec_cmd(cmd, expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT, fail_ok=True)
+        rc, output = con_telnet.exec_cmd(cmd,
+                                         expect_timeout=InstallTimeout.CONFIG_CONTROLLER_TIMEOUT,
+                                         fail_ok=True)
 
         if rc != 0 or (ansible and analyze_ansible_output(output)[0] != 0) or (not ansible and "failed" in output):
             err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
