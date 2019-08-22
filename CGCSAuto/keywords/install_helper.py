@@ -2605,10 +2605,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         controller0.telnet_conn.login()
         LOG.info("Removing patches")
         remove_patches(lab)
-        if ProjVar.get_var('IPV6_OAM'):
-            setup_ipv6_oam(controller0)
-        elif boot_usb:
-            # Already set if ipv6.
+        if boot_usb:
             setup_networking(controller0)
 
     if init_global_vars:

@@ -195,6 +195,17 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
     test_step = "Download lab files"
     LOG.tc_step(test_step)
     if do_step(test_step):
+        con0_v6_ip = None
+        if ProjVar.get_var('IPV6_OAM'):
+            con0_v6_ip = lab['controller-0 ip']
+            # Use ipv4 ip to download files temporarily
+            con0_v4_ip = con0_v6_ip.rsplit(':', maxsplit=1)[-1]
+            if len(con0_v4_ip) == 4 and con0_v4_ip.startswith('1'):
+                con0_v4_ip = '128.224.151.{}'.format(con0_v4_ip[-3:])
+            else:
+                con0_v4_ip = '128.224.150.{}'.format(con0_v4_ip[-3:])
+            lab['controller-0 ip'] = con0_v4_ip
+
         LOG.info("Downloading heat templates with best effort")
         install_helper.download_heat_templates(lab, build_server, load_path, heat_path=heat_path)
         LOG.info("Downloading guest image")
@@ -212,6 +223,10 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
             helm_chart_server = build_server
         install_helper.download_stx_helm_charts(lab, helm_chart_server,
                                                 stx_helm_charts_path=helm_chart_path)
+
+        if ProjVar.get_var('IPV6_OAM'):
+            lab['controller-0 ip'] = con0_v6_ip
+            install_helper.setup_ipv6_oam(lab['controller-0'])
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
