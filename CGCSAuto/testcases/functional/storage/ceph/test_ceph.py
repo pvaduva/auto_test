@@ -147,7 +147,7 @@ def test_ceph_mon_process_kill(monitor):
             root_ssh.exec_cmd(cmd)
 
             LOG.tc_step('Stop the ceph monitor')
-            cmd = 'service ceph stop mon.{}'.format(monitor)
+            cmd = 'service ceph stop mon.{}'.format('controller' if system_helper.is_aio_duplex() else monitor)
             root_ssh.exec_cmd(cmd)
 
     LOG.tc_step('Check that ceph monitor failure alarm is raised')
