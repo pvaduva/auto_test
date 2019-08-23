@@ -2632,8 +2632,9 @@ def setup_ipv6_oam(controller0, conf_server=None):
     con_telnet.exec_cmd("{} ip -6 route delete default".format(sudo_prefix))
     con_telnet.exec_cmd("{} ip -6 route add default via 2620:10a:a001:a103::6:0".
                         format(sudo_prefix))
-    con_telnet.exec_cmd('{} echo "nameserver 2620:10a:a001:a103::2" > /etc/resolv.conf'.
-                        format(sudo_prefix))
+    con_telnet.exec_cmd("touch v6_resolv.conf")
+    con_telnet.exec_cmd('echo "nameserver 2620:10a:a001:a103::2" > v6_resolv.conf')
+    con_telnet.exec_cmd('{} cp v6_resolv.conf /etc/resolv.conf'.format(sudo_prefix), fail_ok=False)
 
 
 def setup_networking(controller0, conf_server=None):
