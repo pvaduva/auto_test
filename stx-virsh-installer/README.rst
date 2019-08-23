@@ -41,8 +41,13 @@ To delete the installed StarlingX system, execute::
 
 SYSTEM_MODE should be one of: simplex, duplex, standard or storage.
 
+To check all start arguments, execute::
+
+    python3 -m stx-virsh-installer -h
+
+
 To install StarlingX system with custom settings:
-	- Modify the variable.ini file.
+	- Modify the installer_config.ini file.
 	- Use -o /path/to/overwrite_file after the default installation command
 	- Use -c /path/to/custom_files_directory after the default installation command to install
 	StarlingX system with custom files that will not be dynamically modified by stx-virsh-installer

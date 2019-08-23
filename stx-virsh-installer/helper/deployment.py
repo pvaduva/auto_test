@@ -600,11 +600,14 @@ def deploy_system(nodes_list, var_dict):
                                         'but a thread that monitors nodes booting is still running')
             installer_log.log_error_msg(traceback.format_exc())
 
+    if var_dict['skiplabsetup']:  # skip lab_setup.sh all nodes are ready
+        installer_log.log_info_msg("Lab_setup.sh skipped! All done! {} installed successfully"
+                                   .format(var_dict['system_mode']))
+        return True
     installer_log.log_step('lab_setup.sh', False)
     loading_done = False
     loading_bar = Thread(target=processing_bar, daemon=True)
     loading_bar.start()
-
     if not run_lab_setup(controller_0, controller_0_name):
         loading_done = True
         loading_bar.join()
@@ -615,6 +618,5 @@ def deploy_system(nodes_list, var_dict):
     installer_log.log_step('lab_setup.sh', True)
     installer_log.log_info_msg("All done! {} installed successfully"
                                .format(var_dict['system_mode']))
-    controller_0_consolelog.close()
     return True
 

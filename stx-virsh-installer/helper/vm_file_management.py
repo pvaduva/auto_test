@@ -125,6 +125,17 @@ def generate_sed(controller_0, nodes_name_list, var_dict):
     :return:
     """
     to_write = ''
+
+    extra_storage_prefix = 's#EXTRASTORAGE#---'
+    extra_storage_format = '\\\\\\napiVersion: starlingx.windriver.com/v1beta1' \
+                           '\\\\\\nkind: Host\\\\\\nmetadata:\\\\\\n  ' \
+                           'labels:\\\\\\n    controller-tools.k8s.io: \\"1.0\\"\\\\\\n' \
+                           '  name: storage-{}\\\\\\n  namespace: vbox\\\\\\n' \
+                           'spec:\\\\\\n  overrides:\\\\\\n    bootMAC: {}\\\\\\n' \
+                           '  profile: storage-profile\\\\\\n---'
+    extra_storage_suffix = '#'
+    extra_storage = ''
+
     extra_compute_prefix = 's#EXTRACOMPUTE#---'
     extra_compute_format = '\\\\\\napiVersion: starlingx.windriver.com/v1beta1' \
                            '\\\\\\nkind: Host\\\\\\nmetadata:\\\\\\n  ' \
@@ -156,6 +167,9 @@ def generate_sed(controller_0, nodes_name_list, var_dict):
                 if '-worker-' in node_name:
                     extra_compute = extra_compute + extra_compute_format.format(
                         int(node_name.split('-')[-1]), mac_addr)
+                elif '-storage-' in node_name:
+                    extra_storage = extra_storage + extra_storage_format.format(
+                        int(node_name.split('-')[-1]), mac_addr)
             elif '-controller-' in node_name:
                 temp = 's/CONTROLLER{}MAC/{}/'.format(node_index, mac_addr)
                 to_write = to_write + temp + '\n'
@@ -169,8 +183,13 @@ def generate_sed(controller_0, nodes_name_list, var_dict):
         extra_compute = extra_compute_prefix + extra_compute_suffix
     else:
         extra_compute = extra_compute_prefix + extra_compute + extra_compute_suffix
-    to_write = to_write + extra_compute + '\n'
 
+    if not extra_storage:
+        extra_storage = extra_storage_prefix + extra_storage_suffix
+    else:
+        extra_storage = extra_storage_prefix + extra_storage + extra_storage_suffix
+    to_write = to_write + extra_compute + '\n'
+    to_write = to_write + extra_storage + '\n'
     controller_0.sendline('echo -n {} | base64'.format(var_dict['admin_password']))
     controller_0.expect('base64\r\n.*\r\n')
     base64_pass = controller_0.after.split('base64')[1].strip()

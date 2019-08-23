@@ -42,7 +42,7 @@ def validate_var_dict(var_dict):
     if 'plex' in var_dict['system_mode']:
         var_dict['num_of_compute'] = '0'
         var_dict['num_of_storage'] = '0'
-    if var_dict['system_mode'] == 'controllerstorage':
+    if var_dict['system_mode'] != 'controllerstorage':
         var_dict['num_of_storage'] = '0'
 
 
@@ -51,8 +51,8 @@ if __name__ == "__main__":
     parser = parser.add_parser()
     args = parser.parse_args()
     default_template_dir = os.path.dirname(os.path.abspath(template.__file__))
-    stx_dict = {'system_mode': args.mode, 'delete': args.delete,
-                'template_dir': default_template_dir, 'skipvm': args.skipvm,
+    stx_dict = {'system_mode': args.mode, 'delete': args.delete, 'skipvm': args.skipvm,
+                'template_dir': default_template_dir, 'skiplabsetup': args.skiplabsetup,
                 'libvirt_scirpt_dir': os.path.dirname(os.path.abspath(libvirt_scripts.__file__))}
 
     # Allow the user to change variable values by:

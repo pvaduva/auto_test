@@ -92,7 +92,7 @@ spec:
   overrides:
     bootMAC: COMPUTE1MAC
   profile: worker-profile
----
+EXTRACOMPUTE
 apiVersion: starlingx.windriver.com/v1beta1
 kind: Host
 metadata:
@@ -150,7 +150,7 @@ spec:
   overrides:
     bootMAC: STORAGE1MAC
   profile: storage-profile
----
+EXTRASTORAGE
 apiVersion: starlingx.windriver.com/v1beta1
 kind: HostProfile
 metadata:
