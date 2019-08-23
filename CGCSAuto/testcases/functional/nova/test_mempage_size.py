@@ -245,7 +245,9 @@ def reset_host_app_mems():
         _wait_for_all_app_hp_avail(host=host)
 
 
-class TestConfigMempage:
+# Take it out since we can no longer configure both 2M and 1G pages now. TC update required.
+# TODO
+class _TestConfigMempage:
     MEM_CONFIGS = [None, 'any', 'large', 'small', '2048', '1048576']
 
     @fixture(scope='class')

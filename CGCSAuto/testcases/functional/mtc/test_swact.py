@@ -119,7 +119,8 @@ def test_swact_controller_platform(wait_for_con_drbd_sync_complete, collect_kpi)
                                   log_path=SwactPlatform.LOG_PATH, end_pattern=SwactPlatform.END,
                                   host=pre_standby_controller,
                                   start_host=pre_active_controller,
-                                  start_pattern=SwactPlatform.START, start_path=SwactPlatform.START_PATH, uptime=1,
+                                  start_pattern=SwactPlatform.START,
+                                  start_path=SwactPlatform.START_PATH, uptime=1,
                                   fail_ok=False)
 
 
@@ -141,4 +142,5 @@ def test_swact_uncontrolled_kpi_platform(collect_kpi):
                               log_path=SwactUncontrolledPlatform.LOG_PATH,
                               end_pattern=SwactUncontrolledPlatform.END, host=end_host,
                               start_host=start_host, start_pattern=SwactUncontrolledPlatform.START,
-                              start_path=SwactUncontrolledPlatform.START_PATH, uptime=5, fail_ok=False)
+                              start_path=SwactUncontrolledPlatform.START_PATH, uptime=5,
+                              fail_ok=False)
