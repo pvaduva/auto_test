@@ -8,8 +8,9 @@ from pytest import fixture, skip, mark
 
 from consts.stx import TIMESTAMP_PATTERN
 from consts.proj_vars import ProjVar
-from consts.kpi_vars import DRBDSync, ConfigController, LabSetup, HeatStacks, SystemInstall, NodeInstall, Idle
-from keywords import system_helper, host_helper, vm_helper, common
+from consts.kpi_vars import DRBDSync, ConfigController, LabSetup, HeatStacks, SystemInstall, \
+    NodeInstall, Idle
+from keywords import system_helper, host_helper, vm_helper, common, container_helper
 from utils.clients.ssh import ControllerClient
 from utils.kpi import kpi_log_parser
 from utils.tis_log import LOG
@@ -259,9 +260,16 @@ def test_idle_kpi(collect_kpi):
     avg_cpu_idle = sum(cpus_idle) / len(cpu_lines)
     avg_cpu_usage = round(100 - avg_cpu_idle, 4)
 
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Idle.NAME_CPU, kpi_val=avg_cpu_usage, uptime=5,
+    cpu_kpi_name = Idle.NAME_CPU
+    mem_kpi_name = Idle.NAME_MEM
+    if not container_helper.is_stx_openstack_deployed():
+        cpu_kpi_name += '_platform'
+        mem_kpi_name += '_platform'
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=cpu_kpi_name,
+                              kpi_val=avg_cpu_usage, uptime=5,
                               unit='Percentage', fail_ok=False)
 
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=Idle.NAME_MEM, kpi_val=mem_usage, uptime=5,
+    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=mem_kpi_name,
+                              kpi_val=mem_usage, uptime=5,
                               unit='Percentage', fail_ok=False)
 

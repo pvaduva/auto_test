@@ -41,6 +41,7 @@ class NodeInstall:
     TIMESTAMP_PATTERN = r'(\d{2}:\d{2}:\d{2},\d{3}) INFO'
 
 
+# Both
 class HostLock:
     NAME = '{}_lock'
     WITH_VM = 'host_lock_with_vms_{}'
@@ -50,6 +51,7 @@ class HostLock:
     START_PATH = '/var/log/bash.log'
 
 
+# OpenStack only
 class HostUnlock:
     NAME = '{}_unlock'
     LOG_PATH = '/var/log/fm-event.log'
@@ -58,6 +60,7 @@ class HostUnlock:
                       'active on host {}.*msg',
         'storage': "200.022.*{} is now 'enabled'.*msg",
         'compute': '275.001.* {} hypervisor is now unlocked-enabled.*msg',
+        'compute_platform': "200.022.*{} is now 'enabled'.*msg",
     }
     START = 'system.*host-unlock.*{}'
     START_PATH = '/var/log/bash.log'
@@ -106,16 +109,16 @@ class VmStartup:
     END = 'Instance .* is enabled on host .*{}'
 
 
-class Swact:
-    NAME = 'swact_controlled'
+class SwactPlatform:
+    NAME = 'swact_controlled_platform'
     START_PATH = '/var/log/bash.log'
     START = 'system .*host-swact'
     LOG_PATH = '/var/log/sm.log'
     END = 'Swact has completed successfully'
 
 
-class SwactUncontrolled:
-    NAME = 'swact_uncontrolled'
+class SwactUncontrolledPlatform:
+    NAME = 'swact_uncontrolled_platform'
     START_PATH = '/var/log/bash.log'
     START = 'sudo reboot -f'
     LOG_PATH = '/var/log/sm.log'

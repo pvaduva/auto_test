@@ -89,9 +89,20 @@ def test_lock_unlock_host(host_type, collect_kpi):
     host_helper.unlock_host(host)
 
     if collect_kpi:
-        LOG.info("Collect kpi for lock/unlock {}".format(host_type))
         lock_kpi_name = HostLock.NAME.format(host_type)
         unlock_kpi_name = HostUnlock.NAME.format(host_type)
+        unlock_host_type = host_type
+        if container_helper.is_stx_openstack_deployed():
+            if system_helper.is_aio_system():
+                unlock_host_type = 'compute'
+        else:
+            lock_kpi_name += '_platform'
+            unlock_kpi_name += '_platform'
+            if unlock_host_type == 'compute':
+                unlock_host_type = 'compute_platform'
+
+        LOG.info("Collect kpi for lock/unlock {}".format(host_type))
+
         if not container_helper.is_stx_openstack_deployed():
             lock_kpi_name += '_platform'
             unlock_kpi_name += '_platform'
@@ -110,7 +121,7 @@ def test_lock_unlock_host(host_type, collect_kpi):
             local_kpi_file=collect_kpi,
             kpi_name=unlock_kpi_name, host=None,
             log_path=HostUnlock.LOG_PATH,
-            end_pattern=HostUnlock.END[host_type].format(host),
+            end_pattern=HostUnlock.END[unlock_host_type].format(host),
             init_time=init_time,
             start_pattern=HostUnlock.START.format(host),
             start_path=HostUnlock.START_PATH)
