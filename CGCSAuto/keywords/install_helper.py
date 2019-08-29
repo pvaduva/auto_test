@@ -2629,12 +2629,16 @@ def setup_ipv6_oam(controller0, conf_server=None):
 
     con_telnet.exec_cmd("{} ip -6 addr add {}/64 dev {}".format(sudo_prefix, host_ip, dev))
     con_telnet.exec_cmd("{} ip -6 link set dev {} up".format(sudo_prefix, dev))
-    con_telnet.exec_cmd("{} ip -6 route delete default".format(sudo_prefix))
-    con_telnet.exec_cmd("{} ip -6 route add default via 2620:10a:a001:a103::6:0".
-                        format(sudo_prefix))
     con_telnet.exec_cmd("touch v6_resolv.conf")
     con_telnet.exec_cmd('echo "nameserver 2620:10a:a001:a103::2" > v6_resolv.conf')
     con_telnet.exec_cmd('{} cp v6_resolv.conf /etc/resolv.conf'.format(sudo_prefix), fail_ok=False)
+    LOG.info("Wait for 30 seconds after configuring v6 IP for controller-0")
+    time.sleep(30)
+    con_telnet.exec_cmd("{} ip -6 route delete default".format(sudo_prefix), get_exit_code=False)
+    con_telnet.exec_cmd("{} ip -6 route delete default".format(sudo_prefix), get_exit_code=False)
+    con_telnet.exec_cmd("{} ip -6 route add default via 2620:10a:a001:a103::6:0".
+                        format(sudo_prefix))
+    con_telnet.exec_cmd('ip -6 route')
 
 
 def setup_networking(controller0, conf_server=None):
@@ -3501,7 +3505,6 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
             raise exceptions.InstallError(msg)
         if deploy_manager:
             cmd = 'ansible-playbook lab-install-playbook.yaml -e "@local-install-overrides.yaml"'
-
             con_telnet.set_prompt(r'.*:~\$\s?')
 
         elif not ansible:
@@ -3513,7 +3516,6 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
                                                         config_file,
                                                         extra_option)
         else:
-
             cmd = 'ansible-playbook /usr/share/ansible/stx-ansible/playbooks/' \
                   'bootstrap/bootstrap.yml -e "@local-install-overrides.yaml"'
             con_telnet.set_prompt(r'.*:~\$\s?')

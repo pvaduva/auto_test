@@ -227,8 +227,6 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
         if ProjVar.get_var('IPV6_OAM'):
             lab['controller-0 ip'] = con0_v6_ip
             install_helper.setup_ipv6_oam(lab['controller-0'])
-            LOG.info("Wait for 2 minutes after configuring v6 IP for controller-0")
-            time.sleep(120)
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
