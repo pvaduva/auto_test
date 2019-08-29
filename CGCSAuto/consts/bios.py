@@ -189,13 +189,13 @@ class BootMenus:
             "wrap_around": True
         }
 
-        Serial_Console = {
-            "name": "Console",
-            "prompt": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|Use the \^ and v keys to '
-                      r'change the selection',
-            "option_identifiers": "STANDARD|EXTENDED",
-            "wrap_around": True
-        }
+        # Serial_Console = {
+        #     "name": "Console",
+        #     "prompt": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|Use the \^ and v keys to '
+        #               r'change the selection',
+        #     "option_identifiers": "STANDARD|EXTENDED",
+        #     "wrap_around": True
+        # }
 
 
     class USB:
@@ -216,13 +216,13 @@ class BootMenus:
             "wrap_around": True
         }
 
-        Serial_Console = {
-            "name": "Console",
-            "prompt": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|Use the \^ and v keys to '
-                      r'change the selection',
-            "option_identifiers": "STANDARD|EXTENDED",
-            "wrap_around": True
-        }
+        # # Serial_Console = {
+        # #     "name": "Console",
+        # #     "prompt": r'(\x1b.*\*?.*\s(Serial)|(Graphical) Console(\s).*\*?)|Use the \^ and v keys to '
+        # #               r'change the selection',
+        # #     "option_identifiers": "STANDARD|EXTENDED",
+        # #     "wrap_around": True
+        # }
 
     class Sub_Menu_Prompts:
 
