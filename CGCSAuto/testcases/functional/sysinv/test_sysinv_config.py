@@ -110,7 +110,7 @@ class TestRetentionPeriod:
     MAX_RETENTION_PERIOD = 31536000  # seconds of 1 year, maximum value allowed
 
     @fixture(scope='class', autouse=True)
-    def restore_retention_period(self, request):
+    def restore_retention_period(self, request, stx_openstack_required):
         """
         Fixture to save the current retention period and restore it after test
 

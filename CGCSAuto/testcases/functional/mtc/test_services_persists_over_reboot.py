@@ -15,7 +15,7 @@ from testfixtures.recover_hosts import HostsToRecover
     'compute',
     # 'storage'
 ])
-def test_system_persist_over_host_reboot(host_type):
+def test_system_persist_over_host_reboot(host_type, stx_openstack_required):
     """
     Validate Inventory summary over reboot of one of the controller see if data persists over reboot
 

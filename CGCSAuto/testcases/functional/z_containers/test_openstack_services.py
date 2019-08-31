@@ -14,6 +14,11 @@ def get_valid_controllers():
     return controllers
 
 
+@fixture(scope='module', autouse=True)
+def check_openstack(stx_openstack_required):
+    pass
+
+
 @fixture(scope='module')
 def check_nodes():
     if kube_helper.get_nodes(status='Ready', field='NAME', exclude=True, fail_ok=True):
@@ -61,10 +66,10 @@ def test_openstack_services_healthy():
     'controller-0',
     'controller-1'
 ])
-def test_reapply_stx_openstack_no_change(stx_openstack_required, check_nodes, controller):
+def test_reapply_stx_openstack_no_change(stx_openstack_applied_required, check_nodes, controller):
     """
     Args:
-        stx_openstack_required:
+        stx_openstack_applied_required:
 
     Pre-requisite:
         - stx-openstack application in applied state

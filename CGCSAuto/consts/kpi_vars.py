@@ -179,6 +179,7 @@ class UpgradeController0:
     LOG_PATH = '/var/log/fm-event.log'
     END = '200.022.*controller-0 reinstall completed successfully'
 
+
 class UpgradeOrchestration:
     NAME = 'upgrade_orchestration'
 

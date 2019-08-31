@@ -7,7 +7,7 @@
 import time
 import random
 from datetime import datetime, timedelta
-from pytest import mark, skip
+from pytest import mark, skip, fixture
 
 from utils.tis_log import LOG
 
@@ -15,6 +15,11 @@ from consts.stx import GuestImages
 from consts.auth import Tenant
 from keywords import common, host_helper, ceilometer_helper, network_helper, glance_helper, system_helper, \
     gnocchi_helper
+
+
+@fixture(scope='module', autouse=True)
+def check_openstack(stx_openstack_required):
+    pass
 
 
 def _wait_for_measurements(meter, resource_type, extra_query, start_time, overlap=None, timeout=1860,

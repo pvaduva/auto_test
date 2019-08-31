@@ -12,7 +12,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module', autouse=True)
-def skip_test_if_less_than_two_hosts(no_simplex):
+def skip_test_if_less_than_two_hosts(stx_openstack_required, no_simplex):
     hypervisors = host_helper.get_up_hypervisors()
     if len(hypervisors) < 2:
         skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)

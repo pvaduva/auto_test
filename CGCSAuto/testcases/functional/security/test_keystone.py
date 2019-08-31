@@ -1,5 +1,6 @@
 from pytest import mark
 from keywords import keystone_helper
+from consts.auth import Tenant
 from utils.tis_log import LOG
 
 
@@ -14,5 +15,6 @@ def test_admin_password():
     """
 
     LOG.info("Deleteing default admin user...expecting it to fail")
-    code, msg = keystone_helper.delete_users('admin', fail_ok=True)
+    code, msg = keystone_helper.delete_users('admin', fail_ok=True, auth_info=Tenant.get(
+        'admin_platform'))
     assert code == 1, "Expected default user admin deletion to fail"

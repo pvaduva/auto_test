@@ -10,7 +10,7 @@ from keywords import host_helper, system_helper, vm_helper, network_helper, comm
 
 @mark.sanity
 @mark.cpe_sanity
-def test_swact_controllers(wait_for_con_drbd_sync_complete):
+def test_swact_controllers(stx_openstack_required, wait_for_con_drbd_sync_complete):
     """
     Verify swact active controller
 
