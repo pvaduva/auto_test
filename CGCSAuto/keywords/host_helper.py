@@ -1466,12 +1466,16 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT,
                 if not res:
                     return 5, "Web-services for new controller is not active"
 
-                hypervisor_up_res = wait_for_hypervisors_up(
-                    hostname, fail_ok=fail_ok, use_telnet=True,
-                    con_telnet=telnet_session, auth_info=nova_auth)
-                if not hypervisor_up_res:
-                    return 6, "Hypervisor state is not up for {} after " \
-                              "swacted".format(hostname)
+                from keywords import container_helper
+                if container_helper.is_stx_openstack_deployed(auth_info=auth_info,
+                                                              con_telnet=con_telnet,
+                                                              use_telnet=True):
+                    hypervisor_up_res = wait_for_hypervisors_up(
+                        hostname, fail_ok=fail_ok, use_telnet=True,
+                        con_telnet=telnet_session, auth_info=nova_auth)
+                    if not hypervisor_up_res:
+                        return 6, "Hypervisor state is not up for {} after " \
+                                  "swacted".format(hostname)
             else:
                 res = wait_for_webservice_up(
                     system_helper.get_active_controller_name(),
@@ -1479,14 +1483,16 @@ def swact_host(hostname=None, swact_start_timeout=HostTimeout.SWACT,
                 if not res:
                     return 5, "Web-services for new controller is not active"
 
-                if system_helper.is_aio_duplex(con_ssh=con_ssh,
-                                               auth_info=auth_info):
-                    hypervisor_up_res = wait_for_hypervisors_up(
-                        hostname, fail_ok=fail_ok, con_ssh=con_ssh,
-                        auth_info=nova_auth)
-                    if not hypervisor_up_res:
-                        return 6, "Hypervisor state is not up for {} after " \
-                                  "swacted".format(hostname)
+                from keywords import container_helper
+                if system_helper.is_aio_duplex(con_ssh=con_ssh, auth_info=auth_info):
+                    if container_helper.is_stx_openstack_deployed(con_ssh=con_ssh,
+                                                                  auth_info=auth_info):
+                        hypervisor_up_res = wait_for_hypervisors_up(
+                            hostname, fail_ok=fail_ok, con_ssh=con_ssh,
+                            auth_info=nova_auth)
+                        if not hypervisor_up_res:
+                            return 6, "Hypervisor state is not up for {} after " \
+                                      "swacted".format(hostname)
 
                     for host in ('controller-0', 'controller-1'):
                         task_aff_res = wait_for_tasks_affined(
@@ -3892,7 +3898,7 @@ def get_host_pci_devices(host, dev_class='Co-processor'):
             dev_vals = [value[:-1] if value.endswith('"') else value for value in line.split(
                 sep=' "')]
             pci_addr, _, vendor, device_name = dev_vals[:4]
-            v_pci_addr = pci_addr.split(sep='.')[0][:-1] # e.g., 09:00.0 > 09:0
+            v_pci_addr = pci_addr.split(sep='.')[0][:-1]  # e.g., 09:00.0 > 09:0
             vcmd = "lspci -mm| grep {}| grep -v ':00.0' | grep '{}'|grep '^{}'| wc -l".format(
                 dev_class, device_name, v_pci_addr)
             vf_count = int(host_ssh.exec_cmd(vcmd)[1])
