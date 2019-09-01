@@ -156,7 +156,7 @@ def get_cli_timestamps(vol_id):
     return  sysinv_timestamp, openstack_timestamp
 
 
-def test_modify_timezone_cli_timestamps():
+def test_modify_timezone_cli_timestamps(stx_openstack_required):
     """
     Test correct timestamps in:
         - ceilometer

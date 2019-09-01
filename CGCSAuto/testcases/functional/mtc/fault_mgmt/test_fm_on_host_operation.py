@@ -57,7 +57,7 @@ from testfixtures.recover_hosts import HostsToRecover
 
 
 @mark.sanity
-def test_system_alarms_and_events_on_lock_unlock_compute(no_simplex):
+def test_system_alarms_and_events_on_lock_unlock_compute(stx_openstack_required, no_simplex):
     """
     Verify fm alarm-show command
 

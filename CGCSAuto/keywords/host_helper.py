@@ -315,7 +315,9 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None,
                         else:
                             raise exceptions.HostPostCheckFailed(err_msg)
 
-                if check_hypervisor_up and computes:
+                from keywords import container_helper
+                if check_hypervisor_up and computes and \
+                        container_helper.is_stx_openstack_deployed():
                     nova_auth = Tenant.get('admin',
                                            dc_region=auth_info.get('region')
                                            if auth_info else None)
