@@ -2564,7 +2564,7 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
 
     LOG.info("Initial login and password set for " + controller0.name)
     if boot_usb:
-        controller0.telnet_conn.set_prompt(r'(-[\d]+)|(localhost):~\$ ')
+        controller0.telnet_conn.set_prompt(r'((-[\d]+)|(localhost)):~\$ ')
     else:
         controller0.telnet_conn.set_prompt(r'-[\d]+:~\$ ')
 
