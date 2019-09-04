@@ -201,7 +201,7 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
             # Use ipv4 ip to download files temporarily
             con0_v4_ip = con0_v6_ip.rsplit(':', maxsplit=1)[-1]
             if len(con0_v4_ip) == 4 and con0_v4_ip.startswith('1'):
-                con0_v4_ip = '128.224.151.{}'.format(con0_v4_ip[-3:])
+                con0_v4_ip = '128.224.151.{}'.format(con0_v4_ip[-3:]).lstrip("0")
             else:
                 con0_v4_ip = '128.224.150.{}'.format(con0_v4_ip[-3:])
             lab['controller-0 ip'] = con0_v4_ip

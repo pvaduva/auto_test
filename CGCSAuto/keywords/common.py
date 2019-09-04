@@ -880,7 +880,7 @@ def convert_ipv4_to_ipv6(ipv4_ip):
     if get_ip_version(ipv4_ip) == 4:
         second_last, suffix = str(ipv4_ip).rsplit('.')[-2:]
         if second_last == '151':
-            suffix = '1{}'.format(suffix)
+            suffix = '1{}'.format(suffix.rjust(3, '0'))
         ip = OAM_IP_v6.format(suffix)
     return ip
 
