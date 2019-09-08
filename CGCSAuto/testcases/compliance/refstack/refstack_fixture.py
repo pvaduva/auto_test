@@ -33,8 +33,8 @@ def refstack_pre_check():
 
         LOG.fixture_step('scp test-list file to refstack test history dir')
         dest_path = '{}/test-list.txt'.format(RefStack.TEST_HISTORY_DIR)
-        refstack_host_ssh.scp_on_dest(source_path=refstack_suite, source_ip=TestFileServer.SERVER,
-                                      source_user=TestFileServer.USER, source_pswd=TestFileServer.PASSWORD,
+        refstack_host_ssh.scp_on_dest(source_path=refstack_suite, source_ip=TestFileServer.get_server(),
+                                      source_user=TestFileServer.get_user(), source_pswd=TestFileServer.get_password(),
                                       dest_path=dest_path, timeout=120)
 
 

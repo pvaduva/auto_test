@@ -123,8 +123,8 @@ def fetch_cert_file(ssh_client, search_path=None):
         return code, msg
 
     from_server = build_server.DEFAULT_BUILD_SERVER['ip']
-    prompt = r'\[{}@.* \~\]\$'.format(TestFileServer.USER)
-    ssh_to_server = SSHFromSSH(ssh_client, from_server, TestFileServer.USER, TestFileServer.PASSWORD, initial_prompt=prompt)
+    prompt = r'\[{}@.* \~\]\$'.format(TestFileServer.get_user())
+    ssh_to_server = SSHFromSSH(ssh_client, from_server, TestFileServer.get_user(), TestFileServer.get_password(), initial_prompt=prompt)
     ssh_to_server.connect(retry=5)
 
     if search_path is None:

@@ -4139,27 +4139,12 @@ def _scp_net_config_cloud_init(guest_os):
     # img_dest, new_name)
     # con_ssh.exec_cmd(cmd, expect_timeout=7200, fail_ok=False)
 
-    source_path = '{}/userdata/{}'.format(TestFileServer.HOME, dest_name)
-    LOG.info('scp image from test server to active controller')
-
-    scp_cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
-              ' {}@{}:{} {}'.format(TestFileServer.USER, TestFileServer.SERVER,
-                                    source_path, dest_dir)
-
-    con_ssh.send(scp_cmd)
-    index = con_ssh.expect(
-        [con_ssh.prompt, Prompt.PASSWORD_PROMPT, Prompt.ADD_HOST], timeout=3600)
-    if index == 2:
-        con_ssh.send('yes')
-        index = con_ssh.expect([con_ssh.prompt, Prompt.PASSWORD_PROMPT],
-                               timeout=3600)
-    if index == 1:
-        con_ssh.send(TestFileServer.PASSWORD)
-        index = con_ssh.expect()
-    if index != 0:
-        raise exceptions.SSHException("Failed to scp files")
-
-    return dest_dir
+    source_path = '{}/userdata/{}'.format(TestFileServer.get_home(), dest_name)
+    LOG.info('scp userdata file from test server to active controller')
+    common.scp_from_test_server_to_active_controller(source_path=source_path,
+                                                     dest_dir=dest_dir,
+                                                     con_ssh=con_ssh,
+                                                     timeout=120)
 
 
 def _create_cloud_init_if_conf(guest_os, nics_num):
@@ -5508,13 +5493,13 @@ def collect_guest_logs(vm_id):
                 local_log_path = '{}/{}_{}'.format(
                     ProjVar.get_var('GUEST_LOGS_DIR'), log_name, vm_id)
                 current_user = local_host.get_user()
-                if current_user == TestFileServer.USER:
+                if current_user == TestFileServer.get_user():
                     vm_ssh.exec_sudo_cmd('chmod -R 755 {}'.format(log_path),
                                          fail_ok=True)
                     vm_ssh.scp_on_source_to_localhost(
                         source_file=log_path,
                         dest_user=current_user,
-                        dest_password=TestFileServer.PASSWORD,
+                        dest_password=TestFileServer.get_password(),
                         dest_path=local_log_path)
                 else:
                     output = vm_ssh.exec_cmd('tail -n 200 {}'.format(log_path),

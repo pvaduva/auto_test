@@ -2483,11 +2483,11 @@ def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None
     tuxlab_server = boot_server if boot_server else InstallVars.get_install_var("BOOT_SERVER")
     controller0 = lab["controller-0"]
     LOG.info("Set feed for {} network boot".format(controller0.barcode))
-    tuxlab_sub_dir = TestFileServer.USER + '/' + os.path.basename(load_path)
-    tuxlab_prompt = r'{}@{}\:(.*)\$ '.format(TestFileServer.USER, tuxlab_server)
+    tuxlab_sub_dir = TestFileServer.get_user() + '/' + os.path.basename(load_path)
+    tuxlab_prompt = r'{}@{}\:(.*)\$ '.format(TestFileServer.get_user(), tuxlab_server)
 
-    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=TestFileServer.USER,
-                                           password=TestFileServer.PASSWORD,
+    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=TestFileServer.get_user(),
+                                           password=TestFileServer.get_password(),
                                            initial_prompt=tuxlab_prompt)
     tuxlab_conn.deploy_ssh_key()
 
@@ -2510,14 +2510,14 @@ def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None
 
     # LOG.info("Installing Centos load to feed path: {}".format(feed_path))
     # bld_server_conn.exec_cmd("cd " + load_path)
-    pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.get_password())
     bld_server_conn.rsync(load_path + "/" + CENTOS_INSTALL_REL_PATH + "/", tuxlab_server, feed_path,
-                          dest_user=TestFileServer.USER, dest_password=TestFileServer.PASSWORD,
+                          dest_user=TestFileServer.get_user(), dest_password=TestFileServer.get_password(),
                           extra_opts=["--delete", "--force", "--chmod=Du=rwx"], pre_opts=pre_opts,
                           timeout=InstallTimeout.INSTALL_LOAD)
     bld_server_conn.rsync(load_path + "/" + "export/extra_cfgs/yow*", tuxlab_server, feed_path,
-                          dest_user=TestFileServer.USER,
-                          dest_password=TestFileServer.PASSWORD, extra_opts=["--chmod=Du=rwx"],
+                          dest_user=TestFileServer.get_user(),
+                          dest_password=TestFileServer.get_password(), extra_opts=["--chmod=Du=rwx"],
                           pre_opts=pre_opts,
                           timeout=InstallTimeout.INSTALL_LOAD)
     LOG.info("Create new symlink to {}".format(feed_path))
@@ -2818,10 +2818,10 @@ def establish_ssh_connection(host, user=HostLinuxUser.get_user(),
         if ssh_from_tuxlab2:
             LOG.info("SSH to {} via tuxlab2".format(host))
             tuxlab2_ip = YOW_TUXLAB2['ip']
-            tux_user = TestFileServer.USER
+            tux_user = TestFileServer.get_user()
             tuxlab_prompt = r'{}@{}\:(.*)\$ '.format(tux_user, YOW_TUXLAB2['name'])
             tuxlab2_ssh = SSHClient(host=tuxlab2_ip, user=tux_user,
-                                    password=TestFileServer.PASSWORD, initial_prompt=tuxlab_prompt)
+                                    password=TestFileServer.get_password(), initial_prompt=tuxlab_prompt)
             tuxlab2_ssh.connect(retry_timeout=300, retry_interval=30, timeout=60)
             _ssh_conn = SSHFromSSH(ssh_client=tuxlab2_ssh, host=host, user=user, password=password,
                                    initial_prompt=initial_prompt, timeout=360)
@@ -3990,10 +3990,10 @@ def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail
     barcode = lab_dict["controller_nodes"][0]
     iso_dest_path = "/tmp/iso/{}/bootimage.iso".format(barcode)
     tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
-    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(TestFileServer.USER, tuxlab_server)
+    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(TestFileServer.get_user(), tuxlab_server)
 
-    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=TestFileServer.USER,
-                                           password=TestFileServer.PASSWORD,
+    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=TestFileServer.get_user(),
+                                           password=TestFileServer.get_password(),
                                            initial_prompt=tuxlab_prompt)
     tuxlab_conn.deploy_ssh_key()
 
@@ -4012,7 +4012,7 @@ def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail
         iso_host.name, iso_full_path)
     iso_host.ssh_conn.rsync(iso_full_path, tuxlab_server, iso_dest_path,
                             timeout=InstallTimeout.INSTALL_LOAD,
-                            dest_user=TestFileServer.USER, dest_password=TestFileServer.PASSWORD)
+                            dest_user=TestFileServer.get_user(), dest_password=TestFileServer.get_password())
     tuxlab_conn.close()
     return 0, None
 
@@ -4022,11 +4022,11 @@ def mount_boot_server_iso(lab_dict=None, tuxlab_conn=None):
         lab_dict = InstallVars.get_install_var("LAB")
     barcode = lab_dict["controller_nodes"][0]
     tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
-    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(TestFileServer.USER, tuxlab_server)
+    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(TestFileServer.get_user(), tuxlab_server)
 
     if not tuxlab_conn:
-        tuxlab_conn = establish_ssh_connection(tuxlab_server, user=TestFileServer.USER,
-                                               password=TestFileServer.PASSWORD,
+        tuxlab_conn = establish_ssh_connection(tuxlab_server, user=TestFileServer.get_user(),
+                                               password=TestFileServer.get_password(),
                                                initial_prompt=tuxlab_prompt)
         tuxlab_conn.deploy_ssh_key()
 
@@ -4064,23 +4064,23 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None, tuxlab_conn=None, is
     barcode = lab_dict["controller_nodes"][0]
 
     tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
-    tuxlab_prompt = r'{}@{}\:(.*)\$ '.format(TestFileServer.USER, tuxlab_server)
+    tuxlab_prompt = r'{}@{}\:(.*)\$ '.format(TestFileServer.get_user(), tuxlab_server)
 
     if not tuxlab_conn:
-        tuxlab_conn = establish_ssh_connection(tuxlab_server, user=TestFileServer.USER,
-                                               password=TestFileServer.PASSWORD,
+        tuxlab_conn = establish_ssh_connection(tuxlab_server, user=TestFileServer.get_user(),
+                                               password=TestFileServer.get_password(),
                                                initial_prompt=tuxlab_prompt)
         tuxlab_conn.deploy_ssh_key()
 
     # connect to test server to mount USB iso
     test_server_attr = dict()
-    test_server_attr['name'] = TestFileServer.HOSTNAME.split('.')[0]
-    test_server_attr['server_ip'] = TestFileServer.SERVER
+    test_server_attr['name'] = TestFileServer.get_hostname().split('.')[0]
+    test_server_attr['server_ip'] = TestFileServer.get_server()
     test_server_attr['prompt'] = r'\[{}@{} {}\]\$ ' \
-        .format(TestFileServer.USER, test_server_attr['name'], TestFileServer.USER)
+        .format(TestFileServer.get_user(), test_server_attr['name'], TestFileServer.get_user())
 
-    test_server_conn = establish_ssh_connection(test_server_attr['name'], user=TestFileServer.USER,
-                                                password=TestFileServer.PASSWORD,
+    test_server_conn = establish_ssh_connection(test_server_attr['name'], user=TestFileServer.get_user(),
+                                                password=TestFileServer.get_password(),
                                                 initial_prompt=test_server_attr['prompt'])
 
     test_server_conn.set_prompt(test_server_attr['prompt'])
@@ -4095,9 +4095,9 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None, tuxlab_conn=None, is
         test_server_conn.exec_sudo_cmd("mkdir -p {}".format(temp_iso_path))
         test_server_conn.exec_sudo_cmd("chmod -R 777 {}".format(temp_iso_path), fail_ok=False)
 
-    pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.PASSWORD)
+    pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.get_password())
     server.ssh_conn.rsync(iso_path, test_server_obj.server_ip, temp_iso_path,
-                          dest_user=TestFileServer.USER, dest_password=TestFileServer.PASSWORD,
+                          dest_user=TestFileServer.get_user(), dest_password=TestFileServer.get_password(),
                           extra_opts=["--delete", "--force", "--chmod=Du=rwx"], pre_opts=pre_opts,
                           timeout=InstallTimeout.INSTALL_LOAD)
 
@@ -4112,7 +4112,7 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None, tuxlab_conn=None, is
 
     controller0 = lab_dict["controller-0"]
     LOG.info("Set feed for {} network boot".format(barcode))
-    tuxlab_sub_dir = TestFileServer.USER + '/' + os.path.basename(iso_path.split('/outputs')[0])
+    tuxlab_sub_dir = TestFileServer.get_user() + '/' + os.path.basename(iso_path.split('/outputs')[0])
 
     tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + str(controller0.barcode)
 
@@ -4135,7 +4135,7 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None, tuxlab_conn=None, is
     # bld_server_conn.exec_cmd("cd " + load_path)
 
     test_server_conn.rsync(media_iso_path + "/", tuxlab_server, feed_path,
-                           dest_user=TestFileServer.USER, dest_password=TestFileServer.PASSWORD,
+                           dest_user=TestFileServer.get_user(), dest_password=TestFileServer.get_password(),
                            extra_opts=["--delete", "--force", "--chmod=Du=rwx,Dgo=rx,Fu=rwx,Fog=r"],
                            pre_opts=pre_opts,
                            timeout=InstallTimeout.INSTALL_LOAD)

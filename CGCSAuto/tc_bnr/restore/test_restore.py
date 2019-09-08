@@ -169,14 +169,14 @@ def pre_restore_checkup():
                      "USB will be checked after controller boot ....")
     else:
         test_server_attr = dict()
-        test_server_attr['name'] = TestFileServer.HOSTNAME.split('.')[0]
-        test_server_attr['server_ip'] = TestFileServer.SERVER
+        test_server_attr['name'] = TestFileServer.get_hostname().split('.')[0]
+        test_server_attr['server_ip'] = TestFileServer.get_server()
         test_server_attr['prompt'] = r'\[{}@{} {}\]\$ ' \
-            .format(TestFileServer.USER, test_server_attr['name'], TestFileServer.USER)
+            .format(TestFileServer.get_user(), test_server_attr['name'], TestFileServer.get_user())
 
         test_server_conn = install_helper.establish_ssh_connection(
-            test_server_attr['name'], user=TestFileServer.USER,
-            password=TestFileServer.PASSWORD,
+            test_server_attr['name'], user=TestFileServer.get_user(),
+            password=TestFileServer.get_password(),
             initial_prompt=test_server_attr['prompt'])
 
         test_server_conn.set_prompt(test_server_attr['prompt'])
@@ -280,12 +280,12 @@ def restore_setup(pre_restore_checkup):
         bld_server_attr = dict()
         bld_server_attr['name'] = bld_server['name']
         bld_server_attr['server_ip'] = bld_server['ip']
-        bld_server_attr['prompt'] = r'{}@{}\:(.*)\$ '.format(TestFileServer.USER, bld_server['name'])
+        bld_server_attr['prompt'] = r'{}@{}\:(.*)\$ '.format(TestFileServer.get_user(), bld_server['name'])
 
         bld_server_conn = install_helper.establish_ssh_connection(
             bld_server_attr['name'],
-            user=TestFileServer.USER,
-            password=TestFileServer.PASSWORD,
+            user=TestFileServer.get_user(),
+            password=TestFileServer.get_password(),
             initial_prompt=bld_server_attr['prompt'])
 
         bld_server_conn.exec_cmd("bash")
@@ -823,8 +823,8 @@ def test_restore(restore_setup):
 
         # transfer all backup files to /opt/backups from test server
         with con_ssh.login_as_root():
-            con_ssh.scp_on_dest(source_user=TestFileServer.USER, source_ip=TestFileServer.SERVER,
-                                source_pswd=TestFileServer.PASSWORD,
+            con_ssh.scp_on_dest(source_user=TestFileServer.get_user(), source_ip=TestFileServer.get_server(),
+                                source_pswd=TestFileServer.get_password(),
                                 source_path=backup_src_path + "/*",
                                 dest_path=StxPath.BACKUPS + '/', timeout=1200)
 

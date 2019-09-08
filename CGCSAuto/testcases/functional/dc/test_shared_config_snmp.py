@@ -8,7 +8,7 @@ from keywords import dc_helper, system_helper
 
 
 SNMP_COMM = 'cgcsauto_dc_snmp_comm'
-SNMP_TRAPDEST = ('cgcsauto_dc_snmp_trapdest', TestFileServer.SERVER)
+SNMP_TRAPDEST = ('cgcsauto_dc_snmp_trapdest', TestFileServer.get_server())
 
 
 @fixture(scope='module')

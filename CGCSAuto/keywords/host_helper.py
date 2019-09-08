@@ -3783,8 +3783,8 @@ def wait_for_sm_dump_desired_states(controller, item_names=None, timeout=60,
 
 
 @contextmanager
-def ssh_to_build_server(bld_srv=None, user=TestFileServer.USER,
-                        password=TestFileServer.PASSWORD,
+def ssh_to_build_server(bld_srv=None, user=TestFileServer.get_user(),
+                        password=TestFileServer.get_password(),
                         prompt=None):
     """
     ssh to given build server.
@@ -3835,9 +3835,9 @@ def ssh_to_build_server(bld_srv=None, user=TestFileServer.USER,
 
 
 @contextmanager
-def ssh_to_test_server(test_srv=TestFileServer.SERVER,
-                       user=TestFileServer.USER,
-                       password=TestFileServer.PASSWORD, prompt=None):
+def ssh_to_test_server(test_srv=TestFileServer.get_server(),
+                       user=TestFileServer.get_user(),
+                       password=TestFileServer.get_password(), prompt=None):
     """
     ssh to test server.
     Usage: Use with context_manager. i.e.,

@@ -109,8 +109,8 @@ def test_upgrade_restore(restore_setup):
 
         # transfer all backup files to /opt/backups from test server
         with con_ssh.login_as_root():
-            con_ssh.scp_on_dest(source_user=TestFileServer.USER, source_ip=TestFileServer.SERVER,
-                                source_pswd=TestFileServer.PASSWORD, source_path=backup_src_path + "/*",
+            con_ssh.scp_on_dest(source_user=TestFileServer.get_user(), source_ip=TestFileServer.get_server(),
+                                source_pswd=TestFileServer.get_password(), source_path=backup_src_path + "/*",
                                 dest_path=StxPath.BACKUPS + '/', timeout=1200)
 
     else:

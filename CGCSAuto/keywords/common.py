@@ -38,9 +38,9 @@ def scp_from_test_server_to_user_file_dir(source_path, dest_dir, dest_name=None,
 
     if ProjVar.get_var('USER_FILE_DIR') == ProjVar.get_var('TEMP_DIR'):
         LOG.info("Copy file from test server to localhost")
-        source_server = TestFileServer.SERVER
-        source_user = TestFileServer.USER
-        source_password = TestFileServer.PASSWORD
+        source_server = TestFileServer.get_server()
+        source_user = TestFileServer.get_user()
+        source_password = TestFileServer.get_password()
         dest_path = dest_dir if not dest_name else os.path.join(dest_dir,
                                                                 dest_name)
         LOG.info('Check if file already exists on TiS')
@@ -67,7 +67,7 @@ def _scp_from_remote_to_active_controller(source_server, source_path,
                                           source_user=None,
                                           source_password=None,
                                           timeout=900, con_ssh=None,
-                                          is_dir=False):
+                                          is_dir=False, ipv6=None):
     """
     SCP file or files under a directory from remote server to TiS server
 
@@ -86,9 +86,9 @@ def _scp_from_remote_to_active_controller(source_server, source_path,
         con_ssh = ControllerClient.get_active_controller()
 
     if not source_user:
-        source_user = TestFileServer.USER
+        source_user = TestFileServer.get_user()
     if not source_password:
-        source_password = TestFileServer.PASSWORD
+        source_password = TestFileServer.get_password()
 
     if dest_name is None and not is_dir:
         dest_name = source_path.split(sep='/')[-1]
@@ -140,7 +140,7 @@ def _scp_from_remote_to_active_controller(source_server, source_path,
         con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server,
                             source_path=source_path,
                             dest_path=dest_path, source_pswd=source_password,
-                            timeout=timeout, is_dir=is_dir)
+                            timeout=timeout, is_dir=is_dir, ipv6=ipv6)
 
     return dest_path
 
@@ -166,9 +166,10 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir,
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    source_server = TestFileServer.SERVER
-    source_user = TestFileServer.USER
-    source_password = TestFileServer.PASSWORD
+    ipv6 = ProjVar.get_var('IPV6_OAM')
+    source_server = TestFileServer.get_server(ipv6=ipv6)
+    source_user = TestFileServer.get_user()
+    source_password = TestFileServer.get_password()
 
     return _scp_from_remote_to_active_controller(
         source_server=source_server,
@@ -179,7 +180,8 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir,
         source_password=source_password,
         timeout=timeout,
         con_ssh=con_ssh,
-        is_dir=is_dir)
+        is_dir=is_dir,
+        ipv6=ipv6)
 
 
 def scp_from_active_controller_to_test_server(source_path, dest_dir,
@@ -203,16 +205,17 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir,
     if con_ssh is None:
         con_ssh = ControllerClient.get_active_controller()
 
-    dest_server = TestFileServer.SERVER
-    dest_user = TestFileServer.USER
-    dest_password = TestFileServer.PASSWORD
+    ipv6 = ProjVar.get_var('IPV6_OAM')
+    dest_server = TestFileServer.get_server(ipv6=ipv6)
+    dest_user = TestFileServer.get_user()
+    dest_password = TestFileServer.get_password()
 
     dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
 
     LOG.info("scp file(s) from tis server to test server")
     con_ssh.scp_on_source(source_path=source_path, dest_user=dest_user,
                           dest_password=dest_password, dest_path=dest_path,
-                          timeout=timeout, is_dir=is_dir, dest_ip=dest_server)
+                          timeout=timeout, is_dir=is_dir, dest_ip=dest_server, ipv6=ipv6)
 
     return dest_path
 
@@ -281,7 +284,7 @@ def scp_from_local(source_path, dest_ip, dest_path=None,
 def scp_to_local(dest_path, source_path, source_server=None,
                  source_user=None,
                  source_password=None,
-                 timeout=900, is_dir=False):
+                 timeout=900, is_dir=False, ipv6=None):
     """
     Scp file(s) to localhost (i.e., to where the automated tests are executed).
 
@@ -293,6 +296,7 @@ def scp_to_local(dest_path, source_path, source_server=None,
         dest_path (str): destination directory path to copy the file(s) to
         timeout (int): max time to wait for scp finish in seconds
         is_dir (bool): whether to copy a single file or a directory
+        ipv6
 
     """
     if not source_user:
@@ -301,9 +305,10 @@ def scp_to_local(dest_path, source_path, source_server=None,
         source_password = HostLinuxUser.get_password()
 
     dir_option = '-r ' if is_dir else ''
-    cmd = 'scp -oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ' \
+    ipv6_arg = '-6 ' if ipv6 or get_ip_version(source_server) == 6 else ''
+    cmd = 'scp {}-oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ' \
           '{}{}@{}:{} {}'.\
-        format(dir_option, source_user, source_server, source_path, dest_path)
+        format(ipv6_arg, dir_option, source_user, source_server, source_path, dest_path)
 
     _scp_on_local(cmd, remote_password=source_password, timeout=timeout)
 
@@ -905,10 +910,10 @@ def ssh_to_stx(lab=None, set_client=False):
         lab = convert_to_ipv6(lab)
         LOG.info("SSH to IPv6 system {} via tuxlab2".format(lab['short_name']))
         tuxlab2_ip = YOW_TUXLAB2['ip']
-        tux_user = TestFileServer.USER
+        tux_user = TestFileServer.get_user()
         tuxlab_prompt = r'{}@{}\:(.*)\$ '.format(tux_user, YOW_TUXLAB2['name'])
         tuxlab2_ssh = SSHClient(host=tuxlab2_ip, user=tux_user,
-                                password=TestFileServer.PASSWORD, initial_prompt=tuxlab_prompt)
+                                password=TestFileServer.get_password(), initial_prompt=tuxlab_prompt)
         tuxlab2_ssh.connect(retry_timeout=300, retry_interval=30, timeout=60)
         con_ssh = SSHFromSSH(ssh_client=tuxlab2_ssh, host=lab['floating ip'],
                              user=user, password=password,

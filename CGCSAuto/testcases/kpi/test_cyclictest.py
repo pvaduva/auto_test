@@ -87,8 +87,8 @@ def get_rt_guest_image():
                                      GuestImages.IMAGE_FILES['tis-centos-guest-rt'][2])
 
     if not con_ssh.file_exists(img_path_on_tis):
-        con_ssh.scp_on_dest(source_user=TestFileServer.USER, source_ip=BUILD_SERVER, source_path=RT_GUEST_PATH,
-                            dest_path=img_path_on_tis, source_pswd=TestFileServer.PASSWORD)
+        con_ssh.scp_on_dest(source_user=TestFileServer.get_user(), source_ip=BUILD_SERVER, source_path=RT_GUEST_PATH,
+                            dest_path=img_path_on_tis, source_pswd=TestFileServer.get_password())
 
     return img_path_on_tis
 

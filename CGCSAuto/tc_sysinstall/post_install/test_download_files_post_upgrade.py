@@ -32,8 +32,8 @@ def pre_download_setup():
 
     bld_server_attr['prompt'] = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', bld_server['name'])
 
-    bld_server_conn = SSHClient(bld_server_attr['name'], user=TestFileServer.USER,
-                                password=TestFileServer.PASSWORD, initial_prompt=bld_server_attr['prompt'])
+    bld_server_conn = SSHClient(bld_server_attr['name'], user=TestFileServer.get_user(),
+                                password=TestFileServer.get_password(), initial_prompt=bld_server_attr['prompt'])
     bld_server_conn.connect()
     bld_server_conn.exec_cmd("bash")
     bld_server_conn.set_prompt(bld_server_attr['prompt'])

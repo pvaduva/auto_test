@@ -9,6 +9,7 @@ import os
 import re
 import threading
 import time
+import ipaddress
 from contextlib import contextmanager
 
 import pexpect
@@ -51,6 +52,15 @@ TIMEOUT_EXPECT = 10
 
 RSYNC_SSH_OPTIONS = ['-o StrictHostKeyChecking=no',
                      '-o UserKnownHostsFile=/dev/null']
+
+
+def get_ip_version(ip_addr):
+    try:
+        ip_version = ipaddress.ip_address(ip_addr).version
+    except ValueError:
+        ip_version = None
+
+    return ip_version
 
 
 class SSHClient:
@@ -615,17 +625,20 @@ class SSHClient:
 
     def scp_on_dest(self, source_user, source_ip, source_path, dest_path,
                     source_pswd, timeout=3600, cleanup=True,
-                    is_dir=False):
+                    is_dir=False, ipv6=None):
         source = source_path
+        ip_version = get_ip_version(source_ip)
         if source_ip:
+            source_ip = '[{}]'.format(source_ip) if ip_version == 6 else source_ip
             source = '{}:{}'.format(source_ip, source)
             if source_user:
                 source = '{}@{}'.format(source_user, source)
 
         option = '-r ' if is_dir else ''
-        scp_cmd = 'scp -o StrictHostKeyChecking=no -o ' \
+        v6_arg = '-6 ' if ip_version ==6 or ipv6 else ''
+        scp_cmd = 'scp {}-o StrictHostKeyChecking=no -o ' \
                   'UserKnownHostsFile=/dev/null {}{} ' \
-                  '{}'.format(option, source, dest_path)
+                  '{}'.format(v6_arg, option, source, dest_path)
 
         try:
             self.send(scp_cmd)
@@ -656,9 +669,11 @@ class SSHClient:
             raise
 
     def scp_on_source(self, source_path, dest_user, dest_ip, dest_path,
-                      dest_password, timeout=3600, is_dir=False):
+                      dest_password, timeout=3600, is_dir=False, ipv6=None):
         dest = dest_path
+        ip_version = get_ip_version(dest_ip)
         if dest_ip:
+            dest_ip = '[{}]'.format(dest_ip) if ip_version == 6 else dest_ip
             dest = '{}:{}'.format(dest_ip, dest)
             if dest_user:
                 dest = '{}@{}'.format(dest_user, dest)
@@ -667,10 +682,10 @@ class SSHClient:
             if not source_path.endswith('/'):
                 source_path += '/'
             source_path = '-r {}'.format(source_path)
-
-        scp_cmd = 'scp -o StrictHostKeyChecking=no -o ' \
+        v6_arg = '-6 ' if ip_version == 6 or ipv6 else ''
+        scp_cmd = 'scp {}-o StrictHostKeyChecking=no -o ' \
                   'UserKnownHostsFile=/dev/null {} {}'. \
-            format(source_path, dest)
+            format(v6_arg, source_path, dest)
 
         self.send(scp_cmd)
         index = self.expect(

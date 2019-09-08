@@ -53,14 +53,14 @@ def test_system_upgrade_simplex(upgrade_setup, check_system_health_query_upgrade
     print('Backup_File_Name', backup_file_name)
     # ssh to test server
     test_server_attr = dict()
-    test_server_attr['name'] = TestFileServer.HOSTNAME.split('.')[0]
-    test_server_attr['server_ip'] = TestFileServer.SERVER
+    test_server_attr['name'] = TestFileServer.get_hostname().split('.')[0]
+    test_server_attr['server_ip'] = TestFileServer.get_server()
     test_server_attr['prompt'] = r'\[{}@{} {}\]\$ ' \
-        .format(TestFileServer.USER, test_server_attr['name'], TestFileServer.USER)
+        .format(TestFileServer.get_user(), test_server_attr['name'], TestFileServer.get_user())
 
     test_server_conn = install_helper.establish_ssh_connection(test_server_attr['name'],
-                                                               user=TestFileServer.USER,
-                                                               password=TestFileServer.PASSWORD,
+                                                               user=TestFileServer.get_user(),
+                                                               password=TestFileServer.get_password(),
                                                                initial_prompt=test_server_attr['prompt'])
 
     test_server_conn.set_prompt(test_server_attr['prompt'])

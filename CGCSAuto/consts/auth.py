@@ -312,14 +312,49 @@ class Guest:
 
 
 class TestFileServer:
-    SERVER = '128.224.150.21'
-    USER = 'svc-cgcsauto'
-    PASSWORD = ')OKM0okm'
+    __server_info = {
+        'server': '128.224.150.21',
+        'server_v6': '2620:10a:a001:a103:f21f:afff:fee6:cf29',
+        'user': 'svc-cgcsauto',
+        'password': ')OKM0okm',
+        'home': '/home/svc-cgcsauto',
+        'hostname': 'yow-cgcs-test',
+        'prompt': r'[\[]?svc-cgcsauto@.*\$[ ]?',
+    }
     VLM_PASSWORD = 'wrssvc-cgcsauto'
-    HOME = '/home/svc-cgcsauto'
     SANDBOX = '/sandbox'
-    HOSTNAME = 'yow-cgcs-test'
-    PROMPT = r'[\[]?svc-cgcsauto@.*\$[ ]?'
+
+    @classmethod
+    def get_server(cls, ipv6=False):
+        return cls.__server_info['server_v6'] if ipv6 else cls.__server_info['server']
+
+    @classmethod
+    def get_user(cls):
+        return cls.__server_info['user']
+
+    @classmethod
+    def get_password(cls):
+        return cls.__server_info['password']
+
+    @classmethod
+    def get_value(cls, param):
+        return cls.__server_info.get(param, None)
+
+    @classmethod
+    def get_home(cls):
+        return cls.__server_info['home']
+
+    @classmethod
+    def get_hostname(cls):
+        return cls.__server_info['hostname']
+
+    @classmethod
+    def get_prompt(cls):
+        return cls.__server_info['prompt']
+
+    @classmethod
+    def set_vars(cls, **kwargs):
+        cls.__server_info.update(**kwargs)
 
 
 class CliAuth:

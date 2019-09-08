@@ -52,12 +52,12 @@ def install_clone_setup():
     bld_server_attr = dict()
     bld_server_attr['name'] = bld_server['name']
     bld_server_attr['server_ip'] = bld_server['ip']
-    bld_server_attr['prompt'] = r'{}@{}\:(.*)\$ '.format(TestFileServer.USER, bld_server['name'])
+    bld_server_attr['prompt'] = r'{}@{}\:(.*)\$ '.format(TestFileServer.get_user(), bld_server['name'])
 
     bld_server_conn = install_helper.establish_ssh_connection(
         bld_server_attr['name'],
-        user=TestFileServer.USER,
-        password=TestFileServer.PASSWORD,
+        user=TestFileServer.get_user(),
+        password=TestFileServer.get_password(),
         initial_prompt=bld_server_attr['prompt'])
 
     bld_server_conn.exec_cmd("bash")

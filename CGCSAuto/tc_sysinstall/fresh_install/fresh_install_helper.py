@@ -1766,11 +1766,11 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                     rc, server_ip = server.ssh_conn.exec_cmd("hostname -i")
                     if rc == 0:
                         server.server_ip = server_ip.strip()
-                pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.PASSWORD)
+                pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.get_password())
                 rc, output = controller0_node.ssh_conn.rsync(yaml_files, server.server_ip,
                                                              unfiltered_dest_results_path,
-                                                             dest_user=TestFileServer.USER,
-                                                             dest_password=TestFileServer.PASSWORD,
+                                                             dest_user=TestFileServer.get_user(),
+                                                             dest_password=TestFileServer.get_password(),
                                                              extra_opts=["--chmod=Fugo=rw"],
                                                              pre_opts=pre_opts, fail_ok=True)
                 if rc != 0:
@@ -1787,12 +1787,12 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                         if rc == 0:
                             server.server_ip = server_ip.strip()
 
-                    pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.PASSWORD)
+                    pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.get_password())
                     rc, output = controller0_node.ssh_conn.rsync(
                         last_file, server.server_ip,
                         DEPLOY_RESULTS_DEST_PATH,
-                        dest_user=TestFileServer.USER,
-                        dest_password=TestFileServer.PASSWORD,
+                        dest_user=TestFileServer.get_user(),
+                        dest_password=TestFileServer.get_password(),
                         extra_opts=["--chmod=Fugo=rw"],
                         pre_opts=pre_opts, fail_ok=True)
                     if rc != 0:

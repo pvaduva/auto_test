@@ -50,7 +50,7 @@ def _reserve_vlm_console(barcode, note=None):
 
 def _force_unreserve_vlm_console(barcode):
     action = VlmAction.VLM_FORCE_UNRESERVE
-    cmd = '{} {} -L {} -P {} -t {}'.format(VLM, action, TestFileServer.USER, TestFileServer.VLM_PASSWORD, barcode)
+    cmd = '{} {} -L {} -P {} -t {}'.format(VLM, action, TestFileServer.get_user(), TestFileServer.VLM_PASSWORD, barcode)
     attr_dict = _get_attr_dict_for_vlm_console(barcode=barcode, attr='all')
     reserved_by = attr_dict['Reserved By']
     reserve_note = attr_dict['Reserve Note']

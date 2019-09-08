@@ -962,7 +962,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False,
                                      "{} must be provided".format(external_ip))
             username = local_host.get_user()
             if "svc-cgcsauto" in username:
-                password = TestFileServer.PASSWORD
+                password = TestFileServer.get_password()
             else:
                 password = local_host.get_password()
 
@@ -1519,15 +1519,15 @@ def collect_sys_net_info(lab):
     """
     LOG.warning("Collecting system network info upon session setup failure")
     res_ = {}
-    source_user = TestFileServer.USER
-    source_pwd = TestFileServer.PASSWORD
-    source_prompt = TestFileServer.PROMPT
+    source_user = TestFileServer.get_user()
+    source_pwd = TestFileServer.get_password()
+    source_prompt = TestFileServer.get_prompt()
 
     dest_info_collected = False
     arp_sent = False
     for source_server in ('natbox', 'ts'):
-        source_ip = NatBoxes.NAT_BOX_HW[
-            'ip'] if source_server == 'natbox' else TestFileServer.SERVER
+        source_ip = NatBoxes.NAT_BOX_HW['ip'] if source_server == 'natbox' \
+            else TestFileServer.get_server()
         source_ssh = SSHClient(source_ip, source_user, source_pwd,
                                initial_prompt=source_prompt)
         source_ssh.connect()
@@ -1689,8 +1689,8 @@ def initialize_server(server_hostname, prompt=None):
     if prompt is None:
         prompt = Prompt.BUILD_SERVER_PROMPT_BASE.format('svc-cgcsauto', '')
 
-    server_conn = SSHClient(server_hostname, user=TestFileServer.USER,
-                            password=TestFileServer.PASSWORD,
+    server_conn = SSHClient(server_hostname, user=TestFileServer.get_user(),
+                            password=TestFileServer.get_password(),
                             initial_prompt=prompt)
     server_conn.connect()
     server_conn.deploy_ssh_key(install_helper.get_ssh_public_key())
