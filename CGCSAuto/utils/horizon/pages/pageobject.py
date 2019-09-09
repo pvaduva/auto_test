@@ -41,6 +41,9 @@ class PageObject(basewebobject.BaseWebObject):
             prefix = 'http'
             domain = ProjVar.get_var("LAB")['floating ip']
 
+        if ProjVar.get_var('IPV6_OAM'):
+            domain = '[{}]'.format(domain)
+
         if not self.port:
             self.port = 8080 if prefix == 'http' else 8443
         base_url = '{}://{}:{}'.format(prefix, domain, self.port)    # horizon url matt
