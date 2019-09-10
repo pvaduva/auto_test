@@ -407,6 +407,22 @@ class Labs:
                        {'port': (7, 4), 'range': (3101, 3151)}],
     }
 
+    WCP_35_60_2plus20 = {
+        'short_name': 'wcp_35_60_2plus20',
+        'name': 'yow-cgcs-wildcat-35_60_2plus20',
+        'floating ip': '128.224.150.234',
+        'controller-0 ip': '128.224.150.232',
+        'controller-1 ip': '128.224.150.233',
+        'controller_nodes': [23268, 23267],
+        'compute_nodes': [23258, 23257, 23256, 23255, 23254, 23253, 23252,
+                          23251, 23250, 23249, 23248, 23247, 23246, 23245,
+                          23244, 23243, 23262, 23261, 23260, 23259],
+        'ixia_ports': [{'port': (7, 1), 'range': (3002, 3051)},
+                       {'port': (7, 2), 'range': (3002, 3051)},
+                       {'port': (7, 3), 'range': (3101, 3151)},
+                       {'port': (7, 4), 'range': (3101, 3151)}],
+    }
+
     WCP_35_50 = {
         'short_name': 'wcp_35_50',
         'name': 'yow-cgcs-wildcat-35_50',
