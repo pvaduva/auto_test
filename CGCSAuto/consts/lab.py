@@ -162,6 +162,21 @@ class Labs:
                        {'port': (5, 2), 'range': (1918, 1951)}],
     }
 
+    PV0_AIO_Plus = {
+        'short_name': 'pv0_aio_plus',
+        'name': 'yow-cgcs-pv-0_aio_plus',
+        'floating ip': '128.224.150.73',
+        'controller-0 ip': '128.224.150.26',
+        'controller-1 ip': '128.224.150.28',
+        'controller_nodes': [22715, 22716],
+        'system_type': 'AIO_PLUS',
+        'system_mode': 'duplex',
+        'compute_nodes': [22719, 22720, 23915, 22722],
+        'unused_nodes': [23954, 23955, 23916, 22717, 22718, 22721],
+        'ixia_ports': [{'port': (5, 1), 'range': (1852, 1884)},
+                       {'port': (5, 2), 'range': (1918, 1951)}],
+    }
+
     PV1 = {
         'short_name': 'pv1',
         'name': 'yow-cgcs-pv-1',

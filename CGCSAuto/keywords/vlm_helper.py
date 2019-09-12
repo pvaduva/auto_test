@@ -162,6 +162,26 @@ def get_barcodes_dict(lab=None):
     return barcodes_dict
 
 
+def get_unused_barcodes(lab=None):
+    if lab is None:
+        lab = get_lab_dict()
+        if ProjVar.get_var('IS_DC'):
+            subcloud = ProjVar.get_var('PRIMARY_SUBCLOUD')
+            lab = lab[subcloud]
+
+    if not isinstance(lab, dict):
+        raise ValueError("lab dict or None should be provided")
+
+    barcodes = []
+    unused = lab.get("unused_nodes")
+    if unused:
+        for barcode in unused:
+            barcodes.append(barcode)
+    LOG.info("The barcodes for unused nodes: {}".format(barcodes))
+
+    return barcodes
+
+
 def get_barcodes_from_hostnames(hostnames,  lab=None):
     """
     Convert hostname(s) to barcodes
@@ -238,6 +258,25 @@ def reserve_hosts(hosts, val='hostname', lab=None):
         if rc > 0:
             err_msg = "Failed to reserve barcode {} in vlm: {}".format(barcode, output)
             raise exceptions.VLMError(err_msg)
+
+
+def power_off_unused_nodes(barcodes, reserve=True, count=1, fail_ok=True):
+    """
+    Power off given unused hosts
+    Args:
+        barcodes (str|list): unused node barcodes(s)
+        reserve (bool): whether to reserve first
+        count (int): how many times to perform the action
+
+    Returns:
+
+    """
+    if isinstance(barcodes, str):
+        barcodes = [barcodes]
+
+    for barcode in barcodes:
+        LOG.info("Powering off unused node with barcode: {}".format(barcode))
+        _vlm_exec_cmd(VlmAction.VLM_TURNOFF, barcode, reserve=reserve, fail_ok=fail_ok, count=count)
 
 
 def power_off_hosts(hosts, lab=None, reserve=True, count=1):

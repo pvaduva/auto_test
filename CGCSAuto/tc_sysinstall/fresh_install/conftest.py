@@ -8,7 +8,7 @@ from utils.jenkins_utils import build_info
 from consts.auth import HostLinuxUser
 from consts.proj_vars import InstallVars, ProjVar
 from consts.filepaths import BuildServerPath
-from consts.stx import VSwitchType
+from consts.stx import VSwitchType, SysType
 from tc_sysinstall.fresh_install import fresh_install_helper
 from keywords import host_helper
 
@@ -181,9 +181,13 @@ def pytest_configure(config):
             pass
 
 
+def pytest_itemcollected( item):
+    if "test_duplex_plus_install.py" in item.nodeid:
+        ProjVar.set_var(sys_type=SysType.AIO_PLUS)
+
 def pytest_runtest_teardown(item):
     install_testcases = ["test_simplex_install.py", "test_duplex_install.py", "test_standard_install.py",
-                         "test_storage_install.py", "test_distributed_cloud_install.py"]
+                         "test_storage_install.py", "test_distributed_cloud_install.py", "test_duplex_plus_install.py"]
     for install_testcase in install_testcases:
         if install_testcase in item.nodeid:
             final_step = LOG.test_step
