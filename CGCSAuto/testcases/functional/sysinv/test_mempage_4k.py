@@ -20,7 +20,7 @@ def check_alarms():
 
 
 @fixture(scope='module', autouse=True)
-def check_avs_pattern():
+def check_avs_pattern(stx_openstack_required):
     if not system_helper.is_avs():
         skip("4k vm unsupported by OVS-dpdk")
 

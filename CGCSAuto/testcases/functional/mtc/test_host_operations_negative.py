@@ -44,7 +44,7 @@ def test_delete_host_if_unlock_negative():
 
 @fixture(scope='function')
 def lock_(request):
-    hosts = host_helper.get_hypervisors()
+    hosts = system_helper.get_hosts()
     host = hosts[0]
     if hosts[0] == system_helper.get_active_controller_name():
         if not system_helper.is_aio_simplex():
@@ -52,13 +52,14 @@ def lock_(request):
     host_helper.lock_host(host)
 
     def unlock_():
-        host_helper.unlock_host(host, check_hypervisor_up=True)
+        host_helper.unlock_host(host)
 
     request.addfinalizer(unlock_)
     return host
 
 
-def test_modify_non_existing_cpu_negative(lock_):
+# Low priority test case that takes too long to test
+def _test_modify_non_existing_cpu_negative(lock_):
     """
     TC1940 cpu data can't be modified for a non existing cpu
 
@@ -191,7 +192,8 @@ def test_unlock_unlocked_host_negative():
         assert 1 == code, "FAIL: The request to reset {} was not rejected".format(host)
 
 
-def test_lock_locked_host_negative(lock_):
+# Low priority test that takes too long to execute
+def _test_lock_locked_host_negative(lock_):
     """
     TC1948 Verify that you can't lock an already locked host
 

@@ -4,12 +4,13 @@ from xml.dom import minidom
 
 import pexpect
 
-from installer.utils.ssh import sftp_send
-from installer.helper import installer_log
+from ..utils import ssh
+from ..helper import installer_log
 
 
 def populate_templates(controller_0, controller_0_name, other_nodes_list, var_dict):
-    """Dynamically populates the reserved keys in template files
+    """
+    Dynamically populates the reserved keys in template files
 
     :param controller_0: Pexpect spawning 'virsh console prefix-system-controller-0'
     :param controller_0_name: Name of the controller-0 virtual machine
@@ -67,7 +68,8 @@ def populate_templates(controller_0, controller_0_name, other_nodes_list, var_di
 
 
 def send_files_controller_0(var_dict):
-    """Send all files needed for installation from host machine to controller-0 vm
+    """
+    Send all files needed for installation from host machine to controller-0 vm
         var_dict['bootimage.iso'] should already be deleted after setup()
     :param var_dict: Variable dictionary
     :return: A boolean type indicates the status of sending files
@@ -81,7 +83,7 @@ def send_files_controller_0(var_dict):
             source = source_path
             destination = '{}/{}'.format(destination_dir, fname)
             installer_log.log_debug_msg('sending {} to {}'.format(source, destination))
-            sftp_send(source, var_dict['vm_ip_addr'], destination, var_dict['vm_os_name'],
+            ssh.sftp_send(source, var_dict['vm_ip_addr'], destination, var_dict['vm_os_name'],
                       var_dict['vm_os_password'])
         return True
     except Exception:
@@ -90,7 +92,8 @@ def send_files_controller_0(var_dict):
 
 
 def populate_localhost(controller_0, var_dict):
-    """Populate localhost.yaml on controller-0
+    """
+    Populate localhost.yaml on controller-0
         Add system_mode: duplex if system mode is not simplex
         Add admin_password: platform_password and ansible_become_pass: platform_password
     :param controller_0: Pexpect spawning 'virsh console prefix-system-controller-0'
@@ -108,7 +111,8 @@ def populate_localhost(controller_0, var_dict):
 
 
 def generate_sed(controller_0, nodes_name_list, var_dict):
-    """Populate a sed file named aio.sed that has the value for reserved keys, aio.sed will be
+    """
+    Populate a sed file named aio.sed that has the value for reserved keys, aio.sed will be
         used to generate deployment-config.yaml
         Reservered keys are: EXTRACOMPUTE, PASSWORD_BASE64, IS_LOW_LATENCY, CONTROLLER0MAC,
         CONTROLLER1MAC,COMPUTE0MAC, COMPUTE1MAC, STORAGE0MAC, STORAGE1MAC
@@ -121,6 +125,17 @@ def generate_sed(controller_0, nodes_name_list, var_dict):
     :return:
     """
     to_write = ''
+
+    extra_storage_prefix = 's#EXTRASTORAGE#---'
+    extra_storage_format = '\\\\\\napiVersion: starlingx.windriver.com/v1beta1' \
+                           '\\\\\\nkind: Host\\\\\\nmetadata:\\\\\\n  ' \
+                           'labels:\\\\\\n    controller-tools.k8s.io: \\"1.0\\"\\\\\\n' \
+                           '  name: storage-{}\\\\\\n  namespace: vbox\\\\\\n' \
+                           'spec:\\\\\\n  overrides:\\\\\\n    bootMAC: {}\\\\\\n' \
+                           '  profile: storage-profile\\\\\\n---'
+    extra_storage_suffix = '#'
+    extra_storage = ''
+
     extra_compute_prefix = 's#EXTRACOMPUTE#---'
     extra_compute_format = '\\\\\\napiVersion: starlingx.windriver.com/v1beta1' \
                            '\\\\\\nkind: Host\\\\\\nmetadata:\\\\\\n  ' \
@@ -152,6 +167,9 @@ def generate_sed(controller_0, nodes_name_list, var_dict):
                 if '-worker-' in node_name:
                     extra_compute = extra_compute + extra_compute_format.format(
                         int(node_name.split('-')[-1]), mac_addr)
+                elif '-storage-' in node_name:
+                    extra_storage = extra_storage + extra_storage_format.format(
+                        int(node_name.split('-')[-1]), mac_addr)
             elif '-controller-' in node_name:
                 temp = 's/CONTROLLER{}MAC/{}/'.format(node_index, mac_addr)
                 to_write = to_write + temp + '\n'
@@ -165,8 +183,13 @@ def generate_sed(controller_0, nodes_name_list, var_dict):
         extra_compute = extra_compute_prefix + extra_compute_suffix
     else:
         extra_compute = extra_compute_prefix + extra_compute + extra_compute_suffix
-    to_write = to_write + extra_compute + '\n'
 
+    if not extra_storage:
+        extra_storage = extra_storage_prefix + extra_storage_suffix
+    else:
+        extra_storage = extra_storage_prefix + extra_storage + extra_storage_suffix
+    to_write = to_write + extra_compute + '\n'
+    to_write = to_write + extra_storage + '\n'
     controller_0.sendline('echo -n {} | base64'.format(var_dict['admin_password']))
     controller_0.expect('base64\r\n.*\r\n')
     base64_pass = controller_0.after.split('base64')[1].strip()
@@ -183,7 +206,8 @@ def generate_sed(controller_0, nodes_name_list, var_dict):
 
 
 def generate_deployment_config(controller_0, var_dict):
-    """Use template file that has reserved keys based on system mode, combine it with aio.sed
+    """
+    Use template file that has reserved keys based on system mode, combine it with aio.sed
        to generate deployment-config.yaml
 
     :param controller_0: Pexpect spawning 'virsh console prefix-system-controller-0'

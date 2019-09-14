@@ -347,11 +347,12 @@ class HostInventoryDetailPage(basepage.BasePage):
     PROCESSOR_TAB_INDEX = 1
     MEMORY_TAB_INDEX = 2
     SOTRAGE_TAB_INDEX = 3
-    PORTS_TAB_INDEX = 4
-    INTEFACES_TAB_INDEX = 5
-    LLDP_TAB_INDEX = 6
-    SENSORS_TAB_INDEX = 7
-    DEVICES_TAB_INDEX = 8
+    FILESYSTEMS_TAB_INDEX = 4
+    PORTS_TAB_INDEX = 5
+    INTEFACES_TAB_INDEX = 6
+    LLDP_TAB_INDEX = 7
+    SENSORS_TAB_INDEX = 8
+    DEVICES_TAB_INDEX = 9
     MEMORYTABLE_PROCESSOR_COL = 'Processor'
 
     def __init__(self, driver, host_name):

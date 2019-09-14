@@ -798,11 +798,15 @@ def change_linux_user_password(password, new_password, user=None,
         pass
         # TODO: close this connection will lead EOF error in ssh.py if
         #  invoked in fixture cleanup handler
-        if user != HostLinuxUser.get_user():
-            conn.close()
+        conn.close()
+        if user == HostLinuxUser.get_user():
+            conn = ControllerClient.get_active_controller()
+            conn.password = password
+            conn.connect()
+            HostLinuxUser.set_password(new_password)
 
     # flush the output to the cli so the next cli is correctly registered
-    conn.flush()
+    # conn.flush()
     LOG.info(
         'Successfully changed password from:\n{}\nto:{} for user:{} on '
         'host:{}'.format(password, new_password, user, host))

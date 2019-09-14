@@ -36,12 +36,12 @@ def admin_home_pg(driver, request):
 
 
 @fixture(scope='function')
-def admin_home_pg_container(driver, request):
+def admin_home_pg_container(stx_openstack_required, driver, request):
     return __login_base(request=request, driver=driver, auth_info=Tenant.get('admin'))
 
 
 @fixture(scope='function')
-def tenant_home_pg_container(driver, request):
+def tenant_home_pg_container(stx_openstack_required, driver, request):
     return __login_base(request=request, driver=driver, auth_info=Tenant.get_primary())
 
 

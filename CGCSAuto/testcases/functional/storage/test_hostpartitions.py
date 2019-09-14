@@ -746,8 +746,7 @@ def test_create_partition_using_valid_uuid_of_another_host():
     CGTS-7901
     """
 
-    computes = host_helper.get_up_hypervisors()
-    hosts = list(set(system_helper.get_controllers() + computes))
+    hosts = system_helper.get_hosts(personality=('worker', 'controller'))
 
     if len(hosts) == 1:
         skip("This test requires more than one host")

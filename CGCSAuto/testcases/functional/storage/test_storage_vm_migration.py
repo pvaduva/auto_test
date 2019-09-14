@@ -14,7 +14,7 @@ from utils.clients.ssh import get_cli_client
 
 
 @fixture(scope='module', autouse=True)
-def check_system():
+def check_system(stx_openstack_required):
     if not cinder_helper.is_volumes_pool_sufficient(min_size=80):
         skip("Cinder volume pool size is smaller than 80G")
 

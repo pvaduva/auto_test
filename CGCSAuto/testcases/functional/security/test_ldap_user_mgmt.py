@@ -13,6 +13,11 @@ from consts.auth import HostLinuxUser
 from keywords import security_helper, system_helper
 
 
+@fixture(scope='module', autouse=True)
+def check_stx_openstack(stx_openstack_required):
+    pass
+
+
 theLdapUserManager = security_helper.get_ldap_user_manager()
 
 

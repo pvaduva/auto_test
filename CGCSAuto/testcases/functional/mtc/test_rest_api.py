@@ -107,7 +107,7 @@ def validate_pipelines(data):
     return 0
 
 
-def test_restapi_neutron_get_extensions():
+def test_restapi_neutron_get_extensions(stx_openstack_required):
     """
     Test that we can REST API query for extensions and that we receive valid data from the query.
 

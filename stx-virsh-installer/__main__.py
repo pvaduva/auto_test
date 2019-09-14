@@ -2,13 +2,13 @@ import os
 import datetime
 import configparser
 
-import installer
-from installer import template, libvirt
-from installer.helper import installer_log, setup, deployment, parser
+from . import template, libvirt_scripts
+from .helper import installer_log, setup, deployment, parser
 
 
 def validate_var_dict(var_dict):
-    """Validates the variable dictionary, terminates the installer if necessary
+    """
+    Validates the variable dictionary, terminates the installer if necessary
 
     :param var_dict: A dictionary contains all the variables
     :return:
@@ -42,7 +42,7 @@ def validate_var_dict(var_dict):
     if 'plex' in var_dict['system_mode']:
         var_dict['num_of_compute'] = '0'
         var_dict['num_of_storage'] = '0'
-    if var_dict['system_mode'] == 'controllerstorage':
+    if var_dict['system_mode'] != 'controllerstorage':
         var_dict['num_of_storage'] = '0'
 
 
@@ -51,12 +51,12 @@ if __name__ == "__main__":
     parser = parser.add_parser()
     args = parser.parse_args()
     default_template_dir = os.path.dirname(os.path.abspath(template.__file__))
-    stx_dict = {'system_mode': args.mode, 'delete': args.delete,
-                'template_dir': default_template_dir, 'skipvm': args.skipvm,
-                'libvirt_scirpt_dir': os.path.dirname(os.path.abspath(libvirt.__file__))}
+    stx_dict = {'system_mode': args.mode, 'delete': args.delete, 'skipvm': args.skipvm,
+                'template_dir': default_template_dir, 'skiplabsetup': args.skiplabsetup,
+                'libvirt_scirpt_dir': os.path.dirname(os.path.abspath(libvirt_scripts.__file__))}
 
     # Allow the user to change variable values by:
-    # - modifying the variable.ini .
+    # - modifying the installer_config.ini .
     #   Customized files provided using this option will not be modified by the installer.
     # - providing an overwrite file that contains all the variables to change and their value in
     #   variable_name=value format for each line.
@@ -70,8 +70,9 @@ if __name__ == "__main__":
     #   the template files to be replaced.
     #   Customized template files provided using this option
     #   WILL be modified by the installer if needed.
+
     config = configparser.ConfigParser()
-    config.read(os.path.join(os.path.dirname(installer.__file__), 'variable.ini'))
+    config.read(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'installer_config.ini'))
     stx_dict.update(config['VARIABLE'])
     
     for key in config['FILE']:

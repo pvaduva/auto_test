@@ -1,11 +1,11 @@
-import urllib.request
-import os
-
 import logging
+import os
+import urllib.request
 
 
 def download_file(url, file_name):
-    """Downloading a file from the given url to the given path
+    """
+    Downloading a file from the given url to the given path
 
     :param url: The url that will be used to download the file
     :param file_name: The complete path including the file name of the downloaded file
@@ -15,7 +15,8 @@ def download_file(url, file_name):
     logging.info('downloading file from {} to {}'.format(url, file_name))
 
     def get_progress(count, block_size, total_size):
-        """Print the download progress
+        """
+        Print the download progress
 
         :param count: Number of block count
         :param block_size: The size of each block

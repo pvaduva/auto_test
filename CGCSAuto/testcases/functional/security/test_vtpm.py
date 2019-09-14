@@ -25,7 +25,7 @@ def reset_vms():
 
 
 @fixture(scope='module', autouse=True)
-def prepare_vms(request):
+def prepare_vms(request, stx_openstack_required):
 
     # if not system_helper.is_avs():
     #     skip('CGTS-9999')

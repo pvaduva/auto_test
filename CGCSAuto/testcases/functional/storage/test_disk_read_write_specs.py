@@ -18,7 +18,7 @@ from testfixtures.fixture_resources import ResourceCleanup
 
 
 @fixture(scope='module')
-def hosts_with_backing():
+def hosts_with_backing(stx_openstack_required):
     storage_backing, hosts = keywords.host_helper.get_storage_backing_with_max_hosts()
 
     LOG.fixture_step("Hosts with {} backing: {}".format(storage_backing, hosts))

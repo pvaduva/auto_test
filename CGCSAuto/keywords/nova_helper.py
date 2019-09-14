@@ -385,8 +385,8 @@ def set_flavor(flavor, project=None, project_domain=None, description=None, no_p
     return 0, flavor
 
 
-def unset_flavor(flavor, properties=None, project=None, project_domain=None, check_first=True, fail_ok=False,
-                 auth_info=Tenant.get('admin'), con_ssh=None):
+def unset_flavor(flavor, properties=None, project=None, project_domain=None, check_first=True,
+                 fail_ok=False, auth_info=Tenant.get('admin'), con_ssh=None):
     """
     Unset specific extra spec(s) from given flavor.
 
@@ -412,7 +412,8 @@ def unset_flavor(flavor, properties=None, project=None, project_domain=None, che
         properties = [properties]
 
     if properties and check_first:
-        existing_specs = get_flavor_values(flavor, fields='properties', con_ssh=con_ssh, auth_info=auth_info)[0]
+        existing_specs = get_flavor_values(flavor, fields='properties', con_ssh=con_ssh,
+                                           auth_info=auth_info)[0]
         properties = list(set(properties) & set(existing_specs.keys()))
 
     args_dict = {
@@ -427,7 +428,8 @@ def unset_flavor(flavor, properties=None, project=None, project_domain=None, che
         return -1, msg
 
     LOG.info("Unsetting flavor {} with args: {}".format(flavor, args))
-    exit_code, output = cli.openstack('flavor unset', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    exit_code, output = cli.openstack('flavor unset', args, ssh_client=con_ssh, fail_ok=fail_ok,
+                                      auth_info=auth_info)
     if exit_code > 0:
         return 1, output
 
@@ -989,8 +991,8 @@ def add_hosts_to_aggregate(aggregate, hosts, check_first=True, fail_ok=False, co
     Add host(s) to specified aggregate
 
     Args:
-        aggregate (str): name of the aggregate to add hosts. cgcsauto aggregate can be added via add_cgcsauto_zone
-            session fixture
+        aggregate (str): name of the aggregate to add hosts. cgcsauto aggregate can be added via
+            add_cgcsauto_zone session fixture
         hosts (list|str): host(s) to add to aggregate
         check_first (bool):
         fail_ok (bool):
@@ -1003,18 +1005,20 @@ def add_hosts_to_aggregate(aggregate, hosts, check_first=True, fail_ok=False, co
         (2, "aggregate-add-host accepted, but some host(s) are not added in aggregate")
 
     """
-    __remove_or_add_hosts_in_aggregate(remove=False, aggregate=aggregate, hosts=hosts, check_first=check_first,
+    __remove_or_add_hosts_in_aggregate(remove=False, aggregate=aggregate, hosts=hosts,
+                                       check_first=check_first,
                                        fail_ok=fail_ok, con_ssh=con_ssh, auth_info=auth_info)
 
 
-def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, check_first=True, fail_ok=False,
+def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, check_first=True,
+                                       fail_ok=False,
                                        con_ssh=None, auth_info=Tenant.get('admin')):
     """
     Remove/Add hosts from/to given aggregate
 
     Args:
-        aggregate (str): name of the aggregate to add/remove hosts. cgcsauto aggregate can be added via
-            add_cgcsauto_zone session fixture
+        aggregate (str): name of the aggregate to add/remove hosts. cgcsauto aggregate can be added
+            via add_cgcsauto_zone session fixture
         hosts (list|str):
         remove (bool): True if remove hosts from given aggregate, otherwise add hosts to aggregate
         check_first (bool):
@@ -1052,8 +1056,8 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
 
     if not hosts_to_rm_or_add:
         warn_str = 'No' if remove else 'All'
-        msg = "{} given host(s) in aggregate {}. Do nothing. Given hosts: {}; hosts in aggregate: {}".\
-            format(warn_str, aggregate, hosts, hosts_in_aggregate)
+        msg = "{} given host(s) in aggregate {}. Do nothing. Given hosts: {}; hosts in " \
+              "aggregate: {}".format(warn_str, aggregate, hosts, hosts_in_aggregate)
         LOG.warning(msg)
         return -1, msg
 
@@ -1061,12 +1065,14 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
     cmd = 'aggregate remove host' if remove else 'aggregate add host'
     for host in hosts_to_rm_or_add:
         args = '{} {}'.format(aggregate, host)
-        code, output = cli.openstack(cmd, args, ssh_client=con_ssh, fail_ok=True, auth_info=auth_info)
+        code, output = cli.openstack(cmd, args, ssh_client=con_ssh, fail_ok=True,
+                                     auth_info=auth_info)
         if code > 0:
             failed_res[host] = output
 
     if failed_res:
-        err_msg = "'{}' is rejected for following host(s) in aggregate {}: {}".format(cmd, aggregate, failed_res)
+        err_msg = "'{}' is rejected for following host(s) in aggregate {}: {}".format(
+            cmd, aggregate, failed_res)
         if fail_ok:
             LOG.warning(err_msg)
             return 1, err_msg
@@ -1080,15 +1086,16 @@ def __remove_or_add_hosts_in_aggregate(aggregate, hosts=None, remove=False, chec
         failed_hosts = list(set(hosts) - set(post_hosts_in_aggregate))
 
     if failed_hosts:
-        err_msg = "{} accepted, but some host(s) are not {}ed in aggregate {}: {}".format(cmd, msg_str, aggregate,
-                                                                                          failed_hosts)
+        err_msg = "{} accepted, but some host(s) are not {}ed in aggregate {}: {}".format(
+            cmd, msg_str, aggregate, failed_hosts)
         if fail_ok:
             LOG.warning(err_msg)
             return 2, err_msg
         else:
             raise exceptions.NovaError(err_msg)
 
-    succ_msg = "Hosts successfully {}ed in aggregate {}: {}".format(msg_str.lower(), aggregate, hosts)
+    succ_msg = "Hosts successfully {}ed in aggregate {}: {}".format(msg_str.lower(), aggregate,
+                                                                    hosts)
     LOG.info(succ_msg)
     return 0, succ_msg
 
@@ -1102,7 +1109,8 @@ def get_migration_list_table(con_ssh=None, auth_info=Tenant.get('admin')):
 
     """
     LOG.info("Listing migration history...")
-    return table_parser.table(cli.nova('migration-list', ssh_client=con_ssh, auth_info=auth_info)[1])
+    return table_parser.table(cli.nova('migration-list', ssh_client=con_ssh,
+                                       auth_info=auth_info)[1])
 
 
 def create_keypair(name, public_key=None, private_key=None, fail_ok=False, con_ssh=None,
@@ -1124,7 +1132,8 @@ def create_keypair(name, public_key=None, private_key=None, fail_ok=False, con_s
     args = '{} "{}"'.format(common.parse_args(args_dict), name)
     LOG.info("Creating keypair with args: {}".format(args))
 
-    code, out = cli.openstack('keypair create', args, ssh_client=con_ssh, fail_ok=fail_ok, auth_info=auth_info)
+    code, out = cli.openstack('keypair create', args, ssh_client=con_ssh, fail_ok=fail_ok,
+                              auth_info=auth_info)
     if code > 0:
         return 1, out
 
@@ -1157,15 +1166,16 @@ def delete_keypairs(keypairs, check_first=True, fail_ok=False, con_ssh=None, aut
             return -1, msg
 
     LOG.info('Deleting keypairs: {}'.format(keypairs))
-    code, out = cli.openstack('keypair delete', ' '.join(keypairs), ssh_client=con_ssh, fail_ok=fail_ok,
-                              auth_info=auth_info)
+    code, out = cli.openstack('keypair delete', ' '.join(keypairs), ssh_client=con_ssh,
+                              fail_ok=fail_ok, auth_info=auth_info)
     if code > 0:
         return code, out
 
     post_keypairs = get_keypairs(con_ssh=con_ssh, auth_info=auth_info)
     undeleted_kp_names = list(set(keypairs) & set(post_keypairs))
     if undeleted_kp_names:
-        raise exceptions.NovaError("keypair(s) still exist after deletion: {}".format(undeleted_kp_names))
+        raise exceptions.NovaError("keypair(s) still exist after deletion: {}".format(
+            undeleted_kp_names))
 
     msg = 'keypairs deleted successfully: {}'.format(keypairs)
     LOG.info(msg)
@@ -1189,7 +1199,8 @@ def get_hosts_in_aggregate(aggregate, con_ssh=None, auth_info=Tenant.get('admin'
     elif 'remote' in aggregate:
         aggregate = 'remote_storage_hosts'
 
-    hosts = get_aggregate_values(aggregate, 'hosts', con_ssh=con_ssh, auth_info=auth_info, fail_ok=fail_ok)
+    hosts = get_aggregate_values(aggregate, 'hosts', con_ssh=con_ssh, auth_info=auth_info,
+                                 fail_ok=fail_ok)
     if hosts:
         hosts = hosts[0]
     LOG.info("Hosts in {} aggregate: {}".format(aggregate, hosts))

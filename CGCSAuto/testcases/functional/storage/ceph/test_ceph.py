@@ -147,7 +147,7 @@ def test_ceph_mon_process_kill(monitor):
             root_ssh.exec_cmd(cmd)
 
             LOG.tc_step('Stop the ceph monitor')
-            cmd = 'service ceph stop mon.{}'.format(monitor)
+            cmd = 'service ceph stop mon.{}'.format('controller' if system_helper.is_aio_duplex() else monitor)
             root_ssh.exec_cmd(cmd)
 
     LOG.tc_step('Check that ceph monitor failure alarm is raised')
@@ -187,7 +187,7 @@ def test_ceph_mon_process_kill(monitor):
 # Testd on PV0.  Ruentime: 1899.93 seconds.  Date: Aug 4, 2017.  Status: Pass
 @mark.usefixtures('ceph_precheck')
 @mark.domain_sanity
-def test_ceph_reboot_storage_node():
+def test_ceph_reboot_storage_node(stx_openstack_required):
     """
     us69932_tc2_ceph_mon_process_kill from us69932_ceph_monitoring.odt
 
@@ -326,7 +326,7 @@ def test_ceph_reboot_storage_node():
 # Tested on PV0.  Runtime: 2770.23 seconds sec.  Date: Aug 4, 2017  Status: # Pass
 @mark.parametrize('host', ['any', 'storage-0'])
 @mark.usefixtures('ceph_precheck')
-def test_lock_stor_check_osds_down(host):
+def test_lock_stor_check_osds_down(stx_openstack_required, host):
     """
     This test is adapted from
     us69932_tc3_ceph_mon_maintenance_operations from us69932_ceph_monitoring.odt

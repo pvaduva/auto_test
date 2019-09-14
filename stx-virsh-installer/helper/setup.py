@@ -1,12 +1,13 @@
 import os
-from subprocess import check_output
+import subprocess
 
-from installer.utils import download_file
-from installer.helper import installer_log
+from ..utils import download_file
+from ..helper import installer_log
 
 
 def setup(var_dict):
-    """Download files, create virtual machines if necessary
+    """
+    Download files, create virtual machines if necessary
 
     :param var_dict: variable dictionary
     :return: a string list of virtual machines' name
@@ -40,19 +41,20 @@ def setup(var_dict):
         cwd = os.getcwd()
         os.chdir(var_dict['libvirt_scirpt_dir'])
         try:  # set_network.sh will return non zero exit if the network name exist
-            ret = check_output([os.path.join(var_dict['libvirt_scirpt_dir'], 'setup_network.sh')])
+            ret = subprocess.check_output([os.path.join(var_dict['libvirt_scirpt_dir'],
+                                                        'setup_network.sh')])
             installer_log.log_debug_msg('output from setup_network.sh:\n{}'.format(ret))
         except Exception:
             pass
         if var_dict['vm_name_prefix']:
-            ret = check_output(
+            ret = subprocess.check_output(
                 [os.path.join(var_dict['libvirt_scirpt_dir'], 'setup_configuration.sh'),
                     '-c', var_dict['system_mode'], '-i', var_dict['bootimage.iso'],
                     '-p', var_dict['vm_name_prefix'],
                     '-w', var_dict['num_of_compute'], '-s', var_dict['num_of_storage']
                  ])
         else:
-            ret = check_output(
+            ret = subprocess.check_output(
                 [os.path.join(var_dict['libvirt_scirpt_dir'], 'setup_configuration.sh'),
                     '-c', var_dict['system_mode'], '-i', var_dict['bootimage.iso'],
                     '-w', var_dict['num_of_compute'], '-s', var_dict['num_of_storage']
@@ -74,7 +76,8 @@ def setup(var_dict):
 
 
 def cleanup(var_dict):
-    """Remove the virtual machines that corresponds to the variable dictionary
+    """
+    Remove the virtual machines that corresponds to the variable dictionary
 
     :param var_dict: variable dictionary
     :return:
@@ -84,14 +87,14 @@ def cleanup(var_dict):
     cwd = os.getcwd()
     os.chdir(var_dict['libvirt_scirpt_dir'])
     if var_dict['vm_name_prefix']:
-        ret = check_output(
+        ret = subprocess.check_output(
             [os.path.join(var_dict['libvirt_scirpt_dir'], 'destroy_configuration.sh'),
                 '-c', var_dict['system_mode'],
                 '-p', var_dict['vm_name_prefix'],
                 '-w', var_dict['num_of_compute'], '-s', var_dict['num_of_storage']
              ])
     else:
-        ret = check_output(
+        ret = subprocess.check_output(
             [os.path.join(var_dict['libvirt_scirpt_dir'], 'destroy_configuration.sh'),
                 '-c', var_dict['system_mode'],
                 '-w', var_dict['num_of_compute'], '-s', var_dict['num_of_storage']

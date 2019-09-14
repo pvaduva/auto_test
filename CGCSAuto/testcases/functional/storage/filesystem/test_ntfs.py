@@ -178,8 +178,8 @@ def mount_usb(host_ssh, usb_device=None, partition="2", mount_type="ntfs", mount
 
 
 # Wendy says just testing one node is enough.
-#@mark.parametrize("host_type", ['controller', 'compute', 'storage'])
-def test_ntfs(host_type="controller"):
+# @mark.parametrize("host_type", ['controller', 'compute', 'storage'])
+def test_ntfs(stx_openstack_required, host_type="controller"):
     """
     This test will test NTFS mount and NTFS formatted device creation on a TiS
     system.

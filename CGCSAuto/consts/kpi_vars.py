@@ -5,7 +5,7 @@ class DRBDSync:
     NAME = 'drbd_sync(K/s)'
     LOG_PATH = '/var/log/kern.log'
     GREP_PATTERN = 'Resync done'
-    PYTHON_PATTERN = 'Resync done .* (\d+) K\/sec'
+    PYTHON_PATTERN = r'Resync done .* (\d+) K\/sec'
     UNIT = 'Rate(K/s)'
 
 
@@ -23,7 +23,7 @@ class VMRecoveryNetworking:
 class ConfigController:
     NAME = 'config_controller'
     LOG_PATH = '/var/log/bash.log'
-    START = 'localhost .*sudo .*config_controller'
+    START = r"localhost .*ansible-playbook .*-e \"@local-install-overrides.yaml\""
     END = 'controller-0'
 
 
@@ -38,9 +38,10 @@ class SystemInstall:
 class NodeInstall:
     NAME = '{}_install'
     LOG_PATH = '/var/log/anaconda/anaconda.log'
-    TIMESTAMP_PATTERN = '(\d{2}:\d{2}:\d{2},\d{3}) INFO'
+    TIMESTAMP_PATTERN = r'(\d{2}:\d{2}:\d{2},\d{3}) INFO'
 
 
+# Both
 class HostLock:
     NAME = '{}_lock'
     WITH_VM = 'host_lock_with_vms_{}'
@@ -50,13 +51,16 @@ class HostLock:
     START_PATH = '/var/log/bash.log'
 
 
+# OpenStack only
 class HostUnlock:
     NAME = '{}_unlock'
     LOG_PATH = '/var/log/fm-event.log'
     END = {
-        'controller': '401.001.*Service group web-services state change from go-active to active on host {}.*msg',
+        'controller': '401.001.*Service group web-services state change from go-active to '
+                      'active on host {}.*msg',
         'storage': "200.022.*{} is now 'enabled'.*msg",
         'compute': '275.001.* {} hypervisor is now unlocked-enabled.*msg',
+        'compute_platform': "200.022.*{} is now 'enabled'.*msg",
     }
     START = 'system.*host-unlock.*{}'
     START_PATH = '/var/log/bash.log'
@@ -78,7 +82,7 @@ class HeatStacks:
 
 class VolCreate:
     NAME = 'volume_creation'
-    START = 'cinder .*create .*20g'
+    START = 'openstack.* volume create .*20g'
     LOG_PATH = '/var/log/bash.log'
 
 
@@ -105,16 +109,16 @@ class VmStartup:
     END = 'Instance .* is enabled on host .*{}'
 
 
-class Swact:
-    NAME = 'swact_controlled'
+class SwactPlatform:
+    NAME = 'swact_controlled_platform'
     START_PATH = '/var/log/bash.log'
     START = 'system .*host-swact'
     LOG_PATH = '/var/log/sm.log'
     END = 'Swact has completed successfully'
 
 
-class SwactUncontrolled:
-    NAME = 'swact_uncontrolled'
+class SwactUncontrolledPlatform:
+    NAME = 'swact_uncontrolled_platform'
     START_PATH = '/var/log/bash.log'
     START = 'sudo reboot -f'
     LOG_PATH = '/var/log/sm.log'
@@ -174,6 +178,7 @@ class UpgradeController0:
     START = ' system  host-upgrade controller-0'
     LOG_PATH = '/var/log/fm-event.log'
     END = '200.022.*controller-0 reinstall completed successfully'
+
 
 class UpgradeOrchestration:
     NAME = 'upgrade_orchestration'

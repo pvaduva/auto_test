@@ -43,7 +43,8 @@ def sftp_send(source, remote_host, destination, username, password):
 
 
 def ssh_command(ip, username, password, command):
-    """ Set up ssh connection with ip using username and password, execute command,
+    """
+    Set up ssh connection with ip using username and password, execute command,
     and return the output
     :param ip: The ip address to connect
     :param username: The username for setting up ssh connection

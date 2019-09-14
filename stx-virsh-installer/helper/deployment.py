@@ -2,21 +2,21 @@ import time
 import traceback
 import os
 from threading import Thread
-from itertools import cycle
-from re import findall
-
+import itertools
+import re
 import pexpect
 
-from installer.utils.ssh import ssh_command
-from installer.helper import installer_log
-from installer.helper.populate_templates import send_files_controller_0, populate_templates
+from ..utils import ssh
+from ..helper import installer_log
+from ..helper import vm_file_management
 
 
 loading_done = False  # used by the precessing bar
 
 
 def wait_for_boot(node, node_name, max_time_out=1800):
-    """Monitor the virtual machine boot status, terminates when time out or boot finished
+    """
+    Monitor the virtual machine boot status, terminates when time out or boot finished
 
     :param node: Pexpect spawn of 'virsh console node_name'
     :param node_name:
@@ -33,7 +33,8 @@ def wait_for_boot(node, node_name, max_time_out=1800):
 
 
 def login(node, node_name, var_dict, is_first_login=False):
-    """Login to the virtual machine
+    """
+    Login to the virtual machine
 
     :param node: Pexpect spawn of 'virsh console node_name'
     :param node_name:
@@ -67,7 +68,8 @@ def login(node, node_name, var_dict, is_first_login=False):
 
 
 def get_external_connectivity(node, node_name, var_dict):
-    """Setting up external connectivity after virtual machine just booted
+    """
+    Setting up external connectivity after virtual machine just booted
 
     :param node: Pexpect spawn of 'virsh console node_name'
     :param node_name:
@@ -97,7 +99,8 @@ def get_external_connectivity(node, node_name, var_dict):
 
 
 def select_kernel_option(controller_0, var_dict):
-    """Select the boot options when booting controller-0
+    """
+    Select the boot options when booting controller-0
 
     :param controller_0: Pexpect spawn of 'virsh console controller_0_name'
     :param var_dict: Variable dictionary
@@ -132,7 +135,8 @@ def select_kernel_option(controller_0, var_dict):
 
 
 def run_ansible_playbook(node, node_name, command, max_time_out=1800):
-    """Run ansible playbook, terminates when detecting 'failed=.'
+    """
+    Run ansible playbook, terminates when detecting 'failed=.'
 
     :param node: Pexpect spawn of 'virsh console node_name'
     :param node_name:
@@ -142,7 +146,8 @@ def run_ansible_playbook(node, node_name, command, max_time_out=1800):
     :param max_time_out:
     :return: A boolean type indicates if login succeeded
     """
-    installer_log.log_debug_msg("run ansible playbook with \n{}\non node {}".format(command, node_name))
+    installer_log.log_debug_msg("run ansible playbook with \n{}\non node {}".
+                                format(command, node_name))
 
     try:
         node.sendline(command)
@@ -157,17 +162,20 @@ def run_ansible_playbook(node, node_name, command, max_time_out=1800):
 
 
 def get_system_host_list(var_dict):
-    """Get the output of system host-list through ssh connection.
+    """
+    Get the output of system host-list through ssh connection.
 
     :param var_dict:
     :return: The output of the ssh connection. Could be empty if the node is not active
     """
-    return ssh_command(var_dict['vm_ip_addr'], var_dict['vm_os_name'], var_dict['vm_os_password'],
-                       'source /etc/platform/openrc && system host-list')
+    return ssh.ssh_command(var_dict['vm_ip_addr'], var_dict['vm_os_name'],
+                           var_dict['vm_os_password'],
+                           'source /etc/platform/openrc && system host-list')
 
 
 def wait_till_controller_0_available(var_dict, max_time_out=600):
-    """ Wait till the controller-0 is unlocked, enabled and available
+    """
+    Wait till the controller-0 is unlocked, enabled and available
 
     :param var_dict:
     :param max_time_out:
@@ -178,14 +186,15 @@ def wait_till_controller_0_available(var_dict, max_time_out=600):
         installer_log.log_debug_msg("wait 20 sec to get controller-0 state")
         time.sleep(20)
         output = get_system_host_list(var_dict)
-        if len(findall('controller-0.*unlocked.*enabled.*available', output)) == 1:
+        if len(re.findall('controller-0.*unlocked.*enabled.*available', output)) == 1:
             return True
         wait_counter = wait_counter + 1
     return False
 
 
 def wait_till_other_nodes_configured(var_dict, num_of_other_nodes, max_time_out=600):
-    """When using deployment manager to install multi-node system, after controller-0
+    """
+    When using deployment manager to install multi-node system, after controller-0
     is ready, all the other nodes will be configure first, and on the output of 'system host-list'
     other node will be shown as locked, disabled and offline status
     Once all other nodes shown in the output of 'system host-list', the installer will start all
@@ -200,14 +209,15 @@ def wait_till_other_nodes_configured(var_dict, num_of_other_nodes, max_time_out=
         installer_log.log_debug_msg('wait 20 sec to check nodes states')
         time.sleep(20)
         output = get_system_host_list(var_dict)
-        if len(findall('locked.*disabled.*offline', output)) == num_of_other_nodes:
+        if len(re.findall('locked.*disabled.*offline', output)) == num_of_other_nodes:
             return True
         wait_counter = wait_counter + 1
     return False
 
 
 def wait_till_all_nodes_available(var_dict, num_of_total_nodes, max_time_out=4800):
-    """Wait till all nodes in unlocked, enabled and available in the output of 'system host-list'
+    """
+    Wait till all nodes in unlocked, enabled and available in the output of 'system host-list'
 
     :param var_dict:
     :param num_of_total_nodes:
@@ -219,11 +229,11 @@ def wait_till_all_nodes_available(var_dict, num_of_total_nodes, max_time_out=480
         # print('wait 30 sec to check nodes states')
         time.sleep(30)
         output = get_system_host_list(var_dict)
-        if len(findall('unlocked.*enabled.*available', output)) == num_of_total_nodes:
+        if len(re.findall('unlocked.*enabled.*available', output)) == num_of_total_nodes:
             # check the state again after 10 sec to make sure the states are stable
             time.sleep(10)
             output = get_system_host_list(var_dict)
-            if len(findall('unlocked.*enabled.*available', output)) == num_of_total_nodes:
+            if len(re.findall('unlocked.*enabled.*available', output)) == num_of_total_nodes:
 
                 return True
         wait_counter = wait_counter + 1
@@ -231,7 +241,8 @@ def wait_till_all_nodes_available(var_dict, num_of_total_nodes, max_time_out=480
 
 
 def check_kubectl(controller_0, controller_0_name, var_dict, num_of_total_nodes, max_time_out=600):
-    """After all nodes ready in the output of 'system host-list', check on kubectl to see if all
+    """
+    After all nodes ready in the output of 'system host-list', check on kubectl to see if all
     nodes are ready
 
     :param controller_0:
@@ -251,7 +262,7 @@ def check_kubectl(controller_0, controller_0_name, var_dict, num_of_total_nodes,
             controller_0.expect_exact('kubectl get hosts -n {}\r\n'.format(var_dict['namespace']))
             controller_0.expect_exact('\r\ncontroller-0:~$')
             output = controller_0.before
-            if len(findall('unlocked.*enabled.*available.*true', output)) == num_of_total_nodes:
+            if len(re.findall('unlocked.*enabled.*available.*true', output)) == num_of_total_nodes:
                 controller_0.sendline('clear')
                 controller_0.sendline('kubectl get nodes')
                 controller_0.expect_exact('kubectl get nodes\r\n')
@@ -266,7 +277,8 @@ def check_kubectl(controller_0, controller_0_name, var_dict, num_of_total_nodes,
 
 
 def start_vm(node_name):
-    """Start the virtual machine with node name
+    """
+    Start the virtual machine with node name
 
     :param node_name:
     :return:
@@ -286,7 +298,8 @@ def start_vm(node_name):
 
 
 def monitor_node_booting(node_name, log_path):
-    """Monitor the boot output and unlock output on nodes other than controller-0
+    """
+    Monitor the boot output and unlock output on nodes other than controller-0
     This function is used in a thread
 
     :param node_name:
@@ -322,7 +335,8 @@ def monitor_node_booting(node_name, log_path):
 
 
 def run_lab_setup(node, node_name, max_time_out=7200):
-    """Preparing and running lab_setup.sh after all nodes are ready
+    """
+    Preparing and running lab_setup.sh after all nodes are ready
 
     :param node:
     :param node_name:
@@ -356,7 +370,8 @@ def run_lab_setup(node, node_name, max_time_out=7200):
 
 
 def update_ip(node, node_name, var_dict):
-    """Check if the external ip for the vm changed after vm rebooting
+    """
+    Check if the external ip for the vm changed after vm rebooting
 
     :param node:
     :param node_name:
@@ -366,11 +381,13 @@ def update_ip(node, node_name, var_dict):
     installer_log.log_debug_msg("updating ip on node {}".format(node_name))
 
     try:
-        node.sendline("ifconfig {} | grep mask | awk '{{print $2}}' | cut -f2 -d:".format(var_dict['vm_interface_name']))
+        node.sendline("ifconfig {} | grep mask | awk '{{print $2}}' | cut -f2 -d:".
+                      format(var_dict['vm_interface_name']))
         # used double curly brace to print literally curly brace when using string.format()
         node.expect('[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}')
         if node.after != var_dict['vm_ip_addr']:
-            installer_log.log_debug_msg('vm ip address changed from {} to {}'.format(var_dict['vm_ip_addr'], node.after))
+            installer_log.log_debug_msg('vm ip address changed from {} to {}'.
+                                        format(var_dict['vm_ip_addr'], node.after))
             var_dict['vm_ip_addr'] = node.after
         return True
     except pexpect.ExceptionPexpect:
@@ -379,12 +396,13 @@ def update_ip(node, node_name, var_dict):
 
 
 def processing_bar():
-    """A rotating processing bar showing that the program is still running
+    """
+    A rotating processing bar showing that the program is still running
 
     :return:
     """
     global loading_done
-    pool = cycle(['-', '\\', '|', '/'])
+    pool = itertools.cycle(['-', '\\', '|', '/'])
     for item in pool:
         if loading_done:
             print('\rLoading Finished !')
@@ -395,7 +413,8 @@ def processing_bar():
 
 
 def deploy_system(nodes_list, var_dict):
-    """Main control flow of installing the system
+    """
+    Main control flow of installing the system
 
     :param nodes_list:
     :param var_dict:
@@ -449,11 +468,12 @@ def deploy_system(nodes_list, var_dict):
                                    'getting external connectivity for controller-0')
         return False
 
-    if not send_files_controller_0(var_dict):
+    if not vm_file_management.send_files_controller_0(var_dict):
         installer_log.log_info_msg('sth went wrong when sending files to controller-0')
         return False
 
-    if not populate_templates(controller_0, controller_0_name, nodes_list, var_dict):
+    if not vm_file_management.populate_templates(controller_0, controller_0_name,
+                                                 nodes_list, var_dict):
         installer_log.log_info_msg('sth went wrong when populating templates')
         return False
 
@@ -580,11 +600,14 @@ def deploy_system(nodes_list, var_dict):
                                         'but a thread that monitors nodes booting is still running')
             installer_log.log_error_msg(traceback.format_exc())
 
+    if var_dict['skiplabsetup']:  # skip lab_setup.sh all nodes are ready
+        installer_log.log_info_msg("Lab_setup.sh skipped! All done! {} installed successfully"
+                                   .format(var_dict['system_mode']))
+        return True
     installer_log.log_step('lab_setup.sh', False)
     loading_done = False
     loading_bar = Thread(target=processing_bar, daemon=True)
     loading_bar.start()
-
     if not run_lab_setup(controller_0, controller_0_name):
         loading_done = True
         loading_bar.join()
@@ -595,6 +618,5 @@ def deploy_system(nodes_list, var_dict):
     installer_log.log_step('lab_setup.sh', True)
     installer_log.log_info_msg("All done! {} installed successfully"
                                .format(var_dict['system_mode']))
-    controller_0_consolelog.close()
     return True
 

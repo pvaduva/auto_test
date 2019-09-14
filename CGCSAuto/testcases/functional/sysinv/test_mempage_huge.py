@@ -45,7 +45,7 @@ def test_modify_memory_when_unlocked_negative(get_host):
     hostname = get_host
 
     LOG.tc_step("Attempt to the modify memory of unlocked host")
-    args = "-2M 4 {} 1".format(hostname)
+    args = "-2M 0 1G 0 {} 1".format(hostname)
     exit_code, output = cli.system('host-memory-modify', args, fail_ok=True)
 
     LOG.tc_step("Verify host-memory-modify command rejected when host is unlocked")

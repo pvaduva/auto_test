@@ -98,7 +98,6 @@ def restore_sysadmin_password(current_password=None, target_password=None):
         LOG.info('chaning password {} times: from:{} to:{}\n'.format(n, current_password, new_password))
 
         security_helper.change_linux_user_password(current_password, new_password,host=current_host)
-        HostLinuxUser.set_password(new_password)
         current_password = new_password
         exclude_list.append(new_password)
 
@@ -110,8 +109,8 @@ def restore_sysadmin_password(current_password=None, target_password=None):
 
     LOG.info('Restore password of sysadmin to:{}'.format(original_password))
 
-    security_helper.change_linux_user_password(current_password, original_password, user='sysadmin', host=current_host)
-    HostLinuxUser.set_password(original_password)
+    security_helper.change_linux_user_password(current_password, original_password,
+                                               user=HostLinuxUser.get_user(), host=current_host)
     LOG.info('Password for sysadmin is restored to:{}'.format(original_password))
 
     return original_password
@@ -300,10 +299,10 @@ def test_non_sysadmin_not_propagating(user, password, host):
 
 def wait_after_change_sysadmin_password():
     total_wait_time = MAX_WAIT_FOR_ALARM
-    each_wait_time = 60
+    each_wait_time = 120
     waited_time = 0
 
-    time.sleep(10)
+    time.sleep(30)
 
     alarm_id = ALARM_ID_OUTOF_CONFIG
     while waited_time < total_wait_time:
@@ -349,7 +348,6 @@ def test_sysadmin_password_propagation():
     LOG.info('OK, password changed for sysadmin, new password:{}, old password:{} on host:{}\n'.format(
         new_password, password, current_host))
 
-    HostLinuxUser.set_password(new_password)
     update_host_user('active-controller', user, new_password)
 
     LOG.tc_step('Wait alarms for password changed raised and cleared')

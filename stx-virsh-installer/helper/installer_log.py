@@ -25,7 +25,8 @@ def log_start(file_name, filemode='w', level=logging.DEBUG):
 
 
 def log_step(step, finished):
-    """Picks up steps from step_dict and log the status of the step
+    """
+    Picks up steps from step_dict and log the status of the step
 
     :param step: An integer or string that corresponds to one of the key in step_dict
     :param finished: A boolean value that indicates if the step is finished or not
@@ -47,7 +48,8 @@ def log_var_dict(var_dict):
 
 
 def log_deleting(confirmed):
-    """Log when the user selected to delete the system
+    """
+    Log when the user selected to delete the system
 
     :param confirmed: A boolean value that indicates if the user confirmed to delete the system
     :return:

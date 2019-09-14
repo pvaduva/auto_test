@@ -22,4 +22,6 @@ def add_parser():
                         action='store_true')
     parser.add_argument('--skipvm', help='Skip creating new virtual machines',
                         action='store_true')
+    parser.add_argument('--skiplabsetup', help='Skip running lab_setup.sh',
+                        action='store_true')
     return parser
