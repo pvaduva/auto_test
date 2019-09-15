@@ -250,7 +250,7 @@ def check_containers(prev_bad_pods, check_app):
 
 
 @fixture()
-def revert_data_mtu(request):
+def revert_data_mtu(request, stx_openstack_required):
     def revert():
         LOG.fixture_step('Restore the MTUs of the data IFs on hosts if modified')
         global HOSTS_IF_MODIFY_ARGS
