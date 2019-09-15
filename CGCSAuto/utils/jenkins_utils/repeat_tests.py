@@ -2,8 +2,10 @@ import pytest
 from optparse import OptionParser
 
 
-def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=None, stop_on_failure=False,
-                 reporttag=None, resultlog=None, sessiondir=None, collectall=False):
+def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=None,
+                 stop_on_failure=False,
+                 reporttag=None, resultlog=None, sessiondir=None, collectall=False,
+                 ipv6_oam=False):
     if file_path:
         test_cases = _get_tests_from_file(file_path=file_path)
         if not test_cases:
@@ -30,6 +32,8 @@ def repeat_tests(lab, count=10, file_path=None, test_cases=None, cgcsauto_path=N
         params.append('--sessiondir={}'.format(sessiondir))
     elif resultlog:
         params.append('--resultlog={}'.format(resultlog))
+    if ipv6_oam:
+        params.append('--ipv6-oam')
 
     params.append('--noconsolelog')
     params += test_cases
@@ -66,16 +70,24 @@ def _get_tests_from_file(file_path):
 
 if __name__ == '__main__':
     parser = OptionParser()
-    parser.add_option('-c', '--count', action='store', type='int', dest='count', default=10, help='How many times to repeat')
-    parser.add_option('-f', '--file', action='store', type='string', dest='file_path', help='test list file path')
-    parser.add_option('-t', '--test', action='store', type='string', dest='testcase', help='testcases')
+    parser.add_option('-c', '--count', action='store', type='int', dest='count', default=10,
+                      help='How many times to repeat')
+    parser.add_option('-f', '--file', action='store', type='string', dest='file_path',
+                      help='test list file path')
+    parser.add_option('-t', '--test', action='store', type='string', dest='testcase',
+                      help='testcases')
     parser.add_option('--stop', action='store_true', dest='stop', default=False,
                       help='Stop session without teardown upon first failure')
+    parser.add_option('--ipv6-oam', action='store_true', dest='ipv6_oam', default=False,
+                      help='IPv6 system')
     parser.add_option('--cgcsauto', action='store', dest='cgcsauto', help='CGCSAuto dir')
-    parser.add_option('--sessiondir', action='store', dest='sessiondir', help='Automation session log dir')
-    parser.add_option('--resultlog', action='store', dest='resultlog', help='Automation logs root dir. e.g., /home')
+    parser.add_option('--sessiondir', action='store', dest='sessiondir',
+                      help='Automation session log dir')
+    parser.add_option('--resultlog', action='store', dest='resultlog',
+                      help='Automation logs root dir. e.g., /home')
     parser.add_option('--reporttag', action='store', dest='reporttag', help='report tag')
-    parser.add_option('--collectall', action='store_true', dest='collectall', help='collect logs on system')
+    parser.add_option('--collectall', action='store_true', dest='collectall',
+                      help='collect logs on system')
 
     options, args = parser.parse_args()
 
@@ -86,14 +98,15 @@ if __name__ == '__main__':
         raise ValueError("lab has to be provided!{}".format(usage))
 
     f_path = options.file_path
-    kwargs = dict(lab=lab_, stop_on_failure=options.stop, count=options.count, cgcsauto_path=options.cgcsauto,
-                  sessiondir=options.sessiondir, resultlog=options.resultlog, reporttag=options.reporttag,
-                  collectall=options.collectall)
+    kwargs = dict(lab=lab_, stop_on_failure=options.stop, count=options.count,
+                  cgcsauto_path=options.cgcsauto,
+                  sessiondir=options.sessiondir, resultlog=options.resultlog,
+                  reporttag=options.reporttag,
+                  collectall=options.collectall, ipv6_oam=options.ipv6_oam)
     if not f_path:
         test = options.testcase
         if not test:
             raise ValueError("file_path or test has to be provided!{}".format(usage))
-
         kwargs['test_cases'] = test
     else:
         kwargs['file_path'] = f_path
