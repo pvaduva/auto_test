@@ -1,11 +1,11 @@
-import random
 from pytest import fixture, mark
 
-from utils import cli, table_parser
+from utils import cli
 from utils.tis_log import LOG
 
 from keywords import host_helper, system_helper
 from testfixtures.recover_hosts import HostsToRecover
+from consts.stx import HostAvailState
 
 
 @fixture(scope='function', autouse=True)
@@ -15,10 +15,12 @@ def check_alarms():
 
 @fixture(scope='module')
 def get_host():
-    if system_helper.is_aio_duplex():
+    if system_helper.is_aio_simplex():
+        hostname = 'controller-0'
+    elif system_helper.is_aio_duplex():
         hostname = system_helper.get_standby_controller_name()
     else:
-        hostname = host_helper.get_up_hypervisors()[0]
+        hostname = system_helper.get_computes(availability=HostAvailState.AVAILABLE)[0]
 
     return hostname
 
@@ -49,7 +51,8 @@ def test_modify_memory_when_unlocked_negative(get_host):
     exit_code, output = cli.system('host-memory-modify', args, fail_ok=True)
 
     LOG.tc_step("Verify host-memory-modify command rejected when host is unlocked")
-    assert exit_code == 1, "system host-memory-modify is not rejected when {} is unlocked".format(hostname)
+    assert exit_code == 1, "system host-memory-modify is not rejected when {} is unlocked".\
+        format(hostname)
 
 
 # @fixture(scope='module')
