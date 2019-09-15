@@ -9,7 +9,10 @@ from keywords import keystone_helper
 
 
 def get_ip_addr():
-    return ProjVar.get_var('lab')['floating ip']
+    ip = ProjVar.get_var('lab')['floating ip']
+    if ProjVar.get_var('IPV6_OAM'):
+        ip = '[{}]'.format(ip)
+    return ip
 
 
 def create_url(ip=None, port=None, version=None, extension=None):
