@@ -371,7 +371,8 @@ def test_sysadmin_password_propagation():
 
     LOG.tc_step('Try to change the password again using the original password')
     # try to change the password again using the original password
-    LOG.info('Change password from  {} to {} again should not be successful'.format(password, new_password))
+    LOG.info('Change password from  {} to {} again should not be successful'.format(password,
+                                                                                    new_password))
     changed, changed_password = security_helper.change_linux_user_password(
         password, new_password, user='sysadmin', host=current_host)
 

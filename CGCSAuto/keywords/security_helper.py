@@ -768,10 +768,14 @@ def change_linux_user_password(password, new_password, user=None,
     initial_prompt = r'.*{}\:~\$ '.format(host)
     LOG.info('Will login as user:"{}", password:"{}", to host:"{}"'.format(
         user, password, host))
-
-    conn = SSHFromSSH(conn_to_ac, host, user, password, force_password=True,
-                      initial_prompt=initial_prompt)
     passed = True
+    try:
+        conn = SSHFromSSH(conn_to_ac, host, user, password, force_password=True,
+                          initial_prompt=initial_prompt)
+    except:
+        passed = False
+        return passed, new_password
+
     try:
         conn.connect(retry=False, use_password=True)
         for cmd, expected, errors in input_outputs:
@@ -801,7 +805,9 @@ def change_linux_user_password(password, new_password, user=None,
         conn.close()
         if user == HostLinuxUser.get_user():
             conn = ControllerClient.get_active_controller()
-            conn.password = password
+            if conn.is_connected():
+                conn.close()
+            conn.password = new_password
             conn.connect()
             HostLinuxUser.set_password(new_password)
 

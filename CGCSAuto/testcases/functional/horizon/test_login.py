@@ -1,7 +1,8 @@
-from pytest import mark
+from pytest import mark, skip
 
 from consts.auth import Tenant
 from utils.horizon.pages import loginpage
+from keywords import container_helper
 
 
 @mark.parametrize(('username', 'service'), [
@@ -17,6 +18,9 @@ def test_horizon_login(driver, username, service):
         - Verify is-logged-in
         - Logout
     """
+    if service == 'container' and not container_helper.is_stx_openstack_deployed():
+        skip('Skip OpenStack horizon test when stx-openstack not deployed')
+
     port = 31000 if service == 'container' else None
     login_pg = loginpage.LoginPage(driver, port=port)
     login_pg.go_to_target_page()
