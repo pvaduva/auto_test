@@ -31,6 +31,7 @@ UPGRADE_LOAD_SIG_FILE = "bootimage.sig"
 BACKUP_USB_MOUNT_POINT = '/media/sysadmin'
 TUXLAB_BARCODES_DIR = "/export/pxeboot/vlm-boards/"
 CENTOS_INSTALL_REL_PATH = "export/dist/isolinux/"
+ANSIBLE_BOOTSTRAP_PATH = "/usr/share/ansible/stx-ansible/playbooks/bootstrap.yml"
 
 outputs_restore_system_conf = ("Enter 'reboot' to reboot controller: ",
                                "compute-config in progress ...")
@@ -3520,8 +3521,8 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
                                                         config_file,
                                                         extra_option)
         else:
-            cmd = 'ansible-playbook /usr/share/ansible/stx-ansible/playbooks/' \
-                  'bootstrap/bootstrap.yml -e "@local-install-overrides.yaml"'
+            cmd = 'ansible-playbook {} -e "@local-install-overrides.yaml"'\
+                .format(ANSIBLE_BOOTSTRAP_PATH)
             con_telnet.set_prompt(r'.*:~\$\s?')
 
         os.environ["TERM"] = "xterm"
