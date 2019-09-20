@@ -7,9 +7,9 @@ from keywords import host_helper, system_helper
 
 
 @mark.parametrize('host_type', [
-    param('controller', marks=mark.platform),
-    param('compute', marks=mark.platform),
-    param('storage', marks=mark.platform),
+    param('controller', marks=mark.platform_sanity),
+    param('compute', marks=mark.platform_sanity),
+    param('storage', marks=mark.platform_sanity),
 ])
 def test_force_reboot_host(host_type):
     """
