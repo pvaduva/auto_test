@@ -196,7 +196,8 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
     LOG.tc_step(test_step)
     if do_step(test_step):
         con0_v6_ip = None
-        if ProjVar.get_var('IPV6_OAM'):
+
+        if InstallVars.get_install_var('IPV6_OAM'):
             con0_v6_ip = lab['controller-0 ip']
             # Use ipv4 ip to download files temporarily
             con0_v4_ip = con0_v6_ip.rsplit(':', maxsplit=1)[-1]
@@ -298,6 +299,21 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
 
     deploy_mgr = use_deploy_manager(controller0_node, lab)
     ansible = True if deploy_mgr or use_ansible(controller0_node) else False
+
+    if deploy_mgr:
+        
+        ## This temporary solution until we implement the yaml helper functions
+        vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
+        ovs_dpdk_yaml = 'deployment-config-ovs_dpdk.yaml'
+        none_yaml = 'deployment-config-none.yaml'
+        default_yaml = 'deployment-config.yaml'
+        if vswitch_type in [VSwitchType.OVS_DPDK]:
+            if controller0_node.telnet_conn.exec_cmd("test -f {}".format(ovs_dpdk_yaml))[0] == 0:
+                LOG.debug("setting up ovs_dpdk deployment-config yaml")
+                controller0_node.telnet_conn.exec_cmd("mv {} {} ; mv {} {}"
+                                                               .format(default_yaml, none_yaml, ovs_dpdk_yaml,
+                                                                       default_yaml))
+        ## End of temporary solution
 
     test_step = "Configure controller"
     LOG.tc_step(test_step)

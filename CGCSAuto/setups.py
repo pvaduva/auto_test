@@ -773,7 +773,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False,
     if float_ip:
         lab_to_install['floating ip'] = float_ip
 
-    convert_to_ipv6(lab=lab_to_install)
+    if ipv6_oam:
+        convert_to_ipv6(lab=lab_to_install)
 
     # Parse nodes info
     nodes_info = installconf['NODES']
