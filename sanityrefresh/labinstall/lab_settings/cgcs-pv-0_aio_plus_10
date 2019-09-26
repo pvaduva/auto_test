@@ -1,0 +1,13 @@
+[boot_interfaces]
+controller-0=0400
+controller-1=8300
+compute-0=8301
+compute-1=8301
+compute-2=UEFI IPv4: Intel Network 00 at Riser 01 Slot 01
+compute-3=8301
+compute-4=UEFI IPv4: Intel Network 00 at Riser 01 Slot 01
+compute-5=UEFI IPv4: Intel Network 00 at Riser 01 Slot 01
+compute-6=UEFI IPv4: Intel Network 00 at Riser 01 Slot 01
+compute-7=8300
+compute-8=8301
+compute-9=UEFI IPv4: Intel 82599 Network 01 at Riser 02 Slot 02
