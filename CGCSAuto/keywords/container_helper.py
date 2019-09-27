@@ -159,7 +159,7 @@ def get_apps(field='status', application=None, con_ssh=None, auth_info=Tenant.ge
     """
     table_ = table_parser.table(cli.system('application-list', ssh_client=con_ssh, auth_info=auth_info,
                                            use_telnet=use_telnet, con_telnet=con_telnet)[1])
-    if application:
+    if application is not None:
         kwargs['application'] = application
 
     return table_parser.get_multi_values(table_, fields=field, rtn_dict=rtn_dict, zip_values=True, **kwargs)

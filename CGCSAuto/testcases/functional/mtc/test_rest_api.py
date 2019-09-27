@@ -251,8 +251,11 @@ def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
     assert 'locked' == hostinfo['administrative'], "FAIL: Couldn't lock {}".format(hostname)
 
     LOG.tc_step("Modify {} vSwitch cpu using CLI".format(hostname))
-    res, out = host_helper.modify_host_cpu(hostname, 'Platform', p0=2, p1=2)
-    assert 0 == res, "FAIL: The cpus weren't even modified by cli"
+    res, out = host_helper.modify_host_cpu(hostname, 'Platform', p0=2, p1=2, fail_ok=True)
+    assert 1 == res, "FAIL: platform cpu modify passed with invalid config option"
+
+    res, out = host_helper.modify_host_cpu(hostname, 'Platform', p0=2)
+    assert 0 == res, "FAIL: platform cpu modify failed by cli"
 
     LOG.tc_step("Applying cpu profile with original config to {} via restAPI".format(hostname))
     data = [{"path": "/iprofile_uuid", "value": "{}".format(iprofile_uuid), "op": "replace"},

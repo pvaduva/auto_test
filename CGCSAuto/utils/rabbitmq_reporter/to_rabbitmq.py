@@ -56,12 +56,6 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
     if not os.path.isfile(file_path):
         raise FileNotFoundError("File does not exist: {}".format(file_path))
 
-    # Parse common test params
-    # class UploadRes:
-    #   USER_STORY = 'cgcsauto'
-    #   REL_NAME = 'Titanium Cloud R4'
-    #   TAG = 'cgcsauto'
-    #
 
     userStory = UploadRes.USER_STORY
     release_name = UploadRes.REL_NAME
@@ -95,7 +89,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
             runStartDate=reportDate,
             date_modified=reportDate,
             testResult=result,
-            releaseName='Titanium Cloud R5',
+            releaseName='Wind River Cloud Platform 19.10',
             tcTotal=1,
             testExecutionTimeStamp=reportDate,
             id=tmp_id,

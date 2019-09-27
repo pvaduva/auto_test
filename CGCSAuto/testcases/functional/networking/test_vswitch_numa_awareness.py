@@ -63,7 +63,6 @@ def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
     vswitch_original_num_p0 = len(vswitch_proc_core_dict[0])
     vswitch_original_num_p1 = len(vswitch_proc_core_dict[1]) if proc1_exists else None
     platform_ogigin_num_p0 = len(pform_proc_core_dict[0])
-    platform_original_num_p1 = len(pform_proc_core_dict[1]) if proc1_exists else None
 
     def revert():
         post_vswitch_dict = host_helper.get_host_cpu_cores_for_function(host, func='vSwitch', core_type='log_core')
@@ -76,7 +75,7 @@ def host_to_config(request, add_admin_role_module, add_cgcsauto_zone):
                  any([len(v) > 2 for v in post_pform_dict.values()])):
             host_helper.lock_host(host, swact=True)
             host_helper.modify_host_cpu(host, 'vswitch', p0=vswitch_original_num_p0, p1=vswitch_original_num_p1)
-            host_helper.modify_host_cpu(host, 'platform', p0=platform_ogigin_num_p0, p1=platform_original_num_p1)
+            host_helper.modify_host_cpu(host, 'platform', p0=platform_ogigin_num_p0)
             host_helper.unlock_host(host, check_hypervisor_up=True)
 
     request.addfinalizer(revert)
@@ -140,7 +139,8 @@ class TestVSwitchCPUReconfig:
         # ((2, 0), (2, 0), None, True),       # CPE only    # remove - covered by other test
         # ((1, 0), (2, 0), None, 'nonAIO'),      # Standard lab only
     ], ids=id_params_cores)
-    def test_vswitch_cpu_reconfig_positive(self, host_to_config, flavor_, platform, vswitch, ht_required, cpe_required):
+    def test_vswitch_cpu_reconfig_positive(self, host_to_config, flavor_, platform, vswitch,
+                                           ht_required, cpe_required):
         """
         Test valid vswitch cpu reconfigurations, and verify vm can still be hosted on the modified host
 
@@ -216,16 +216,10 @@ class TestVSwitchCPUReconfig:
         pass
 
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required', 'expt_err'), [
-        param((1, 1), (5, 5), 'nonHT', None, "CpuAssignment.VSWITCH_TOO_MANY_CORES", marks=mark.p3),
-        param((7, 6), (2, 5), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES", marks=mark.p3),
+        param((2, 0), (5, 6), 'nonHT', None, "CpuAssignment.VSWITCH_TOO_MANY_CORES",
+              marks=mark.p3),
         # Assume total<=10 cores/per proc & thread
-        # param(('cores-2', 'cores-2'), (2, 2), None, None, "CpuAssignment.NO_VM_CORE", marks=mark.p3), Removed due to CGTS-5715
-        param((1, 1), (9, 8), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES", marks=mark.p3),
-        # Assume total <= 10 cores/per proc & thread
-        param((5, 5), (5, 4), None, None, "CpuAssignment.VSWITCH_TOO_MANY_CORES", marks=mark.p3),
-        param((5, 5), (6, 5), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES", marks=mark.p3),  # Assume total<=10core/proc&thread
-        param((1, 1), (8, 10), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES", marks=mark.p3),
-        # Assume total <= 10 cores/per proc&thread
+        param((4, 0), (8, 10), None, None, "CpuAssignment.TOTAL_TOO_MANY_CORES", marks=mark.p3),
         # param((2, 0), (0, 0), None, None, "CpuAssignment.VSWITCH_INSUFFICIENT_CORES", marks=mark.p3), shared vswitch core feature
     ], ids=id_params_cores)
     def test_vswitch_cpu_reconfig_negative(self, host_to_config, platform, vswitch, ht_required, cpe_required,
@@ -269,8 +263,8 @@ class TestVSwitchCPUReconfig:
 
         # FIXME
         # total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1))
-        total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1),
-                                                             functions=['Applications', 'vSwitch', 'Platform'])
+        total_p0, total_p1 = host_helper.get_logcores_counts(
+            host, proc_ids=(0, 1), functions=['Applications', 'vSwitch', 'Platform'])
 
         # convert test params if host to config has more than 10 cores per proc & threaad
         if 'NO_VM_CORE' in expt_err:
@@ -281,21 +275,18 @@ class TestVSwitchCPUReconfig:
             #
             platform = int(total_p0) - 2, int(total_p1) - 2
         elif 'TOTAL_TOO_MANY_CORES' in expt_err:
-            diff = 0
             if total_p0 > 10 and platform[0] + vswitch[0] > 10:
                 diff = total_p0 - 10
+                platform = platform[0] + diff, 0
             elif total_p1 > 10 and platform[1] + vswitch[1] > 10:
                 diff = total_p1 - 10
-            platform = platform[0] + diff, platform[1] + diff
+                vswitch[1] += diff
         elif 'VSWITCH_TOO_MANY_CORES' in expt_err:
             if total_p0 > 10 and vswitch[0] + vswitch[1] > 10:
                 diff = total_p0 - 10
                 vswitch = vswitch[0] + diff, vswitch[1] + diff
 
-        platform_args = {}
-        for i in range(len(platform)):
-            if i is not None:
-                platform_args['p' + str(i)] = platform[i]
+        platform_args = {'p0': platform[0]}
 
         vswitch_args = {}
         for j in range(len(vswitch)):
