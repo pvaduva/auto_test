@@ -31,6 +31,14 @@ SSH_OPTS = {
     }
 
 
+
+
+
+
+
+
+
+
 def change_password(connect, password, new_password, expecting_fail=False):
     LOG.info('change_password: current:{}, new_password:{}'.format(password, new_password))
 
@@ -135,6 +143,11 @@ def restore_sysadmin_password_raw(connect, current_password, original_password, 
 
     HostLinuxUser.set_password(original_password)
     LOG.info('Password for sysadmin is restored to:{}'.format(original_password))
+
+
+@fixture()
+def check_alarms():
+    pass
 
 
 @fixture(scope="function", autouse=True)
