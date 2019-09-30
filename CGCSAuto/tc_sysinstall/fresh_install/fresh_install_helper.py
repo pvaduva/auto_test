@@ -12,11 +12,12 @@ from utils.clients.ssh import ControllerClient, NATBoxClient, SSHFromSSH
 from consts.lab import NatBoxes
 from consts.auth import Tenant, HostLinuxUser, TestFileServer
 from consts.timeout import InstallTimeout, HostTimeout
-from consts.stx import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState, VSwitchType
+from consts.stx import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState, \
+    VSwitchType
 from consts.filepaths import BuildServerPath, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
-from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, kube_helper, storage_helper, \
-    keystone_helper, network_helper
+from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, \
+    kube_helper, storage_helper, keystone_helper
 
 DEPLOY_TOOL = 'deploy'
 DEPLOY_SOUCE_PATH = '/folk/cgts/lab/bin/'
@@ -118,7 +119,8 @@ def do_step(step_name=None):
                     in_skip_list = True
     else:
         in_skip_list = current_step_num in skip_list
-    # if resume flag is given do_step if it's currently the specified resume step or a step after that point
+    # if resume flag is given do_step if it's currently the specified resume step or a step
+    # after that point
     if resume_step:
         on_resume_step = (str(resume_step) == str(current_step_num) or resume_step == step_name) and \
                          not completed_resume_step
@@ -301,7 +303,7 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
     ansible = True if deploy_mgr or use_ansible(controller0_node) else False
 
     if deploy_mgr:
-        
+
         ## This temporary solution until we implement the yaml helper functions
         vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
         ovs_dpdk_yaml = 'deployment-config-ovs_dpdk.yaml'
@@ -310,9 +312,8 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
         if vswitch_type in [VSwitchType.OVS_DPDK]:
             if controller0_node.telnet_conn.exec_cmd("test -f {}".format(ovs_dpdk_yaml))[0] == 0:
                 LOG.debug("setting up ovs_dpdk deployment-config yaml")
-                controller0_node.telnet_conn.exec_cmd("mv {} {} ; mv {} {}"
-                                                               .format(default_yaml, none_yaml, ovs_dpdk_yaml,
-                                                                       default_yaml))
+                controller0_node.telnet_conn.exec_cmd("mv {} {} ; mv {} {}".format(
+                    default_yaml, none_yaml, ovs_dpdk_yaml, default_yaml))
         ## End of temporary solution
 
     test_step = "Configure controller"
@@ -655,8 +656,8 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
 
 def run_lab_setup(con_ssh, conf_file=None, final_step=None):
 
-    lab = InstallVars.get_install_var('LAB')
-    deploy_mgr = use_deploy_manager(lab['controller-0'], lab)
+    # lab = InstallVars.get_install_var('LAB')
+    # deploy_mgr = use_deploy_manager(lab['controller-0'], lab)
 
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
@@ -1170,7 +1171,8 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
             active_controller_node.ssh_conn.connect(retry=True, retry_interval=10, retry_timeout=60)
             active_controller_node.ssh_conn.flush()
             system_helper.get_build_info(con_ssh=active_controller_node.ssh_conn)
-    except (exceptions.SSHException, exceptions.SSHRetryTimeout, exceptions.SSHExecCommandFailed) as e_:
+    except (exceptions.SSHException, exceptions.SSHRetryTimeout, exceptions.SSHExecCommandFailed) \
+            as e_:
         LOG.error(e_.__str__())
 
     LOG.fixture_step("unreserving hosts")

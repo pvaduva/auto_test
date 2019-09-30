@@ -745,6 +745,17 @@ def lock_host(host, force=False, lock_timeout=HostTimeout.LOCK,
                     auth_info=auth_info, con_ssh=con_ssh, use_telnet=use_telnet,
                     con_telnet=con_telnet):
                 LOG.info("Host is successfully locked and in online state.")
+                if not use_telnet:
+                    from keywords import container_helper
+                    platform_app = 'platform-integ-apps'
+                    if container_helper.wait_for_apps_status(apps=platform_app, timeout=30,
+                                                             status=AppStatus.APPLYING,
+                                                             fail_ok=True, con_ssh=con_ssh,
+                                                             auth_info=auth_info)[0]:
+                        container_helper.wait_for_apps_status(apps=platform_app,
+                                                              status=AppStatus.APPLIED,
+                                                              fail_ok=False,
+                                                              con_ssh=con_ssh, auth_info=auth_info)
                 return 0, "Host is locked and in online state."
             else:
                 msg = "Task is not cleared within {} seconds after host goes " \

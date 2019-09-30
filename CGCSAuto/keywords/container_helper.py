@@ -281,7 +281,8 @@ def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=300, c
         return 1, output
 
     res = wait_for_apps_status(apps=app_name, status=AppStatus.APPLIED, timeout=applied_timeout,
-                               check_interval=check_interval, con_ssh=con_ssh, auth_info=auth_info, fail_ok=fail_ok)[0]
+                               check_interval=check_interval, con_ssh=con_ssh, auth_info=auth_info,
+                               fail_ok=fail_ok)[0]
     if not res:
         return 2, "{} failed to apply".format(app_name)
 
