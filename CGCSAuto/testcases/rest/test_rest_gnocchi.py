@@ -1,7 +1,9 @@
 import pytest
+
 from utils.tis_log import LOG
 from utils.rest import Rest
 
+from testfixtures.pre_checks_and_configs import stx_openstack_required
 from testcases.rest import rest_test_helper
 
 
