@@ -46,6 +46,8 @@ def get_sys_type(con_ssh=None, use_telnet=False, con_telnet=None):
                                use_telnet=use_telnet, con_telnet=con_telnet,
                                auth_info=auth_info)) == 1:
             sys_type = SysType.AIO_SX
+        elif get_computes(con_ssh=con_ssh):
+            sys_type = SysType.AIO_PLUS
     elif get_storage_nodes(con_ssh=con_ssh):
         sys_type = SysType.STORAGE
     else:

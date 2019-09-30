@@ -64,7 +64,8 @@ def test_lock_unlock_host(host_type, collect_kpi):
             assert host, "No standby controller available"
 
     else:
-        if host_type == 'compute' and system_helper.is_aio_system():
+        if host_type == 'compute' and (system_helper.is_aio_duplex() or
+                                       system_helper.is_aio_simplex()):
             skip("No compute host on AIO system")
         elif host_type == 'storage' and not system_helper.is_storage_system():
             skip("System does not have storage nodes")

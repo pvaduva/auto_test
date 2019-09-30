@@ -656,7 +656,7 @@ class SysType:
     REGULAR = 'Regular'
     MULTI_REGION = 'Multi-Region'
     DISTRIBUTED_CLOUD = 'Distributed_Cloud'
-    AIO_PLUS = 'AIO_PLUS'
+    AIO_PLUS = 'AIO-PLUS'
 
 
 class HeatStackStatus:
