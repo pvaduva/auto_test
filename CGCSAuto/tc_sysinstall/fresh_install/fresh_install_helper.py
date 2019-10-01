@@ -1167,10 +1167,21 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
 
     try:
         if active_controller_node.ssh_conn:
-            LOG.fixture_step("Get build info")
-            active_controller_node.ssh_conn.connect(retry=True, retry_interval=10, retry_timeout=60)
-            active_controller_node.ssh_conn.flush()
-            system_helper.get_build_info(con_ssh=active_controller_node.ssh_conn)
+            LOG.fixture_step("Collect system info")
+            con_ssh = active_controller_node.ssh_conn
+            con_ssh.connect(retry=True, retry_interval=10, retry_timeout=60)
+            con_ssh.flush()
+            con_ssh.exec_cmd('nslookup www.google.com')
+            con_ssh.exec_sudo_cmd('docker pull alpine')
+            con_ssh.exec_cmd('kubectl -n titanium-deployment-manager describe statefulsetapps',
+                             fail_ok=True)
+            con_ssh.exec_cmd('kubectl -n titanium-deployment-manager describe pods', fail_ok=True)
+
+            from keywords import container_helper
+            container_helper.get_apps(con_ssh=con_ssh)
+            system_helper.get_alarms(con_ssh=con_ssh)
+            system_helper.get_build_info(con_ssh=con_ssh)
+
     except (exceptions.SSHException, exceptions.SSHRetryTimeout, exceptions.SSHExecCommandFailed) \
             as e_:
         LOG.error(e_.__str__())

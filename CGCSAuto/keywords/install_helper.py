@@ -3534,11 +3534,6 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
                 (not ansible and "failed" in output):
             err_msg = "{} execution failed: {} {}".format(cmd, rc, output)
             LOG.error(err_msg)
-            if deploy_manager:
-                con_telnet.exec_cmd('kubectl -n titanium-deployment-manager describe '
-                                    'statefulsetapps', fail_ok=True)
-                con_telnet.exec_cmd('kubectl -n titanium-deployment-manager describe pods',
-                                    fail_ok=True)
 
             scp_logs_to_log_dir([LogPath.CONFIG_CONTROLLER_LOG], con_ssh=con_telnet)
             raise exceptions.CLIRejected(err_msg)
