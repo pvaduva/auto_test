@@ -29,6 +29,7 @@ POD_NAME = 'hellokitty'
 
 HELM_TAR = 'hello-kitty.tgz'
 HELM_APP_NAME = 'hello-kitty'
+HELM_APP_VERSION = '1.16'
 HELM_POD_FULL_NAME = 'hk-hello-kitty-hello-kit'
 HELM_MSG = '<h3>Hello Kitty World!</h3>'
 
@@ -147,7 +148,7 @@ def test_launch_app_via_sysinv(copy_test_apps, cleanup_app):
     app_name = HELM_APP_NAME
 
     LOG.tc_step("Upload {} helm charts".format(app_name))
-    container_helper.upload_app(app_name=app_name, app_version='1.0',
+    container_helper.upload_app(app_name=app_name, app_version=HELM_APP_VERSION,
                                 tar_file=os.path.join(app_dir, HELM_TAR))
 
     LOG.tc_step("Apply {}".format(app_name))
