@@ -31,7 +31,7 @@ HELM_TAR = 'hello-kitty.tgz'
 HELM_APP_NAME = 'hello-kitty'
 HELM_APP_VERSION = '1.16'
 HELM_POD_FULL_NAME = 'hk-hello-kitty-hello-kit'
-HELM_MSG = '<h3>Hello Kitty World!</h3>'
+HELM_MSG = '<h3>Hello MONSTER Kitty World!</h3>'
 
 
 def controller_precheck(controller):
