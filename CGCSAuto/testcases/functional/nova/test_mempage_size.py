@@ -131,10 +131,10 @@ def check_mempage_change(vm, host, prev_host_mems, mempage_size=None, mem_gib=VM
 
 
 @mark.parametrize('mem_page_size', [
-    param('2048', marks=mark.domain_sanity),
+    param('2048', marks=mark.nightly),
     param('large', marks=mark.p1),
     param('small', marks=mark.domain_sanity),
-    param('1048576', marks=mark.p3),
+    param('1048576', marks=mark.nightly),
 ])
 def test_vm_mem_pool_default_config(prepare_resource, mem_page_size):
     """

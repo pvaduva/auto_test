@@ -162,8 +162,10 @@ def test_launch_app_via_sysinv(copy_test_apps, cleanup_app):
                                         "jsonpath '{}'".format(json_path)
 
     localhost = LocalHostClient(connect=True)
-    prefix = 'https' if keystone_helper.is_https_enabled() else 'http'
+    prefix = 'http'
     oam_ip = ProjVar.get_var('LAB')['floating ip']
+    if common.get_ip_version(oam_ip) == 6:
+        oam_ip = '[{}]'.format(oam_ip)
     output_file = '{}/{}.html'.format(ProjVar.get_var('TEMP_DIR'),
                                       HELM_APP_NAME)
     localhost.exec_cmd('wget {}://{}:{} -O {}'.format(
