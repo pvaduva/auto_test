@@ -61,7 +61,7 @@ def __verify_alarms(request, scope):
         if prev_bad_pods:
             exclude = True
             prev_name = prev_bad_pods
-        kube_helper.wait_for_pods_healthy(timeout=120, all_namespaces=True,
+        kube_helper.wait_for_pods_healthy(timeout=300, all_namespaces=True,
                                           name=prev_name, exclude=exclude,
                                           strict=True)
 
