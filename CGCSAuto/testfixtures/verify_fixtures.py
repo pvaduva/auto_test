@@ -55,8 +55,14 @@ def __verify_alarms(request, scope):
         post_apps_status = container_helper.get_apps(
             field=('application', 'status'), application=prev_applied_apps)
         LOG.info('prev bad pods: {}'.format(prev_bad_pods))
+
+        exclude = False
+        prev_name = None
+        if prev_bad_pods:
+            exclude = True
+            prev_name = prev_bad_pods
         kube_helper.wait_for_pods_healthy(timeout=120, all_namespaces=True,
-                                          name=prev_bad_pods, exclude=True,
+                                          name=prev_name, exclude=exclude,
                                           strict=True)
 
         # check no new bad application
