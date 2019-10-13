@@ -1,7 +1,8 @@
 from pytest import mark, fixture
 
 from utils.tis_log import LOG
-from keywords import host_helper, check_helper
+from consts.stx import PLATFORM_APP, AppStatus
+from keywords import host_helper, check_helper, container_helper
 
 
 # Do not check alarms for test in this module, which are read only tests.
@@ -46,3 +47,15 @@ def test_system_alarms(pre_alarms_session):
     LOG.tc_step("Gathering system alarms at the end of test session")
     check_helper.check_alarms(before_alarms=pre_alarms_session)
     LOG.info("No new alarms found after test session.")
+
+
+@mark.absfirst
+@mark.platform_sanity
+def test_system_health_pre_session():
+    LOG.tc_step("Check {} status".format(PLATFORM_APP))
+    assert container_helper.get_apps(application=PLATFORM_APP)[0] == AppStatus.APPLIED, \
+        "{} is not {}".format(PLATFORM_APP, AppStatus.APPLIED)
+
+    LOG.tc_step("Check system alarms")
+    check_helper.check_alarms(before_alarms=[])
+    LOG.info("No new alarms found.")

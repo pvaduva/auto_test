@@ -69,6 +69,8 @@ SUPPORTED_UPGRADES = [['15.12', '16.10'],
 
 DROPS = {1: '18.07'}
 PLATFORM_NET_TYPES = ('mgmt', 'oam', 'infra', 'pxeboot')
+PLATFORM_APP = 'platform-integ-apps'
+
 
 TIMEZONES = [
     "Asia/Hong_Kong",       # UTC+8
