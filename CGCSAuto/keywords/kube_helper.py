@@ -841,6 +841,8 @@ def wait_for_running_pods_ready(pod_names=None, namespace=None,
         if not unready_pods:
             return True
 
+        time.sleep(20)
+
     msg = "Some pods are not ready within {}s: {}".format(timeout, unready_pods)
     LOG.warning(msg)
     if fail_ok:
