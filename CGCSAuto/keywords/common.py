@@ -306,10 +306,11 @@ def scp_to_local(dest_path, source_path, source_server=None,
 
     dir_option = '-r ' if is_dir else ''
     ipv6_arg = ''
-    if ipv6 or get_ip_version(source_server) == 6:
+    if get_ip_version(source_server) == 6:
         ipv6_arg = '-6 '
-        if get_ip_version(source_server) == 6:
-            source_server = '[]'.format(source_server)
+        source_server = '[{}]'.format(source_server)
+    elif ipv6:
+        ipv6_arg = '-6 '
     cmd = 'scp {}-oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ' \
           '{}{}@{}:{} {}'.\
         format(ipv6_arg, dir_option, source_user, source_server, source_path, dest_path)

@@ -103,11 +103,6 @@ def test_lock_unlock_host(host_type, collect_kpi):
                 unlock_host_type = 'compute_platform'
 
         LOG.info("Collect kpi for lock/unlock {}".format(host_type))
-
-        if not container_helper.is_stx_openstack_deployed():
-            lock_kpi_name += '_platform'
-            unlock_kpi_name += '_platform'
-
         code_lock, out_lock = kpi_log_parser.record_kpi(
             local_kpi_file=collect_kpi,
             kpi_name=lock_kpi_name,
