@@ -6,7 +6,7 @@ import random
 import re
 import time
 
-from pytest import mark, param
+from pytest import mark, param, fixture, skip
 
 from consts.stx import EventLogID
 from keywords import vm_helper, host_helper, system_helper, storage_helper
@@ -97,13 +97,19 @@ def _test_ceph_osd_process_kill():
         assert False, msg
 
 
+@fixture(scope='module')
+def ceph_monitors():
+    return storage_helper.get_ceph_mons()
+
+
 @mark.parametrize('monitor', [
     param('controller-0', marks=mark.nightly),
     'controller-1',
+    'compute-0',
     'storage-0'])
 # Tested on PV0.  Runtime: 222.34 seconds.  Date: Aug 4, 2017  Status: Pass
 @mark.usefixtures('ceph_precheck')
-def test_ceph_mon_process_kill(monitor):
+def test_ceph_mon_process_kill(monitor, ceph_monitors):
     """
     us69932_tc2_ceph_mon_process_kill from us69932_ceph_monitoring.odt
 
@@ -137,6 +143,9 @@ def test_ceph_mon_process_kill(monitor):
         1.  CGTS-2975
 
     """
+    if monitor not in ceph_monitors:
+        skip("{} is not a ceph monitor".format(monitor))
+
     LOG.tc_step('Get process ID of ceph monitor')
     mon_pid = storage_helper.get_mon_pid(monitor)
 

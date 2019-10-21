@@ -649,7 +649,7 @@ def add_ceph_mon(host, con_ssh=None, fail_ok=False):
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    existing_ceph_mons = get_ceph_mon_values(con_ssh=con_ssh)
+    existing_ceph_mons = get_ceph_mons(con_ssh=con_ssh)
     if host in existing_ceph_mons:
         state = get_ceph_mon_state(host, con_ssh=con_ssh)
         LOG.warning("Host {} is already added as ceph-mon and is in state: {}".format(host, state))
@@ -713,7 +713,8 @@ def wait_for_ceph_mon_configured(host, state=None, timeout=HostTimeout.CEPH_MON_
         raise exceptions.StorageError(msg)
 
 
-def get_ceph_mon_values(field='hostname', hostname=None, uuid=None, state=None, task=None, con_ssh=None):
+def get_ceph_mons(field='hostname', hostname=None, uuid=None, state=None, task=None,
+                  con_ssh=None):
     """
 
     Args:
@@ -728,7 +729,8 @@ def get_ceph_mon_values(field='hostname', hostname=None, uuid=None, state=None, 
 
     """
     ceph_mons = []
-    table_ = table_parser.table(cli.system('ceph-mon-list', ssh_client=con_ssh)[1], combine_multiline_entry=True)
+    table_ = table_parser.table(cli.system('ceph-mon-list', ssh_client=con_ssh)[1],
+                                combine_multiline_entry=True)
 
     filters = {}
     if table_:
@@ -747,7 +749,7 @@ def get_ceph_mon_values(field='hostname', hostname=None, uuid=None, state=None, 
 
 
 def get_ceph_mon_state(hostname, con_ssh=None):
-    return get_ceph_mon_values(field='state', hostname=hostname, con_ssh=con_ssh)[0]
+    return get_ceph_mons(field='state', hostname=hostname, con_ssh=con_ssh)[0]
 
 
 def get_fs_mount_path(ssh_client, fs):
