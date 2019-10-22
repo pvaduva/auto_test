@@ -4535,7 +4535,7 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
         if server_ssh.exec_cmd('test -f {}'.format(helm_chart_overrides_path),
                                rm_date=False)[0] == 0:
             pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
-            dest_path = "{}titanium-deployment-manager-overrides.yaml". \
+            dest_path = "{}wind-river-cloud-platform-deployment-manager-overrides.yaml". \
                 format(HostLinuxUser.get_home())
             # dest_path = '{}/{}'.format(HostLinuxUser.get_home(), helm_chart_overrides)
             server.ssh_conn.rsync(helm_chart_overrides_path,
@@ -4557,11 +4557,12 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
                                   lab['controller-0 ip'], HostLinuxUser.get_home(),
                                   pre_opts=pre_opts)
 
-        titanium_deploy_mgr_tgz_path = os.path.join(BuildServerPath.DEPLOY_MANAGER_PATH,
-                                                    BuildServerPath.TITANIUM_DEPLOYMENT_MGR_TGZ)
-        dest_path = '{}titanium-deployment-manager.tgz'.format(HostLinuxUser.get_home())
+        deploy_mgr_tgz_path = os.path.join(BuildServerPath.DEPLOY_MANAGER_PATH,
+                                           BuildServerPath.TITANIUM_DEPLOYMENT_MGR_TGZ)
+        dest_path = '{}wind-river-cloud-platform-deployment-manager.tgz'.format(
+            HostLinuxUser.get_home())
 
-        server.ssh_conn.rsync(titanium_deploy_mgr_tgz_path,
+        server.ssh_conn.rsync(deploy_mgr_tgz_path,
                               lab['controller-0 ip'], dest_path, pre_opts=pre_opts)
 
     if server_ssh.exec_cmd('test -f {}'.format(registry_ca_cert_path), rm_date=False)[0] == 0:
