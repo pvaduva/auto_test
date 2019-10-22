@@ -1173,12 +1173,9 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
             con_ssh.flush()
             con_ssh.exec_cmd('nslookup www.google.com')
             con_ssh.exec_sudo_cmd('docker pull alpine')
-            con_ssh.exec_cmd('kubectl -n wind-river-cloud-platform-deployment-manager describe '
-                             'statefulsetapps',
+            con_ssh.exec_cmd('kubectl -n titanium-deployment-manager describe statefulsetapps',
                              fail_ok=True)
-            con_ssh.exec_cmd(
-                'kubectl -n wind-river-cloud-platform-deployment-manager describe pods',
-                fail_ok=True)
+            con_ssh.exec_cmd('kubectl -n titanium-deployment-manager describe pods', fail_ok=True)
 
             from keywords import container_helper
             container_helper.get_apps(con_ssh=con_ssh)

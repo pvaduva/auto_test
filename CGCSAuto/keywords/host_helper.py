@@ -204,7 +204,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None,
         return -1, msg
 
     if hostnames:
-        time.sleep(60)
+        time.sleep(30)
         hostnames = sorted(hostnames)
         hosts_in_rebooting = system_helper.wait_for_hosts_states(
             hostnames, timeout=HostTimeout.FAIL_AFTER_REBOOT,
