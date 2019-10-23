@@ -216,7 +216,8 @@ class LocalHostClient(SSHClient):
         """
         output = packet_loss_rate = None
         for i in range(max(retry+1, 1)):
-            cmd = 'ping -c {} {}'.format(ping_count, server)
+            ping = "ping6" if ':' in server else "ping"
+            cmd = '{} -c {} {}'.format(ping, ping_count, server)
             code, output = self.exec_cmd(cmd=cmd, expect_timeout=timeout, fail_ok=True)
             if code != 0:
                 packet_loss_rate = 100
