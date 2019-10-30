@@ -1,7 +1,7 @@
 from pytest import fixture
 
 from consts import horizon
-from keywords import system_helper, storage_helper
+from keywords import system_helper, storage_helper, host_helper
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
 from utils.horizon.pages.admin.platform import storageoverviewpage
@@ -33,6 +33,11 @@ def test_horizon_storage_overview_display(storage_overview_pg):
         - Test osd.# table and status display
     """
     con_ssh = ControllerClient.get_active_controller()
+    standby = system_helper.get_standby_controller_name(con_ssh=con_ssh)
+    if standby == 'controller-1':
+        LOG.info('Workaround for CGTS-16739')
+        host_helper.swact_host(con_ssh=con_ssh)
+
     LOG.tc_step('Check storage cluster UUID, ceph health and storage usage display')
     cli_storage_service_info = []
 
