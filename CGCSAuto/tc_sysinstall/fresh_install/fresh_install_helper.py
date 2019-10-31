@@ -2027,7 +2027,7 @@ def wait_for_deploy_mgr_hosts_config(controller0_node, lab=None, fail_ok=False):
     LOG.info("Waiting for Deploy Mgr to configure and unlock hosts: {}  ...".format(hosts))
     no_of_hosts_configured = 0
     debug_msg = "Waiting for {} to become availability=available and insync=true: {}"
-    end_time = time.time() + HostTimeout.REBOOT
+    end_time = time.time() + HostTimeout.INSTALL_LOAD
     while time.time() < end_time:
         hosts_states = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'],
                                                  namespace='deployment',
