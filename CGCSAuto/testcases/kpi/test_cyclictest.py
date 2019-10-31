@@ -25,7 +25,7 @@ SHELL_FILE = 'runcyclictest.sh'
 RESULT_FILE = 'result'
 RUN_LOG = 'runlog'
 INCLUDING_RATIO = 0.999999
-TARGET_CPU_TYPE = 'Applications'
+TARGET_CPU_TYPE = 'Application'
 VM_CPU_NUM = 4
 
 RT_GUEST_PATH = '/localdisk/loadbuild/jenkins/CGCS_6.0_RT_Guest/latest_tis-centos-guest-rt.img'

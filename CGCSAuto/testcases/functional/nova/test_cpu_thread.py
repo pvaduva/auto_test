@@ -238,7 +238,7 @@ class TestHTEnabled:
         host = ht_hosts[0]
         vms = vm_helper.get_vms_on_host(hostname=host)
         vm_helper.delete_vms(vms=vms)
-        log_core_counts = host_helper.get_logcores_counts(host, thread='0', functions='Applications')
+        log_core_counts = host_helper.get_logcores_counts(host, thread='0', functions='Application')
         max_vm_count = int(log_core_counts[0] / vcpu_count) + int(log_core_counts[1] / vcpu_count)
         vm_helper.ensure_vms_quotas(vms_num=max_vm_count + 10, cores_num=4 * (max_vm_count + 2) + 10)
 

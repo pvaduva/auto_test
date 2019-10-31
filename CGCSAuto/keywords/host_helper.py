@@ -204,7 +204,7 @@ def reboot_hosts(hostnames, timeout=HostTimeout.REBOOT, con_ssh=None,
         return -1, msg
 
     if hostnames:
-        time.sleep(60)
+        time.sleep(120)
         hostnames = sorted(hostnames)
         hosts_in_rebooting = system_helper.wait_for_hosts_states(
             hostnames, timeout=HostTimeout.FAIL_AFTER_REBOOT,
@@ -2435,7 +2435,7 @@ def compare_host_to_cpuprofile(host, profile_uuid):
             if not check_range(shared_cores, i):
                 LOG.warning(msg + str(i))
                 return 2, msg + str(i)
-        elif functions[i] == 'Applications':
+        elif functions[i] == 'Application':
             if not check_range(vm_cores, i):
                 LOG.warning(msg + str(i))
                 return 2, msg + str(i)
@@ -2504,7 +2504,7 @@ def get_host_cpu_cores_for_function(hostname, func='vSwitch',
 
     Args:
         hostname (str): hostname to pass to system host-cpu-list
-        func (str|tuple|list): such as 'Platform', 'vSwitch', or 'Applications'
+        func (str|tuple|list): such as 'Platform', 'vSwitch', or 'Application'
         core_type (str): 'phy_core' or 'log_core'
         thread (int|None): thread number. 0 or 1
         con_ssh (SSHClient):
@@ -2532,7 +2532,7 @@ def get_host_cpu_cores_for_function(hostname, func='vSwitch',
         funcs_cores = []
         for func_ in func:
             if func_:
-                func_ = 'Applications' if func_.lower() == 'vms' else func_
+                func_ = 'Application' if func_.lower() == 'vms' else func_
             cores = table_parser.get_values(table_, core_type, processor=proc,
                                             assigned_function=func_,
                                             thread=thread)
@@ -2996,7 +2996,7 @@ def get_vcpus_per_proc(hosts=None, thread=None, con_ssh=None,
     for host in hosts:
         vcpus_per_proc[host] = {}
         cpus_per_proc = get_host_cpu_cores_for_function(host,
-                                                        func='Applications',
+                                                        func='Application',
                                                         thread=thread,
                                                         auth_info=auth_info,
                                                         con_ssh=con_ssh)

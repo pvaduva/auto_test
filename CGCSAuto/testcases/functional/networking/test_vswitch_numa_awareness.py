@@ -264,7 +264,7 @@ class TestVSwitchCPUReconfig:
         # FIXME
         # total_p0, total_p1 = host_helper.get_logcores_counts(host, proc_ids=(0, 1))
         total_p0, total_p1 = host_helper.get_logcores_counts(
-            host, proc_ids=(0, 1), functions=['Applications', 'vSwitch', 'Platform'])
+            host, proc_ids=(0, 1), functions=['Application', 'vSwitch', 'Platform'])
 
         # convert test params if host to config has more than 10 cores per proc & threaad
         if 'NO_VM_CORE' in expt_err:
@@ -331,7 +331,7 @@ def _get_vms_cores_nums(host, vswitch_cores_dict):
     """
     #  vswitch and non-vswitch nodes should be one each when this is called
 
-    vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='Applications')
+    vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='Application')
 
     vswitch_procs = [proc for proc in vms_cores_dict if vswitch_cores_dict[proc]]
     nonvswitch_procs = [proc for proc in vms_cores_dict if not vswitch_cores_dict[proc]]
@@ -522,7 +522,7 @@ class TestNovaSchedulerAVS:
             hosts_configured[1]: 0,
         }
         for host in hosts_configured:
-            vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='Applications')
+            vms_cores_dict = host_helper.get_host_cpu_cores_for_function(host, func='Application')
             vswitch_vm_cores = len(vms_cores_dict[hosts_vswitch_proc[host]])
             if host_helper.is_host_hyperthreaded(host):
                 vswitch_vm_cores *= 2
@@ -688,7 +688,7 @@ class TestNovaSchedulerAVS:
         LOG.fixture_step("(class) Determine host to boot vms on and calculate the vcpus for flavor")
 
         initial_host, other_host = hosts_configured
-        vms_cores_dict = host_helper.get_host_cpu_cores_for_function(initial_host, func='Applications')
+        vms_cores_dict = host_helper.get_host_cpu_cores_for_function(initial_host, func='Application')
         p1_vm_cores = len(vms_cores_dict[1])
         # p0_vm_cores = len(vms_cores_dict[0])
         if host_helper.is_host_hyperthreaded(initial_host):

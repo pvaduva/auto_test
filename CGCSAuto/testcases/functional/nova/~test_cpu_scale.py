@@ -64,11 +64,11 @@
 #     max_vcpus_proc0 = 0
 #     max_vcpus_proc1 = 0
 #     for host in target_hosts:
-#         vm_cores_per_proc = host_helper.get_host_cpu_cores_for_function(host, func='Applications', thread=None)
+#         vm_cores_per_proc = host_helper.get_host_cpu_cores_for_function(host, func='Application', thread=None)
 #         max_vcpus_proc0 = max(max_vcpus_proc0, len(vm_cores_per_proc[0]))
 #         max_vcpus_proc1 = max(max_vcpus_proc1, len(vm_cores_per_proc.get(1, [])))
 #
-#         host_helper.get_host_cpu_cores_for_function(host, func='Applications')
+#         host_helper.get_host_cpu_cores_for_function(host, func='Application')
 #         if system_helper.is_hyperthreading_enabled(host):
 #             ht_hosts[host] = vm_cores_per_proc
 #         else:
