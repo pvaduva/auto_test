@@ -1454,10 +1454,12 @@ def set_dc_vars():
 
         LOG.info("Create ssh connection to {}, and add to ControllerClient".
                  format(subcloud))
-        subcloud_ssh = SSHClient(subcloud_lab['floating ip'],
-                                 HostLinuxUser.get_user(),
-                                 HostLinuxUser.get_password(),
-                                 CONTROLLER_PROMPT)
+        # subcloud_ssh = SSHClient(subcloud_lab['floating ip'],
+        #                          HostLinuxUser.get_user(),
+        #                          HostLinuxUser.get_password(),
+        #                          CONTROLLER_PROMPT)
+
+        subcloud_ssh = common.ssh_to_stx(lab=subcloud_lab)
 
         try:
             subcloud_ssh.connect(retry=True, retry_timeout=30)

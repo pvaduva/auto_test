@@ -903,12 +903,12 @@ class Labs:
         'name': 'yow-cgcs-distributed_cloud-1',
         'floating ip': WCP_90_91['floating ip'],
         'central_region': WCP_90_91,
-        'subcloud-1': WCP_80_84,     # wcp80-81(84)
-        'subcloud-2': WCP_82_83,     # wcp82-83
-        'subcloud-3': WCP_84,      # wcp84
-        'subcloud-4': WCP_85_86,
-        'subcloud-5': WCP_87_88,
-        'subcloud-6': WCP_89,
+        'subcloud1': WCP_80_84,     # wcp80-81(84)
+        'subcloud2': WCP_82_83,     # wcp82-83
+        'subcloud3': WCP_84,      # wcp84
+        'subcloud4': WCP_85_86,
+        'subcloud5': WCP_87_88,
+        'subcloud6': WCP_89,
     }
 
     NO_LAB = None

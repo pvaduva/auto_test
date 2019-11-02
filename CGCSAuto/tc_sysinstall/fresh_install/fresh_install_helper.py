@@ -1995,9 +1995,10 @@ def wait_for_deploy_mgr_lab_config(controller0_node, lab=None, fail_ok=False):
     if do_step(test_step):
 
         wait_for_deploy_mgr_hosts_config(controller0_node, lab=lab, fail_ok=fail_ok)
-        wait_for_deploy_mgr_system_config(controller0_node, lab=lab, timeout=30, fail_ok=fail_ok)
         wait_for_deploy_mgr_data_networks_config(controller0_node, lab=lab, timeout=30,
                                                  fail_ok=fail_ok)
+        wait_for_deploy_mgr_system_config(controller0_node, lab=lab, timeout=1800, fail_ok=fail_ok)
+
 
 
 def wait_for_deploy_mgr_hosts_config(controller0_node, lab=None, fail_ok=False):
@@ -2056,7 +2057,7 @@ def wait_for_deploy_mgr_hosts_config(controller0_node, lab=None, fail_ok=False):
         raise exceptions.HostTimeout(msg)
 
 
-def wait_for_deploy_mgr_system_config(controller0_node, lab=None, timeout=30, fail_ok=False):
+def wait_for_deploy_mgr_system_config(controller0_node, lab=None, timeout=1800, fail_ok=False):
     """
 
     Args:
