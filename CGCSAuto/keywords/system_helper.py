@@ -61,7 +61,7 @@ def is_storage_system(con_ssh=None, use_telnet=False, con_telnet=None,
                       auth_info=Tenant.get('admin_platform')):
     sys_type = ProjVar.get_var('SYS_TYPE')
     if sys_type:
-        if not (ProjVar.get_var('IS_DC') and auth_info and
+        if not (con_ssh and ProjVar.get_var('IS_DC') and auth_info and
                 ProjVar.get_var('PRIMARY_SUBCLOUD') != auth_info.get('region')):
             return SysType.STORAGE == sys_type
     else:
@@ -87,7 +87,7 @@ def is_aio_duplex(con_ssh=None, use_telnet=False, con_telnet=None,
 
     sys_type = ProjVar.get_var('SYS_TYPE')
     if sys_type:
-        if not (ProjVar.get_var('IS_DC') and auth_info and
+        if not (con_ssh and ProjVar.get_var('IS_DC') and auth_info and
                 ProjVar.get_var('PRIMARY_SUBCLOUD') !=
                 auth_info.get('region', None)):
             return SysType.AIO_DX == sys_type
@@ -103,17 +103,17 @@ def is_aio_simplex(con_ssh=None, use_telnet=False, con_telnet=None,
                    auth_info=Tenant.get('admin_platform')):
     sys_type = ProjVar.get_var('SYS_TYPE')
     if sys_type:
-        if not (ProjVar.get_var('IS_DC') and auth_info and
+        if not (con_ssh and ProjVar.get_var('IS_DC') and auth_info and
                 ProjVar.get_var('PRIMARY_SUBCLOUD') !=
                 auth_info.get('region', None)):
             return SysType.AIO_SX == sys_type
-    else:
-        return is_aio_system(controller_ssh=con_ssh,
-                             use_telnet=use_telnet, con_telnet=con_telnet,
-                             auth_info=auth_info) and \
-               len(get_controllers(con_ssh=con_ssh,
-                                   use_telnet=use_telnet, con_telnet=con_telnet,
-                                   auth_info=auth_info)) == 1
+
+    return is_aio_system(controller_ssh=con_ssh,
+                         use_telnet=use_telnet, con_telnet=con_telnet,
+                         auth_info=auth_info) \
+        and len(get_controllers(con_ssh=con_ssh,
+                                use_telnet=use_telnet, con_telnet=con_telnet,
+                                auth_info=auth_info)) == 1
 
 
 def is_aio_system(controller_ssh=None, controller='controller-0',
@@ -134,7 +134,7 @@ def is_aio_system(controller_ssh=None, controller='controller-0',
     """
     sys_type = ProjVar.get_var('SYS_TYPE')
     if sys_type:
-        if not (ProjVar.get_var('IS_DC') and auth_info and
+        if not (controller_ssh and ProjVar.get_var('IS_DC') and auth_info and
                 ProjVar.get_var('PRIMARY_SUBCLOUD') != auth_info.get(
                     'region', None)):
             return 'aio' in sys_type.lower()

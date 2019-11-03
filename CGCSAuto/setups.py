@@ -1445,7 +1445,7 @@ def set_dc_vars():
     LOG.info("Online subclouds: {}".format(sub_clouds))
 
     lab = ProjVar.get_var('LAB')
-
+    primary_ssh = None
     for subcloud in sub_clouds:
         subcloud_lab = lab.get(subcloud, None)
         if not subcloud_lab:
@@ -1464,7 +1464,7 @@ def set_dc_vars():
         try:
             subcloud_ssh.connect(retry=True, retry_timeout=30)
             ControllerClient.set_active_controller(subcloud_ssh, name=subcloud)
-        except exceptions.SSHRetryTimeout as e:
+        except exceptions.SSHException as e:
             if subcloud == primary_subcloud:
                 raise
             LOG.warning('Cannot connect to {} via its floating ip. {}'.
@@ -1479,6 +1479,7 @@ def set_dc_vars():
                                                      'region': region}})
 
         if subcloud == primary_subcloud:
+            primary_ssh = subcloud_ssh
             LOG.info("Set default cli auth to use {}".format(subcloud))
             Tenant.set_region(region=region)
             Tenant.set_platform_url(url=auth_url)
@@ -1486,12 +1487,12 @@ def set_dc_vars():
     LOG.info("Set default controller ssh to {} in ControllerClient".
              format(primary_subcloud))
     ControllerClient.set_default_ssh(primary_subcloud)
+    return primary_ssh
 
 
 def set_sys_type(con_ssh):
-    set_dc_vars()
-
-    sys_type = system_helper.get_sys_type(con_ssh=con_ssh)
+    primary_ssh = set_dc_vars()
+    sys_type = system_helper.get_sys_type(con_ssh=primary_ssh if primary_ssh else con_ssh)
     ProjVar.set_var(SYS_TYPE=sys_type)
 
 
