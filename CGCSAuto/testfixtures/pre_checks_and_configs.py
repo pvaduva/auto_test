@@ -33,6 +33,10 @@ def stx_openstack_applied_required(request):
                                                       check_interval=15, fail_ok=False)
     request.addfinalizer(wait_for_recover)
 
+@fixture(scope='module')
+def no_openstack():
+    if container_helper.is_stx_openstack_deployed():
+        skip('stx-openstack is deployed. Skip test.')
 
 @fixture(scope='module')
 def stx_openstack_required():
