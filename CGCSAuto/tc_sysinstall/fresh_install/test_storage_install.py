@@ -127,7 +127,7 @@ def test_storage_install(install_setup):
         fresh_install_helper.wait_for_deployment_mgr_to_bulk_add_hosts(controller0_node, lab=lab)
 
     fresh_install_helper.boot_hosts(boot_device)
-    fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTERIM)
+    #fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTERIM)
     if not deploy_mgr:
         fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
@@ -152,8 +152,8 @@ def test_storage_install(install_setup):
         setup_tis_ssh(lab)
 
     #fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
-
-    fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_LAST)
+    if not deploy_mgr:
+        fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_LAST)
 
     fresh_install_helper.attempt_to_run_post_install_scripts()
 

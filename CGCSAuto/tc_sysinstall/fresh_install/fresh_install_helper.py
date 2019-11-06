@@ -1728,12 +1728,12 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
     if not controller0_node.ssh_conn:
         controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
     ControllerClient.set_active_controller(controller0_node.ssh_conn)
-
+    deploy_mgr = use_deploy_manager(controller0_node, lab)
     deploy_tool_full_path = HostLinuxUser.get_home() + DEPLOY_TOOL
 
     test_step = "collect lab configuration {}".format(stage)
     LOG.tc_step(test_step)
-    if do_step(test_step):
+    if do_step(test_step) and not deploy_mgr:
 
         cmd = "test -f {}".format(deploy_tool_full_path)
         err_msg = ''
