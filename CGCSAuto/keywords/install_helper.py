@@ -4558,10 +4558,14 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
                                   lab['controller-0 ip'], HostLinuxUser.get_home(),
                                   pre_opts=pre_opts)
 
-        deploy_mgr_tgz_path = os.path.join(BuildServerPath.DEPLOY_MANAGER_PATH, "19.10",
-                                           BuildServerPath.TITANIUM_DEPLOYMENT_MGR_TGZ)
-        dest_path = '{}wind-river-cloud-platform-deployment-manager.tgz'.format(
-            HostLinuxUser.get_home())
+        if "19.10" in load_path:
+            deploy_mgr_tgz_path = os.path.join(BuildServerPath.DEPLOY_MANAGER_PATH, "19.10",
+                                               BuildServerPath.TITANIUM_DEPLOYMENT_MGR_TGZ)
+        else:
+            deploy_mgr_tgz_path = os.path.join(BuildServerPath.DEPLOY_MANAGER_PATH,
+                                               BuildServerPath.TITANIUM_DEPLOYMENT_MGR_TGZ_V2)
+
+        dest_path = '{}wind-river-cloud-platform-deployment-manager.tgz'.format(HostLinuxUser.get_home())
 
         server.ssh_conn.rsync(deploy_mgr_tgz_path,
                               lab['controller-0 ip'], dest_path, pre_opts=pre_opts)

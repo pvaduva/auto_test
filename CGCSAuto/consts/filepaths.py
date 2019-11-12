@@ -113,6 +113,7 @@ class BuildServerPath:
     PLAY_BOOKS_PATH = LAB_CONF_DIR + "/playbooks"
     DEFAULT_CUMULUS_DOCKER_REGISTRY_CERT_PATH = LAB_CONF_DIR + '/pki/cumulus-docker-registry-ca-cert.pem'
     TITANIUM_DEPLOYMENT_MGR_TGZ = "wind-river-cloud-platform-deployment-manager-1.0.0.tgz"
+    TITANIUM_DEPLOYMENT_MGR_TGZ_V2 = "wind-river-cloud-platform-deployment-manager-2.0.0.tgz"
 
     HEAT_TEMPLATES_EXTS = {'16.10': HEAT_TEMPLATES_PREV,
                            '17.06': HEAT_TEMPLATES_PREV,
