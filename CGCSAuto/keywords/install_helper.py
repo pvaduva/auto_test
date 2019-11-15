@@ -629,12 +629,12 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
 
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
     download_deploy_manager_files(lab, server, load_path=load_path, deployment_mgr=deployment_mgr)
-    if not deployment_mgr:
-        cmd = "test -e " + script_path
-        server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
-        server.ssh_conn.rsync(script_path + "/*",
-                              lab['controller-0 ip'],
-                              HostLinuxUser.get_home(), pre_opts=pre_opts)
+    # if not deployment_mgr:
+    cmd = "test -e " + script_path
+    server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+    server.ssh_conn.rsync(script_path + "/*",
+                          lab['controller-0 ip'],
+                          HostLinuxUser.get_home(), pre_opts=pre_opts)
 
     cmd = "test -e " + lab_file_dir
     conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
@@ -4633,10 +4633,10 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
                            rm_date=False)[0] == 0:
         server.ssh_conn.rsync(BuildServerPath.DEPLOY_MANAGER_PATH + "/*.yaml",
                               lab['controller-0 ip'], HostLinuxUser.get_home(), pre_opts=pre_opts)
-        if deployment_mgr:
-            server.ssh_conn.rsync(BuildServerPath.DEPLOY_MANAGER_PATH + "/*.sh",
-                                  lab['controller-0 ip'], HostLinuxUser.get_home(),
-                                  pre_opts=pre_opts)
+        # if deployment_mgr:
+        #     server.ssh_conn.rsync(BuildServerPath.DEPLOY_MANAGER_PATH + "/*.sh",
+        #                           lab['controller-0 ip'], HostLinuxUser.get_home(),
+        #                           pre_opts=pre_opts)
 
         deploy_mgr_tgz_path = os.path.join(BuildServerPath.DEPLOY_MANAGER_PATH,
                                            BuildServerPath.TITANIUM_DEPLOYMENT_MGR_TGZ)
