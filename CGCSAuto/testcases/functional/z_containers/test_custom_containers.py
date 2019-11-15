@@ -322,7 +322,8 @@ def deploy_delete_kubectl_app(request):
         + ' --expose' \
         + ' --service-overrides=' \
         + "'{ " + '"spec": { "type": "LoadBalancer" } }' \
-        + "' --port 8080 --requests='cpu=1000m,memory=1024Mi'"
+        + "' --port 8080 --requests='cpu=1000m,memory=1024Mi'" \
+        + ' --replicas=2'
 
     LOG.fixture_step("Create {} test app by kubectl run".format(app_name))
     sub_cmd = "run {}".format(app_name)
@@ -385,5 +386,7 @@ def test_host_operations_with_custom_kubectl_app(deploy_delete_kubectl_app):
     time.sleep(20)
 
     host_helper.unlock_host(active)
+    pod_name = kube_helper.get_pods(field='NAME', namespace='default',
+                                    name=app_name, strict=False)[0]
     kube_helper.wait_for_pods_status(pod_names=pod_name, namespace=None,
                                      fail_ok=False)
