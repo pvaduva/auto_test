@@ -3,6 +3,7 @@ import os
 import re
 import threading
 import time
+import socket
 from urllib.request import urlopen
 
 import setups
@@ -10,7 +11,7 @@ from consts.auth import HostLinuxUser, TestFileServer, Tenant, CliAuth
 from consts.stx import HostAvailState, Prompt, PREFIX_BACKUP_FILE, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, \
     BACKUP_FILE_DATE_STR, BackupRestore, \
-    PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH, VSwitchType
+    PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH, VSwitchType, PING_LOSS_RATE
 from consts.filepaths import StxPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
@@ -3891,12 +3892,14 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
     controller0_node = lab_dict['controller-0']
 
     LOG.info("Transferring boot image iso file to lab: {}".format(dest_lab_name))
-    if local_client().ping_server(controller0_node.host_ip, fail_ok=True)[0] == 100:
+    local_hostname = socket.gethostname()
+    ping_func = local_client().ping_server if "yow-cgcs-test" in local_hostname else ping_from_test_server
+    if ping_func(controller0_node.host_ip, fail_ok=True)[0] == 100:
         msg = "The destination lab {} controller-0 is not reachable.".format(dest_lab_name)
         if boot_lab:
             LOG.info("{}. Attempting to boot lab {}:controller-0".format(msg, dest_lab_name))
             boot_controller(lab=lab_dict)
-            if local_client().ping_server(controller0_node.host_ip, fail_ok=fail_ok)[0] == 100:
+            if ping_func(controller0_node.host_ip, fail_ok=fail_ok)[0] == 100:
                 err_msg = "Cannot ping destination lab {} controller-0 after boot".format(
                     dest_lab_name)
                 LOG.warn(err_msg)
@@ -3915,7 +3918,9 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
         iso_host.name, iso_full_path)
     node_ssh = controller0_node.ssh_conn
     if node_ssh is None:
-        node_ssh = SSHClient(lab_dict['controller-0 ip'], initial_prompt=".*\$ ")
+        ssh_from_tuxlab2 = True if ProjVar.get_var('IPV6_OAM') else False
+        node_ssh = establish_ssh_connection(lab_dict['controller-0 ip'], initial_prompt=Prompt.CONTROLLER_PROMPT,
+                                 retry=False,  ssh_from_tuxlab2=ssh_from_tuxlab2)
         node_ssh.connect(retry=True, retry_timeout=30)
         close_conn = True
 
@@ -3928,18 +3933,28 @@ def burn_image_to_usb(iso_host, iso_full_path=None, lab_dict=None, boot_lab=True
             usb_device))
 
         iso_rsynced = False
-        for i in range(0, 3):
-            rc, output = iso_host.ssh_conn.rsync(iso_full_path, controller0_node.host_ip,
-                                                 iso_dest_path,
-                                                 dest_user=HostLinuxUser.get_user(),
-                                                 dest_password=HostLinuxUser.get_password(),
-                                                 timeout=300, fail_ok=True)
+        dest_ip = '[{}]'.format(controller0_node.host_ip) if controller0_node.host_ip.count(':') > 2 \
+            else controller0_node.host_ip
+        if controller0_node.host_ip.count(':') > 2:
+            rc, msg = rsync_image_to_boot_server(iso_host, iso_full_path=iso_full_path, lab_dict=lab_dict,
+                                                 fail_ok=fail_ok)
             if rc == 0:
-                LOG.info(" The iso image file from {}:{} is copied to controller-0: {}"
-                         .format(iso_host.name, iso_full_path, iso_dest_path))
-                iso_rsynced = True
-                break
-            time.sleep(1)
+                rc, msg = rsync_image_from_boot_server(lab_dict=lab_dict, fail_ok=fail_ok)
+                if rc == 0:
+                    iso_rsynced = True
+        else:
+            for i in range(0, 3):
+                rc, output = iso_host.ssh_conn.rsync(iso_full_path, dest_ip,
+                                                     iso_dest_path,
+                                                     dest_user=HostLinuxUser.get_user(),
+                                                     dest_password=HostLinuxUser.get_password(),
+                                                     timeout=300, fail_ok=True)
+                if rc == 0:
+                    LOG.info(" The iso image file from {}:{} is copied to controller-0: {}"
+                             .format(iso_host.name, iso_full_path, iso_dest_path))
+                    iso_rsynced = True
+                    break
+                time.sleep(1)
 
         if not iso_rsynced:
             err_msg = "Failed to rsync the iso image  file from {}:{} to controller-0: {}; " \
@@ -3991,7 +4006,6 @@ def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail
     if lab_dict is None:
         lab_dict = InstallVars.get_install_var("LAB")
     barcode = lab_dict["controller_nodes"][0]
-    iso_dest_path = "/tmp/iso/{}/bootimage.iso".format(barcode)
     tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
     tuxlab_prompt = '{}@{}\:(.*)\$ '.format(TestFileServer.get_user(), tuxlab_server)
 
@@ -4006,16 +4020,82 @@ def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail
         LOG.warn(msg)
         return 1, msg
 
-    cmd = "rm -rf /tmp/iso/{}; mkdir -p /tmp/iso/{}; sudo chmod -R 777 /tmp/iso/".format(barcode,
-                                                                                         barcode)
-    tuxlab_conn.exec_sudo_cmd(cmd)
-
     cmd = "test -f " + iso_full_path
     assert iso_host.ssh_conn.exec_cmd(cmd)[0] == 0, 'image not found in {}:{}'.format(
         iso_host.name, iso_full_path)
+    tuxlab_sub_dir = TestFileServer.get_user() + '/' + os.path.basename(iso_full_path)
+    tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + str(barcode)
+
+    if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
+        msg = "Failed to cd to: " + tuxlab_barcode_dir
+        LOG.error(msg)
+        return False
+
+    iso_dest_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
+
+    pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.get_password())
     iso_host.ssh_conn.rsync(iso_full_path, tuxlab_server, iso_dest_path,
-                            timeout=InstallTimeout.INSTALL_LOAD,
-                            dest_user=TestFileServer.get_user(), dest_password=TestFileServer.get_password())
+                          dest_user=TestFileServer.get_user(), dest_password=TestFileServer.get_password(),
+                          extra_opts=["--delete", "--force", "--chmod=Du=rwx"], pre_opts=pre_opts,
+                          timeout=InstallTimeout.INSTALL_LOAD)
+
+    tuxlab_conn.close()
+    return 0, None
+
+
+def ping_from_test_server(server, ping_count=5, timeout=60, fail_ok=False, retry=0):
+
+    test_server = TestFileServer.get_server()
+    test_server_conn = establish_ssh_connection(test_server, user=TestFileServer.get_user(),
+                                                password=TestFileServer.get_password(),
+                                                initial_prompt=TestFileServer.get_prompt())
+
+    test_server_conn.set_prompt(TestFileServer.get_prompt())
+    test_server_conn.deploy_ssh_key(get_ssh_public_key())
+    return test_server_conn.ping_server(server, ping_count=ping_count, timeout=timeout, fail_ok=True, retry=retry)
+
+
+def rsync_image_from_boot_server(iso_full_path=None, lab_dict=None, fail_ok=False):
+    if lab_dict is None:
+        lab_dict = InstallVars.get_install_var("LAB")
+
+    if iso_full_path is None:
+        iso_full_path = InstallVars.get_install_var("ISO_PATH")
+
+    barcode = lab_dict["controller_nodes"][0]
+    tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + str(barcode)
+    tuxlab_sub_dir = TestFileServer.get_user() + '/' + os.path.basename(iso_full_path)
+    tuxlab_iso_src_path = "{}/{}/bootimage.iso".format(tuxlab_barcode_dir, tuxlab_sub_dir)
+
+    controller0 = lab_dict["controller-0"]
+
+    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    tuxlab_prompt = '{}@{}\:(.*)\$ '.format(TestFileServer.get_user(), tuxlab_server)
+
+    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=TestFileServer.get_user(),
+                                           password=TestFileServer.get_password(),
+                                           initial_prompt=tuxlab_prompt)
+    tuxlab_conn.deploy_ssh_key()
+
+    LOG.info("Transferring boot image iso file to controller-0: {}".format(controller0.host_ip))
+    if tuxlab_conn.ping_server(controller0.host_ip, fail_ok=fail_ok) == 100:
+        msg = "{} is not reachable.".format(lab_dict['name'])
+        LOG.warn(msg)
+        return 1, msg
+
+    cmd = "test -f " + tuxlab_iso_src_path
+    assert tuxlab_conn.exec_cmd(cmd)[0] == 0, 'image not found in {}:{}'.format(
+        tuxlab_server, iso_full_path)
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
+    iso_dest_path = '{}/bootimage.iso'.format(HostLinuxUser.get_home())
+    dest_ip = controller0.host_ip
+    if ':' in dest_ip:
+        dest_ip = "\[{}\]".format(dest_ip)
+
+    tuxlab_conn.rsync(tuxlab_iso_src_path, dest_ip, iso_dest_path,
+                      timeout=InstallTimeout.INSTALL_LOAD,
+                      dest_user=HostLinuxUser.get_user(), dest_password=HostLinuxUser.get_password(),
+                      pre_opts=pre_opts)
     tuxlab_conn.close()
     return 0, None
 

@@ -16,7 +16,7 @@ import pexpect
 from pexpect import pxssh
 
 from consts.auth import Guest, HostLinuxUser
-from consts.stx import Prompt, DATE_OUTPUT
+from consts.stx import Prompt, DATE_OUTPUT, PING_LOSS_RATE
 from consts.lab import Labs, NatBoxes
 from consts.proj_vars import ProjVar
 from utils import exceptions, local_host
@@ -973,6 +973,56 @@ class SSHClient:
 
     def update_host(self, new_host):
         self.host = new_host
+
+    def ping_server(self, server, ping_count=5, timeout=60, fail_ok=False, retry=0):
+        """
+
+        Args:
+            server (str): server ip to ping
+            ping_count (int):
+            timeout (int): max time to wait for ping response in seconds
+            fail_ok (bool): whether to raise exception if packet loss rate is 100%
+            retry (int):
+
+        Returns (int): packet loss percentile, such as 100, 0, 25
+
+        """
+        output = packet_loss_rate = None
+        for i in range(max(retry+1, 1)):
+            ping = "ping6" if ':' in server else "ping"
+            cmd = '{} -c {} {}'.format(ping, ping_count, server)
+            code, output = self.exec_cmd(cmd=cmd, expect_timeout=timeout, fail_ok=True)
+            if code != 0:
+                packet_loss_rate = 100
+            else:
+                packet_loss_rate = re.findall(PING_LOSS_RATE, output)[-1]
+
+            packet_loss_rate = int(packet_loss_rate)
+            if packet_loss_rate < 100:
+                if packet_loss_rate > 0:
+                    LOG.warning("Some packets dropped when ping from {} ssh session to {}. Packet loss rate: {}%".
+                                format(self.host, server, packet_loss_rate))
+                else:
+                    LOG.info("All packets received by {}".format(server))
+                break
+
+            LOG.info("retry in 3 seconds")
+            time.sleep(3)
+        else:
+            msg = "Ping from {} to {} failed.".format(self.host, server)
+            if not fail_ok:
+                raise exceptions.LocalHostError(msg)
+            else:
+                LOG.warning(msg)
+
+        untransmitted_packets = re.findall(r"(\d+) packets transmitted,", output)
+        if untransmitted_packets:
+            untransmitted_packets = int(ping_count) - int(untransmitted_packets[0])
+        else:
+            untransmitted_packets = ping_count
+
+        return packet_loss_rate, untransmitted_packets
+
 
 
 class ContainerClient(SSHClient):
