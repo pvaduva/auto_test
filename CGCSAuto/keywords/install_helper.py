@@ -621,7 +621,7 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
 
     cmd = "test -e {}/deployment-config.yaml".format(lab_file_dir)
-    cmd1 = "test -e {}/deployment-config-avs.yaml".format(lab_file_dir)
+    cmd1 = "test -e {}/deployment-config_avs.yaml".format(lab_file_dir)
     deployment_mgr = False
     if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0 or \
             conf_server.ssh_conn.exec_cmd(cmd1, rm_date=False)[0] == 0:
@@ -666,7 +666,7 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     if vswitch_type == VSwitchType.AVS:
         LOG.info("The vswitch type is avs; attempting to download the avs deployment config yaml"
                  " file if exists")
-        avs_yaml_path = os.path.join(lab_file_dir, "deployment-config-avs.yaml")
+        avs_yaml_path = os.path.join(lab_file_dir, "deployment-config_avs.yaml")
         if conf_server.ssh_conn.exec_cmd('test -e {}'.format(avs_yaml_path), rm_date=False)[0] == 0:
             dest_path = '{}deployment-config.yaml'.format(HostLinuxUser.get_home())
             conf_server.ssh_conn.rsync(avs_yaml_path,

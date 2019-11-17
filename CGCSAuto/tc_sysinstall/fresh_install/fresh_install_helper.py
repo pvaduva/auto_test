@@ -306,8 +306,8 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
 
         ## This temporary solution until we implement the yaml helper functions
         vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
-        ovs_dpdk_yaml = 'deployment-config-ovs_dpdk.yaml'
-        none_yaml = 'deployment-config-none.yaml'
+        ovs_dpdk_yaml = 'deployment-config_ovs-dpdk.yaml'
+        none_yaml = 'deployment-config_none.yaml'
         default_yaml = 'deployment-config.yaml'
         if vswitch_type in [VSwitchType.OVS_DPDK]:
             if controller0_node.telnet_conn.exec_cmd("test -f {}".format(ovs_dpdk_yaml))[0] == 0:
