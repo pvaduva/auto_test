@@ -26,11 +26,11 @@ import string
 
 from pytest import fixture, mark, skip
 
-from consts.stx import PartitionStatus
+from consts.stx import PartitionStatus, AppStatus
 from utils import cli, table_parser
 from utils.tis_log import LOG
 from testfixtures.recover_hosts import HostsToRecover
-from keywords import system_helper, host_helper, storage_helper
+from keywords import system_helper, host_helper, storage_helper, container_helper
 
 CP_TIMEOUT = 120
 DP_TIMEOUT = 120
@@ -564,13 +564,16 @@ def test_attempt_host_unlock_during_partition_creation():
             partitions_to_restore[host] = []
             partitions_to_restore[host].append(uuid)
 
-            LOG.tc_step("Attempt to unlock host and ensure it's rejected when partition is being created")
+            LOG.tc_step("Attempt to unlock host and ensure it's rejected when partition is "
+                        "being created")
             rc_ = host_helper.unlock_host(host, fail_ok=True, check_first=False)[0]
             assert rc_ != 0, "Unlock attempt unexpectedly passed"
 
             LOG.tc_step("wait for partition to be created")
             storage_helper.wait_for_host_partition_status(host=host, uuid=uuid, timeout=CP_TIMEOUT)
 
+            container_helper.wait_for_apps_status(apps='platform-integ-apps',
+                                                  status=AppStatus.APPLIED, check_interval=10)
             # Only test one disk on each host
             break
         # Do it on one host only
