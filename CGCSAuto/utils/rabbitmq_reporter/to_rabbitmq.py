@@ -89,7 +89,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
             runStartDate=reportDate,
             date_modified=reportDate,
             testResult=result,
-            releaseName='Wind River Cloud Platform 19.10',
+            releaseName='Wind River Cloud Platform 19.12',
             tcTotal=1,
             testExecutionTimeStamp=reportDate,
             id=tmp_id,
