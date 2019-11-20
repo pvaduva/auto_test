@@ -20,7 +20,7 @@ def test_cpe_services_and_functions():
     check_params = ["nova-scheduler",
                     # "nova-cert",
                     "nova-conductor",
-                    "nova-consoleauth",
+                    # "nova-consoleauth",  # removed in Train
                     "nova-compute"]
 
     binaries = nova_helper.get_compute_services(field='Binary')
