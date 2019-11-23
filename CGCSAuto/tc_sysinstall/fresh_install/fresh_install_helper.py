@@ -552,6 +552,8 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
 
     LOG.tc_step(test_step)
     if do_step(test_step):
+        LOG.info("Wait for 2 minutes before power on other hosts")
+        time.sleep(120)
         hosts_online = False
         for hostname in hostnames:
             threads.append(install_helper.open_vlm_console_thread(hostname, lab=lab,
