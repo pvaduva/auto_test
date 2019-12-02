@@ -365,6 +365,8 @@ class RestoreVars:
             'WIPE_CEPH_OSDS': kwargs.pop('wipe_ceph_osds', False),
             'RESTORE_PRE_BOOT_CONTROLLER0':
                 kwargs.pop('restore_pre_boot_controller0', False),
+            'STOP_BEFORE_ANSIBLE_RESTORE':
+                kwargs.pop('stop_before_ansible_restore', False),
         }
 
     @classmethod

@@ -71,6 +71,8 @@ def test_restore_simplex_install(install_setup):
     patch_server = install_setup["servers"]["patches"]
 
     do_boot_c0 = RestoreVars.get_restore_var('RESTORE_PRE_BOOT_CONTROLLER0')
+    stop_before_ansible_restore =\
+        RestoreVars.get_restore_var('STOP_BEFORE_ANSIBLE_RESTORE')
 
     if do_boot_c0:
         fresh_install_helper.install_controller(sys_type=SysType.AIO_SX, patch_dir=patch_dir,
@@ -78,6 +80,9 @@ def test_restore_simplex_install(install_setup):
                                                 init_global_vars=True)
     else:
         LOG.tc_step("Skipping controller-0 install")
+
+    if stop_before_ansible_restore:
+        skip("Stopping test before restoring")
 
     restore_helper.restore_platform()
 

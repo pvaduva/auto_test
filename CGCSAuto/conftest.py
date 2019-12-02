@@ -953,6 +953,9 @@ def pytest_addoption(parser):
                      dest='restore_pre_boot_controller0', action='store_true',
                      default=False, help='')
 
+    parser.addoption('--stop-before-ansible-restore',
+                     dest='stop_before_ansible_restore', action='store_true',
+                     default=False, help='')
 
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
