@@ -21,8 +21,9 @@ def snat_setups(request):
 
     for auth_info in [primary_tenant, other_tenant]:
         tenant_router = network_helper.get_tenant_router(auth_info=auth_info)
-        is_dvr_router = network_helper.get_router_values(router_id=tenant_router, fields='distributed')[0]
-        if find_dvr == is_dvr_router:
+        is_dvr_router = network_helper.get_router_values(router_id=tenant_router,
+                                                         fields='distributed')[0]
+        if find_dvr == str(is_dvr_router):
             LOG.fixture_step("Setting primary tenant to {}".format(common.get_tenant_name(auth_info)))
             Tenant.set_primary(auth_info)
             break

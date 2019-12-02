@@ -66,7 +66,7 @@ def test_horizon_sysconfig_addrpool_add_delete(sys_config_pg):
     """
     sys_config_pg.go_to_address_pools_tab()
     LOG.tc_step('Check address pools display')
-    addr_table = table_parser.table(cli.system('addrpool-list')[1])
+    addr_table = table_parser.table(cli.system('addrpool-list --nowrap')[1])
     uuid_list = table_parser.get_values(addr_table, target_header='uuid')
     for uuid in uuid_list:
         expt_horizon = {}

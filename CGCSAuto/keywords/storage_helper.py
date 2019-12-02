@@ -99,7 +99,7 @@ def get_osd_host(osd_id, fail_ok=False, con_ssh=None):
     """
     storage_hosts = system_helper.get_storage_nodes(con_ssh=con_ssh)
     for host in storage_hosts:
-        osd_list = get_host_stors(host, 'osdid')
+        osd_list = get_host_stors(host, field='osdid', con_ssh=con_ssh, function='osd')
         if int(osd_id) in osd_list:
             msg = 'OSD ID {} is on host {}'.format(osd_id, host)
             LOG.info(msg)
@@ -201,11 +201,11 @@ def get_osds(host=None, con_ssh=None):
     osd_list = []
 
     if host:
-        osd_list += get_host_stors(host, 'osdid', con_ssh)
+        osd_list += get_host_stors(host, field='osdid', con_ssh=con_ssh, function='osd')
     else:
         storage_hosts = system_helper.get_storage_nodes()
         for host in storage_hosts:
-            osd_list += get_host_stors(host, 'osdid', con_ssh)
+            osd_list += get_host_stors(host, field='osdid', con_ssh=con_ssh, function='osd')
 
     return osd_list
 
@@ -1432,7 +1432,8 @@ def modify_controllerfs(fail_ok=False, auth_info=Tenant.get('admin_platform'), c
     return 0, msg
 
 
-def get_host_stors(host, field='uuid', con_ssh=None, auth_info=Tenant.get('admin_platform')):
+def get_host_stors(host, field='uuid', con_ssh=None, auth_info=Tenant.get('admin_platform'),
+                   **kwargs):
     """
     Get host storage values from system host-stor-list
     Args:
@@ -1440,15 +1441,18 @@ def get_host_stors(host, field='uuid', con_ssh=None, auth_info=Tenant.get('admin
         field (str|tuple|list):
         auth_info:
         con_ssh:
+        kwargs
 
     Returns (list):
 
     """
-    table_ = table_parser.table(cli.system('host-stor-list --nowrap', host, ssh_client=con_ssh, auth_info=auth_info)[1])
-    return table_parser.get_multi_values(table_, field, evaluate=True)
+    table_ = table_parser.table(cli.system('host-stor-list --nowrap', host, ssh_client=con_ssh,
+                                           auth_info=auth_info)[1])
+    return table_parser.get_multi_values(table_, field, evaluate=True, **kwargs)
 
 
-def get_host_stor_values(host, stor_uuid, fields="size", con_ssh=None, auth_info=Tenant.get('admin_platform')):
+def get_host_stor_values(host, stor_uuid, fields="size", con_ssh=None,
+                         auth_info=Tenant.get('admin_platform')):
     """
     Returns the value of a particular filesystem.
 
