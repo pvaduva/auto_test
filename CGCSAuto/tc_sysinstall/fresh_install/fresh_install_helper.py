@@ -2209,3 +2209,117 @@ def wait_for_deploy_mgr_platform_networks_config(controller0_node, lab=None, tim
             LOG.warning(msg)
             return False
         raise exceptions.HostTimeout(msg)
+
+
+def restore_wait_for_hosts_to_be_online(hosts, lab=None, fail_ok=True):
+    """
+
+    Args:
+        hosts:
+        lab:
+
+    Returns:
+
+    """
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    controller0_node = lab['controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
+
+    LOG.info("Verifying {} is Locked, Disabled and Online ...".format(hosts))
+    system_helper.wait_for_hosts_states(hosts, check_interval=10,
+                                        con_ssh=controller0_node.ssh_conn,
+                                        administrative=HostAdminState.LOCKED,
+                                        operational=HostOperState.DISABLED,
+                                        availability=HostAvailState.ONLINE, fail_ok=fail_ok)
+
+
+def restore_boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
+               wait_for_online=True):
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
+    test_step = "Boot"
+
+    if lab is None:
+        lab = InstallVars.get_install_var('LAB')
+    if hostnames is None:
+        hostnames = [hostname for hostname in lab['hosts'] if 'controller-0' not in hostname]
+    if boot_device_dict is None:
+        lab = InstallVars.get_install_var('LAB')
+        boot_device_dict = lab.get('boot_device_dict')
+    controllers = []
+    computes = []
+    storages = []
+    for hostname in hostnames:
+        if 'controller' in hostname:
+            controllers.append(hostname)
+        elif 'compute' in hostname:
+            computes.append(hostname)
+        elif 'storage' in hostname:
+            storages.append(hostname)
+    if controllers and not computes and not storages:
+        if 'controller-0' in controllers and 'controller-1' not in controllers:
+            test_step += ' active controller'
+        elif 'controller-1' in controllers and 'controller-0' not in controllers:
+            test_step += ' standby controller'
+        else:
+            test_step += ' controller nodes'
+    elif computes and not controllers and not storages:
+        if len(computes) > 1:
+            test_step += ' compute nodes'
+        else:
+            test_step += " {}".format(computes[0])
+    elif storages and not controllers and not computes:
+        if len(storages) > 1:
+            test_step += ' storage nodes'
+        else:
+            test_step += " {}".format(storages[0])
+    else:
+        test_step += " other lab hosts"
+
+    threads = []
+
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+        hosts_online = False
+        for hostname in hostnames:
+            threads.append(install_helper.open_vlm_console_thread(hostname, lab=lab,
+                                                                  boot_interface=boot_device_dict,
+                                                                  wait_for_thread=False,
+                                                                  vlm_power_on=True,
+                                                                  close_telnet_conn=True))
+        for thread in threads:
+            thread.join(timeout=InstallTimeout.INSTALL_LOAD)
+
+        if wait_for_online:
+            restore_wait_for_hosts_to_be_online(hosts=hostnames, lab=lab, fail_ok=False)
+            hosts_online = True
+
+        if InstallVars.get_install_var("DEPLOY_OPENSTACK_FROM_CONTROLLER1") and \
+                'controller-1' in hostnames and hosts_online:
+            controller0_node = lab['controller-0']
+            controller1_node = lab['controller-1']
+            if controller1_node.telnet_conn:
+                controller1_node.telnet_conn.close()
+
+            controller1_node.telnet_conn = install_helper.open_telnet_session(controller1_node)
+            controller1_node.telnet_conn.set_prompt(r'-[\d]+:~\$ ')
+            controller1_node.telnet_conn.login(handle_init_login=True)
+            controller1_node.telnet_conn.close()
+
+            if not controller0_node.ssh_conn:
+                controller0_node.ssh_conn = install_helper.ssh_to_controller(
+                    controller0_node.host_ip)
+
+            pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
+
+            controller0_node.ssh_conn.rsync(HostLinuxUser.get_home() + '*', 'controller-1',
+                                            HostLinuxUser.get_home(),
+                                            dest_user=HostLinuxUser.get_user(),
+                                            dest_password=HostLinuxUser.get_password(),
+                                            pre_opts=pre_opts)
+
+    if str(LOG.test_step) == final_step or test_step == final_step:
+        skip("stopping at install step: {}".format(LOG.test_step))
