@@ -363,6 +363,8 @@ class RestoreVars:
             'REINSTALL_STORAGE': kwargs.pop('reinstall_storage', False),
             'HAS_WIPE_CEPH_OSDS': kwargs.pop('has_wipe_ceph_osds', False),
             'WIPE_CEPH_OSDS': kwargs.pop('wipe_ceph_osds', False),
+            'RESTORE_PRE_BOOT_CONTROLLER0':
+                kwargs.pop('restore_pre_boot_controller0', False),
         }
 
     @classmethod

@@ -1,7 +1,7 @@
 from pytest import skip, fixture
 
 from consts.stx import SysType, Prompt
-from consts.proj_vars import InstallVars, ProjVar
+from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from keywords import install_helper, vlm_helper
 from setups import setup_tis_ssh
 from utils.tis_log import LOG
@@ -70,8 +70,14 @@ def test_restore_simplex_install(install_setup):
     patch_dir = install_setup["directories"]["patches"]
     patch_server = install_setup["servers"]["patches"]
 
-    fresh_install_helper.install_controller(sys_type=SysType.AIO_SX, patch_dir=patch_dir,
-                                            patch_server_conn=patch_server.ssh_conn, init_global_vars=True)
+    do_boot_c0 = RestoreVars.get_restore_var('RESTORE_PRE_BOOT_CONTROLLER0')
+
+    if do_boot_c0:
+        fresh_install_helper.install_controller(sys_type=SysType.AIO_SX, patch_dir=patch_dir,
+                                                patch_server_conn=patch_server.ssh_conn,
+                                                init_global_vars=True)
+    else:
+        LOG.tc_step("Skipping controller-0 install")
 
     restore_helper.restore_platform()
 

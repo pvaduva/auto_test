@@ -1,7 +1,7 @@
 from pytest import skip, fixture
 
 from consts.stx import SysType, Prompt
-from consts.proj_vars import InstallVars, ProjVar
+from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from keywords import install_helper, vlm_helper
 from setups import setup_tis_ssh, collect_sys_net_info
 from utils.tis_log import LOG
@@ -80,9 +80,14 @@ def test_duplex_restore_install(install_setup):
     hostnames = [hostname for hostname in lab['hosts'] if 'controller-0' not in hostname]
     vlm_helper.power_off_hosts(hostnames, lab=lab, count=2)
 
-    fresh_install_helper.install_controller(sys_type=SysType.AIO_DX, patch_dir=patch_dir,
-                                            patch_server_conn=patch_server.ssh_conn,
-                                            init_global_vars=True)
+    do_boot_c0 = RestoreVars.get_restore_var('RESTORE_PRE_BOOT_CONTROLLER0')
+
+    if do_boot_c0:
+        fresh_install_helper.install_controller(sys_type=SysType.AIO_DX, patch_dir=patch_dir,
+                                                patch_server_conn=patch_server.ssh_conn,
+                                                init_global_vars=True)
+    else:
+        LOG.tc_step("Skipping controller-0 install")
 
     restore_helper.restore_platform()
 

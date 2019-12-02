@@ -60,11 +60,12 @@ def pytest_configure(config):
     backup_src_path = config.getoption('backup_path')
     has_wipe_ceph_osds = config.getoption('has_wipe_ceph_osds')
     wipe_ceph_osds = config.getoption('wipe_ceph_osds')
+    restore_pre_boot_controller0 = config.getoption('restore_pre_boot_controller0')
 
     RestoreVars.set_restore_var(backup_src_path=backup_src_path)
     RestoreVars.set_restore_var(has_wipe_ceph_osds=has_wipe_ceph_osds)
     RestoreVars.set_restore_var(wipe_ceph_osds=wipe_ceph_osds)
-
+    RestoreVars.set_restore_var(restore_pre_boot_controller0=restore_pre_boot_controller0)
 
     if not lab_arg:
         raise ValueError("Lab name must be provided")

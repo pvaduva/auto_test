@@ -949,6 +949,11 @@ def pytest_addoption(parser):
                      dest='wipe_ceph_osds', action='store_true',
                      default=False, help='')
 
+    parser.addoption('--restore-pre-boot-controller0',
+                     dest='restore_pre_boot_controller0', action='store_true',
+                     default=False, help='')
+
+
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
                      action='store',
