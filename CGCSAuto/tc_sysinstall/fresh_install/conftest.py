@@ -6,7 +6,7 @@ from utils.tis_log import LOG
 from utils.node import Node
 from utils.jenkins_utils import build_info
 from consts.auth import HostLinuxUser
-from consts.proj_vars import InstallVars, ProjVar
+from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from consts.filepaths import BuildServerPath
 from consts.stx import VSwitchType, SysType
 from tc_sysinstall.fresh_install import fresh_install_helper
@@ -55,6 +55,16 @@ def pytest_configure(config):
     extract_deploy_config = config.getoption('extract_deploy_config')
     vswitch_type = config.getoption('vswitch_type')
     ipv6_oam = config.getoption('ipv6_oam')
+
+    # Restore parameters
+    backup_src_path = config.getoption('backup_path')
+    has_wipe_ceph_osds = config.getoption('has_wipe_ceph_osds')
+    wipe_ceph_osds = config.getoption('wipe_ceph_osds')
+
+    RestoreVars.set_restore_var(backup_src_path=backup_src_path)
+    RestoreVars.set_restore_var(has_wipe_ceph_osds=has_wipe_ceph_osds)
+    RestoreVars.set_restore_var(wipe_ceph_osds=wipe_ceph_osds)
+
 
     if not lab_arg:
         raise ValueError("Lab name must be provided")
