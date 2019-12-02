@@ -361,6 +361,8 @@ class RestoreVars:
             'BUILD_SERVER': kwargs.pop('build_server', ''),
             'CINDER_BACKUP': kwargs.pop('cinder_backup', True),
             'REINSTALL_STORAGE': kwargs.pop('reinstall_storage', False),
+            'HAS_WIPE_CEPH_OSDS': kwargs.pop('has_wipe_ceph_osds', False),
+            'WIPE_CEPH_OSDS': kwargs.pop('wipe_ceph_osds', False),
         }
 
     @classmethod

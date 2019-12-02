@@ -941,6 +941,14 @@ def pytest_addoption(parser):
                           "This will be helpful if the lab was/will be "
                           "in customized way.")
 
+    parser.addoption('--has-wipe-ceph-osds', '--has_wipe_ceph_osds',
+                     dest='has_wipe_ceph_osds', action='store_true',
+                     default=False, help='')
+
+    parser.addoption('--wipe-ceph-osds', '--wipe_ceph_osds',
+                     dest='wipe_ceph_osds', action='store_true',
+                     default=False, help='')
+
     # Clone only
     parser.addoption('--dest-labs', '--dest_labs',  dest='dest_labs',
                      action='store',
