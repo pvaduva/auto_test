@@ -619,7 +619,7 @@ def write_to_file(file_path, content, mode='a'):
                                                                     content))
 
 
-def collect_software_logs(con_ssh=None):
+def collect_software_logs(con_ssh=None, lab_ip=None):
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
     LOG.info("Collecting all hosts logs...")
@@ -650,7 +650,8 @@ def collect_software_logs(con_ssh=None):
         LOG.error("Collecting logs failed. No ALL_NODES logs found.")
         return
 
-    lab_ip = ProjVar.get_var('LAB')['floating ip']
+    if lab_ip is None:
+        lab_ip = ProjVar.get_var('LAB')['floating ip']
     dest_path = ProjVar.get_var('LOG_DIR')
     try:
         LOG.info("Copying log file from lab {} to local {}".format(lab_ip,
