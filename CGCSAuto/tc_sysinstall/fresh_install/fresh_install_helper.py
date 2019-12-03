@@ -148,7 +148,7 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
         sys_type = ProjVar.get_var('SYS_TYPE')
     if patch_dir is None:
         patch_dir = InstallVars.get_install_var("PATCH_DIR")
-    is_cpe = sys_type == SysType.AIO_SX or sys_type == SysType.AIO_DX
+    is_cpe = sys_type == SysType.AIO_SX or sys_type == SysType.AIO_DX or sys_type == SysType.DISTRIBUTED_CLOUD
 
     test_step = "Install Controller"
     LOG.tc_step(test_step)
@@ -383,30 +383,6 @@ def configure_controller_dc(controller0_node, config_file='TiS_config.ini_centos
 
     # WK Touch .this_didnt_work to avoid using heat for kubernetes
     controller0_node.ssh_conn.exec_cmd("cd; touch .this_didnt_work")
-
-    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
-        reset_global_vars()
-        skip("stopping at install step: {}".format(LOG.test_step))
-
-    LOG.info("Run lab_setup after config controller")
-    run_lab_setup(con_ssh=controller0_node.ssh_conn, conf_file=lab_setup_conf_file)
-
-    test_step = "unlock_active_controller"
-    LOG.tc_step(test_step)
-    if do_step(test_step):
-        if controller0_node.ssh_conn is None:
-            controller0_node.ssh_conn = install_helper.ssh_to_controller(
-                controller0_node.host_ip)
-
-        sys_mode = system_helper.get_system_values(fields="system_mode",
-                                                   con_ssh=controller0_node.ssh_conn)[0]
-        LOG.info("unlocking {}".format(controller0_node.name))
-        host_helper.unlock_host(host=controller0_node.name,
-                                available_only=False if sys_mode == "duplex-direct" else True,
-                                con_ssh=controller0_node.ssh_conn, timeout=2400,
-                                check_hypervisor_up=False, check_webservice_up=False,
-                                check_subfunc=False,
-                                check_first=False, con0_install=True)
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
@@ -1308,7 +1284,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
         elif 'iso_feed' in boot["boot_type"] and 'feed' not in skip_list:
             skip_cfg = "pxeboot" in skip_list
-            install_helper.set_up_feed_from_boot_server_iso(iso_host_obj, lab_dict=lab, iso_path=iso_path,
+            install_helper.set_up_feed_from_boot_server_iso(iso_host_obj, lab_dict=lab_dict, iso_path=iso_path,
                                                             skip_cfg=skip_cfg)
 
         elif 'feed' in boot["boot_type"] and 'feed' not in skip_list:

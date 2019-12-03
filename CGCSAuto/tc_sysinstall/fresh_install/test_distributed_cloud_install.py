@@ -123,23 +123,16 @@ def test_distributed_cloud_install(install_setup):
                                             guest_path=InstallVars.get_install_var('GUEST_IMAGE'))
 
     # TODO Change config and lab setup files to common name
-    # config_file_ext = ''.join(central_region_lab['short_name'].split('_')[0:2])
-    config_file = 'TiS_config_ipv6.ini_centos' if ipv6_install else 'TiS_config.ini_centos'
-    fresh_install_helper.configure_controller_dc(controller0_node, config_file=config_file, lab=central_region_lab,
-                                                 banner=False, branding=False)
+    fresh_install_helper.configure_controller_(controller0_node, lab=central_region_lab, banner=False, branding=False)
+
+    fresh_install_helper.wait_for_deploy_mgr_controller_config(controller0_node, lab=central_region_lab)
 
     controller0_node.telnet_conn.hostname = "controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
-    file_path = load_path + "/lab/yow/{}".format(central_region_lab['name'].replace('yow-', ''))
-    LOG.info("Downloading central region's hosts bulk add xml file from path: {}".format(file_path))
-
-    install_helper.download_hosts_bulk_add_xml_file(central_region_lab, build_server, file_path)
-
-    LOG.info("Adding  standby controller host xml data ...")
-    fresh_install_helper.bulk_add_hosts(lab=dc_lab, con_ssh=controller0_node.ssh_conn)
+    fresh_install_helper.wait_for_deployment_mgr_to_bulk_add_hosts(controller0_node, lab=central_region_lab)
 
     LOG.info("Booting standby controller host...")
 
@@ -149,16 +142,9 @@ def test_distributed_cloud_install(install_setup):
     host_helper.wait_for_hosts_ready([host for host in hosts if controller0_node.name not in host],
                                      con_ssh=controller0_node.ssh_conn)
 
-    LOG.info("Installing license  subcloud info ...")
-    # TODO
+    fresh_install_helper.wait_for_deploy_mgr_lab_config(controller0_node, lab=central_region_lab)
 
-    LOG.info("Running lab setup script ...")
-    fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
-
-    LOG.info("Unlocking controller-1 ...")
-    fresh_install_helper.unlock_hosts([host for host in hosts if controller0_node.name not in host],
-                                      lab=central_region_lab, con_ssh=controller0_node.ssh_conn)
-
+    fresh_install_helper.wait_for_hosts_ready(["controller-1"], lab=central_region_lab)
     LOG.info("Running lab setup script ...")
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
@@ -168,12 +154,8 @@ def test_distributed_cloud_install(install_setup):
 
     fresh_install_helper.wait_for_hosts_ready(controller0_node.name, lab=central_region_lab)
 
-    # LOG.info("Adding subcloud info ...")
-    # subclouds, subcloud_configs = fresh_install_helper.add_subclouds(controller0_node)
-    #
-    # LOG.info("DC subclouds added are:{}".format(subclouds))
-    # LOG.info("DC subclouds configs are:{}".format(subcloud_configs))
     fresh_install_helper.attempt_to_run_post_install_scripts(controller0_node=controller0_node)
 
     fresh_install_helper.reset_global_vars()
     fresh_install_helper.verify_install_uuid(lab=central_region_lab)
+    fresh_install_helper.validate_deployment_mgr_install(controller0_node, central_region_lab)

@@ -767,6 +767,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False,
         lab_to_install['controller-0 ip'] = con0_ip
     con1_ip = lab_info_.get('CONTROLLER1_IP') if not dc_system else \
         (central_reg_info_['controller-1 ip'] if central_reg_info_ else None)
+
     if con1_ip:
         lab_to_install['controller-1 ip'] = con1_ip
     float_ip = lab_info_['FLOATING_IP']
@@ -775,6 +776,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False,
 
     if ipv6_oam:
         convert_to_ipv6(lab=lab_to_install)
+        if dc_system:
+            convert_to_ipv6(lab=lab_to_install['central_region'])
 
     # Parse nodes info
     nodes_info = installconf['NODES']

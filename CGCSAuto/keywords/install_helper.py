@@ -2629,7 +2629,7 @@ def setup_ipv6_oam(controller0, conf_server=None):
     sudo_prefix = 'echo {} | sudo -S'.format(controller0.telnet_conn.password)
     host_ip = controller0.host_ip
     dev = nic_interface
-
+    con_telnet.exec_cmd("{} ip addr flush dev {}".format(sudo_prefix,  dev))
     con_telnet.exec_cmd("{} ip -6 addr add {}/64 dev {}".format(sudo_prefix, host_ip, dev))
     con_telnet.exec_cmd("{} ip -6 link set dev {} up".format(sudo_prefix, dev))
     con_telnet.exec_cmd("touch v6_resolv.conf")
@@ -3558,7 +3558,6 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
 
     return rc, output
 
-
 def apply_banner(telnet_conn, fail_ok=True):
     LOG.info("Applying banner files")
     banner_dir = "{}/banner/".format(HostLinuxUser.get_home())
@@ -4005,6 +4004,7 @@ def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail
         iso_full_path = InstallVars.get_install_var("ISO_PATH")
     if lab_dict is None:
         lab_dict = InstallVars.get_install_var("LAB")
+    boot_type = InstallVars.get_install_var("BOOT_TYPE")
     barcode = lab_dict["controller_nodes"][0]
     tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
     tuxlab_prompt = '{}@{}\:(.*)\$ '.format(TestFileServer.get_user(), tuxlab_server)
@@ -4026,12 +4026,18 @@ def rsync_image_to_boot_server(iso_host, iso_full_path=None, lab_dict=None, fail
     tuxlab_sub_dir = TestFileServer.get_user() + '/' + os.path.basename(iso_full_path)
     tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + str(barcode)
 
-    if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
-        msg = "Failed to cd to: " + tuxlab_barcode_dir
-        LOG.error(msg)
-        return False
-
-    iso_dest_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir
+    iso_dest_path = tuxlab_barcode_dir + "/" + tuxlab_sub_dir if boot_type not in ["pxe_iso"]  \
+        else "/tmp/iso/{}/bootimage.iso".format(barcode)
+    LOG.info("Boot Type is: {}; iso dest path is {}".format(boot_type, iso_dest_path))
+    if boot_type in ['pxe_iso']:
+        iso_dest_dir = os.path.dirname(iso_dest_path)
+        cmd = "rm -rf {}; mkdir -p {}; sudo chmod -R 777 {}".format(iso_dest_dir, iso_dest_dir, iso_dest_dir)
+        tuxlab_conn.exec_sudo_cmd(cmd)
+    else:
+        if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
+            msg = "Failed to cd to: " + tuxlab_barcode_dir
+            LOG.error(msg)
+            return False
 
     pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.get_password())
     iso_host.ssh_conn.rsync(iso_full_path, tuxlab_server, iso_dest_path,
