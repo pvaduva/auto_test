@@ -1190,8 +1190,9 @@ def pytest_collection_modifyitems(items):
 
     # Repeat collected test cases x times
     if count and count > 1:
-        print('Run collected test cases {} times'.format(count))
+        print(' Run collected test cases {} times'.format(count))
         items[:] = items * count
+        # print('items: {}'.format(items))
 
 
 def pytest_generate_tests(metafunc):

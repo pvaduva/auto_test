@@ -2642,7 +2642,7 @@ def setup_ipv6_oam(controller0, conf_server=None):
     con_telnet.exec_cmd("{} ip -6 route delete default".format(sudo_prefix), get_exit_code=False)
     con_telnet.exec_cmd("{} ip -6 route add default via 2620:10a:a001:a103::6:0".
                         format(sudo_prefix))
-    con_telnet.exec_cmd('ip -6 route; ip -6 neigh', get_exit_code=False)
+    con_telnet.exec_cmd('ip route; ip -6 route; ip -6 neigh; ip addr', get_exit_code=False)
     LOG.info("Wait for 60 seconds after configuring v6 IP for controller-0")
     time.sleep(60)
     con_telnet.exec_cmd('ip -6 route; ip -6 neigh', get_exit_code=False)
