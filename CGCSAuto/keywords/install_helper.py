@@ -59,7 +59,7 @@ def check_system_health_for_upgrade():
 
 
 def download_upgrade_license(lab, server, license_path):
-    cmd = "test -h " + license_path
+    cmd = "test -f " + license_path
     assert server.ssh_conn.exec_cmd(cmd)[0] == 0, 'Upgrade license file not found in {}:{}'.format(
         server.name, license_path)
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
@@ -93,7 +93,7 @@ def download_upgrade_license(lab, server, license_path):
 
 # TODO: to replace download_upgrade_license
 def download_license(lab, server, license_path, dest_name="upgrade_license"):
-    cmd = "test -h " + license_path
+    cmd = "test -f " + license_path
     assert server.ssh_conn.exec_cmd(cmd)[0] == 0, \
         '{} file not found in {}:{}'.format(dest_name.capitalize(), server.name, license_path)
     pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
