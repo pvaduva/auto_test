@@ -94,12 +94,16 @@ def test_duplex_restore_install(install_setup):
     if stop_before_ansible_restore:
         skip("Stopping test before restoring")
 
+    if InstallVars.get_install_var('IPV6_OAM'):
+        restore_helper.setup_ipv6_oam(controller0_node)
+
     restore_helper.restore_platform()
 
     fresh_install_helper.unlock_active_controller(controller0_node)
 
     controller0_node.telnet_conn.hostname = r"controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
+
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)

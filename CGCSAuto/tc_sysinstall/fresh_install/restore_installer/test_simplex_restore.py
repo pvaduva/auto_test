@@ -84,6 +84,9 @@ def test_restore_simplex_install(install_setup):
     if stop_before_ansible_restore:
         skip("Stopping test before restoring")
 
+    if InstallVars.get_install_var('IPV6_OAM'):
+        restore_helper.setup_ipv6_oam(controller0_node)
+
     restore_helper.restore_platform()
 
     fresh_install_helper.unlock_active_controller(controller0_node)
