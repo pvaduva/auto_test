@@ -2,6 +2,7 @@ import os
 import time
 
 import pexpect
+from consts.auth import HostLinuxUser, Tenant
 from consts.proj_vars import RestoreVars, InstallVars
 from keywords import common, install_helper
 from utils.clients.ssh import SSHClient
@@ -142,7 +143,9 @@ def restore_platform():
     cmd = "ansible-playbook {} -e ".format(RESTORE_PLATFORM_PLAYBOOK) \
           + "\"initial_backup_dir=/home/sysadmin " \
           + wipe_ceph_osds + " " \
-          + "ansible_become_pass=Li69nux* admin_password=Li69nux* " \
+          + "ansible_become_pass=" + HostLinuxUser.get_password() + " " \
+          + "admin_password=" + Tenant.get('admin_platform')['password'] \
+          + " " \
           + "backup_filename=" + os.path.basename(STORE_BACKUP_PATH) + "\""
     LOG.tc_step("Run " + cmd)
 
