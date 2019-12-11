@@ -2,6 +2,7 @@ import os
 import re
 import time
 
+import pexpect
 from pytest import skip
 
 import setups
@@ -1149,10 +1150,10 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
             con_ssh = active_controller_node.ssh_conn
             con_ssh.connect(retry=True, retry_interval=10, retry_timeout=60)
             con_ssh.flush()
-            con_ssh.exec_cmd('nslookup www.google.com')
-            con_ssh.exec_sudo_cmd('docker pull alpine')
+            con_ssh.exec_cmd('nslookup www.google.com', get_exit_code=False)
+            con_ssh.exec_sudo_cmd('docker pull alpine', get_exit_code=False)
             con_ssh.exec_cmd('kubectl -n wind-river-cloud-platform-deployment-manager describe '
-                             'statefulsetapps',
+                             'statefulsetapps', get_exit_code=False,
                              fail_ok=True)
             con_ssh.exec_cmd(
                 'kubectl -n wind-river-cloud-platform-deployment-manager describe pods',
@@ -1163,7 +1164,8 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
             system_helper.get_alarms(con_ssh=con_ssh)
             system_helper.get_build_info(con_ssh=con_ssh)
 
-    except (exceptions.SSHException, exceptions.SSHRetryTimeout, exceptions.SSHExecCommandFailed) \
+    except (exceptions.SSHException, exceptions.SSHRetryTimeout, exceptions.SSHExecCommandFailed,
+            pexpect.exceptions.TIMEOUT) \
             as e_:
         LOG.error(e_.__str__())
 

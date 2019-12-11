@@ -344,7 +344,7 @@ class TestVmPCIOperations:
         LOG.tc_step('Set extra-specs to the flavor {}'.format(flavor_id))
         extra_specs = {
             FlavorSpec.CPU_POLICY: 'dedicated',
-            FlavorSpec.PCI_NUMA_AFFINITY: self.pci_numa_affinity,
+            # FlavorSpec.PCI_NUMA_AFFINITY: self.pci_numa_affinity, # LP1854516
             FlavorSpec.PCI_PASSTHROUGH_ALIAS: pci_alias_spec,
             FlavorSpec.PCI_IRQ_AFFINITY_MASK: self.pci_irq_affinity_mask}
         extra_specs = {k: str(v) for k, v in extra_specs.items() if v is not None}

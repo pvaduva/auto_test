@@ -187,17 +187,19 @@ def get_app_values(app_name, fields, con_ssh=None, auth_info=Tenant.get('admin_p
 
 
 def wait_for_apps_status(apps, status, timeout=360, check_interval=5, fail_ok=False, con_ssh=None,
-                         auth_info=Tenant.get('admin_platform')):
+                         auth_info=Tenant.get('admin_platform'), use_telnet=False, con_telnet=None):
     """
     Wait for applications to reach expected status via system application-list
     Args:
-        apps:
-        status:
+        apps (str|tuple|list):
+        status (str|tuple|None|list):
         timeout:
         check_interval:
         fail_ok:
         con_ssh:
         auth_info:
+        use_telnet
+        con_telnet
 
     Returns (tuple):
 
@@ -206,23 +208,28 @@ def wait_for_apps_status(apps, status, timeout=360, check_interval=5, fail_ok=Fa
     if isinstance(apps, str):
         apps = [apps]
     apps_to_check = list(apps)
-    check_failed = []
+    check_failed = {}
+    apps_to_check_status = {}
     end_time = time.time() + timeout
 
     LOG.info("Wait for {} application(s) to reach status: {}".format(apps, status))
     while time.time() < end_time:
-        apps_status = get_apps(application=apps_to_check, field=('application', 'status'), con_ssh=con_ssh,
+        apps_status = get_apps(application=apps_to_check, field=('application', 'status'),
+                               con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
                                auth_info=auth_info)
         apps_status = {item[0]: item[1] for item in apps_status if item}
 
-        checked = []
+        checked = {}
+        apps_to_check_status = {}
         for app in apps_to_check:
             current_app_status = apps_status.get(app, '')
-            if current_app_status == status:
-                checked.append(app)
+            if current_app_status in status:
+                checked[app] = current_app_status
             elif current_app_status.endswith('ed'):
-                check_failed.append(app)
-                checked.append(app)
+                check_failed[app] = current_app_status
+                checked[app] = current_app_status
+            else:
+                apps_to_check_status[app] = current_app_status
 
         apps_to_check = list(set(apps_to_check) - set(checked))
         if not apps_to_check:
@@ -230,17 +237,17 @@ def wait_for_apps_status(apps, status, timeout=360, check_interval=5, fail_ok=Fa
                 msg = '{} failed to reach status - {}'.format(check_failed, status)
                 LOG.warning(msg)
                 if fail_ok:
-                    return False, check_failed
+                    return False, checked
                 else:
                     raise exceptions.ContainerError(msg)
 
             LOG.info("{} reached expected status {}".format(apps, status))
-            return True, None
+            return True, checked
 
         time.sleep(check_interval)
 
-    check_failed += apps_to_check
-    msg = '{} did not reach status {} within {}s'.format(check_failed, status, timeout)
+    check_failed.update(**apps_to_check_status)
+    msg = '{} did not reach status {} within {}s'.format(list(check_failed.keys()), status, timeout)
     LOG.warning(msg)
     if fail_ok:
         return False, check_failed

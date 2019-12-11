@@ -2366,9 +2366,11 @@ def set_router_mode(router_id=None, distributed=None, ha=None,
     router_mode = ' and '.join(router_mode)
     LOG.info("Disable router {} and set it to {} mode".format(router_id,
                                                               router_mode))
+
+    set_router(router=router_id, enable=False, con_ssh=con_ssh, auth_info=auth_info)
     try:
         code, output = set_router(router=router_id, distributed=distributed,
-                                  ha=ha, enable=False, fail_ok=fail_ok,
+                                  ha=ha, fail_ok=fail_ok,
                                   con_ssh=con_ssh, auth_info=auth_info)
     except (exceptions.TiSError, pexpect.ExceptionPexpect):
         if enable_on_failure:

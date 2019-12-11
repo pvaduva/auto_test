@@ -897,9 +897,22 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK,
         con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
         auth_info=auth_info)
 
-    from keywords import kube_helper, container_helper
-    check_stx = prev_bad_pods = None
+    check_stx = prev_bad_pods = pre_checked = None
+    from keywords import container_helper, kube_helper
     if check_containers and not use_telnet:
+        applying_apps = container_helper.get_apps(field='application', con_ssh=con_ssh,
+                                                  auth_info=auth_info,
+                                                  status='applying', con_telnet=con_telnet,
+                                                  use_telnet=use_telnet)
+
+        if applying_apps:
+            pre_checked = container_helper.wait_for_apps_status(apps=applying_apps,
+                                                                con_ssh=con_ssh,
+                                                                auth_info=auth_info,
+                                                                use_telnet=use_telnet,
+                                                                con_telnet=con_telnet,
+                                                                status=(AppStatus.APPLIED,
+                                                                        AppStatus.APPLY_FAILED))[1]
         check_stx = container_helper.is_stx_openstack_deployed(
             applied_only=True, con_ssh=con_ssh, auth_info=auth_info,
             use_telnet=use_telnet, con_telnet=con_telnet)
@@ -1010,6 +1023,14 @@ def unlock_host(host, timeout=HostTimeout.CONTROLLER_UNLOCK,
                 apps='stx-openstack', status=AppStatus.APPLIED,
                 auth_info=auth_info, con_ssh=con_ssh, check_interval=10,
                 fail_ok=fail_ok)[0]
+
+        if pre_checked and AppStatus.APPLY_FAILED in list(pre_checked.values()):
+            err = 'Application(s) apply-failed before unlock: {}'.format(pre_checked)
+            if fail_ok:
+                LOG.error(err)
+                res_app = False
+            else:
+                raise exceptions.ContainerError(pre_checked)
 
         if con0_install:
             prev_bad_pods = 'coredns-'

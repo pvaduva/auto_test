@@ -14,7 +14,9 @@ from testfixtures.fixture_resources import ResourceCleanup
 # us54724_test_strategy_JUNO_DVR_Integration #
 ##############################################
 
-# This is to test dvr, non-dvr routers with SNAT disabled. Tests with SNAT enabled are in test_avr_snat.py
+# This is to test dvr, non-dvr routers with SNAT disabled.
+# Tests with SNAT enabled are in test_avr_snat.py
+
 
 result_ = None
 
@@ -28,10 +30,12 @@ def router_info(request):
 
     router_id = network_helper.get_tenant_router()
     network_helper.set_router_gateway(router_id, enable_snat=False)
-    is_dvr = network_helper.get_router_values(router_id, fields='distributed', auth_info=Tenant.get('admin'))[0]
+    is_dvr = network_helper.get_router_values(router_id, fields='distributed',
+                                              auth_info=Tenant.get('admin'))[0]
 
     def teardown():
-        post_dvr = network_helper.get_router_values(router_id, fields='distributed', auth_info=Tenant.get('admin'))[0]
+        post_dvr = network_helper.get_router_values(router_id, fields='distributed',
+                                                    auth_info=Tenant.get('admin'))[0]
         if post_dvr != is_dvr:
             network_helper.set_router_mode(router_id, distributed=is_dvr)
     request.addfinalizer(teardown)
@@ -86,12 +90,14 @@ def test_dvr_update_router(router_info, _bring_up_router):
 
     for update_to_val in [False, True]:
         LOG.tc_step("Update router distributed to {}".format(update_to_val))
-        network_helper.set_router_mode(router_id, distributed=update_to_val, enable_on_failure=False)
+        network_helper.set_router_mode(router_id, distributed=update_to_val,
+                                       enable_on_failure=False)
 
         # Wait for 30 seconds to allow the router update completes
         time.sleep(30)
         LOG.tc_step("Verify router is in active state and vm can be ping'd from NatBox")
-        assert RouterStatus.ACTIVE == network_helper.get_router_values(router_id, fields='status')[0], \
+        assert RouterStatus.ACTIVE == network_helper.get_router_values(router_id,
+                                                                       fields='status')[0], \
             "Router is not in active state after updating distributed to {}.".format(update_to_val)
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
@@ -110,7 +116,8 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
 
     Args:
         vms_num (int): number of vms to boot
-        srv_grp_policy (str): affinity to boot vms on same host, anti-affinity to boot vms on different hosts
+        srv_grp_policy (str): affinity to boot vms on same host, anti-affinity to boot vms on
+            different hosts
         server_groups: test fixture to return affinity and anti-affinity server groups
         router_info (str): id of tenant router
 
@@ -122,7 +129,8 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
 
     Test Steps
         - Update router to distributed if not already done
-        - Boot given number of vms with specific server group policy to schedule vms on same or different host(s)
+        - Boot given number of vms with specific server group policy to schedule vms on
+            same or different host(s)
         - Ping vms' over data and management networks from one vm to test NS and EW traffic
 
     Teardown:
@@ -140,7 +148,8 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
 
     LOG.tc_step("Update router to distributed if not already done")
     router_id = router_info
-    is_dvr = network_helper.get_router_values(router_id, fields='distributed', auth_info=Tenant.get('admin'))[0]
+    is_dvr = network_helper.get_router_values(router_id, fields='distributed',
+                                              auth_info=Tenant.get('admin'))[0]
     if not is_dvr:
         network_helper.set_router_mode(router_id, distributed=True)
 
@@ -161,12 +170,15 @@ def test_dvr_vms_network_connection(vms_num, srv_grp_policy, server_groups, rout
     for i in range(vms_num):
         vol = cinder_helper.create_volume()[1]
         ResourceCleanup.add(resource_type='volume', resource_id=vol)
-        vm_id = vm_helper.boot_vm('dvr_ew_traffic', source='volume', source_id=vol, nics=nics, cleanup='function',
+        vm_id = vm_helper.boot_vm('dvr_ew_traffic', source='volume', source_id=vol, nics=nics,
+                                  cleanup='function',
                                   hint={'group': srv_grp_id})[1]
         vms.append(vm_id)
         LOG.tc_step("Wait for vm {} pingable from NatBox".format(vm_id))
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id, fail_ok=False)
 
     from_vm = vms[0]
-    LOG.tc_step("Ping vms over management and data networks from vm {}, and verify ping successful.".format(from_vm))
-    vm_helper.ping_vms_from_vm(to_vms=vms, from_vm=from_vm, fail_ok=False, net_types=['data', 'mgmt', 'internal'])
+    LOG.tc_step("Ping vms over management and data networks from vm {}, and verify "
+                "ping successful.".format(from_vm))
+    vm_helper.ping_vms_from_vm(to_vms=vms, from_vm=from_vm, fail_ok=False,
+                               net_types=['data', 'mgmt', 'internal'])
