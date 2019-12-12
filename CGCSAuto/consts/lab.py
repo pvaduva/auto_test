@@ -828,6 +828,118 @@ class Labs:
         'system_mode': 'duplex',
     }
 
+    WP_22_24 = {
+        'short_name': 'wp_22_24',
+        'name': 'yow-cgcs-wolfpass-22_24',
+        'floating ip': '128.224.151.243',
+        'controller-0 ip': '128.224.151.242',
+        'controller-1 ip': '128.224.151.155',
+        'controller_nodes': [27560, 60807],
+        'compute_nodes': [43267],
+        'system_type': 'AIO_PLUS',
+        'system_mode': 'duplex',
+    }
+
+    WP_25 = {
+        'short_name': 'wp_25',
+        'name': 'yow-cgcs-wolfpass-25',
+        'floating ip': '128.224.151.67',
+        'controller-0 ip': '128.224.151.67',
+        'controller_nodes': [65814],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    WP_26 = {
+        'short_name': 'wp_26',
+        'name': 'yow-cgcs-wolfpass-26',
+        'floating ip': '128.224.151.68',
+        'controller-0 ip': '128.224.151.68',
+        'controller_nodes': [39680],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    WP_27 = {
+        'short_name': 'wp_27',
+        'name': 'yow-cgcs-wolfpass-27',
+        'floating ip': '128.224.151.178',
+        'controller-0 ip': '128.224.151.178',
+        'controller_nodes': [95641],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    WP_28 = {
+        'short_name': 'wp_28',
+        'name': 'yow-cgcs-wolfpass-28',
+        'floating ip': '128.224.151.220',
+        'controller-0 ip': '128.224.151.220',
+        'controller_nodes': [51440],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    WP_29 = {
+        'short_name': 'wp_29',
+        'name': 'yow-cgcs-wolfpass-29',
+        'floating ip': '128.224.151.251',
+        'controller-0 ip': '128.224.151.251',
+        'controller_nodes': [58383],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    WP_30 = {
+        'short_name': 'wp_30',
+        'name': 'yow-cgcs-wolfpass-30',
+        'floating ip': '128.224.151.204',
+        'controller-0 ip': '128.224.151.204',
+        'controller_nodes': [90797],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    WP_31 = {
+        'short_name': 'wp_31',
+        'name': 'yow-cgcs-wolfpass-31',
+        'floating ip': '128.224.151.179',
+        'controller-0 ip': '128.224.151.179',
+        'controller_nodes': [13820],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    WP_32 = {
+        'short_name': 'wp_32',
+        'name': 'yow-cgcs-wolfpass-32',
+        'floating ip': '128.224.151.152',
+        'controller-0 ip': '128.224.151.152',
+        'controller_nodes': [20106],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    WP_33 = {
+        'short_name': 'wp_33',
+        'name': 'yow-cgcs-wolfpass-33',
+        'floating ip': '128.224.151.203',
+        'controller-0 ip': '128.224.151.203',
+        'controller_nodes': [73614],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
+    WP_34 = {
+        'short_name': 'wp_34',
+        'name': 'yow-cgcs-wolfpass-34',
+        'floating ip': '128.224.151.190',
+        'controller-0 ip': '128.224.151.190',
+        'controller_nodes': [58338],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
+    }
+
     VBOX = {
         'short_name': 'vbox',
         'name': 'vbox',
@@ -897,7 +1009,7 @@ class Labs:
         'storage_nodes': []
     }
 
-    # Distributed Cloud
+    # Distributed Cloud-1
     WCP_80_91 = {
         'short_name': 'wcp_80_91',
         'name': 'yow-cgcs-distributed_cloud-1',
@@ -909,6 +1021,23 @@ class Labs:
         'subcloud4': WCP_85_86,
         'subcloud5': WCP_87_88,
         'subcloud6': WCP_89,
+    }
+    # Distributed Cloud-2
+    WP_22_34 = {
+        'short_name': 'wp_22_34',
+        'name': 'yow-cgcs-distributed_cloud-2',
+        'floating ip': WP_22_24['floating ip'],
+        'central_region': WP_22_24,
+        'subcloud1': WP_27,
+        'subcloud2': WP_28,
+        'subcloud3': WP_29,
+        'subcloud4': WP_30,
+        'subcloud5': WP_31,
+        'subcloud6': WP_32,
+        'subcloud7': WP_33,
+        'subcloud8': WP_34,
+        'subcloud9': WP_25,
+        'subcloud10': WP_26
     }
 
     NO_LAB = None

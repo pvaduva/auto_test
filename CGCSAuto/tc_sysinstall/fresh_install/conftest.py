@@ -82,7 +82,7 @@ def pytest_configure(config):
     if 'yow' in lab_name:
         lab_name = lab_name[4:]
 
-    is_subcloud, sublcoud_name, dc_float_ip = setups.is_lab_subcloud(lab_dict)
+    is_subcloud, sublcoud_name, dc_float_ip = setups.is_lab_subcloud(lab_dict, ipv6=ipv6_oam)
 
     if resume_install is True:
         resume_install = fresh_install_helper.get_resume_step(lab_dict)
@@ -109,11 +109,6 @@ def pytest_configure(config):
             host_build_dir_path = host_build_dir_path[:-len('latest_build')] + build_id
 
         files_server = build_server
-
-        if sublcoud_name and not lab_file_dir:
-            lab_file_dir = "{}:{}{}".format(dc_float_ip, HostLinuxUser.get_home(), sublcoud_name)
-            files_server = Node(host_ip=dc_float_ip, host_name='controller-0')
-
         if lab_file_dir:
             if lab_file_dir.find(":/") != -1:
                 files_server = lab_file_dir[:lab_file_dir.find(":/")]

@@ -102,7 +102,7 @@ def test_duplex_install(install_setup):
                                             helm_chart_server=helm_chart_server)
 
     if install_subcloud:
-        fresh_install_helper.configure_subcloud(controller0_node, lab_files_server,
+        fresh_install_helper.configure_subcloud(controller0_node, install_setup["dc_system_controller"],
                                                 subcloud=install_subcloud,
                                                 final_step=final_step)
     else:
@@ -150,10 +150,14 @@ def test_duplex_install(install_setup):
         collect_sys_net_info(lab)
         setup_tis_ssh(lab)
 
-    #fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
+    # fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
     if not deploy_mgr:
         fresh_install_helper.collect_lab_config_yaml(lab, build_server,
                                                      stage=fresh_install_helper.DEPLOY_LAST)
+
+    if install_subcloud:
+        fresh_install_helper.wait_for_subcloud_to_be_managed(install_subcloud, install_setup["dc_system_controller"],
+                                                             lab=lab)
 
     fresh_install_helper.attempt_to_run_post_install_scripts()
 

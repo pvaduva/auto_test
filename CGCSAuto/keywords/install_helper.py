@@ -14,12 +14,12 @@ from consts.stx import HostAvailState, Prompt, PREFIX_BACKUP_FILE, \
     PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH, VSwitchType, PING_LOSS_RATE
 from consts.filepaths import StxPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar, RestoreVars
-from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout
+from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout, DCTimeout
 from consts.vlm import VlmAction
 from consts.bios import NODES_WITH_KERNEL_BOOT_OPTION_SPACING, TerminalKeys
 from consts.build_server import Server, YOW_TUXLAB2
 from keywords import system_helper, host_helper, vm_helper, patching_helper, \
-    cinder_helper, common, network_helper, vlm_helper
+    cinder_helper, common, network_helper, vlm_helper, dc_helper
 from utils import exceptions, cli, table_parser, lab_info, multi_thread, menu
 from utils.clients.ssh import SSHClient, ControllerClient, SSHFromSSH
 from utils.clients.telnet import TelnetClient, LOGIN_REGEX
@@ -595,6 +595,12 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     if not conf_server:
         conf_server = server
 
+    dc_lab_name = ''
+    subcloud = InstallVars.get_install_var('INSTALL_SUBCLOUD')
+    if subcloud:
+        dc_lab = InstallVars.get_install_var('DC_LAB')
+        dc_lab_name = dc_lab['name'].split('yow-', maxsplit=1)[-1]
+
     sys_version = extract_software_version_from_string_path(load_path)
     sys_version = \
         sys_version if sys_version in BuildServerPath.DEFAULT_LAB_CONFIG_PATH_EXTS else 'default'
@@ -604,17 +610,27 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
     if lab_file_dir:
         lab_file_dir = os.path.normpath(lab_file_dir)
         if os.path.basename(lab_file_dir) == 'yow':
-            lab_file_dir += '/{}'.format(lab_name)
+            if not subcloud:
+                lab_file_dir += '/{}'.format(lab_name)
+            else:
+                lab_file_dir += '/{}/{}'.format(dc_lab_name, subcloud[:8] + '-' + subcloud[8:])
+        elif os.path.basename(lab_file_dir) == lab_name and '/lab/yow/' in lab_file_dir:
+            if subcloud:
+                lab_file_dir = "{}/{}/{}".format(os.path.dirname(lab_file_dir), dc_lab_name,
+                                                 subcloud[:8] + '-' + subcloud[8:])
 
         # script_path = lab_file_dir
         if '/lab/yow/' in lab_file_dir:
             script_path = os.path.join(lab_file_dir.rsplit('/lab/yow/', maxsplit=1)[0],
                                        'lab/scripts')
         else:
-            script_path = os.path.join(default_lab_config_path, "scripts")
+            script_path = os.path.join(default_lab_config_path, "scripts") if not subcloud else lab_file_dir
     else:
-        lab_file_dir = default_lab_config_path + "/yow/{}".format(lab['name'])
+        lab_file_dir = default_lab_config_path + "/yow/{}".format(lab['name']) if not subcloud else \
+            default_lab_config_path + "/yow/{}/{}".format(dc_lab_name, subcloud[:8] + '-' + subcloud[8:])
         script_path = os.path.join(default_lab_config_path, "scripts")
+
+    deployment_mgr = True
 
     LOG.info("Getting lab config file from specified path: {}".format(lab_file_dir))
     cmd = "test -e " + lab_file_dir
@@ -622,17 +638,20 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
 
     cmd = "test -e {}/deployment-config.yaml".format(lab_file_dir)
     cmd1 = "test -e {}/deployment-config_avs.yaml".format(lab_file_dir)
-    deployment_mgr = False
-    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0 or \
-            conf_server.ssh_conn.exec_cmd(cmd1, rm_date=False)[0] == 0:
-        deployment_mgr = True
+    # deployment_mgr = False
+    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] != 0 and \
+            conf_server.ssh_conn.exec_cmd(cmd1, rm_date=False)[0] != 0:
+        deployment_mgr = False
 
-    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
-    download_deploy_manager_files(lab, server, load_path=load_path, deployment_mgr=deployment_mgr)
+    if not subcloud:
+        download_deploy_manager_files(lab, server, load_path=load_path, deployment_mgr=deployment_mgr)
+
     # if not deployment_mgr:
     cmd = "test -e " + script_path
     server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
-    server.ssh_conn.rsync(script_path + "/*",
+    script_path_src = script_path + "/*"
+    pre_opts = 'sshpass -p "{0}"'.format(HostLinuxUser.get_password())
+    server.ssh_conn.rsync(script_path_src,
                           lab['controller-0 ip'],
                           HostLinuxUser.get_home(), pre_opts=pre_opts)
 
@@ -647,20 +666,20 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
                                lab['controller-0 ip'],
                                HostLinuxUser.get_home(),
                                pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
+    if not subcloud:
+        site_file_path = os.path.join(default_lab_config_path, "yow/ansible/site.yml")
+        local_install_override_file_path = os.path.join(default_lab_config_path,
+                                                        "yow/ansible/local-install-overrides.yaml")
 
-    site_file_path = os.path.join(default_lab_config_path, "yow/ansible/site.yml")
-    local_install_override_file_path = os.path.join(default_lab_config_path,
-                                                    "yow/ansible/local-install-overrides.yaml")
+        if conf_server.ssh_conn.exec_cmd('test -e {}'.format(site_file_path), rm_date=False)[0] == 0:
+            conf_server.ssh_conn.rsync(site_file_path,
+                                       lab['controller-0 ip'],
+                                       HostLinuxUser.get_home(), pre_opts=pre_opts)
 
-    if conf_server.ssh_conn.exec_cmd('test -e {}'.format(site_file_path), rm_date=False)[0] == 0:
-        conf_server.ssh_conn.rsync(site_file_path,
-                                   lab['controller-0 ip'],
-                                   HostLinuxUser.get_home(), pre_opts=pre_opts)
-
-    if conf_server.ssh_conn.exec_cmd('test -e {}'.format(local_install_override_file_path),
-                                     rm_date=False)[0] == 0:
-        conf_server.ssh_conn.rsync(local_install_override_file_path, lab['controller-0 ip'],
-                                   HostLinuxUser.get_home(), pre_opts=pre_opts)
+        if conf_server.ssh_conn.exec_cmd('test -e {}'.format(local_install_override_file_path),
+                                         rm_date=False)[0] == 0:
+            conf_server.ssh_conn.rsync(local_install_override_file_path, lab['controller-0 ip'],
+                                       HostLinuxUser.get_home(), pre_opts=pre_opts)
 
     vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
     if vswitch_type == VSwitchType.AVS:
@@ -2588,7 +2607,6 @@ def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_u
         controller0.telnet_conn.set_prompt(r'((-[\d]+)|(localhost)):~\$ ')
     else:
         controller0.telnet_conn.set_prompt(r'((-[\d]+)|(localhost)):~\$ ')
-        #controller0.telnet_conn.set_prompt(r'-[\d]+:~\$ ')
 
     controller0.telnet_conn.login(handle_init_login=True)
 
@@ -3558,6 +3576,151 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
 
     return rc, output
 
+
+def controller_system_config_subcloud(subcloud, system_controller_node, con_telnet=None,  lab=None,
+                                      close_telnet=False,  banner=True, branding=True):
+    """
+
+    Args:
+        subcloud:
+        system_controller_node:
+        con_telnet:
+        lab:
+        close_telnet:
+        banner:
+        branding:
+
+    Returns:
+
+    """
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    controller0 = lab["controller-0"]
+    if con_telnet is None:
+        con_telnet = open_telnet_session(controller0)
+        con_telnet.login()
+        close_telnet = True
+
+    try:
+        if banner:
+            apply_banner(telnet_conn=con_telnet, fail_ok=True)
+        if branding:
+            apply_branding(telnet_conn=con_telnet, fail_ok=True)
+
+        con_telnet.exec_cmd("unset TMOUT")
+        histime_format_cmd = 'export HISTTIMEFORMAT="%Y-%m-%d %T "'
+        bashrc_path = '{}/.bashrc'.format(HostLinuxUser.get_home())
+        if con_telnet.exec_cmd("grep '{}' {}".format(histime_format_cmd, bashrc_path))[0] == 1:
+            con_telnet.exec_cmd("""echo '{}'>> {}""".format(histime_format_cmd, bashrc_path))
+            con_telnet.exec_cmd("source {}".format(bashrc_path))
+
+        con_telnet.exec_cmd("export USER={}".format(HostLinuxUser.get_user()))
+
+        config_file_found = False
+        if system_controller_node.ssh_conn is not None:
+            if not system_controller_node.ssh_conn.is_connected():
+                system_controller_node.ssh_conn.connect()
+        else:
+            system_controller_node.ssh_conn = ssh_to_controller(system_controller_node.host_ip)
+
+        update_auth_url(ssh_con=system_controller_node.ssh_conn)
+
+        subcloud_config_dirname = subcloud if '-' in subcloud else subcloud[:8] + '-' + subcloud[8:]
+
+        subcloud_config_path = '{}/{}'.format(HostLinuxUser.get_home(), subcloud_config_dirname)
+        subcloud_config_files = subcloud.replace('-', '') + '*'
+
+        if system_controller_node.ssh_conn.exec_cmd("ls {}/{}".format(subcloud_config_path,
+                                                                      subcloud_config_files))[0] != 0:
+
+            if system_controller_node.ssh_conn .exec_cmd("test -d {}".format(subcloud_config_path))[0] == 0:
+                system_controller_node.ssh_conn.exec_cmd("cp {}/{} ./"
+                                                         .format(subcloud_config_path, subcloud_config_files))
+                if system_controller_node.ssh_conn.exec_cmd("ls {}/{}".format(subcloud_config_path,
+                                                                              subcloud_config_files))[0] != 0:
+                    msg = "The subcloud  configuration files  {}  not found in System Controller" \
+                        .format(subcloud_config_path)
+                    raise exceptions.InstallError(msg)
+            else:
+                msg = "The subcloud  configuration file dir  {}  not found in System Controller"\
+                    .format(subcloud_config_path)
+                raise exceptions.InstallError(msg)
+        bootstrap_values_path = "{}{}_ipv6-bootstrap-values.yaml"\
+            .format(HostLinuxUser.get_home(), subcloud.replace('-', ''))
+        deploy_play_book_path = "{}wind-river-cloud-platform-deployment-manager-playbook.yaml"\
+            .format(HostLinuxUser.get_home())
+        deploy_values_path = "{}{}-deploy-values.yaml".format(HostLinuxUser.get_home(), subcloud.replace('-', ''))
+
+        dc_helper.add_subcloud(subcloud, controller0, system_controller_node, bootstrap_values_path,
+                               deploy_play_book_path, deploy_values_path)
+
+        wait_for_subcloud_deploy_complete(subcloud, con_ssh=system_controller_node.ssh_conn)
+
+    finally:
+        if close_telnet:
+            con_telnet.close()
+
+
+def wait_for_subcloud_deploy_complete(subcloud,  timeout=DCTimeout.SUBCLOUD_DEPLOY,
+                                      check_interval=60, auth_info=Tenant.get('admin_platform', 'RegionOne'),
+                                      con_ssh=None, source_openrc=None, fail_ok=False):
+    """
+
+    Args:
+        subcloud:
+        timeout:
+        check_interval:
+        auth_info:
+        con_ssh:
+        source_openrc:
+        fail_ok:
+
+    Returns:
+
+    """
+
+    if not subcloud:
+        raise ValueError("Subcloud name must be specified")
+
+    expt_status = {
+        'avail': "offline",
+        'sync': 'unknown',
+        'mgmt': 'unmanaged',
+        'deploy': 'complete',
+    }
+
+    LOG.info("Wait for {} deploy status: {}".format(subcloud, expt_status))
+    current_status = 'bootstrapping'
+    end_time = time.time() + timeout + check_interval
+    while time.time() < end_time:
+        status = dc_helper.get_subcloud_status(subcloud, field='deploy status',  con_ssh=con_ssh,
+                                               source_openrc=source_openrc, auth_info=auth_info)
+
+        if 'failed' in status:
+            msg = 'Subcloud {}  {}; Check subcloud logs in /var/log/dcmanager/'.format(subcloud, status)
+            LOG.warning(msg)
+            if fail_ok:
+                return 1, msg
+            else:
+                raise exceptions.InstallError(msg)
+
+        if current_status != status:
+            LOG.info("Subcloud is in status {} ...".format(status))
+        if status == expt_status['deploy']:
+            LOG.info("Subcloud deploy is  {} ...".format(status))
+            return 0, None
+
+        time.sleep(check_interval)
+
+    msg = '{} status did not reach {} within {} seconds'.format(subcloud, expt_status, timeout)
+    LOG.warning(msg)
+    if fail_ok:
+        return 1, msg
+    else:
+        raise exceptions.InstallError(msg)
+
+
 def apply_banner(telnet_conn, fail_ok=True):
     LOG.info("Applying banner files")
     banner_dir = "{}/banner/".format(HostLinuxUser.get_home())
@@ -3771,8 +3934,7 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
             pass
         except IndexError:
             LOG.error("Not enough indexes were given for the menu. {} indexes was given for {} "
-                      "amount of menus".format(
-                str(len(index)), str(len(boot_menu.sub_menus) + 1)))
+                      "amount of menus".format(str(len(index)), str(len(boot_menu.sub_menus) + 1)))
             raise
 
     return 0
@@ -3788,9 +3950,9 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
                               if key == node_obj.name or key == node_obj.personality), None)
     boot_type = InstallVars.get_install_var("BOOT_TYPE")
     if boot_device_regex:
-        uefi = "UEFI" in boot_device_regex or re.search("r\d+", node_obj.host_name)
+        uefi = "UEFI" in boot_device_regex or re.search(r'(\d+)', node_obj.host_name)
     else:
-        uefi = re.search("r\d+", node_obj.host_name) or "ml350" in node_obj.host_name
+        uefi = re.search(r'(\d+)', node_obj.host_name) or "ml350" in node_obj.host_name
 
     if small_footprint is None:
         sys_type = ProjVar.get_var("SYS_TYPE")
@@ -4656,3 +4818,57 @@ def download_deploy_manager_files(lab, server, load_path=None, deployment_manage
         # Cumulus docker registry certificate
         server.ssh_conn.rsync(registry_ca_cert_path, lab['controller-0 ip'],
                               HostLinuxUser.get_home(), pre_opts=pre_opts)
+
+
+def config_ipv6_oam_interface(lab, oam_gateway_address='2620:10a:a001:a103::6:0',
+                              oam_subnet_cidr='2620:10a:a001:a103::/64'):
+    """
+
+    Args:
+        lab:
+        oam_gateway_address:
+        oam_subnet_cidr:
+
+    Returns:
+
+    """
+    if not lab:
+        raise ValueError("The lab dictionary object must be specified")
+
+    controller0_node = lab['controller-0']
+    if controller0_node.telnet_conn is None:
+        controller0_node.telnet_conn = open_telnet_session(controller0_node)
+        controller0_node.telnet_conn.login()
+
+    oam_ip = controller0_node.host_ip
+    if common.get_ip_version(oam_ip) != 6:
+        raise exceptions.InstallError("The lab oam ip is not ipv6 version; oam_ip = {}".format(oam_ip))
+
+    nic_interface = controller0_node.host_nic
+    if nic_interface is None:
+        raise exceptions.InstallError("The lab oam inteface device name is not specified; please ensure the oam "
+                                      "device name is defined in the lab dictionary")
+
+    prompts = [Prompt.PASSWORD_PROMPT, r"Enter management interface name:"]
+    controller0_node.telnet_conn.send(cmd="sudo config_management")
+    index = controller0_node.telnet_conn.expect(prompts, timeout=300)
+    if index == 0:
+        controller0_node.telnet_conn.send(HostLinuxUser.get_password())
+        prompts.remove(Prompt.PASSWORD_PROMPT)
+        controller0_node.telnet_conn.expect(prompts, timeout=300)
+    controller0_node.telnet_conn.send(nic_interface)
+    controller0_node.telnet_conn.expect(b"Enter management IP address in CIDR notation, ie. ip/prefix_length:")
+    controller0_node.telnet_conn.send(oam_ip + "/64")
+    prompt = r"Enter management gateway IP address \[2620:10a:a001:a103::1\]:"
+    controller0_node.telnet_conn.expect(prompt)
+    controller0_node.telnet_conn.send(oam_gateway_address)
+    controller0_node.telnet_conn.expect(r"Enter System Controller subnet in CIDR notation:")
+    controller0_node.telnet_conn.send(oam_subnet_cidr)
+    controller0_node.telnet_conn.expect(r"Adding route to System Controller...  DONE")
+
+    LOG.info("Verifying the OAM IPv6 address {} is set for interface {}".format(oam_ip, nic_interface))
+    cmd = "ip addr show dev {} | grep inet6 | grep \'{}/64\'".format(nic_interface, oam_ip)
+    rc,  output = controller0_node.telnet_conn.exec_cmd(cmd)
+    if rc != 0:
+        raise exceptions.InstallError("Fail to set oam ipv6 address {} for nic device {}: {}"
+                                      .format(oam_ip, nic_interface, output))

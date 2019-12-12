@@ -4,14 +4,14 @@ import copy
 from utils import cli, exceptions, table_parser
 from utils.tis_log import LOG
 from utils.clients.ssh import ControllerClient
-from consts.auth import Tenant
+from consts.auth import Tenant, HostLinuxUser
 from consts.proj_vars import ProjVar
 from consts.timeout import DCTimeout
 from consts.filepaths import SysLogPath
 from keywords import system_helper, nova_helper
 
 
-def get_subclouds(field='name', name=None, avail=None, sync=None, mgmt=None,
+def get_subclouds(field='name', name=None, avail=None, sync=None, mgmt=None, deploy=None,
                   auth_info=Tenant.get('admin_platform', 'RegionOne'), con_ssh=None, source_openrc=None):
     """
     Getting subclouds info
@@ -33,10 +33,34 @@ def get_subclouds(field='name', name=None, avail=None, sync=None, mgmt=None,
     LOG.info("Auth_info: {}".format(auth_info))
     table_ = table_parser.table(
         cli.dcmanager('subcloud list', ssh_client=con_ssh, auth_info=auth_info, source_openrc=source_openrc)[1])
-    arg_dict = {'name': name, 'availability': avail, 'sync': sync, 'management': mgmt}
+    arg_dict = {'name': name, 'availability': avail, 'sync': sync, 'management': mgmt, 'deploy status': deploy}
     kwargs = {key: val for key, val in arg_dict.items() if val is not None}
     subclouds = table_parser.get_values(table_, target_header=field, **kwargs)
     return subclouds
+
+
+def get_subcloud_status(subcloud, field='availability', auth_info=Tenant.get('admin_platform', 'RegionOne'), con_ssh=None,
+                        source_openrc=None):
+    """
+
+    Args:
+        subcloud:
+        field:
+        auth_info:
+        con_ssh:
+        source_openrc:
+
+    Returns:
+
+    """
+
+    LOG.info("Auth_info: {}".format(auth_info))
+    table_ = table_parser.table(
+        cli.dcmanager('subcloud list', ssh_client=con_ssh, auth_info=auth_info, source_openrc=source_openrc)[1])
+    arg_dict = {'name': subcloud}
+    kwargs = {key: val for key, val in arg_dict.items() if val is not None}
+    status = table_parser.get_values(table_, target_header=field, **kwargs)
+    return status[0]
 
 
 def _manage_unmanage_subcloud(subcloud=None, manage=False, check_first=True, fail_ok=False, con_ssh=None,
@@ -411,7 +435,7 @@ def wait_for_subcloud_ntp_config(subcloud=None, subcloud_ssh=None, expected_ntp=
     return res
 
 
-def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout=DCTimeout.SUBCLOUD_AUDIT,
+def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, deploy=None, timeout=DCTimeout.SUBCLOUD_AUDIT,
                              check_interval=30, auth_info=Tenant.get('admin_platform', 'RegionOne'), con_ssh=None,
                              source_openrc=None, fail_ok=False):
     """
@@ -442,6 +466,8 @@ def wait_for_subcloud_status(subcloud, avail=None, sync=None, mgmt=None, timeout
         expt_status['sync'] = sync
     if mgmt:
         expt_status['mgmt'] = mgmt
+    if deploy:
+        expt_status['deploy'] = deploy
 
     if not expt_status:
         raise ValueError("At least one  expected status of the subcloud must be specified.")
@@ -486,3 +512,67 @@ def wait_for_subcloud_keypair(subcloud=None, subcloud_ssh=None, expected_keypair
     return wait_for_subcloud_config(subcloud=subcloud, func=func, config_name='Name',
                                     expected_value=expected_keypair, fail_ok=fail_ok, timeout=timeout,
                                     check_interval=check_interval, strict_order=False, **func_kwargs)
+
+
+
+def add_subcloud(subcloud, subcloud_controller_node, system_controller_node, bootstrap_values_path,
+                 deploy_play_book_path, deploy_values_path,  fail_ok=False,
+                 auth_info=Tenant.get('admin_platform', 'RegionOne'),  source_openrc=None):
+    """
+
+
+    """
+    operation = 'add'
+    LOG.info("Attempt to {}: {}".format(operation, subcloud))
+
+    if system_controller_node.ssh_conn is None:
+        msg = 'No ssh connection to System Controller; Cannot add subcloud {} '.format(subcloud)
+        LOG.warning(msg)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.DCError(msg)
+    subcloud_add_config_pathes = [bootstrap_values_path, deploy_play_book_path, deploy_values_path]
+
+    if not subcloud_controller_node or not bootstrap_values_path or not deploy_play_book_path or not deploy_values_path:
+        msg = "To add a subcloud all values must be specified"
+        LOG.warning(msg)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.DCError(msg)
+
+    for file_path in subcloud_add_config_pathes:
+        if system_controller_node.ssh_conn.exec_cmd("test -f {}".format(file_path))[0] != 0:
+            msg = "Subcloud {} is missing config file {} ".format(subcloud, file_path)
+            LOG.warning(msg)
+            if fail_ok:
+                return 1, msg
+            else:
+                raise exceptions.DCError(msg)
+
+    args_dict = {
+        '--bootstrap-address': subcloud_controller_node.host_ip,
+        '--bootstrap-values': bootstrap_values_path,
+        '--deploy-playbook': deploy_play_book_path,
+        '--deploy-values': deploy_values_path,
+        '--subcloud-password': HostLinuxUser.get_password()
+    }
+
+    opt_args = ''
+    for key, val in args_dict.items():
+        if val is not None:
+            opt_args += '{} {} '.format(key, val)
+
+    rc, output = cli.dcmanager('subcloud ' + operation, opt_args, ssh_client=system_controller_node.ssh_conn,
+                              fail_ok=fail_ok, auth_info=auth_info, source_openrc=source_openrc)
+
+    if rc != 0:
+        msg = "Fail to add subcloud {}: {}".format(subcloud, output)
+        LOG.warning(msg)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.DCError(msg)
+
+    return rc, output

@@ -1,5 +1,4 @@
 import os
-import re
 import time
 
 import pexpect
@@ -12,13 +11,13 @@ from utils.node import Node
 from utils.clients.ssh import ControllerClient, NATBoxClient, SSHFromSSH
 from consts.lab import NatBoxes
 from consts.auth import Tenant, HostLinuxUser, TestFileServer
-from consts.timeout import InstallTimeout, HostTimeout
+from consts.timeout import InstallTimeout, HostTimeout, DCTimeout
 from consts.stx import SysType, SubcloudStatus, HostAdminState, HostAvailState, HostOperState, \
     VSwitchType
 from consts.filepaths import BuildServerPath, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
 from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, \
-    kube_helper, storage_helper, keystone_helper
+    kube_helper, storage_helper, keystone_helper, common
 
 DEPLOY_TOOL = 'deploy'
 DEPLOY_SOUCE_PATH = '/folk/cgts/lab/bin/'
@@ -230,7 +229,10 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
 
         if ProjVar.get_var('IPV6_OAM'):
             lab['controller-0 ip'] = con0_v6_ip
-            install_helper.setup_ipv6_oam(lab['controller-0'])
+            if InstallVars.get_install_var('INSTALL_SUBCLOUD'):
+                install_helper.config_ipv6_oam_interface(lab)
+            else:
+                install_helper.setup_ipv6_oam(lab['controller-0'])
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
@@ -238,6 +240,7 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
 
     if not InstallVars.get_install_var("DEPLOY_OPENSTACK"):
         controller0_node = lab['controller-0']
+        controller0_node.telnet_conn.set_prompt(r'-[\d]+((:~\$)|( ~\(keystone_admin\)\]\$ ))')
         controller0_node.telnet_conn.exec_cmd("touch .no_openstack_install")
 
 
@@ -305,7 +308,7 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
 
     if deploy_mgr:
 
-        ## This temporary solution until we implement the yaml helper functions
+        # This temporary solution until we implement the yaml helper functions
         vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
         ovs_dpdk_yaml = 'deployment-config_ovs-dpdk.yaml'
         none_yaml = 'deployment-config_none.yaml'
@@ -315,7 +318,7 @@ def configure_controller_(controller0_node, config_file='TiS_config.ini_centos',
                 LOG.debug("setting up ovs_dpdk deployment-config yaml")
                 controller0_node.telnet_conn.exec_cmd("mv {} {} ; mv {} {}".format(
                     default_yaml, none_yaml, ovs_dpdk_yaml, default_yaml))
-        ## End of temporary solution
+        # End of temporary solution
 
     test_step = "Configure controller"
     LOG.tc_step(test_step)
@@ -400,59 +403,16 @@ def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='sub
     LOG.tc_step(test_step)
     if do_step(test_step):
 
-        subcloud_config = subcloud.replace('-', '') + '.config'
+        install_helper.controller_system_config_subcloud(subcloud, main_cloud_node,
+                                                         con_telnet=subcloud_controller0_node.telnet_conn, lab=lab,
+                                                         close_telnet=False, banner=True, branding=True)
 
-        install_helper.controller_system_config(lab=lab, config_file=subcloud_config,
-                                                con_telnet=subcloud_controller0_node.telnet_conn,
-                                                subcloud=True)
-
-        if subcloud_controller0_node.ssh_conn is None:
-            subcloud_controller0_node.ssh_conn = install_helper.establish_ssh_connection(
-                subcloud_controller0_node.host_ip)
-
-        ControllerClient.set_active_controller(subcloud_controller0_node.ssh_conn)
-        # install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
         LOG.info("Auto_info before update: {}".format(Tenant.get('admin', 'RegionOne')))
         if not main_cloud_node.ssh_conn:
             main_cloud_node.ssh_conn = install_helper.ssh_to_controller(
                 main_cloud_node.host_ip)
         install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
         LOG.info("Auto_info after update: {}".format(Tenant.get('admin', 'RegionOne')))
-        dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
-                                           mgmt=SubcloudStatus.MGMT_UNMANAGED,
-                                           con_ssh=main_cloud_node.ssh_conn)
-
-        LOG.info(" Subcloud {}  is in {}/{} status ... ".format(
-            subcloud, SubcloudStatus.AVAIL_ONLINE, SubcloudStatus.MGMT_UNMANAGED))
-        no_manage = InstallVars.get_install_var("NO_MANAGE")
-        if not no_manage:
-            LOG.info("Managing subcloud {} ... ".format(subcloud))
-            LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
-            install_helper.update_auth_url(ssh_con=main_cloud_node.ssh_conn)
-            dc_helper.manage_subcloud(subcloud=subcloud, con_ssh=main_cloud_node.ssh_conn,
-                                      fail_ok=True)
-
-            dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
-                                               mgmt=SubcloudStatus.MGMT_MANAGED,
-                                               sync=SubcloudStatus.SYNCED,
-                                               con_ssh=main_cloud_node.ssh_conn)
-
-        LOG.info("Running config for subcloud {} ... ".format(subcloud))
-        install_helper.update_auth_url(ssh_con=subcloud_controller0_node.ssh_conn)
-        LOG.info("Run lab_setup after config controller")
-        run_lab_setup(con_ssh=subcloud_controller0_node.ssh_conn)
-        if do_step("unlock_active_controller"):
-            LOG.info("unlocking {}".format(subcloud_controller0_node.name))
-            host_helper.unlock_host(host=subcloud_controller0_node.name,
-                                    con_ssh=subcloud_controller0_node.ssh_conn,
-                                    timeout=2400, check_hypervisor_up=False,
-                                    check_webservice_up=False,
-                                    check_subfunc=True, check_first=False, con0_install=True)
-
-        LOG.info("Installing license file for subcloud {} ... ".format(subcloud))
-        subcloud_license_path = HostLinuxUser.get_home() + "license.lic"
-        system_helper.install_license(subcloud_license_path,
-                                      con_ssh=subcloud_controller0_node.ssh_conn)
 
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
@@ -782,8 +742,7 @@ def _install_subcloud(subcloud, load_path, build_server, boot_server=None, boot_
     install_helper.copy_files_to_subcloud(subcloud)
 
     system_version = install_helper.extract_software_version_from_string_path(load_path)
-    license_version = system_version if system_version in \
-                                        BuildServerPath.DEFAULT_LICENSE_PATH else 'default'
+    license_version = system_version if system_version in BuildServerPath.DEFAULT_LICENSE_PATH else 'default'
     sys_type = lab['system_mode']
     if sys_type == SysType.REGULAR:
         license_path = BuildServerPath.DEFAULT_LICENSE_PATH[license_version][0]
@@ -890,7 +849,7 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
         raise ValueError("The distributed cloud IP version must be either ipv4 or ipv6;  currently set to {}"
                          .format("ipv" + str(ip_ver)))
     if name is None:
-        name = 'subcloud'
+        raise ValueError("The distributed cloud system subcloud name must be provided")
 
     ProjVar.set_var(SOURCE_OPENRC=True)
     if not controller0_node.ssh_conn.is_connected():
@@ -908,61 +867,18 @@ def add_subclouds(controller0_node, name=None, ip_ver=4):
 
         return 0, [name]
 
-    if name is not None and name is not '':
-        subclouds_file = "{}_ipv6.txt".format(name) if ip_ver == 6 else "{}.txt".format(name)
-        subclouds_file_path = HostLinuxUser.get_home() + name + '/' + subclouds_file
-    else:
-        subclouds_file = "subcloud_ipv6.txt" if ip_ver == 6 else "subcloud.txt"
-        subclouds_file_path = HostLinuxUser.get_home() + subclouds_file
+    subclouds_files = "{}*".format(name)
+    subclouds_files_path = HostLinuxUser.get_home() + name[:8] + '-' + name[8:]
 
-    cmd = "test -f {}".format(subclouds_file_path)
-    cmd2 = "chmod 777 {}".format(subclouds_file_path)
+    cmd = "test -d {}".format(subclouds_files_path)
+    cmd2 = "ls {}/{}".format(subclouds_files_path, subclouds_files)
 
-    if controller0_node.ssh_conn.exec_cmd(cmd)[0] == 0:
-        controller0_node.ssh_conn.exec_cmd(cmd2)
-    else:
-        assert False, "The subclouds text file {} is missing in system controller {}" \
-            .format(subclouds_file, controller0_node.host_name)
+    if controller0_node.ssh_conn.exec_cmd(cmd)[0] != 0 or controller0_node.ssh_conn.exec_cmd(cmd2)[0] != 0:
+        assert False, "The subcloud {} deployment configuration files are missing in system controller {}:{}" \
+            .format(name, controller0_node.host_name, subclouds_files_path)
 
-    LOG.info("Generating subclouds config info from {}".format(subclouds_file))
-    controller0_node.ssh_conn.exec_cmd("{}".format(subclouds_file_path))
-    LOG.info("Checking if subclouds are added and config files are generated.....")
-    subclouds = dc_helper.get_subclouds(con_ssh=controller0_node.ssh_conn)
-    added_subclouds = [sub for sub in subclouds if sub not in existing_subclouds]
-    if name not in added_subclouds:
-        msg = "Fail to add subcloud {}. Existing subclouds= {}; Added subclouds = {}".\
-            format(name, existing_subclouds, added_subclouds)
-        LOG.warning(msg)
-        assert False, msg
-
-    config_generated = []
-    for subcloud in added_subclouds:
-        if re.match(r'subcloud-\d{1,2}', subcloud):
-            subcloud_config = subcloud.replace('-', '') + ".config"
-        else:
-            subcloud_config = subcloud + ".config"
-
-        rc = controller0_node.ssh_conn.exec_cmd("test -f {}{}".format(HostLinuxUser.get_home(),
-                                                                      subcloud_config))[0]
-        if rc == 0:
-            config_generated.append(subcloud_config)
-            config_path = HostLinuxUser.get_home() + subcloud
-            controller0_node.ssh_conn.exec_cmd("mv {}{} {}/".format(HostLinuxUser.get_home(),
-                                                                    subcloud_config, config_path))
-        else:
-            msg = "Subcloud {} config file {} not generated or missing".format(subcloud,
-                                                                               subcloud_config)
-            LOG.warning(msg)
-            assert False, msg
-
-    if len(added_subclouds) == len(config_generated):
-        LOG.info("Subclouds added and config files generated successfully; subclouds: {}"
-                 .format(list(zip(added_subclouds, config_generated))))
-    else:
-        LOG.info("One or more subcloud config are missing, please try to generate the missing "
-                 "configs manually")
-
-    return 0, added_subclouds
+    LOG.info("Getting subclouds deployment config files  from {}".format(subclouds_files_path))
+    controller0_node.ssh_conn.exec_cmd("cp {}/{} ./".format(subclouds_files_path, subclouds_files))
 
 
 def install_subclouds(subclouds, subcloud_boots, load_path, build_server, lab=None, patch_dir=None,
@@ -1197,22 +1113,27 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     patch_server = InstallVars.get_install_var("PATCH_SERVER")
     guest_server = InstallVars.get_install_var("GUEST_SERVER")
 
-    servers = list({file_server, iso_host, patch_server, guest_server, helm_chart_server}) \
-        if not subcloud else list({iso_host, patch_server, guest_server, helm_chart_server})
+    servers = list({file_server, iso_host, patch_server, guest_server, helm_chart_server})
+
     LOG.fixture_step("Establishing connection to {}".format(servers))
 
     servers_map = {server_: setups.initialize_server(server_) for server_ in servers}
     bs_obj = servers_map.get(build_server)
-
+    file_server_obj = servers_map.get(file_server, bs_obj)
     dc_float_ip = None
     install_sub = None
+    system_controller_obj = None
     if subcloud:
         dc_float_ip = InstallVars.get_install_var("DC_FLOAT_IP")
         install_sub = InstallVars.get_install_var("INSTALL_SUBCLOUD")
-        file_server_obj = Node(host_ip=dc_float_ip, host_name='controller-0')
-        file_server_obj.ssh_conn = install_helper.establish_ssh_connection(file_server_obj.host_ip)
+        dc_lab = setups.get_dc_lab(lab)
+        system_controller_obj = Node(host_ip=dc_float_ip, host_name='controller-0')
+        ssh_from_tuxlab2 = True if common.get_ip_version(dc_float_ip) == 6 else False
+        system_controller_obj.ssh_conn = install_helper.establish_ssh_connection(system_controller_obj.host_ip,
+                                                                                 ssh_from_tuxlab2=ssh_from_tuxlab2)
         dc_ipv6 = InstallVars.get_install_var("DC_IPV6")
-        v6 = is_dcloud_system_controller_ipv6(file_server_obj)
+        v6 = True if ssh_from_tuxlab2 else is_dcloud_system_controller_ipv6(file_server_obj)
+
         if not v6:
             if dc_ipv6:
                 LOG.warning("The DC System controller is configured as IPV4; Switching to IPV4")
@@ -1222,10 +1143,11 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
                         "Configuring subcloud {} as IPV6".format(install_sub))
             dc_ipv6 = True
         InstallVars.set_install_var(dc_ipv6=dc_ipv6)
-        add_subclouds(file_server_obj, name=install_sub, ip_ver=6 if dc_ipv6 else 4)
-    else:
-        file_server_obj = servers_map.get(file_server, bs_obj)
-
+        add_subclouds(system_controller_obj, name=install_sub, ip_ver=6 if dc_ipv6 else 4)
+        servers_map['dc_system_controller'] = system_controller_obj
+        InstallVars.set_install_var(system_controller=system_controller_obj)
+        InstallVars.set_install_var(dc_lab=dc_lab)
+        LOG.info("Instal DC lab  = {}".format(InstallVars.get_install_var('DC_LAB')['name']))
     ProjVar.set_var(SOURCE_OPENRC=True)
 
     boot_type = InstallVars.get_install_var("BOOT_TYPE")
@@ -1267,7 +1189,8 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
                       "boot": boot,
                       "control": control,
                       "skips": skip_list,
-                      "active_controller": active_con}
+                      "active_controller": active_con,
+                      "dc_system_controller": system_controller_obj}
 
     if subcloud and install_sub:
         _install_setup['install_subcloud'] = install_sub
@@ -1339,6 +1262,7 @@ def verify_install_uuid(lab=None):
 
     return True
 
+
 def send_arp_cmd(lab=None):
 
     if lab is None:
@@ -1353,7 +1277,6 @@ def send_arp_cmd(lab=None):
 
     if fip:
         setups.arp_for_fip(lab, controller0_node.ssh_conn)
-
 
 
 def wait_for_hosts_ready(hosts, lab=None, timeout=2400):
@@ -1404,6 +1327,7 @@ def wait_for_hosts_to_be_online(hosts, lab=None, fail_ok=True):
     Args:
         hosts:
         lab:
+        fail_ok:
 
     Returns:
 
@@ -1415,7 +1339,10 @@ def wait_for_hosts_to_be_online(hosts, lab=None, fail_ok=True):
 
     if not controller0_node.ssh_conn:
         controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
-    deploy_mgr = use_deploy_manager(controller0_node, lab=lab)
+    if InstallVars.get_install_var("INSTALL_SUBCLOUD"):
+        deploy_mgr = True
+    else:
+        deploy_mgr = use_deploy_manager(controller0_node, lab=lab)
 
     LOG.info("Verifying {} is Locked, Disabled and Online ...".format(hosts))
     if not deploy_mgr:
@@ -1461,12 +1388,27 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
 
     if controller0_node is None:
         controller0_node = lab['controller-0']
+    subcloud = InstallVars.get_install_var("INSTALL_SUBCLOUD")
 
     test_step = "Wait for Deployment Mgr to configure active controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        host_helper._wait_for_simplex_reconnect(con_ssh=controller0_node.ssh_conn,
-                                                timeout=HostTimeout.CONTROLLER_UNLOCK)
+        if subcloud:
+            system_controller_node = InstallVars.get_install_var("SYSTEM_CONTROLLER")
+
+            dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
+                                               mgmt=SubcloudStatus.MGMT_UNMANAGED, timeout=DCTimeout.SUBCLOUD_CONFIG,
+                                               con_ssh=system_controller_node.ssh_conn)
+
+            LOG.info(" Subcloud {}  is in {}/{} status ... ".format(
+                subcloud, SubcloudStatus.AVAIL_ONLINE, SubcloudStatus.MGMT_UNMANAGED))
+
+            controller0_node.ssh_conn.connect(retry=True, retry_timeout=120)
+            ControllerClient.set_active_controller(controller0_node.ssh_conn)
+        else:
+
+            host_helper._wait_for_simplex_reconnect(con_ssh=controller0_node.ssh_conn,
+                                                    timeout=HostTimeout.CONTROLLER_UNLOCK)
 
         LOG.info("Verifying for controller-0 to be online ...")
         end_time = time.time() + HostTimeout.REBOOT
@@ -1477,7 +1419,7 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
                                                        con_ssh=controller0_node.ssh_conn,
                                                        name='controller-0', availability='available')
 
-            #if not available_host or ('true' not in available_host[0]):
+            # if not available_host or ('true' not in available_host[0]):
             if not available_host:
                 LOG.info("Waiting for controller-0 to become available and true: {}"
                          .format(list(available_host[0]) if available_host else available_host))
@@ -1487,7 +1429,7 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
                     list(available_host[0])))
                 return
         else:
-            sys_values= system_helper.get_system_values(fields=["system_mode", "system_type"],
+            sys_values = system_helper.get_system_values(fields=["system_mode", "system_type"],
                                                          con_ssh=controller0_node.ssh_conn)
             if "All-in-one" in sys_values and 'duplex' in sys_values[0]:
                 current_avail = kube_helper.get_resources(field=['NAME', 'AVAILABILITY', 'INSYNC'],
@@ -1506,6 +1448,53 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
                 LOG.warning(msg)
                 return False
             raise exceptions.HostTimeout(msg)
+
+
+def wait_for_subcloud_to_be_managed(subcloud, dc_system_controller, lab=None, fail_ok=True):
+    """
+
+    Args:
+        subcloud:
+        dc_system_controller:
+        lab:
+        fail_ok:
+
+    Returns:
+
+    """
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    controller0_node = lab['controller-0']
+
+    if not controller0_node.ssh_conn:
+        controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
+
+    if dc_system_controller.ssh_conn is not None:
+        if not dc_system_controller.ssh_conn.is_connected():
+            dc_system_controller.ssh_conn.connect()
+    else:
+        dc_system_controller.ssh_conn = install_helper.ssh_to_controller(dc_system_controller.host_ip)
+
+    dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
+                                       mgmt=SubcloudStatus.MGMT_UNMANAGED,
+                                       con_ssh=dc_system_controller.ssh_conn)
+
+    LOG.info(" Subcloud {}  is in {}/{} status ... ".format(
+        subcloud, SubcloudStatus.AVAIL_ONLINE, SubcloudStatus.MGMT_UNMANAGED))
+    no_manage = InstallVars.get_install_var("NO_MANAGE")
+    if not no_manage:
+        LOG.info("Managing subcloud {} ... ".format(subcloud))
+        LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
+        install_helper.update_auth_url(ssh_con=dc_system_controller.ssh_conn)
+        dc_helper.manage_subcloud(subcloud=subcloud, con_ssh=dc_system_controller.ssh_conn,
+                                  fail_ok=True)
+
+        dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
+                                           mgmt=SubcloudStatus.MGMT_MANAGED,
+                                           sync=SubcloudStatus.SYNCED,
+                                           con_ssh=dc_system_controller.ssh_conn)
 
 
 def get_host_ceph_osd_devices_from_conf(active_controller_node, host, conf_file='lab_setup.conf'):
@@ -1845,7 +1834,6 @@ def check_ansible_configured_mgmt_interface(controller0_node, lab):
 
 def use_deploy_manager(controller0_node, lab):
 
-
     if "DEPLOY_MGR" in InstallVars.get_install_vars().keys():
         return InstallVars.get_install_var("DEPLOY_MGR")
 
@@ -1854,11 +1842,11 @@ def use_deploy_manager(controller0_node, lab):
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
     deploy_config_file = "deployment-config.yaml"
-    #deploy_config_file_2 = "{}.yaml".format(lab['name'])
+    # deploy_config_file_2 = "{}.yaml".format(lab['name'])
 
-    #cmd = "test -f {}{}".format(HostLinuxUser.get_home(), deploy_config_file_2)
+    # cmd = "test -f {}{}".format(HostLinuxUser.get_home(), deploy_config_file_2)
     cmd = "test -f {}{}".format(HostLinuxUser.get_home(), deploy_config_file)
-    deploy_mgr =  True if controller0_node.telnet_conn.exec_cmd(cmd, fail_ok=True)[0] == 0 else False
+    deploy_mgr = True if controller0_node.telnet_conn.exec_cmd(cmd, fail_ok=True)[0] == 0 else False
     InstallVars.set_install_var(deploy_mgr=deploy_mgr)
     return deploy_mgr
 
@@ -1871,7 +1859,7 @@ def use_ansible(controller0_node):
     if controller0_node.telnet_conn is None:
         controller0_node.telnet_conn = install_helper.open_telnet_session(controller0_node)
     local_host_file = "localhost.yml"
-    ansible_config =  True if controller0_node.telnet_conn.exec_cmd(
+    ansible_config = True if controller0_node.telnet_conn.exec_cmd(
         "test -f {}{}".format(HostLinuxUser.get_home(), local_host_file), fail_ok=True)[0] == 0 \
         else False
     InstallVars.set_install_var(ansible_config=ansible_config)
@@ -1980,7 +1968,6 @@ def wait_for_deploy_mgr_lab_config(controller0_node, lab=None, fail_ok=False):
         wait_for_deploy_mgr_system_config(controller0_node, lab=lab, timeout=1800, fail_ok=fail_ok)
 
 
-
 def wait_for_deploy_mgr_hosts_config(controller0_node, lab=None, fail_ok=False):
     """
 
@@ -2016,9 +2003,8 @@ def wait_for_deploy_mgr_hosts_config(controller0_node, lab=None, fail_ok=False):
                                                  con_ssh=controller0_node.ssh_conn,
                                                  name=hosts, insync='true')
 
-        if not hosts_states or \
-                any(host for host in hosts if host not in
-                                              [host_state[0] for host_state in hosts_states]):
+        if not hosts_states or any(host for host in hosts if host not in [host_state[0] for
+                                                                          host_state in hosts_states]):
             if len(hosts_states) > no_of_hosts_configured:
                 LOG.info(debug_msg.format(hosts, list(hosts_states)))
                 no_of_hosts_configured = len(hosts_states)
@@ -2043,6 +2029,7 @@ def wait_for_deploy_mgr_system_config(controller0_node, lab=None, timeout=1800, 
     Args:
         controller0_node:
         lab:
+        timeout:
         fail_ok:
 
     Returns:
@@ -2092,6 +2079,7 @@ def wait_for_deploy_mgr_data_networks_config(controller0_node, lab=None, timeout
     Args:
         controller0_node:
         lab:
+        timeout:
         fail_ok:
 
     Returns:
@@ -2123,12 +2111,10 @@ def wait_for_deploy_mgr_data_networks_config(controller0_node, lab=None, timeout
                                              con_ssh=controller0_node.ssh_conn,
                                              name=configured_data_nets, insync='true')
 
-        if not d_states or \
-                any(p for p in configured_data_nets if p not in
-                                                       [d_state[0] for d_state in d_states]):
+        if not d_states or any(p for p in configured_data_nets if p not in [d_state[0] for d_state in d_states]):
             time.sleep(10)
         else:
-            LOG.info("{} datanetworks insync: {}".format(configured_data_nets, d_states ))
+            LOG.info("{} datanetworks insync: {}".format(configured_data_nets, d_states))
             return
     else:
         msg = "Timed out waiting for {} data networks to become insync".format(configured_data_nets)
@@ -2145,6 +2131,7 @@ def wait_for_deploy_mgr_platform_networks_config(controller0_node, lab=None, tim
     Args:
         controller0_node:
         lab:
+        timeout:
         fail_ok:
 
     Returns:
@@ -2179,7 +2166,7 @@ def wait_for_deploy_mgr_platform_networks_config(controller0_node, lab=None, tim
         if not p_states:
             time.sleep(10)
         else:
-            LOG.info("platform networks insync: {}".format(configured_data_nets, p_states ))
+            LOG.info("platform networks insync: {}".format(configured_data_nets, p_states))
             return
     else:
         msg = "Timed out waiting for platform networks to become insync"
@@ -2195,6 +2182,7 @@ def restore_wait_for_hosts_to_be_online(hosts, lab=None, fail_ok=True):
     Args:
         hosts:
         lab:
+        fail_ok:
 
     Returns:
 
@@ -2215,8 +2203,19 @@ def restore_wait_for_hosts_to_be_online(hosts, lab=None, fail_ok=True):
                                         availability=HostAvailState.ONLINE, fail_ok=fail_ok)
 
 
-def restore_boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
-               wait_for_online=True):
+def restore_boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None, wait_for_online=True):
+    """
+
+    Args:
+        boot_device_dict:
+        hostnames:
+        lab:
+        final_step:
+        wait_for_online:
+
+    Returns:
+
+    """
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Boot"
 

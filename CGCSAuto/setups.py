@@ -304,13 +304,26 @@ def get_dc_labs_list(labs):
     return dc_labs
 
 
-def is_lab_subcloud(lab):
+def get_dc_lab(lab):
+    dc_labs = get_dc_labs_list(get_labs_list())
+    for dc_lab in dc_labs:
+        subclouds = [k for k, v in dc_lab.items() if 'subcloud' in k]
+        for subcloud in subclouds:
+            if lab['short_name'] == dc_lab[subcloud]['short_name']:
+                return dc_lab
+    return None
+
+
+def is_lab_subcloud(lab, ipv6=False):
     dc_labs = get_dc_labs_list(get_labs_list())
     for dc_lab in dc_labs:
         subclouds = [k for k, v in dc_lab.items() if 'subcloud' in k]
         for subcloud in subclouds:
             if lab['short_name'] == dc_lab[subcloud]['short_name']:
                 dc_float_ip = dc_lab['floating ip']
+                if ipv6:
+                    convert_to_ipv6(dc_lab)
+                    dc_float_ip = dc_lab['floating ip']
                 return True, subcloud, dc_float_ip
 
     return False, None, None

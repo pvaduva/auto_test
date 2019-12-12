@@ -2,7 +2,7 @@ from pytest import skip, fixture
 
 from consts.stx import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
-from keywords import system_helper, install_helper, vlm_helper
+from keywords import install_helper, vlm_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
 from setups import setup_tis_ssh, collect_sys_net_info
 from utils.tis_log import LOG
@@ -105,13 +105,13 @@ def test_standard_install(install_setup):
                                             helm_chart_server=helm_chart_server)
 
     if install_subcloud:
-        fresh_install_helper.configure_subcloud(controller0_node, lab_files_server,
-                                                subcloud=install_subcloud,
-                                                final_step=final_step)
+        fresh_install_helper.configure_subcloud(controller0_node, install_setup["dc_system_controller"],
+                                                subcloud=install_subcloud, final_step=final_step)
+        deploy_mgr = True
     else:
         fresh_install_helper.configure_controller_(controller0_node)
 
-    deploy_mgr = fresh_install_helper.use_deploy_manager(controller0_node, lab)
+        deploy_mgr = fresh_install_helper.use_deploy_manager(controller0_node, lab)
 
     if not deploy_mgr:
         fresh_install_helper.check_ansible_configured_mgmt_interface(controller0_node, lab)
@@ -156,7 +156,7 @@ def test_standard_install(install_setup):
         fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     else:
-        fresh_install_helper.wait_for_deploy_mgr_lab_config(controller0_node,lab=lab)
+        fresh_install_helper.wait_for_deploy_mgr_lab_config(controller0_node, lab=lab)
 
         fresh_install_helper.wait_for_hosts_ready(hosts, lab=lab)
         fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
@@ -169,7 +169,9 @@ def test_standard_install(install_setup):
     if not deploy_mgr:
         fresh_install_helper.collect_lab_config_yaml(lab, build_server,
                                                      stage=fresh_install_helper.DEPLOY_LAST)
-
+    if install_subcloud:
+        fresh_install_helper.wait_for_subcloud_to_be_managed(install_subcloud, install_setup["dc_system_controller"],
+                                                             lab=lab)
     fresh_install_helper.attempt_to_run_post_install_scripts()
 
     fresh_install_helper.reset_global_vars()

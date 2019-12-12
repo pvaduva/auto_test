@@ -124,6 +124,8 @@ class DCTimeout:
     SYNC = 660    # 10 minutes + 1
     SUBCLOUD_AUDIT = 600    # 4 minutes + 1
     PATCH_AUDIT = 240   # 3 minutes + 1
+    SUBCLOUD_DEPLOY = 1800
+    SUBCLOUD_CONFIG = 1200
 
 
 class MiscTimeout:
