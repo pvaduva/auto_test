@@ -2,7 +2,7 @@ from pytest import skip, fixture
 
 from consts.stx import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
-from keywords import install_helper, vlm_helper
+from keywords import install_helper, vlm_helper, container_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
 from setups import setup_tis_ssh, collect_sys_net_info
 from utils.tis_log import LOG
@@ -160,6 +160,9 @@ def test_standard_install(install_setup):
 
         fresh_install_helper.wait_for_hosts_ready(hosts, lab=lab)
         fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
+
+    container_helper.wait_for_apps_status(apps='platform-integ-apps', timeout=600,
+                                          con_ssh=controller0_node.ssh_conn, status='applied')
 
     if lab.get("floating ip"):
         collect_sys_net_info(lab)

@@ -2,7 +2,7 @@ from pytest import skip, fixture
 
 from consts.stx import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
-from keywords import install_helper, vlm_helper
+from keywords import install_helper, vlm_helper, container_helper
 from setups import setup_tis_ssh
 from tc_sysinstall.fresh_install import fresh_install_helper
 from utils.tis_log import LOG
@@ -113,6 +113,8 @@ def test_simplex_install(install_setup):
         controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
+    container_helper.wait_for_apps_status(apps='platform-integ-apps', timeout=600,
+                                          con_ssh=controller0_node.ssh_conn, status='applied')
     fresh_install_helper.run_lab_setup(controller0_node.ssh_conn)
 
     if lab.get("floating ip"):
