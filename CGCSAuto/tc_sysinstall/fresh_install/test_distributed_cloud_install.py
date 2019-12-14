@@ -2,7 +2,7 @@ import pytest
 
 from consts.stx import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
-from keywords import host_helper, install_helper, vlm_helper
+from keywords import host_helper, install_helper, vlm_helper, container_helper
 from tc_sysinstall.fresh_install import fresh_install_helper
 from setups import setup_tis_ssh, collect_sys_net_info
 from utils.tis_log import LOG
@@ -145,6 +145,8 @@ def test_distributed_cloud_install(install_setup):
     fresh_install_helper.wait_for_deploy_mgr_lab_config(controller0_node, lab=central_region_lab)
 
     fresh_install_helper.wait_for_hosts_ready(["controller-1"], lab=central_region_lab)
+    container_helper.wait_for_apps_status(apps='platform-integ-apps', timeout=600,
+                                          con_ssh=controller0_node.ssh_conn, status='applied')
     LOG.info("Running lab setup script ...")
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
