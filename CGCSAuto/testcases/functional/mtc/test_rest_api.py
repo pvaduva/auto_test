@@ -257,11 +257,11 @@ def test_restapi_sysinv_modify_cpu(prepare_modify_cpu):
     res, out = host_helper.modify_host_cpu(hostname, 'Platform', p0=2)
     assert 0 == res, "FAIL: platform cpu modify failed by cli"
 
-    # LOG.tc_step("Applying cpu profile with original config to {} via restAPI".format(hostname))
-    # data = [{"path": "/iprofile_uuid", "value": "{}".format(iprofile_uuid), "op": "replace"},
-    #         {"path": "/action", "value": "apply-profile", "op": "replace"}]
-    # html_helper.patch_request(url=url, headers=headers, data=data, verify=False)
-    #
-    # LOG.tc_step("Check host cpu configuration reverted to original")
-    # res, out = host_helper.compare_host_to_cpuprofile(hostname, iprofile_uuid)
-    # assert 0 == res, "FAIL: The host doesn't have the same cpu functions as the cpu profile"
+    LOG.tc_step("Applying cpu profile with original config to {} via restAPI".format(hostname))
+    data = [{"path": "/iprofile_uuid", "value": "{}".format(iprofile_uuid), "op": "replace"},
+            {"path": "/action", "value": "apply-profile", "op": "replace"}]
+    html_helper.patch_request(url=url, headers=headers, data=data, verify=False)
+
+    LOG.tc_step("Check host cpu configuration reverted to original")
+    res, out = host_helper.compare_host_to_cpuprofile(hostname, iprofile_uuid)
+    assert 0 == res, "FAIL: The host doesn't have the same cpu functions as the cpu profile"
