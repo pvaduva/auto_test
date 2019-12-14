@@ -161,7 +161,7 @@ def test_standard_install(install_setup):
         fresh_install_helper.wait_for_hosts_ready(hosts, lab=lab)
         fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
-    container_helper.wait_for_apps_status(apps='platform-integ-apps', timeout=600,
+    container_helper.wait_for_apps_status(apps='platform-integ-apps', timeout=1200,
                                           con_ssh=controller0_node.ssh_conn, status='applied')
 
     if lab.get("floating ip"):
