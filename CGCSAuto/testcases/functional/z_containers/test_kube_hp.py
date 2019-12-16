@@ -11,7 +11,7 @@ import os
 def modify_yaml(file_dir, file_name, str_to_add, hp_value):
     """
     Desc:
-        This function adds the hugepages 1G value to the hugepages_pod.yaml file
+        This function adds the hugepages value to the hugepages_pod.yaml file
     Args:
         file_dir(str) - where the yaml file exist
         file_name(str) - name of the yaml to modify
