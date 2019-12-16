@@ -1403,8 +1403,10 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
 
             LOG.info(" Subcloud {}  is in {}/{} status ... ".format(
                 subcloud, SubcloudStatus.AVAIL_ONLINE, SubcloudStatus.MGMT_UNMANAGED))
-
-            controller0_node.ssh_conn.connect(retry=True, retry_timeout=120)
+            if controller0_node.ssh_conn is None:
+                controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
+            else:
+                controller0_node.ssh_conn.connect(retry=True, retry_timeout=120)
             ControllerClient.set_active_controller(controller0_node.ssh_conn)
         else:
 
