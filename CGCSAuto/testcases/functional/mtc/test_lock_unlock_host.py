@@ -4,6 +4,7 @@
 import time
 from pytest import mark, skip, param
 
+from utils.clients.ssh import ControllerClient
 from utils.tis_log import LOG
 from utils.kpi import kpi_log_parser
 from consts.stx import HostOperState, HostAvailState
@@ -88,6 +89,10 @@ def test_lock_unlock_host(host_type, collect_kpi):
     LOG.tc_step("Unlock {} host - {} and ensure it is successfully unlocked".format(host_type,
                                                                                     host))
     host_helper.unlock_host(host)
+
+    LOG.tc_step("Check helm list after host unlocked")
+    con_ssh = ControllerClient.get_active_controller()
+    con_ssh.exec_cmd('helm list', fail_ok=False)
 
     if collect_kpi:
         lock_kpi_name = HostLock.NAME.format(host_type)

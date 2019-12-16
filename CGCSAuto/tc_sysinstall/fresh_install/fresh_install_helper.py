@@ -240,7 +240,8 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
 
     if not InstallVars.get_install_var("DEPLOY_OPENSTACK"):
         controller0_node = lab['controller-0']
-        controller0_node.telnet_conn.set_prompt(r'-[\d]+((:~\$)|( ~\(keystone_admin\)\]\$ ))')
+        #controller0_node.telnet_conn.set_prompt(r'-[\d]+((:~\$)|( ~\(keystone_admin\)\]\$ ))')
+        controller0_node.telnet_conn.set_prompt(r'(.*:~\$\s?)|(\[.*\(keystone_admin\)\]\$ )')
         controller0_node.telnet_conn.exec_cmd("touch .no_openstack_install")
 
 

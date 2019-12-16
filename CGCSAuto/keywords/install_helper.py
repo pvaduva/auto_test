@@ -3543,7 +3543,7 @@ def controller_system_config(con_telnet=None, config_file="TiS_config.ini_centos
         else:
             cmd = 'ansible-playbook {} -e "@local-install-overrides.yaml"'\
                 .format(ANSIBLE_BOOTSTRAP_PATH)
-            con_telnet.set_prompt(r'.*:~\$\s?')
+            con_telnet.set_prompt(r'(.*:~\$\s?)|(\[.*\(keystone_admin\)\]\$ )')
 
         os.environ["TERM"] = "xterm"
         rc, output = con_telnet.exec_cmd(cmd,

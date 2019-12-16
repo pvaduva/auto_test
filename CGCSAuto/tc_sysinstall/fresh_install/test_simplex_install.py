@@ -2,7 +2,7 @@ from pytest import skip, fixture
 
 from consts.stx import SysType, Prompt
 from consts.proj_vars import InstallVars, ProjVar
-from keywords import install_helper, vlm_helper
+from keywords import install_helper, vlm_helper, container_helper
 from setups import setup_tis_ssh
 from tc_sysinstall.fresh_install import fresh_install_helper
 from utils.tis_log import LOG
@@ -40,7 +40,10 @@ def install_setup(request):
 
     is_subcloud = InstallVars.get_install_var("INSTALL_SUBCLOUD") is not None
     _install_setup = fresh_install_helper.setup_fresh_install(lab, subcloud=is_subcloud)
-    if InstallVars.get_install_var("RESUME"):
+    resume_step = InstallVars.get_install_var("RESUME")
+    if resume_step and resume_step not in \
+            ["setup", "install_controller", "configure_controller", "download_lab_files"]:
+
         try:
             if active_con.ssh_conn is None:
                 active_con.ssh_conn = install_helper.ssh_to_controller(active_con.host_ip)
@@ -113,6 +116,8 @@ def test_simplex_install(install_setup):
         controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
+    container_helper.wait_for_apps_status(apps='platform-integ-apps', timeout=1800,
+                                          con_ssh=controller0_node.ssh_conn, status='applied')
     fresh_install_helper.run_lab_setup(controller0_node.ssh_conn)
 
     if lab.get("floating ip"):
