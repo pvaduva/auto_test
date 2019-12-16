@@ -225,7 +225,7 @@ def wait_for_apps_status(apps, status, timeout=360, check_interval=5, fail_ok=Fa
             current_app_status = apps_status.get(app, '')
             if current_app_status in status:
                 checked[app] = current_app_status
-            elif current_app_status.endswith('ed'):
+            elif current_app_status.endswith('failed'):
                 check_failed[app] = current_app_status
                 checked[app] = current_app_status
             else:
