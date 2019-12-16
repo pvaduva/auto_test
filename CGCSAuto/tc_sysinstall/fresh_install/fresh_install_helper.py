@@ -1497,6 +1497,7 @@ def wait_for_subcloud_to_be_managed(subcloud, dc_system_controller, lab=None, fa
         dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
                                            mgmt=SubcloudStatus.MGMT_MANAGED,
                                            sync=SubcloudStatus.SYNCED,
+                                           timeout=DCTimeout.SUBCLOUD_MANAGE,
                                            con_ssh=dc_system_controller.ssh_conn)
 
 
