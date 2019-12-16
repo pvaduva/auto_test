@@ -42,9 +42,9 @@ def install_setup(request):
     is_subcloud = InstallVars.get_install_var("INSTALL_SUBCLOUD") is not None
 
     _install_setup = fresh_install_helper.setup_fresh_install(lab, subcloud=is_subcloud)
-    if InstallVars.get_install_var("RESUME"):    resume_step = InstallVars.get_install_var("RESUME")
+    resume_step = InstallVars.get_install_var("RESUME")
     if resume_step and resume_step not in \
-            ["setup", "install_controller", "download_lab_files"]:
+            ["setup", "install_controller", "configure_controller", "download_lab_files"]:
         try:
             if active_con.ssh_conn is None:
                 active_con.ssh_conn = install_helper.ssh_to_controller(active_con.host_ip)
