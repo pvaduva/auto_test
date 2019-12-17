@@ -70,13 +70,13 @@ def get_hp_pod_file():
     LOG.info("{} {} pod wil be configured on {} proc id {}".format(
         hp_str, hp_val, hostname, proc_id))
     file_name = modify_yaml(
-        "utils/test_files/hp/", "hugepages_pod.yaml", hp_str, hp_val)
-    source_path = "utils/test_files/hp/{}".format(file_name)
+        "utils/test_files/", "hugepages_pod.yaml", hp_str, hp_val)
+    source_path = "utils/test_files/{}".format(file_name)
     home_dir = HostLinuxUser.get_home()
     common.scp_from_localhost_to_active_controller(
         source_path, dest_path=home_dir)
     LOG.info("Deleting the local file after scp to active controller")
-    os.system('rm utils/test_files/hp/{}'.format(file_name))
+    os.system('rm utils/test_files/{}'.format(file_name))
     yield file_name
     LOG.info("Delete hugepages pod")
     kube_helper.exec_kube_cmd(
