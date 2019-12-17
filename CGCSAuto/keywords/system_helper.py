@@ -245,8 +245,8 @@ def get_hypervisors(administrative=None, operational=None,
                             availability=availability, con_ssh=con_ssh,
                             use_telnet=use_telnet, con_telnet=con_telnet,
                             auth_info=auth_info)
-    if is_aio_simplex(con_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
-                      auth_info=auth_info):
+    if is_aio_system(controller_ssh=con_ssh, use_telnet=use_telnet, con_telnet=con_telnet,
+                     auth_info=auth_info):
         computes = list(computes)
         computes += get_controllers(administrative=administrative, operational=operational,
                                     availability=availability, con_telnet=con_telnet,
