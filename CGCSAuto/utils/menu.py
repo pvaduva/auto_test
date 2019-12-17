@@ -192,6 +192,7 @@ class KickstartMenu(Menu):
 
     def get_current_option(self, telnet_conn=None):
         highlight_code = "\x1b[0;7;37;40m" if "PXE" in self.name else "\x1b[0m\x1b[37m\x1b[40m"
+        #highlight_code = "\x1b[0;7;37;40m"
         if not self.options:
             self.find_options(telnet_conn)
         for i in range(0, len(self.options)):
@@ -216,7 +217,7 @@ class KickstartMenu(Menu):
             # if matches:
             #     option_name = matches.group(0).strip()
 
-            LOG.info("Kickstart option no match: {} tag: ".format(option.name.lower(), option.tag))
+            LOG.info("Kickstart option no match: {} tag: {} ".format(option.name.lower(), option.tag))
             if "security" in option.name.lower() and ("  >" in option.name.lower() or "options" in option.name.lower()):
                 security_type = InstallVars.get_install_var("SECURITY")
                 if security_type == 'extended':

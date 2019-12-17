@@ -3949,8 +3949,10 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
     boot_device_regex = next((value for key, value in boot_device_dict.items()
                               if key == node_obj.name or key == node_obj.personality), None)
     boot_type = InstallVars.get_install_var("BOOT_TYPE")
+
     if boot_device_regex:
-        uefi = "UEFI" in boot_device_regex or re.search(r'(\d+)', node_obj.host_name)
+        #uefi = "UEFI" in boot_device_regex or re.search(r'(\d+)', node_obj.host_name)
+        uefi = "UEFI" in boot_device_regex
     else:
         uefi = re.search(r'(\d+)', node_obj.host_name) or "ml350" in node_obj.host_name
 
