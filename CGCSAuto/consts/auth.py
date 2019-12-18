@@ -128,6 +128,8 @@ class Tenant:
                 raise ValueError(
                     'Distributed cloud region {} is not added to '
                     'DC_MAP yet. DC_MAP: {}'.format(dc_region, cls.__DC_MAP))
+            # tenant_dict.update({'region': region_dict['region']})
+            tenant_dict = dict(tenant_dict)
             tenant_dict.update({'region': region_dict['region']})
         else:
             tenant_dict.pop('region', None)
