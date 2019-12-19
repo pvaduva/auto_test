@@ -1,4 +1,4 @@
-from pytest import skip, fixture
+from pytest import skip, fixture, mark
 
 import keywords.host_helper
 from utils.tis_log import LOG
@@ -20,7 +20,8 @@ def get_hosts_with_backing(add_admin_role_module):
 
     return storage_backing, host_under_test
 
-
+@mark.trylast
+@mark.reboot
 def test_force_lock_with_mig_vms(get_hosts_with_backing):
     """
     Test force lock host with migrate-able vms on it
@@ -74,6 +75,8 @@ def add_host_to_zone(request, get_hosts_with_backing, add_cgcsauto_zone):
     return storage_backing, host_under_test
 
 
+@mark.trylast
+@mark.reboot
 def test_force_lock_with_non_mig_vms(add_host_to_zone):
     """
     Test force lock host with non-migrate-able vms on it

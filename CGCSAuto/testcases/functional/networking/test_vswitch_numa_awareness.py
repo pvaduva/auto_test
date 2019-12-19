@@ -125,6 +125,8 @@ class TestVSwitchCPUReconfig:
 
         return flavor
 
+    @mark.trylast
+    @mark.reboot
     @mark.p3
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required'), [
         # (None, None, None, None),           # Test without reconfig
@@ -215,6 +217,8 @@ class TestVSwitchCPUReconfig:
     def check_alarms(self):
         pass
 
+    @mark.trylast
+    @mark.reboot
     @mark.parametrize(('platform', 'vswitch', 'ht_required', 'cpe_required', 'expt_err'), [
         param((2, 0), (5, 6), 'nonHT', None, "CpuAssignment.VSWITCH_TOO_MANY_CORES",
               marks=mark.p3),

@@ -80,6 +80,8 @@ class TestLockWithVMs:
 
         return storage_backing, target_host
 
+    @mark.trylast
+    @mark.reboot
     @mark.nightly
     @mark.kpi
     def test_lock_with_vms(self, target_hosts, no_simplex, add_admin_role_func, collect_kpi):

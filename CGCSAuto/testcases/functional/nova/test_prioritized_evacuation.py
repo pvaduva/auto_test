@@ -81,6 +81,8 @@ class TestPrioritizedVMEvacuation:
 
         return storage_backing, hosts_to_add
 
+    @mark.trylast
+    @mark.reboot
     @mark.parametrize(('operation', 'set_on_boot', 'prioritizing', 'vcpus', 'mem', 'root_disk', 'swap_disk'), [
         ('reboot', False, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
         ('reboot', False, 'same_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'no_swap_disk'),
