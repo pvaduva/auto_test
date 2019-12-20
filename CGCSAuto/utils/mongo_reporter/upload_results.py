@@ -66,8 +66,9 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
         # Parse each record
         test_name, domain, result = __parse_testcase_record(record)
 
-        if test_name in uploaded_tests:
-            print("Result for {} already uploaded. Skip uploading.".format(test_name))
+        if ('skip' in str(result).lower()) or (test_name in uploaded_tests):
+            print("{} skipped or result already uploaded. Do not upload.".format(
+                test_name))
             continue
 
         # Upload result
