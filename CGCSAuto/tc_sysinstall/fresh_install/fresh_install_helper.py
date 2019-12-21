@@ -1067,14 +1067,14 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
             con_ssh = active_controller_node.ssh_conn
             con_ssh.connect(retry=True, retry_interval=10, retry_timeout=60)
             con_ssh.flush()
+            install_helper.update_auth_url(ssh_con=con_ssh)
             con_ssh.exec_cmd('nslookup www.google.com', get_exit_code=False)
             con_ssh.exec_sudo_cmd('docker pull alpine', get_exit_code=False)
-            con_ssh.exec_cmd('kubectl -n wind-river-cloud-platform-deployment-manager describe '
-                             'statefulsetapps', get_exit_code=False,
-                             fail_ok=True)
-            con_ssh.exec_cmd(
-                'kubectl -n wind-river-cloud-platform-deployment-manager describe pods',
-                fail_ok=True)
+            dm_namespace = con_ssh.exec_cmd("kubectl get namespaces | grep deployment-manager | awk ' { print $1}'")[1]
+            if dm_namespace and "deployment" in dm_namespace.strip():
+                con_ssh.exec_cmd('kubectl -n {} describe statefulset.apps'.format(dm_namespace), get_exit_code=False,
+                                 fail_ok=True)
+                con_ssh.exec_cmd('kubectl -n {} describe pods'.format(dm_namespace), fail_ok=True)
 
             from keywords import container_helper
             container_helper.get_apps(con_ssh=con_ssh)
@@ -1085,17 +1085,18 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
             pexpect.exceptions.TIMEOUT) \
             as e_:
         LOG.error(e_.__str__())
-
-    LOG.fixture_step("unreserving hosts")
-    if dist_cloud:
-        vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
-                                   lab=lab['central_region'])
-        subclouds = [k for k, v in lab.items() if 'subcloud' in k]
-        for subcloud in subclouds:
-            vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab[subcloud]),
-                                       lab=lab[subcloud])
-    else:
-        vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
+        unreserve_lab_hosts(lab, dist_cloud=dist_cloud)
+    unreserve_lab_hosts(lab, dist_cloud=dist_cloud)
+    # LOG.fixture_step("unreserving hosts")
+    # if dist_cloud:
+    #     vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
+    #                                lab=lab['central_region'])
+    #     subclouds = [k for k, v in lab.items() if 'subcloud' in k]
+    #     for subcloud in subclouds:
+    #         vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab[subcloud]),
+    #                                    lab=lab[subcloud])
+    # else:
+    #     vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
 
 
 def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
@@ -1480,25 +1481,32 @@ def wait_for_subcloud_to_be_managed(subcloud, dc_system_controller, lab=None, fa
     else:
         dc_system_controller.ssh_conn = install_helper.ssh_to_controller(dc_system_controller.host_ip)
 
-    dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
-                                       mgmt=SubcloudStatus.MGMT_UNMANAGED,
-                                       con_ssh=dc_system_controller.ssh_conn)
+    test_step = "Wait for subcloud to be managed"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
 
-    LOG.info(" Subcloud {}  is in {}/{} status ... ".format(
-        subcloud, SubcloudStatus.AVAIL_ONLINE, SubcloudStatus.MGMT_UNMANAGED))
-    no_manage = InstallVars.get_install_var("NO_MANAGE")
-    if not no_manage:
-        LOG.info("Managing subcloud {} ... ".format(subcloud))
-        LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
-        install_helper.update_auth_url(ssh_con=dc_system_controller.ssh_conn)
-        dc_helper.manage_subcloud(subcloud=subcloud, con_ssh=dc_system_controller.ssh_conn,
-                                  fail_ok=True)
+        if dc_helper.get_subcloud_status(subcloud, field='management') == SubcloudStatus.MGMT_UNMANAGED:
 
-        dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
-                                           mgmt=SubcloudStatus.MGMT_MANAGED,
-                                           sync=SubcloudStatus.SYNCED,
-                                           timeout=DCTimeout.SUBCLOUD_MANAGE,
-                                           con_ssh=dc_system_controller.ssh_conn)
+            dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
+                                               mgmt=SubcloudStatus.MGMT_UNMANAGED,
+                                               con_ssh=dc_system_controller.ssh_conn)
+
+            LOG.info(" Subcloud {}  is in {}/{} status ... ".format(
+                subcloud, SubcloudStatus.AVAIL_ONLINE, SubcloudStatus.MGMT_UNMANAGED))
+
+        no_manage = InstallVars.get_install_var("NO_MANAGE")
+        if not no_manage:
+            LOG.info("Managing subcloud {} ... ".format(subcloud))
+            LOG.info("Auto_info before manage: {}".format(Tenant.get('admin', 'RegionOne')))
+            install_helper.update_auth_url(ssh_con=dc_system_controller.ssh_conn)
+            dc_helper.manage_subcloud(subcloud=subcloud, con_ssh=dc_system_controller.ssh_conn,
+                                      fail_ok=True)
+
+            dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
+                                               mgmt=SubcloudStatus.MGMT_MANAGED,
+                                               sync=SubcloudStatus.SYNCED,
+                                               timeout=DCTimeout.SUBCLOUD_MANAGE,
+                                               con_ssh=dc_system_controller.ssh_conn)
 
 
 def get_host_ceph_osd_devices_from_conf(active_controller_node, host, conf_file='lab_setup.conf'):
@@ -2304,3 +2312,17 @@ def restore_boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_st
 
     if str(LOG.test_step) == final_step or test_step == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
+
+
+def unreserve_lab_hosts(lab, dist_cloud=False):
+
+    LOG.fixture_step("unreserving hosts")
+    if dist_cloud:
+        vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab['central_region']),
+                                   lab=lab['central_region'])
+        subclouds = [k for k, v in lab.items() if 'subcloud' in k]
+        for subcloud in subclouds:
+            vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab[subcloud]),
+                                       lab=lab[subcloud])
+    else:
+        vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
