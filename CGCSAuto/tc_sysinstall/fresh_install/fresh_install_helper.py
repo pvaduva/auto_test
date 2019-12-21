@@ -1485,7 +1485,8 @@ def wait_for_subcloud_to_be_managed(subcloud, dc_system_controller, lab=None, fa
     LOG.tc_step(test_step)
     if do_step(test_step):
 
-        if dc_helper.get_subcloud_status(subcloud, field='management') == SubcloudStatus.MGMT_UNMANAGED:
+        if dc_helper.get_subcloud_status(subcloud, field='management', con_ssh=dc_system_controller.ssh_conn) == \
+                SubcloudStatus.MGMT_UNMANAGED:
 
             dc_helper.wait_for_subcloud_status(subcloud, avail=SubcloudStatus.AVAIL_ONLINE,
                                                mgmt=SubcloudStatus.MGMT_UNMANAGED,
