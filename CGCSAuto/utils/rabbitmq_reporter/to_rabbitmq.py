@@ -58,7 +58,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
 
 
     userStory = UploadRes.USER_STORY
-    release_name = UploadRes.REL_NAME
+    release_name = UploadRes.REL_NAME.get('platform')
     tag = tags if tags else UploadRes.TAG
     jira = ''
 
@@ -89,7 +89,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
             runStartDate=reportDate,
             date_modified=reportDate,
             testResult=result,
-            releaseName='Wind River Cloud Platform 19.12',
+            releaseName='Wind River Cloud Platform 20.06',
             tcTotal=1,
             testExecutionTimeStamp=reportDate,
             id=tmp_id,

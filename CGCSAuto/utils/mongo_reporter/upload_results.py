@@ -14,7 +14,8 @@ WASSP_PYTHON = os.path.join(WASSP_PATH, ".venv_wassp/bin/python3")
 # sys.path.append(WASSP_LIB)
 
 
-def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_name=None, skip_uploaded=True):
+def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_name=None,
+                   skip_uploaded=True, product='platform'):
     """
     collect the test environment variables
     """
@@ -39,7 +40,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
 
     # Parse common test params
     userstory = UploadRes.USER_STORY
-    release_name = UploadRes.REL_NAME
+    release_name = UploadRes.REL_NAME.get(product)
     tag = tags if tags else UploadRes.TAG
     jira = ''
 
