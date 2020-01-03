@@ -23,10 +23,12 @@ def get_yaml():
     LOG.info("Delete the deployment")
     kube_helper.exec_kube_cmd(
         "delete deployment --namespace={} resource-consumer".format(ns))
-    LOG.info("check pods are terminating")
+    LOG.info("Check pods are terminating")
     kube_helper.wait_for_pods_status(
         namespace=ns, status=PodStatus.TERMINATING)
-    LOG.info("delete the service and namespace")
+    LOG.info("Wait for all pods are deleted")
+    kube_helper.wait_for_resources_gone(namespace=ns)
+    LOG.info("Delete the service and namespace")
     kube_helper.exec_kube_cmd(
         "delete service rc-service --namespace={}".format(ns))
     kube_helper.exec_kube_cmd("delete namespace {}".format(ns))
