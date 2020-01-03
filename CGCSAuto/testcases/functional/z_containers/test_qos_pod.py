@@ -1,8 +1,10 @@
+import json
+
 from pytest import fixture, mark, skip
+
+from utils.tis_log import LOG
 from keywords import kube_helper, common
 from consts.auth import HostLinuxUser
-from utils.tis_log import LOG
-import json
 
 
 @fixture(scope='module')
@@ -24,22 +26,26 @@ def copy_pod_yamls():
 
 
 @mark.qos()
-@mark.parametrize('expected,pod', [("Guaranteed", "qos-pod"),
-                                   ("Burstable", "qos-pod-2"),
-                                   ("BestEffort", "qos-pod-3"),
-                                   ("Burstable", "qos-pod-4")])
-def test_qos_tests(copy_pod_yamls, expected, pod):
+@mark.parametrize('pod,expected', [("qos-pod-1", "Guaranteed",),
+                                   ("qos-pod-2", "Burstable",),
+                                   ("qos-pod-3", "BestEffort", ),
+                                   ("qos-pod-4", "Burstable",)])
+def test_qos_class(copy_pod_yamls, expected, pod):
     """
     Testing the Qos class for pods
+    Args:
+        copy_pod_yamls : module fixture
+        expected : test param
+        pod : test param
     Setup:
-        scp qos pod yaml files
-        create the deployment of namespace and qos pods
+        - Scp qos pod yaml files(module)
+        - Create the deployment of namespace and qos pods
     Steps:
-        check status of the pod
-        check the qos-class type is as expected
+        - Check status of the pod
+        - Check the qos-class type is as expected
     Teardown:
-        delete all pods in qos-example namespace
-        delete the namespace
+        - Delete all pods in the namespace
+        - Delete the namespace
 
     """
     ns = copy_pod_yamls

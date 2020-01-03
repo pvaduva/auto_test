@@ -6,7 +6,7 @@ metadata:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: qos-pod
+  name: qos-pod-1
   namespace: qos
 spec:
   containers:
