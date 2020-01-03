@@ -9,6 +9,7 @@ from keywords import host_helper, system_helper, vm_helper, network_helper
 from testfixtures.recover_hosts import HostsToRecover
 
 
+@mark.trylast
 @mark.usefixtures('check_alarms')
 @mark.parametrize('host_type', [
     param('controller', marks=mark.sanity),

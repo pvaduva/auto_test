@@ -80,6 +80,8 @@ class TestDefaultGuest:
         if len(host_helper.get_up_hypervisors()) < 2:
             skip(SkipHypervisor.LESS_THAN_TWO_HYPERVISORS)
 
+    @mark.trylast
+    @mark.reboot
     @mark.parametrize('storage_backing', [
         'local_image',
         'remote',
@@ -334,6 +336,8 @@ class TestOneHostAvail:
         request.addfinalizer(remove_hosts_from_zone)
         return zone
 
+    @mark.trylast
+    @mark.reboot
     @mark.sx_sanity
     def test_reboot_only_host(self, get_zone):
         """

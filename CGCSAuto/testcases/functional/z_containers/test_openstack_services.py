@@ -58,7 +58,7 @@ def test_openstack_services_healthy():
         check_openstack_pods_healthy(host=host, timeout=60)
 
 
-@mark.trylast
+# @mark.trylast
 @mark.sanity
 @mark.sx_sanity
 @mark.cpe_sanity
@@ -188,7 +188,7 @@ def reset_if_modified(request):
     return valid_hosts, conf_path
 
 
-@mark.trylast
+# @mark.trylast
 @mark.sanity
 @mark.sx_sanity
 @mark.cpe_sanity

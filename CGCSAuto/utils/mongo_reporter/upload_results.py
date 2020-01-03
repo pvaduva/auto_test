@@ -14,7 +14,8 @@ WASSP_PYTHON = os.path.join(WASSP_PATH, ".venv_wassp/bin/python3")
 # sys.path.append(WASSP_LIB)
 
 
-def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_name=None, skip_uploaded=True):
+def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_name=None,
+                   skip_uploaded=True, product='platform'):
     """
     collect the test environment variables
     """
@@ -39,7 +40,7 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
 
     # Parse common test params
     userstory = UploadRes.USER_STORY
-    release_name = UploadRes.REL_NAME
+    release_name = UploadRes.REL_NAME.get(product)
     tag = tags if tags else UploadRes.TAG
     jira = ''
 
@@ -66,8 +67,9 @@ def upload_results(file_path=None, logs_dir=None, lab=None, tags=None, tester_na
         # Parse each record
         test_name, domain, result = __parse_testcase_record(record)
 
-        if test_name in uploaded_tests:
-            print("Result for {} already uploaded. Skip uploading.".format(test_name))
+        if ('skip' in str(result).lower()) or (test_name in uploaded_tests):
+            print("{} skipped or result already uploaded. Do not upload.".format(
+                test_name))
             continue
 
         # Upload result

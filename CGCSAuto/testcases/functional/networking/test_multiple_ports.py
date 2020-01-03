@@ -456,6 +456,8 @@ class TestMutiPortsPCI:
             vm_helper.ping_vms_from_vm(to_vms=vm_under_test, from_vm=base_vm_pci,
                                        net_types=['mgmt', 'internal'])
 
+    @mark.trylast
+    @mark.reboot
     @mark.parametrize('vifs', [
         ('pci-sriov',),
         ('pci-passthrough',),

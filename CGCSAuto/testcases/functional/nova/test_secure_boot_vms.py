@@ -1,3 +1,5 @@
+from pytest import fixture, skip, mark
+
 from utils.tis_log import LOG
 from consts.stx import GuestImages, ImageMetadata
 from consts.cli_errs import LiveMigErr      # Don't remove this import, used by eval()
@@ -116,7 +118,8 @@ def test_vm_actions_secure_boot_vm():
         LOG.tc_step("Verifying Secure boot is still enabled after vm action {}".format(vm_actions))
         _check_secure_boot_on_vm(vm_id=vm_id)
 
-
+@mark.trylast
+@mark.reboot
 def test_lock_unlock_secure_boot_vm():
 
     """

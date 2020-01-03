@@ -16,7 +16,8 @@ def hosts_per_stor_backing():
 
     return hosts_per_backing
 
-
+@mark.trylast
+@mark.reboot
 @mark.nightly
 @mark.sx_nightly
 def test_vm_with_config_drive(hosts_per_stor_backing):
