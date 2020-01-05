@@ -11,7 +11,7 @@ from consts.auth import HostLinuxUser, TestFileServer, Tenant, CliAuth
 from consts.stx import HostAvailState, Prompt, PREFIX_BACKUP_FILE, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, \
     BACKUP_FILE_DATE_STR, BackupRestore, \
-    PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH, VSwitchType, PING_LOSS_RATE
+    PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH, VSwitchType
 from consts.filepaths import StxPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout, DCTimeout
@@ -19,8 +19,8 @@ from consts.vlm import VlmAction
 from consts.bios import NODES_WITH_KERNEL_BOOT_OPTION_SPACING, TerminalKeys
 from consts.build_server import Server, YOW_TUXLAB2
 from keywords import system_helper, host_helper, vm_helper, patching_helper, \
-    cinder_helper, common, network_helper, vlm_helper, dc_helper
-from utils import exceptions, cli, table_parser, lab_info, multi_thread, menu
+    cinder_helper, common, network_helper, vlm_helper, dc_helper, bmc_helper
+from utils import exceptions, cli, table_parser, lab_info, multi_thread, menu, local_host
 from utils.clients.ssh import SSHClient, ControllerClient, SSHFromSSH
 from utils.clients.telnet import TelnetClient, LOGIN_REGEX
 from utils.clients.local import LocalHostClient
@@ -39,7 +39,7 @@ outputs_restore_system_conf = ("Enter 'reboot' to reboot controller: ",
 
 lab_ini_info = {}
 __local_client = None
-
+__test_server_client = None
 
 def local_client():
     global __local_client
@@ -47,6 +47,19 @@ def local_client():
         __local_client = LocalHostClient(connect=True)
 
     return __local_client
+
+
+def test_server_client():
+    global __test_server_client
+    if not __test_server_client:
+        if TestFileServer.get_hostname() in local_host.get_host_name():
+            __test_server_client = local_client()
+        else:
+            __test_server_client = SSHClient(host=TestFileServer.get_server(), user=TestFileServer.get_user(),
+                                password=TestFileServer.get_password(), initial_prompt=TestFileServer.get_prompt())
+            __test_server_client.connect()
+
+    return __test_server_client
 
 
 def get_ssh_public_key():
@@ -267,11 +280,24 @@ def bring_node_console_up(node, boot_device,
 
     if node.telnet_conn is None:
         node.telnet_conn = open_telnet_session(node)
+    bmc_power = InstallVars.get_install_var("USE_BMC")
+    if bmc_power and node.name != 'controller-0':
+        vlm_power_on = False
+        LOG.info("Waiting 30 seconds for mtcAgent to power on {}".format(node.name))
+        time.sleep(30)
+        power_status = get_bmc_power_status(node.name, lab=lab)[0]
+        if power_status == "off":
+            LOG.info("The  {} BMC power status is off; The MTC agent fail to turn on; turning node on for pxe"
+                     .format(node.name))
+            set_bmc_boot_to_pxe(node.name, lab=lab)
+            power_on_hosts(node.name)
 
     try:
         if vlm_power_on:
             LOG.info("Powering on {}".format(node.name))
-            power_on_host(node.name, lab=lab, wait_for_hosts_state_=False)
+            if bmc_power:
+                set_bmc_boot_to_pxe(node.name, lab=lab)
+            power_on_hosts(node.name, lab=lab, wait_for_hosts_state_=False)
 
         install_node(node, boot_device_dict=boot_device, low_latency=low_latency,
                      small_footprint=small_footprint,
@@ -655,17 +681,17 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
                           lab['controller-0 ip'],
                           HostLinuxUser.get_home(), pre_opts=pre_opts)
 
-    cmd = "test -e " + lab_file_dir
-    conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
-    if deployment_mgr:
-        extra_option = "-L "
-    else:
-        extra_option = ''
-
-    conf_server.ssh_conn.rsync("{}".format(extra_option) + lab_file_dir + "/*",
-                               lab['controller-0 ip'],
-                               HostLinuxUser.get_home(),
-                               pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
+    # cmd = "test -e " + lab_file_dir
+    # conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+    # if deployment_mgr:
+    #     extra_option = "-L "
+    # else:
+    #     extra_option = ''
+    #
+    # conf_server.ssh_conn.rsync("{}".format(extra_option) + lab_file_dir + "/*",
+    #                            lab['controller-0 ip'],
+    #                            HostLinuxUser.get_home(),
+    #                            pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
     if not subcloud:
         site_file_path = os.path.join(default_lab_config_path, "yow/ansible/site.yml")
         local_install_override_file_path = os.path.join(default_lab_config_path,
@@ -681,6 +707,32 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
             conf_server.ssh_conn.rsync(local_install_override_file_path, lab['controller-0 ip'],
                                        HostLinuxUser.get_home(), pre_opts=pre_opts)
 
+    openstack_lab_files_dir = os.path.split(script_path)[0] + "/yow/openstack"
+    cmd = "test -e " + openstack_lab_files_dir
+    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
+        conf_server.ssh_conn.rsync(openstack_lab_files_dir + "/*",
+                                   lab['controller-0 ip'],
+                                   HostLinuxUser.get_home(),
+                                   pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
+    else:
+        LOG.warning("Openstack lab config file path: {} does not exist".format(
+            openstack_lab_files_dir))
+
+    # Getting lab_config files. All files in the lab_config_path will be downloaded. If custom path specified,
+    # all files in the custom path are downloaded; Any previously downloaded file will be overwritten if exists in
+    # the custom path.
+    cmd = "test -e " + lab_file_dir
+    conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+    if deployment_mgr:
+        extra_option = "-L "
+    else:
+        extra_option = ''
+
+    conf_server.ssh_conn.rsync("{}".format(extra_option) + lab_file_dir + "/*",
+                               lab['controller-0 ip'],
+                               HostLinuxUser.get_home(),
+                               pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
+
     vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
     if vswitch_type == VSwitchType.AVS:
         LOG.info("The vswitch type is avs; attempting to download the avs deployment config yaml"
@@ -691,17 +743,17 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
             conf_server.ssh_conn.rsync(avs_yaml_path,
                                        lab['controller-0 ip'], dest_path, pre_opts=pre_opts)
 
-    openstack_lab_files_dir = os.path.split(script_path)[0] + "/yow/openstack"
-
-    cmd = "test -e " + openstack_lab_files_dir
-    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
-        conf_server.ssh_conn.rsync(openstack_lab_files_dir + "/*",
-                                   lab['controller-0 ip'],
-                                   HostLinuxUser.get_home(),
-                                   pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
-    else:
-        LOG.warning("Openstack lab config file path: {} does not exist".format(
-            openstack_lab_files_dir))
+    # openstack_lab_files_dir = os.path.split(script_path)[0] + "/yow/openstack"
+    #
+    # cmd = "test -e " + openstack_lab_files_dir
+    # if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
+    #     conf_server.ssh_conn.rsync(openstack_lab_files_dir + "/*",
+    #                                lab['controller-0 ip'],
+    #                                HostLinuxUser.get_home(),
+    #                                pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
+    # else:
+    #     LOG.warning("Openstack lab config file path: {} does not exist".format(
+    #         openstack_lab_files_dir))
 
 
 def download_lab_config_file(lab, server, load_path, config_file='lab_setup.conf'):
@@ -3943,6 +3995,9 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=None, security=None,
                  usb=None,
                  pxe_host='controller-0'):
+
+    bmc_power = InstallVars.get_install_var("USE_BMC")
+
     bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
     bios_option = bios_menu.get_boot_option()
     boot_device_menu = menu.BootDeviceMenu()
@@ -3979,16 +4034,17 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
         node_obj.telnet_conn = open_telnet_session(node_obj)
 
     bios_boot_option = bios_option.name.encode()
-
     telnet_conn = node_obj.telnet_conn
-    LOG.info('Waiting for BIOS boot option: {}'.format(bios_boot_option))
-    index = telnet_conn.expect([re.compile(bios_boot_option, re.IGNORECASE)], 300)
-    if index < 0:
-        msg = "BIOS boot option {} not found within 300 seconds".format(bios_boot_option)
-        raise exceptions.InstallError(msg)
 
-    enter_bios_option(node_obj, bios_option, expect_prompt=False)
-    LOG.info('BIOS option entered')
+    if not bmc_power:
+        LOG.info('Waiting for BIOS boot option: {}'.format(bios_boot_option))
+        index = telnet_conn.expect([re.compile(bios_boot_option, re.IGNORECASE)], 300)
+        if index < 0:
+            msg = "BIOS boot option {} not found within 300 seconds".format(bios_boot_option)
+            raise exceptions.InstallError(msg)
+
+        enter_bios_option(node_obj, bios_option, expect_prompt=False)
+        LOG.info('BIOS option entered')
 
     expt_prompts = []
     if "hp" in node_obj.host_name:
@@ -4010,31 +4066,44 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
             LOG.info('Kick start option selected')
 
     else:
-        expt_prompts.append(boot_device_menu.prompt)
-        if node_obj.name == pxe_host:
-            expt_prompts.append(kickstart_menu.prompt)
-
-        index = telnet_conn.expect(expt_prompts, 360)
-        LOG.info('In boot device menu index = {}'.format(index))
-        if index == 0:
-            LOG.info('In boot device menu')
-            select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb,
-                               expect_prompt=False)
-            LOG.info('Boot device selected')
-
-            expt_prompts.pop(0)
+        if bmc_power:
             if node_obj.name == pxe_host:
+                expt_prompts.append(kickstart_menu.prompt)
                 expt_prompts.append("\x1b.*\*{56,60}")
-            if len(expt_prompts) > 0:
-                LOG.info('In Kickstart menu expected promts = {}'.format(expt_prompts))
+                if len(expt_prompts) > 0:
+                    LOG.info('In Kickstart menu expected promts = {}'.format(expt_prompts))
 
-                telnet_conn.read_until(kickstart_menu.prompt, timeout=360)
+                    telnet_conn.read_until(kickstart_menu.prompt, timeout=360)
+                    select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint,
+                                          low_latency=low_latency,
+                                          security=security, usb=usb, expect_prompt=False)
+                    LOG.info('Kick start option selected')
+        else:
+            expt_prompts.append(boot_device_menu.prompt)
+            if node_obj.name == pxe_host:
+                expt_prompts.append(kickstart_menu.prompt)
 
-        if node_obj.name == pxe_host:
-            select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint,
-                                  low_latency=low_latency,
-                                  security=security, usb=usb, expect_prompt=False)
-            LOG.info('Kick start option selected')
+            index = telnet_conn.expect(expt_prompts, 360)
+            LOG.info('In boot device menu index = {}'.format(index))
+            if index == 0:
+                LOG.info('In boot device menu')
+                select_boot_device(node_obj, boot_device_menu, boot_device_dict, usb=usb,
+                                   expect_prompt=False)
+                LOG.info('Boot device selected')
+
+                expt_prompts.pop(0)
+                if node_obj.name == pxe_host:
+                    expt_prompts.append("\x1b.*\*{56,60}")
+                if len(expt_prompts) > 0:
+                    LOG.info('In Kickstart menu expected promts = {}'.format(expt_prompts))
+
+                    telnet_conn.read_until(kickstart_menu.prompt, timeout=360)
+
+            if node_obj.name == pxe_host:
+                select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint,
+                                      low_latency=low_latency,
+                                      security=security, usb=usb, expect_prompt=False)
+                LOG.info('Kick start option selected')
 
     LOG.info("Waiting for {} to boot".format(node_obj.name))
     node_obj.telnet_conn.expect([str.encode("ogin:")], 2400)
@@ -4874,3 +4943,106 @@ def config_ipv6_oam_interface(lab, oam_gateway_address='2620:10a:a001:a103::6:0'
     if rc != 0:
         raise exceptions.InstallError("Fail to set oam ipv6 address {} for nic device {}: {}"
                                       .format(oam_ip, nic_interface, output))
+
+
+def use_bmc(hosts, lab=None):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    if isinstance(hosts, str):
+        hosts = [hosts]
+    bmc_info = lab.get("bmc_info")
+    if bmc_info and 'username' in bmc_info and 'password' in bmc_info:
+        for host in hosts:
+            if host not in bmc_info:
+                return False
+        return True
+    else:
+        return False
+
+
+def power_off_hosts(lab):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    bmc_info = lab.get("bmc_info")
+    power_bmc = InstallVars.get_install_var("USE_BMC")
+    powered_off = False
+    if power_bmc:
+        LOG.info("Powering off nodes uisng bmc impitool ... ")
+        test_client = test_server_client()
+        for host in lab["hosts"]:
+            LOG.info("Checking current power status for host {} uisng bmc impitool".format(host))
+            status, out = get_bmc_power_status(host, lab=lab)
+            if status == "off":
+                LOG.info("Current Power status is off; Do nothing".format(host))
+                powered_off = True
+            elif status == "on":
+                LOG.info("Current Power status is on; Powering off host {} uisng bmc impitool".format(host))
+                code, output = bmc_helper.set_server_chassis_power(bmc_info[host], test_client, action="off",
+                                                                   user=bmc_info['username'],
+                                                                   password=bmc_info['password'])
+                if code == 0:
+                    LOG.info(" Host {}  {}".format(host, output))
+                    powered_off = True
+
+    if not powered_off:
+        vlm_helper.power_off_hosts(lab["hosts"], lab=lab, count=2)
+
+
+def power_on_hosts(hosts, lab=None, wait_for_hosts_state_=False):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    bmc_info = lab.get("bmc_info")
+    power_bmc = InstallVars.get_install_var("USE_BMC")
+    if isinstance(hosts, str):
+        hosts = [hosts]
+    power_on = False
+    if power_bmc:
+        action='on'
+        test_client = test_server_client()
+        for host in hosts:
+            LOG.info("Powering on node {} uisng bmc impitool ... ".format(host))
+            status, out = get_bmc_power_status(host, lab=lab)
+            if status == 'on' or status == 'unknown':
+                action ='reset'
+            rc, output = bmc_helper.set_server_chassis_power(bmc_info[host], test_client, action=action,
+                                                             user=bmc_info['username'], password=bmc_info['password'])
+            if rc == 0:
+                LOG.info(" Host {}  {}".format(host, output))
+                power_on = True
+
+    if not power_on:
+        power_on_host(hosts, lab=lab, wait_for_hosts_state_=wait_for_hosts_state_)
+
+
+def get_bmc_power_status(host, lab=None):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    bmc_info = lab.get("bmc_info")
+
+    if use_bmc(host, lab=lab):
+        test_client = test_server_client()
+        LOG.info("Getting Power status of node {} uisng bmc impitool ... ".format(host))
+        rc, output = bmc_helper.set_server_chassis_power(bmc_info[host], test_client,  action="status",
+                                                         user=bmc_info['username'], password=bmc_info['password'])
+        if rc == 0:
+            LOG.info(" Host {}  {}".format(host, output))
+            if "Power is off" in output:
+                return 'off', None
+            elif "Power is on" in output:
+                return 'on', None
+            else:
+                return 'unknown', output
+        else:
+            return 'unknown', output
+
+    else:
+        return 'n/a', "BMC not supported"
+
+
+def set_bmc_boot_to_pxe(host, lab=None):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    bmc_info = lab.get("bmc_info")
+    local_client = test_server_client()
+    return bmc_helper.set_bootdev(bmc_info[host], local_client, bootdev='pxe', user=bmc_info['username'],
+                                  password=bmc_info['password'] )

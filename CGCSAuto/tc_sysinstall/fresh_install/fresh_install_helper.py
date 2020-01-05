@@ -1,14 +1,17 @@
 import os
 import time
+import yaml
+import pysftp
+import base64
 
 import pexpect
 from pytest import skip
 
 import setups
-from utils import cli
+from utils import cli, local_host
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
-from utils.clients.ssh import ControllerClient, NATBoxClient, SSHFromSSH
+from utils.clients.ssh import ControllerClient, NATBoxClient, SSHFromSSH, SSHClient
 from consts.lab import NatBoxes
 from consts.auth import Tenant, HostLinuxUser, TestFileServer
 from consts.timeout import InstallTimeout, HostTimeout, DCTimeout
@@ -153,7 +156,7 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
     test_step = "Install Controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        vlm_helper.power_off_hosts(lab["hosts"], lab=lab, count=2)
+        install_helper.power_off_hosts(lab)
         install_helper.boot_controller(lab=lab, small_footprint=is_cpe, boot_usb=usb,
                                        security=security,
                                        low_latency=low_latency, patch_dir_paths=patch_dir,
@@ -447,12 +450,13 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
 def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
                wait_for_online=True):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
-    test_step = "Boot"
 
     if lab is None:
         lab = InstallVars.get_install_var('LAB')
     if hostnames is None:
         hostnames = [hostname for hostname in lab['hosts'] if 'controller-0' not in hostname]
+    use_bmc = InstallVars.get_install_var("USE_BMC")
+    test_step = " Wait for mtcAgent to boot" if use_bmc else "Boot"
     if boot_device_dict is None:
         lab = InstallVars.get_install_var('LAB')
         boot_device_dict = lab.get('boot_device_dict')
@@ -490,9 +494,11 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
 
     LOG.tc_step(test_step)
     if do_step(test_step):
-        LOG.info("Wait for 2 minutes before power on other hosts")
-        time.sleep(120)
         hosts_online = False
+        if not use_bmc:
+            LOG.info("Wait for 2 minutes before power on other hosts")
+            time.sleep(120)
+
         for hostname in hostnames:
             threads.append(install_helper.open_vlm_console_thread(hostname, lab=lab,
                                                                   boot_interface=boot_device_dict,
@@ -1151,6 +1157,12 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         InstallVars.set_install_var(dc_lab=dc_lab)
         LOG.info("Instal DC lab  = {}".format(InstallVars.get_install_var('DC_LAB')['name']))
     ProjVar.set_var(SOURCE_OPENRC=True)
+
+    bmc_info = get_bmc_info(lab, servers_map.get(file_server, bs_obj))
+    lab['bmc_info'] = bmc_info
+    check_bmc_config(lab=lab)
+    LOG.info("Lab bmc info  = {}".format(InstallVars.get_install_var("LAB")['bmc_info']))
+
 
     boot_type = InstallVars.get_install_var("BOOT_TYPE")
     if "usb" in boot_type:
@@ -2327,3 +2339,77 @@ def unreserve_lab_hosts(lab, dist_cloud=False):
                                        lab=lab[subcloud])
     else:
         vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
+
+
+def get_bmc_info(lab, conf_server=None, lab_file_dir=None):
+
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    if not lab_file_dir:
+        lab_file_dir = InstallVars.get_install_var("LAB_SETUP_PATH")
+
+    if not os.path.isabs(lab_file_dir):
+        raise ValueError("Abs path required for {}".format(lab_file_dir))
+
+    lab_name = lab['name']
+    lab_name = lab_name.split('yow-', maxsplit=1)[-1]
+
+    lab_bmc_info = {}
+    LOG.info("Getting lab config file from specified path: {}".format(lab_file_dir))
+    cmd = "test -e " + lab_file_dir
+    conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+
+    cmd = "test -e {}/deployment-config.yaml".format(lab_file_dir)
+    cmd1 = "test -e {}/deployment-config_avs.yaml".format(lab_file_dir)
+    # deployment_mgr = False
+    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] != 0 and \
+            conf_server.ssh_conn.exec_cmd(cmd1, rm_date=False)[0] != 0:
+        LOG.info("No deployment-config file exist for lab {} in specified path: {}".format(lab_name, lab_file_dir))
+        return None
+
+    dm_file_path = "{}/deployment-config.yaml".format(lab_file_dir)
+    try:
+
+        with pysftp.Connection(host=conf_server.name, username=TestFileServer.get_user(),
+                               password=TestFileServer.get_password()) as sftp:
+            dm_file = sftp.open(dm_file_path)
+            docs = yaml.load_all(dm_file)
+            for document in docs:
+                if document:
+                    if document['kind'] == 'Secret' and document['metadata']['name'] == 'bmc-secret':
+                        lab_bmc_info['username'] = base64.b64decode(document['data']['username']).decode()
+                        lab_bmc_info['password'] = base64.b64decode(document['data']['password']).decode()
+                    elif document['kind'] == 'Host':
+                        if 'boardManagement' in document['spec']['overrides']:
+                            lab_bmc_info[document['metadata']['name']] = \
+                                document['spec']['overrides']['boardManagement']['address']
+
+    except IOError as e:
+        LOG.info("Fail to open  deployment-config file {} for lab {}: {}".format(lab_file_dir, lab_name, e.message))
+
+    return lab_bmc_info
+
+
+def check_bmc_config(lab):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    bmc_info = lab.get("bmc_info")
+    use_bmc = install_helper.use_bmc(lab['hosts'], lab=lab)
+    if use_bmc:
+        LOG.info("Using BMC to power on/off hosts; Ensure all lab nodes are VLM powered on ...")
+        vlm_helper.power_on_hosts(lab["hosts"], post_check=False)
+        time.sleep(60)
+        test_client = install_helper.test_server_client()
+        for host in lab["hosts"]:
+
+            code, output = test_client.ping_server(bmc_info[host], fail_ok=True)
+            if code != 0:
+                msg = 'Unable to ping BMC address {} from Test Server: {}'.format(bmc_info[host], output)
+                LOG.info(msg)
+                use_bmc = False
+
+        if not use_bmc:
+            lab["bmc_info"].clear()
+    InstallVars.set_install_var(lab=lab)
+    InstallVars.set_install_var(use_bmc=use_bmc)
