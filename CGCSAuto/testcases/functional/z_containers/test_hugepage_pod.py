@@ -50,7 +50,7 @@ def get_hugepage_pod_file():
         hostname = system_helper.get_standby_controller_name()
     else:
         hostname = system_helper.get_hypervisors()[0]
-    LOG.info("checking hugepage values on {}".format(hostname))
+    LOG.fixture_step("Checking hugepage values on {}".format(hostname))
     proc_id = 0
     out = host_helper.get_host_memories(
         hostname, ('app_hp_avail_2M', 'app_hp_avail_1G'), proc_id)
@@ -66,10 +66,12 @@ def get_hugepage_pod_file():
         hugepage_str = "hugepages-1Gi"
         HostsToRecover.add(hostname)
         host_helper.lock_host(hostname)
+        LOG.fixture_step("Configuring hugepage values {} on {}".format(
+            hugepage_val, hostname))
         cli.system('host-memory-modify {} {}'.format(hostname, cmd), ssh_client=None,
                    use_telnet=False, con_telnet=None, auth_info=Tenant.get('admin_platform'))
         host_helper.unlock_host(hostname)
-    LOG.info("{} {} pod wil be configured on {} proc id {}".format(
+    LOG.fixture_step("{} {} pod will be configured on {} proc id {}".format(
         hugepage_str, hugepage_val, hostname, proc_id))
     file_dir, file_name = modify_yaml(
         "utils/test_files/", "hugepages_pod.yaml", hugepage_str, hugepage_val)
@@ -78,7 +80,7 @@ def get_hugepage_pod_file():
     common.scp_from_localhost_to_active_controller(
         source_path, dest_path=home_dir)
     yield file_name
-    LOG.info("Delete hugepages pod")
+    LOG.fixture_step("Delete hugepages pod")
     kube_helper.delete_resources(
         resource_names="hugepages-pod")
 
@@ -90,16 +92,16 @@ def test_hugepage_pod(get_hugepage_pod_file):
     Args:
         get_hugepage_pod_file: module fixture
 
-    Test:
+    Steps:
         - Create hugepage pod with deployment file
         - Verifies hugepage pod is deployed and running
 
     Teardown:
         - Deletes the hugepages pod from the host
     """
-    LOG.info("Create hugepage pod with deployment file")
+    LOG.tc_step("Create hugepage pod with deployment file")
     kube_helper.exec_kube_cmd(
         sub_cmd="create -f {}".format(get_hugepage_pod_file))
-    LOG.info("Verifies hugepage pod is deployed and running")
+    LOG.tc_step("Verifies hugepage pod is deployed and running")
     kube_helper.wait_for_pods_status(
         pod_names="hugepages-pod", namespace="default")

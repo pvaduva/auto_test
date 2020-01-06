@@ -20,15 +20,15 @@ def get_yaml():
     common.scp_from_localhost_to_active_controller(
         source_path, dest_path=home_dir)
     yield ns, relicas, filename
-    LOG.info("Delete the deployment")
+    LOG.fixture_step("Delete the deployment")
     kube_helper.exec_kube_cmd(
         "delete deployment --namespace={} resource-consumer".format(ns))
-    LOG.info("Check pods are terminating")
+    LOG.fixture_step("Check pods are terminating")
     kube_helper.wait_for_pods_status(
         namespace=ns, status=PodStatus.TERMINATING)
-    LOG.info("Wait for all pods are deleted")
+    LOG.fixture_step("Wait for all pods are deleted")
     kube_helper.wait_for_resources_gone(namespace=ns)
-    LOG.info("Delete the service and namespace")
+    LOG.fixture_step("Delete the service and namespace")
     kube_helper.exec_kube_cmd(
         "delete service rc-service --namespace={}".format(ns))
     kube_helper.exec_kube_cmd("delete namespace {}".format(ns))
@@ -51,12 +51,13 @@ def test_scale_pods(get_yaml):
         - Delete the deployment and service
     """
     ns, replicas, filename = get_yaml
+    LOG.tc_step("Create the deployment")
     kube_helper.exec_kube_cmd(
         sub_cmd="create -f {}".format(filename))
-    LOG.info("Check resource consumer pods are running")
+    LOG.tc_step("Check resource consumer pods are running")
     state, _ = kube_helper.wait_for_pods_status(namespace=ns, timeout=180)
     if state:
-        LOG.info(
+        LOG.tc_step(
             "Scale the resource consumer app to {}* no of worker nodes".format(replicas))
         kube_helper.exec_kube_cmd(
             "scale deployment --namespace={} resource-consumer --replicas={}".format(ns, replicas))

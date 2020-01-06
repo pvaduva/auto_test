@@ -48,7 +48,7 @@ spec:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: qos-pod-4
+  name: qos-pod-with-two-containers
   namespace: qos
 spec:
   containers:

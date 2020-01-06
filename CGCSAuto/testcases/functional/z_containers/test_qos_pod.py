@@ -12,24 +12,24 @@ def copy_pod_yamls():
     home_dir = HostLinuxUser.get_home()
     filename = "qos_deployment.yaml"
     ns = "qos"
-    LOG.info("Copying deployment yaml file")
+    LOG.fixture_step("Copying deployment yaml file")
     common.scp_from_localhost_to_active_controller(
         source_path="utils/test_files/{}".format(filename), dest_path=home_dir)
     kube_helper.exec_kube_cmd(
         sub_cmd="create -f {}".format(filename))
     yield ns
-    LOG.info("Delete all pods in namespace {}".format(ns))
+    LOG.fixture_step("Delete all pods in namespace {}".format(ns))
     kube_helper.exec_kube_cmd(
         sub_cmd="delete pods --all --namespace={}".format(ns))
-    LOG.info("Delete the namespace")
+    LOG.fixture_step("Delete the namespace")
     kube_helper.exec_kube_cmd(sub_cmd="delete namespace {}".format(ns))
 
 
 @mark.qos()
-@mark.parametrize('pod,expected', [("qos-pod-1", "Guaranteed",),
-                                   ("qos-pod-2", "Burstable",),
-                                   ("qos-pod-3", "BestEffort", ),
-                                   ("qos-pod-4", "Burstable",)])
+@mark.parametrize('expected,pod', [("guaranteed", "qos-pod-1"),
+                                   ("burstable", "qos-pod-2"),
+                                   ("besteffort", "qos-pod-3"),
+                                   ("burstable", "qos-pod-with-two-containers")])
 def test_qos_class(copy_pod_yamls, expected, pod):
     """
     Testing the Qos class for pods
@@ -53,6 +53,6 @@ def test_qos_class(copy_pod_yamls, expected, pod):
     _, out = kube_helper.exec_kube_cmd(
         sub_cmd="get pod {} --namespace={} --output=json".format(pod, ns))
     out = json.loads(out)
-    LOG.info("pod qos class is {} and expected is {}".format(
+    LOG.tc_step("pod qos class is {} and expected is {}".format(
         out["status"]["qosClass"], expected))
-    assert out["status"]["qosClass"] == expected
+    assert out["status"]["qosClass"].lower() == expected
