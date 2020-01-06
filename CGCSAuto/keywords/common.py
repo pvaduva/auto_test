@@ -148,7 +148,8 @@ def _scp_from_remote_to_active_controller(source_server, source_path,
 def scp_from_test_server_to_active_controller(source_path, dest_dir,
                                               dest_name=None, timeout=900,
                                               con_ssh=None,
-                                              is_dir=False):
+                                              is_dir=False,
+                                              force_ipv4=False):
     """
     SCP file or files under a directory from test server to TiS server
 
@@ -166,7 +167,11 @@ def scp_from_test_server_to_active_controller(source_path, dest_dir,
     if not con_ssh:
         con_ssh = ControllerClient.get_active_controller()
 
-    ipv6 = ProjVar.get_var('IPV6_OAM')
+    if not force_ipv4:
+        ipv6 = ProjVar.get_var('IPV6_OAM')
+    else:
+        ipv6 = None
+
     source_server = TestFileServer.get_server(ipv6=ipv6)
     source_user = TestFileServer.get_user()
     source_password = TestFileServer.get_password()

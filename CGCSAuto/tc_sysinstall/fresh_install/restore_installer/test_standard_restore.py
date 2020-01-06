@@ -14,13 +14,13 @@ from tc_sysinstall.fresh_install.restore_installer import restore_helper
 def install_setup(request):
     lab = InstallVars.get_install_var("LAB")
     install_type = ProjVar.get_var('SYS_TYPE')
-    if install_type != SysType.AIO_DX:
-        skip("The specified lab is not {} type. It is {} and use the appropriate test install script".
-             format(SysType.AIO_DX, install_type))
+
+    if install_type != SysType.REGULAR:
+        skip("The specified lab is not {} type. It is {} and use the appropriate test install script"
+             .format(SysType.REGULAR, install_type))
 
     lab["hosts"] = vlm_helper.get_hostnames_from_consts(lab)
     barcodes = vlm_helper.get_barcodes_from_hostnames(lab["hosts"])
-
     active_con = lab["controller-0"]
 
     LOG.tc_setup_start("{} install".format(install_type))
@@ -44,19 +44,16 @@ def install_setup(request):
     is_subcloud = InstallVars.get_install_var("INSTALL_SUBCLOUD") is not None
 
     _install_setup = fresh_install_helper.setup_fresh_install(lab, subcloud=is_subcloud)
-    if InstallVars.get_install_var("RESUME"):
-        try:
-            if active_con.ssh_conn is None:
-                active_con.ssh_conn = install_helper.ssh_to_controller(active_con.host_ip)
-        except:
-            pass
 
     return _install_setup
 
 
-def test_duplex_restore_install(install_setup):
+def test_standard_restore_install(install_setup):
     """
-     Complete fresh_install steps for a duplex lab
+     Configure the active controller
+
+     Prerequisites:
+         - pxeboot has been setup.
      Test Setups:
          - Retrieve dictionary containing lab information
          - Retrieve required paths to directories, images, and licenses
@@ -64,28 +61,28 @@ def test_duplex_restore_install(install_setup):
          - Initialize build server and boot server objects
          - Retrieve what steps to be skipped
      Test Steps:
-         - Boot controller-0
-         - Run restore controller-0
+         - Install controller-0
          - Unlock controller-0
-         - Install the Standby Controller
-         - Unlock the standby controller
+         - Boot the other hosts
+         - Unlock the other hosts
      """
     lab = install_setup["lab"]
-    boot_device = lab["boot_device_dict"]
+    hosts = lab["hosts"]
+    boot_device = lab['boot_device_dict']
     controller0_node = lab["controller-0"]
     patch_dir = install_setup["directories"]["patches"]
     patch_server = install_setup["servers"]["patches"]
 
-    # Power off that which is Not Controller-0
+    # Power off that which is NOT Controller-0
     hostnames = [hostname for hostname in lab['hosts'] if 'controller-0' not in hostname]
     vlm_helper.power_off_hosts(hostnames, lab=lab, count=2)
 
     do_boot_c0 = RestoreVars.get_restore_var('RESTORE_PRE_BOOT_CONTROLLER0')
-    stop_before_ansible_restore =\
+    stop_before_ansible_restore = \
         RestoreVars.get_restore_var('STOP_BEFORE_ANSIBLE_RESTORE')
 
     if do_boot_c0:
-        fresh_install_helper.install_controller(sys_type=SysType.AIO_DX, patch_dir=patch_dir,
+        fresh_install_helper.install_controller(sys_type=SysType.REGULAR, patch_dir=patch_dir,
                                                 patch_server_conn=patch_server.ssh_conn,
                                                 init_global_vars=True)
     else:
@@ -103,7 +100,6 @@ def test_duplex_restore_install(install_setup):
 
     controller0_node.telnet_conn.hostname = r"controller\-[01]"
     controller0_node.telnet_conn.set_prompt(Prompt.CONTROLLER_PROMPT)
-
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
@@ -111,14 +107,18 @@ def test_duplex_restore_install(install_setup):
     # Boot that which is Not Controller-0
     fresh_install_helper.restore_boot_hosts(boot_device)
 
-    fresh_install_helper.unlock_hosts(["controller-1"], con_ssh=controller0_node.ssh_conn)
+    # Unlock controller-1
+    fresh_install_helper.unlock_hosts(['controller-1'], con_ssh=controller0_node.ssh_conn)
 
-    fresh_install_helper.wait_for_hosts_ready(["controller-1"], lab=lab)
+    # Unlock computes
+    fresh_install_helper.unlock_hosts([host_ for host_ in hosts if 'compute' in host_],
+                                      con_ssh=controller0_node.ssh_conn)
+
+    fresh_install_helper.send_arp_cmd()
 
     if lab.get("floating ip"):
         collect_sys_net_info(lab)
         setup_tis_ssh(lab)
 
     fresh_install_helper.reset_global_vars()
-
     fresh_install_helper.verify_install_uuid(lab)
