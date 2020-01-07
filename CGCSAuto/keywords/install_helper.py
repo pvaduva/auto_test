@@ -283,15 +283,6 @@ def bring_node_console_up(node, boot_device,
     bmc_power = InstallVars.get_install_var("USE_BMC")
     if bmc_power and node.name != 'controller-0':
         vlm_power_on = False
-        LOG.info("Waiting 30 seconds for mtcAgent to power on {}".format(node.name))
-        time.sleep(30)
-        power_status = get_bmc_power_status(node.name, lab=lab)[0]
-        if power_status == "off":
-            LOG.info("The  {} BMC power status is off; The MTC agent fail to turn on; turning node on for pxe"
-                     .format(node.name))
-            set_bmc_boot_to_pxe(node.name, lab=lab)
-            power_on_hosts(node.name)
-
     try:
         if vlm_power_on:
             LOG.info("Powering on {}".format(node.name))
@@ -5014,7 +5005,7 @@ def power_on_hosts(hosts, lab=None, wait_for_hosts_state_=False):
         power_on_host(hosts, lab=lab, wait_for_hosts_state_=wait_for_hosts_state_)
 
 
-def get_bmc_power_status(host, lab=None):
+def get_bmc_power_status(host, lab=None, fail_ok=False):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
     bmc_info = lab.get("bmc_info")
@@ -5023,7 +5014,8 @@ def get_bmc_power_status(host, lab=None):
         test_client = test_server_client()
         LOG.info("Getting Power status of node {} uisng bmc impitool ... ".format(host))
         rc, output = bmc_helper.set_server_chassis_power(bmc_info[host], test_client,  action="status",
-                                                         user=bmc_info['username'], password=bmc_info['password'])
+                                                         user=bmc_info['username'], password=bmc_info['password'],
+                                                         fail_ok=fail_ok)
         if rc == 0:
             LOG.info(" Host {}  {}".format(host, output))
             if "Power is off" in output:
@@ -5046,3 +5038,4 @@ def set_bmc_boot_to_pxe(host, lab=None):
     local_client = test_server_client()
     return bmc_helper.set_bootdev(bmc_info[host], local_client, bootdev='pxe', user=bmc_info['username'],
                                   password=bmc_info['password'] )
+

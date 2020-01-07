@@ -498,6 +498,9 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
         if not use_bmc:
             LOG.info("Wait for 2 minutes before power on other hosts")
             time.sleep(120)
+        else:
+            LOG.info("Wait for 2 minutes for mtcAgent to power on hosts: {}".format(hostnames))
+            wait_for_mtc_to_power_on_hosts(hostnames, lab=lab)
 
         for hostname in hostnames:
             threads.append(install_helper.open_vlm_console_thread(hostname, lab=lab,
@@ -2413,3 +2416,43 @@ def check_bmc_config(lab):
             lab["bmc_info"].clear()
     InstallVars.set_install_var(lab=lab)
     InstallVars.set_install_var(use_bmc=use_bmc)
+
+
+def wait_for_mtc_to_power_on_hosts(hosts, lab=None, timeout=120, fail_ok=False):
+    """
+    Waits for mtcAgent to power on hosts
+    Args:
+        hosts:
+        lab:
+        timeout:
+        fail_ok:
+
+    Returns:
+
+    """
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+    powered_on_hosts = []
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+
+        for host in hosts:
+            status, output = install_helper.get_bmc_power_status(host, lab=lab, fail_ok=True)
+            if status == 'on':
+                LOG.info("The mtcAgent has power on {}: {}".format(host, output))
+                powered_on_hosts.append(host)
+
+        if len(powered_on_hosts) == len(hosts):
+            LOG.info("The mtcAgent has power on all hosts: {}".format(powered_on_hosts))
+            return 0, None
+        else:
+            time.sleep(30)
+    else:
+        msg = "Timed out waiting for mtcAgent to power on hosts {};  powered on hosts: {}".format(hosts, powered_on_hosts)
+        if fail_ok:
+            LOG.warning(msg)
+            return False
+        raise exceptions.HostTimeout(msg)
