@@ -25,7 +25,6 @@ def copy_pod_yamls():
     kube_helper.exec_kube_cmd(sub_cmd="delete namespace {}".format(ns))
 
 
-@mark.qos()
 @mark.parametrize('expected,pod', [("guaranteed", "qos-pod-1"),
                                    ("burstable", "qos-pod-2"),
                                    ("besteffort", "qos-pod-3"),
