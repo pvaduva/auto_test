@@ -85,7 +85,6 @@ def get_hugepage_pod_file():
         resource_names="hugepages-pod")
 
 
-@mark.hugepage
 def test_hugepage_pod(get_hugepage_pod_file):
     """
     Verify hugepage pod is deployed and running

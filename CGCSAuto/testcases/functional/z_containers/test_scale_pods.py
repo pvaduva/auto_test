@@ -34,7 +34,6 @@ def get_yaml():
     kube_helper.exec_kube_cmd("delete namespace {}".format(ns))
 
 
-@mark.scale
 def test_scale_pods(get_yaml):
     """
     Testing the deployment of high number of pods
