@@ -191,9 +191,12 @@ class BuildServerPath:
         '18.07': ['/folk/cgts/lab/R6-EAR1-eval.lic',
                   '/folk/cgts/lab/R6-EAR1-AIO-DX-eval.lic',
                   '/folk/cgts/lab/R6-EAR1-AIO-SX-eval.lic'],
-        'default': ['/folk/cgts/lab/licenses/wrslicense-19.12.lic',
-                    '/folk/cgts/lab/licenses/wrslicense-19.12.lic',
-                    '/folk/cgts/lab/licenses/wrslicense-19.12.lic'],
+        '19.10': ['/folk/cgts/lab/licenses/wrslicense-wrcp-1910.lic',
+                    '/folk/cgts/lab/licenses/wrslicense-wrcp-1910.lic',
+                    '/folk/cgts/lab/licenses/wrslicense-wrcp-1910.lic'],
+        'default': ['/folk/cgts/lab/R6-full.lic',
+                    '/folk/cgts/lab/R6-AIO-DX-full.lic',
+                    '/folk/cgts/lab/R6-AIO-SX-full.lic'],
     }
 
     PATCH_DIR_PATHS = {
