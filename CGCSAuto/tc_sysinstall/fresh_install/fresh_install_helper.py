@@ -2361,35 +2361,35 @@ def get_bmc_info(lab, conf_server=None, lab_file_dir=None):
     lab_bmc_info = {}
     LOG.info("Getting lab config file from specified path: {}".format(lab_file_dir))
     cmd = "test -e " + lab_file_dir
-    conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=False)
+    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
 
-    cmd = "test -e {}/deployment-config.yaml".format(lab_file_dir)
-    cmd1 = "test -e {}/deployment-config_avs.yaml".format(lab_file_dir)
-    # deployment_mgr = False
-    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] != 0 and \
-            conf_server.ssh_conn.exec_cmd(cmd1, rm_date=False)[0] != 0:
-        LOG.info("No deployment-config file exist for lab {} in specified path: {}".format(lab_name, lab_file_dir))
-        return None
+        cmd = "test -e {}/deployment-config.yaml".format(lab_file_dir)
+        cmd1 = "test -e {}/deployment-config_avs.yaml".format(lab_file_dir)
+        # deployment_mgr = False
+        if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] != 0 and \
+                conf_server.ssh_conn.exec_cmd(cmd1, rm_date=False)[0] != 0:
+            LOG.info("No deployment-config file exist for lab {} in specified path: {}".format(lab_name, lab_file_dir))
+            return None
 
-    dm_file_path = "{}/deployment-config.yaml".format(lab_file_dir)
-    try:
+        dm_file_path = "{}/deployment-config.yaml".format(lab_file_dir)
+        try:
 
-        with pysftp.Connection(host=conf_server.name, username=TestFileServer.get_user(),
-                               password=TestFileServer.get_password()) as sftp:
-            dm_file = sftp.open(dm_file_path)
-            docs = yaml.load_all(dm_file)
-            for document in docs:
-                if document:
-                    if document['kind'] == 'Secret' and document['metadata']['name'] == 'bmc-secret':
-                        lab_bmc_info['username'] = base64.b64decode(document['data']['username']).decode()
-                        lab_bmc_info['password'] = base64.b64decode(document['data']['password']).decode()
-                    elif document['kind'] == 'Host':
-                        if 'boardManagement' in document['spec']['overrides']:
-                            lab_bmc_info[document['metadata']['name']] = \
-                                document['spec']['overrides']['boardManagement']['address']
+            with pysftp.Connection(host=conf_server.name, username=TestFileServer.get_user(),
+                                   password=TestFileServer.get_password()) as sftp:
+                dm_file = sftp.open(dm_file_path)
+                docs = yaml.load_all(dm_file)
+                for document in docs:
+                    if document:
+                        if document['kind'] == 'Secret' and document['metadata']['name'] == 'bmc-secret':
+                            lab_bmc_info['username'] = base64.b64decode(document['data']['username']).decode()
+                            lab_bmc_info['password'] = base64.b64decode(document['data']['password']).decode()
+                        elif document['kind'] == 'Host':
+                            if 'boardManagement' in document['spec']['overrides']:
+                                lab_bmc_info[document['metadata']['name']] = \
+                                    document['spec']['overrides']['boardManagement']['address']
 
-    except IOError as e:
-        LOG.info("Fail to open  deployment-config file {} for lab {}: {}".format(lab_file_dir, lab_name, e.message))
+        except IOError as e:
+            LOG.info("Fail to open  deployment-config file {} for lab {}: {}".format(lab_file_dir, lab_name, e.message))
 
     return lab_bmc_info
 
