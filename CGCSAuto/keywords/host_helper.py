@@ -2246,7 +2246,6 @@ def add_host_interface(host, if_name, ports_or_ifs,  parent_sriov_vf=None, if_ty
                                  ' ' + pnet if pnet else '',
                                  ' '.join(ports_or_ifs) if ports_or_ifs else '')
     opt_args_dict = {
-        'vf': parent_sriov_vf,
         '--aemode': ae_mode,
         '--txhashpolicy': tx_hash_policy,
         '--vlan_id': vlan_id,
@@ -2261,7 +2260,11 @@ def add_host_interface(host, if_name, ports_or_ifs,  parent_sriov_vf=None, if_ty
         '--num-vfs': sriov_vf_count,
     }
 
-    opt_args = ''
+    if parent_sriov_vf is not None:
+        opt_args = 'vf {} '.format(parent_sriov_vf)
+    else:
+        opt_args = ''
+
     for key, val in opt_args_dict.items():
         if val is not None:
             opt_args += '{} {} '.format(key, val)
