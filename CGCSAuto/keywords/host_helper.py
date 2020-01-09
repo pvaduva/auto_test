@@ -2178,81 +2178,6 @@ def modify_host_cpu(host, cpu_function, timeout=CMDTimeout.HOST_CPU_MODIFY,
     return 0, msg
 
 
-def add_host_interface(host, if_name, ports_or_ifs, if_type=None, pnet=None,
-                       ae_mode=None, tx_hash_policy=None,
-                       vlan_id=None, mtu=None, if_class=None, network=None,
-                       ipv4_mode=None, ipv6_mode=None,
-                       ipv4_pool=None, ipv6_pool=None, lock_unlock=True,
-                       fail_ok=False, con_ssh=None,
-                       auth_info=Tenant.get('admin_platform')):
-    """
-
-    Args:
-        host:
-        if_name:
-        ports_or_ifs:
-        if_type:
-        pnet:
-        ae_mode:
-        tx_hash_policy:
-        vlan_id:
-        mtu:
-        if_class:
-        network:
-        ipv4_mode:
-        ipv6_mode:
-        ipv4_pool:
-        ipv6_pool:
-        lock_unlock:
-        fail_ok:
-        con_ssh:
-        auth_info:
-
-    Returns:
-
-    """
-    if lock_unlock:
-        lock_host(host=host, con_ssh=con_ssh, swact=True, fail_ok=False)
-
-    if isinstance(ports_or_ifs, str):
-        ports_or_ifs = [ports_or_ifs]
-    args = '{} {}{}{} {}'.format(host, if_name,
-                                 ' ' + if_type if if_type else '',
-                                 ' ' + pnet if pnet else '',
-                                 ' '.join(ports_or_ifs))
-    opt_args_dict = {
-        '--aemode': ae_mode,
-        '--txhashpolicy': tx_hash_policy,
-        '--vlan_id': vlan_id,
-        '--imtu': mtu,
-        '--ifclass': if_class,
-        '--networks': network,
-        '--ipv4-mode': ipv4_mode,
-        '--ipv6-mode': ipv6_mode,
-        '--ipv4-pool': ipv4_pool,
-        '--ipv6-pool': ipv6_pool,
-    }
-
-    opt_args = ''
-    for key, val in opt_args_dict.items():
-        if val is not None:
-            opt_args += '{} {} '.format(key, val)
-
-    args = '{} {}'.format(args, opt_args).strip()
-    code, out = cli.system('host-if-add', args, ssh_client=con_ssh,
-                           fail_ok=fail_ok, auth_info=auth_info)
-    if code > 0:
-        return 1, out
-
-    if lock_unlock:
-        unlock_host(host, con_ssh=con_ssh)
-
-    msg = "Interface {} successfully added to {}".format(if_name, host)
-    LOG.info(msg)
-
-    return 0, msg
-
-
 def get_host_datanetworks(host, interface=None, field='datanetwork_name', con_ssh=None,
                           auth_info=Tenant.get('admin_platform'), **kwargs):
     """
@@ -2278,14 +2203,88 @@ def get_host_datanetworks(host, interface=None, field='datanetwork_name', con_ss
     return table_parser.get_multi_values(table_, field, **kwargs)
 
 
-def modify_host_interface(host, interface, pnet=None, ae_mode=None,
-                          tx_hash_policy=None,
-                          mtu=None, if_class=None, network=None, ipv4_mode=None,
-                          ipv6_mode=None,
-                          ipv4_pool=None, ipv6_pool=None, sriov_vif_count=None,
-                          new_if_name=None,
-                          lock_unlock=True, fail_ok=False, con_ssh=None,
-                          auth_info=Tenant.get('admin_platform')):
+def add_host_interface(host, if_name, ports_or_ifs,  parent_sriov_vf=None, if_type=None, pnet=None, ae_mode=None, tx_hash_policy=None,
+                       vlan_id=None, mtu=None, if_class=None, network=None, sriov_vf_count=None,
+                       sriov_vf_driver=None, ipv4_mode=None, ipv6_mode=None, ipv4_pool=None, ipv6_pool=None,
+                       lock_unlock=True, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin_platform')):
+    """
+
+    Args:
+        host:
+        if_name:
+        ports_or_ifs:
+        if_type:
+        pnet:
+        ae_mode:
+        tx_hash_policy:
+        vlan_id:
+        mtu:
+        if_class:
+        network:
+        ipv4_mode:
+        ipv6_mode:
+        ipv4_pool:
+        ipv6_pool:
+        parent_sriov_vf:
+        sriov_vf_count:
+        sriov_vf_driver:
+        lock_unlock:
+        fail_ok:
+        con_ssh:
+        auth_info:
+
+    Returns:
+
+    """
+    if lock_unlock:
+        lock_host(host=host, con_ssh=con_ssh, swact=True, fail_ok=False)
+
+    if isinstance(ports_or_ifs, str):
+        ports_or_ifs = [ports_or_ifs]
+    args = '{} {}{}{} {}'.format(host, if_name,
+                                 ' ' + if_type if if_type else '',
+                                 ' ' + pnet if pnet else '',
+                                 ' '.join(ports_or_ifs) if ports_or_ifs else '')
+    opt_args_dict = {
+        'vf': parent_sriov_vf,
+        '--aemode': ae_mode,
+        '--txhashpolicy': tx_hash_policy,
+        '--vlan_id': vlan_id,
+        '--imtu': mtu,
+        '--networks': network,
+        '--ipv4-mode': ipv4_mode,
+        '--ipv6-mode': ipv6_mode,
+        '--ipv4-pool': ipv4_pool,
+        '--ipv6-pool': ipv6_pool,
+        '--vf-driver': sriov_vf_driver,
+        '--ifclass': if_class,
+        '--num-vfs': sriov_vf_count,
+    }
+
+    opt_args = ''
+    for key, val in opt_args_dict.items():
+        if val is not None:
+            opt_args += '{} {} '.format(key, val)
+
+    args = '{} {}'.format(args, opt_args).strip()
+    code, out = cli.system('host-if-add', args, ssh_client=con_ssh,
+                           fail_ok=fail_ok, auth_info=auth_info)
+    if code > 0:
+        return 1, out
+
+    if lock_unlock:
+        unlock_host(host, con_ssh=con_ssh)
+
+    msg = "Interface {} successfully added to {}".format(if_name, host)
+    LOG.info(msg)
+
+    return 0, msg
+
+
+def modify_host_interface(host, interface, pnet=None, ae_mode=None, tx_hash_policy=None, mtu=None, if_class=None,
+                          network=None, ipv4_mode=None, ipv6_mode=None, ipv4_pool=None, ipv6_pool=None,
+                          sriov_vf_count=None, sriov_vf_driver=None, new_if_name=None, lock_unlock=True, fail_ok=False,
+                          con_ssh=None, auth_info=Tenant.get('admin_platform')):
     """
 
     Args:
@@ -2301,7 +2300,8 @@ def modify_host_interface(host, interface, pnet=None, ae_mode=None,
         ipv6_mode:
         ipv4_pool:
         ipv6_pool:
-        sriov_vif_count:
+        sriov_vf_count:
+        sriov_vf_driver:
         new_if_name:
         lock_unlock:
         fail_ok:
@@ -2325,7 +2325,8 @@ def modify_host_interface(host, interface, pnet=None, ae_mode=None,
         '--ipv6-mode': ipv6_mode,
         '--ipv4-pool': ipv4_pool,
         '--ipv6-pool': ipv6_pool,
-        '--num-vfs': sriov_vif_count,
+        '--num-vfs': sriov_vf_count,
+        '--vf-driver': sriov_vf_driver,
         '--providernetworks': pnet,
     }
 
