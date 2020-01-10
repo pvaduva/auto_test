@@ -2203,10 +2203,12 @@ def get_host_datanetworks(host, interface=None, field='datanetwork_name', con_ss
     return table_parser.get_multi_values(table_, field, **kwargs)
 
 
-def add_host_interface(host, if_name, ports_or_ifs,  parent_sriov_vf=None, if_type=None, pnet=None, ae_mode=None, tx_hash_policy=None,
-                       vlan_id=None, mtu=None, if_class=None, network=None, sriov_vf_count=None,
-                       sriov_vf_driver=None, ipv4_mode=None, ipv6_mode=None, ipv4_pool=None, ipv6_pool=None,
-                       lock_unlock=True, fail_ok=False, con_ssh=None, auth_info=Tenant.get('admin_platform')):
+def add_host_interface(host, if_name, ports_or_ifs,  if_type=None, pnet=None, ae_mode=None,
+                       tx_hash_policy=None, vlan_id=None, mtu=None, if_class=None, network=None,
+                       sriov_vf_count=None, sriov_vf_driver=None, parent_sriov_vf=None,
+                       ipv4_mode=None, ipv6_mode=None, ipv4_pool=None, ipv6_pool=None,
+                       lock_unlock=True, fail_ok=False, con_ssh=None,
+                       auth_info=Tenant.get('admin_platform')):
     """
 
     Args:
@@ -2284,10 +2286,11 @@ def add_host_interface(host, if_name, ports_or_ifs,  parent_sriov_vf=None, if_ty
     return 0, msg
 
 
-def modify_host_interface(host, interface, pnet=None, ae_mode=None, tx_hash_policy=None, mtu=None, if_class=None,
-                          network=None, ipv4_mode=None, ipv6_mode=None, ipv4_pool=None, ipv6_pool=None,
-                          sriov_vf_count=None, sriov_vf_driver=None, new_if_name=None, lock_unlock=True, fail_ok=False,
-                          con_ssh=None, auth_info=Tenant.get('admin_platform')):
+def modify_host_interface(host, interface, pnet=None, ae_mode=None, tx_hash_policy=None, mtu=None,
+                          if_class=None, network=None, ipv4_mode=None, ipv6_mode=None,
+                          ipv4_pool=None, ipv6_pool=None, sriov_vf_count=None, sriov_vf_driver=None,
+                          new_if_name=None, lock_unlock=True, fail_ok=False, con_ssh=None,
+                          auth_info=Tenant.get('admin_platform')):
     """
 
     Args:
