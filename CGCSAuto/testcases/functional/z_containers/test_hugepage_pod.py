@@ -6,8 +6,7 @@ from utils import cli, table_parser, exceptions
 from utils.tis_log import LOG
 
 from consts.proj_vars import ProjVar
-from consts.auth import Tenant
-from consts.auth import HostLinuxUser
+from consts.auth import Tenant, HostLinuxUser
 from keywords import system_helper, kube_helper, common, host_helper
 from testfixtures.recover_hosts import HostsToRecover
 
