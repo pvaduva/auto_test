@@ -11,7 +11,7 @@ from consts.auth import HostLinuxUser, TestFileServer, Tenant, CliAuth
 from consts.stx import HostAvailState, Prompt, PREFIX_BACKUP_FILE, \
     IMAGE_BACKUP_FILE_PATTERN, CINDER_VOLUME_BACKUP_FILE_PATTERN, \
     BACKUP_FILE_DATE_STR, BackupRestore, \
-    PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH, VSwitchType
+    PREFIX_CLONED_IMAGE_FILE, PLATFORM_CONF_PATH, VSwitchType, SysType
 from consts.filepaths import StxPath, BuildServerPath, LogPath
 from consts.proj_vars import InstallVars, ProjVar, RestoreVars
 from consts.timeout import HostTimeout, ImageTimeout, InstallTimeout, DCTimeout
@@ -4058,7 +4058,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
 
     else:
         if bmc_power:
-            if node_obj.name == pxe_host:
+            if node_obj.name == pxe_host and boot_type != 'pxe_iso':
                 expt_prompts.append(kickstart_menu.prompt)
                 expt_prompts.append("\x1b.*\*{56,60}")
                 if len(expt_prompts) > 0:
@@ -4070,6 +4070,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
                                           security=security, usb=usb, expect_prompt=False)
                     LOG.info('Kick start option selected')
         else:
+
             expt_prompts.append(boot_device_menu.prompt)
             if node_obj.name == pxe_host:
                 expt_prompts.append(kickstart_menu.prompt)
@@ -4083,14 +4084,15 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
                 LOG.info('Boot device selected')
 
                 expt_prompts.pop(0)
-                if node_obj.name == pxe_host:
-                    expt_prompts.append("\x1b.*\*{56,60}")
-                if len(expt_prompts) > 0:
-                    LOG.info('In Kickstart menu expected promts = {}'.format(expt_prompts))
+                if boot_type != 'pxe_iso':
+                    if node_obj.name == pxe_host:
+                        expt_prompts.append("\x1b.*\*{56,60}")
+                    if len(expt_prompts) > 0:
+                        LOG.info('In Kickstart menu expected promts = {}'.format(expt_prompts))
 
-                    telnet_conn.read_until(kickstart_menu.prompt, timeout=360)
+                        telnet_conn.read_until(kickstart_menu.prompt, timeout=360)
 
-            if node_obj.name == pxe_host:
+            if node_obj.name == pxe_host and boot_type != 'pxe_iso':
                 select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint,
                                       low_latency=low_latency,
                                       security=security, usb=usb, expect_prompt=False)
@@ -4333,6 +4335,7 @@ def rsync_image_from_boot_server(iso_full_path=None, lab_dict=None, fail_ok=Fals
 def mount_boot_server_iso(lab_dict=None, tuxlab_conn=None):
     if lab_dict is None:
         lab_dict = InstallVars.get_install_var("LAB")
+    install_type = ProjVar.get_var('SYS_TYPE')
     barcode = lab_dict["controller_nodes"][0]
     tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
     tuxlab_prompt = '{}@{}\:(.*)\$ '.format(TestFileServer.get_user(), tuxlab_server)
@@ -4362,7 +4365,16 @@ def mount_boot_server_iso(lab_dict=None, tuxlab_conn=None):
     tuxlab_conn.exec_cmd(cmd, fail_ok=False)
     cmd = "umount /media/iso/{}".format(barcode)
     tuxlab_conn.exec_sudo_cmd(cmd, fail_ok=False)
+    # set default kickstart menu
+    if install_type == SysType.REGULAR:
+        menu_label = 1
+    else:
+        lowlat = InstallVars.get_install_var("LOW_LATENCY")
+        menu_label = 5 if lowlat else 3
 
+    cmd = "sed -i 's/DEFAULT menu.c32/DEFAULT {}/g' /export/pxeboot/pxeboot.cfg/{}/pxeboot.cfg"\
+        .format(menu_label, barcode)
+    tuxlab_conn.exec_cmd(cmd, fail_ok=False)
     tuxlab_conn.close()
 
     return 0, None
@@ -4455,14 +4467,12 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None, tuxlab_conn=None, is
 
     LOG.info("Create new symlink to {}".format(feed_path))
     if tuxlab_conn.exec_cmd("rm -f feed")[0] != 0:
-        msg = "Failed to remove feed"
-        LOG.error(msg)
-        return False
+        msg = "Failed to remove feed; Check permission in {} feed that: {}".format(tuxlab_server, feed_path)
+        raise exceptions.InstallError(msg)
 
     if tuxlab_conn.exec_cmd("ln -s " + tuxlab_sub_dir + "/" + " feed")[0] != 0:
         msg = "Failed to set VLM target {} feed symlink to: " + tuxlab_sub_dir
-        LOG.error(msg)
-        return False
+        raise exceptions.InstallError(msg)
 
     LOG.info("Updating pxeboot kickstart files")
     update_pxeboot_ks_files(lab_dict, tuxlab_conn, feed_path)

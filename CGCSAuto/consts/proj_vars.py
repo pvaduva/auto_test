@@ -138,7 +138,8 @@ class InstallVars:
                          helm_chart_server=None,
                          no_manage=False,
                          extract_deploy_config=False,
-                         ipv6_oam=False):
+                         ipv6_oam=False,
+                         subcloud_host=False):
 
         cls.__var_dict = {
             'LAB': lab,
@@ -171,6 +172,7 @@ class InstallVars:
             'LOW_LATENCY': low_latency,
             'DC_FLOAT_IP': dc_float_ip,
             'INSTALL_SUBCLOUD': install_subcloud,
+            'SUBCLOUD_HOST': subcloud_host,
             'NO_MANAGE': no_manage,
             'SECURITY': security,
             # Default path is <DEFAULT_LAB_FILES_DIR>/

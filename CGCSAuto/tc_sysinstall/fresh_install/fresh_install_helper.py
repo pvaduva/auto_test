@@ -2370,8 +2370,9 @@ def get_bmc_info(lab, conf_server=None, lab_file_dir=None):
                 conf_server.ssh_conn.exec_cmd(cmd1, rm_date=False)[0] != 0:
             LOG.info("No deployment-config file exist for lab {} in specified path: {}".format(lab_name, lab_file_dir))
             return None
-
-        dm_file_path = "{}/deployment-config.yaml".format(lab_file_dir)
+        vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
+        dm_file = "deployment-config.yaml" if vswitch_type == 'none' else "deployment-config_avs.yaml"
+        dm_file_path = "{}/{}".format(lab_file_dir, dm_file)
         try:
 
             with pysftp.Connection(host=conf_server.name, username=TestFileServer.get_user(),

@@ -684,6 +684,8 @@ def pytest_addoption(parser):
                         'ovs-dpdk: a default value \n' \
                         'avs \n' \
                         'none'
+    subcloud_host_help = 'flag to indicate the lab will be used for subclouds host; default is false.'
+
 
     # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir',
@@ -735,6 +737,9 @@ def pytest_addoption(parser):
                      help=vswitch_type_help)
     parser.addoption('--ipv6-oam', '--ipv6', dest='ipv6_oam', action='store_true', default=False,
                      help=ipv6_install_help)
+
+    parser.addoption('--subclouds-host', '--subcloud-host', dest='subcloud_host', action='store_true', default=False,
+                     help=subcloud_host_help)
 
     # DC Options:
     parser.addoption('--dc-float-ip', '--dc_float_ip', '--dcfip',
