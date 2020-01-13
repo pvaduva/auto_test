@@ -1653,7 +1653,7 @@ class ControllerClient:
         Args:
             ssh_client:
             name: used in distributed cloud, when ssh for multiple systems
-                need to be stored. e.g., name='subcloud-1'
+                need to be stored. e.g., name='subcloud1'
 
         Returns:
 

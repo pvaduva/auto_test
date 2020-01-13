@@ -51,6 +51,6 @@ def test_dc_dead_office_recovery_central(reserve_unreserve_all_hosts_module_cent
     LOG.tc_step("Check vms are recovered after dead office recovery")
     vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
 
-    LOG.tc_step("Check vms are reachable after centtral clouds DOR test")
+    LOG.tc_step("Check vms are reachable after central clouds DOR test")
     for vm in vms:
         vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm, timeout=VMTimeout.DHCP_RETRY)

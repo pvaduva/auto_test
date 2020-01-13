@@ -322,7 +322,7 @@ def pytest_configure(config):
     elif stress_count > 0:
         count = stress_count
 
-    # neccesary install params if --lab is not given
+    # necessary install params if --lab is not given
     controller_arg = config.getoption('controller')
     compute_arg = config.getoption('compute')
     storage_arg = config.getoption('storage')
@@ -488,7 +488,7 @@ def pytest_addoption(parser):
                   "different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
     subcloud_help = "Default subcloud used for automated test when boot vm, " \
-                    "etc. 'subcloud-1' if unspecified."
+                    "etc. 'subcloud1' if unspecified."
     report_help = "Upload results and logs to the test results database."
     tag_help = "Tag to be used for uploading logs to the test results database."
     telnetlog_help = "Collect telnet logs throughout the session"
@@ -560,7 +560,7 @@ def pytest_addoption(parser):
     parser.addoption('--region', action='store', metavar='region',
                      default=None, help=region_help)
     parser.addoption('--subcloud', action='store', metavar='subcloud',
-                     default='subcloud-1', help=subcloud_help)
+                     default='subcloud1', help=subcloud_help)
 
     ##################################
     # Lab fresh_install or upgrade options #

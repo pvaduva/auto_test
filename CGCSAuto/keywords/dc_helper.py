@@ -258,7 +258,7 @@ def wait_for_sync_audit(subclouds, con_ssh=None, fail_ok=False, filters_regex=No
 
     LOG.info("Waiting for sync audit in dcmanager.log for: {}".format(subclouds))
     if not filters_regex:
-        filters_regex = ['platform', 'volume', 'compute', 'network', 'patching', 'identity']
+        filters_regex = ['platform', 'patching', 'identity']
     elif isinstance(filters_regex, str):
         filters_regex = [filters_regex]
 

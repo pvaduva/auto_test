@@ -397,7 +397,7 @@ def configure_controller_dc(controller0_node, config_file='TiS_config.ini_centos
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='subcloud-1',
+def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='subcloud1',
                        lab=None, final_step=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")

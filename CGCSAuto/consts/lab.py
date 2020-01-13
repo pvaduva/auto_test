@@ -1051,7 +1051,7 @@ def update_lab(lab_dict_name=None, lab_name=None, floating_ip=None, **kwargs):
         lab_name (str|None): lab short_name. This is used only if
         lab_dict_name is not specified
         floating_ip (str|None):
-        **kwargs: Some possible keys: subcloud-1, name, etc
+        **kwargs: Some possible keys: subcloud1, name, etc
 
     Returns (dict): updated lab dict
 
