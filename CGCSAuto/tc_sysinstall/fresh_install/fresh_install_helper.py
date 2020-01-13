@@ -1160,8 +1160,9 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         InstallVars.set_install_var(dc_lab=dc_lab)
         LOG.info("Instal DC lab  = {}".format(InstallVars.get_install_var('DC_LAB')['name']))
     ProjVar.set_var(SOURCE_OPENRC=True)
-
-    bmc_info = get_bmc_info(lab, servers_map.get(file_server, bs_obj))
+    bmc_config_server = servers_map.get(file_server, bs_obj)
+    bmc_info = get_bmc_info(lab, bmc_config_server,
+                            subcloud=InstallVars.get_install_var("INSTALL_SUBCLOUD") if subcloud else None)
     lab['bmc_info'] = bmc_info
     check_bmc_config(lab=lab)
     LOG.info("Lab bmc info  = {}".format(InstallVars.get_install_var("LAB")['bmc_info']))
@@ -2344,13 +2345,14 @@ def unreserve_lab_hosts(lab, dist_cloud=False):
         vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
 
 
-def get_bmc_info(lab, conf_server=None, lab_file_dir=None):
-
+def get_bmc_info(lab, conf_server=None, lab_file_dir=None, subcloud=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
 
     if not lab_file_dir:
         lab_file_dir = InstallVars.get_install_var("LAB_SETUP_PATH")
+    if subcloud:
+        lab_file_dir = "{}/{}".format(lab_file_dir, subcloud[:-1] + '-' + subcloud[-1:])
 
     if not os.path.isabs(lab_file_dir):
         raise ValueError("Abs path required for {}".format(lab_file_dir))
@@ -2361,36 +2363,34 @@ def get_bmc_info(lab, conf_server=None, lab_file_dir=None):
     lab_bmc_info = {}
     LOG.info("Getting lab config file from specified path: {}".format(lab_file_dir))
     cmd = "test -e " + lab_file_dir
-    if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
-
-        cmd = "test -e {}/deployment-config.yaml".format(lab_file_dir)
-        cmd1 = "test -e {}/deployment-config_avs.yaml".format(lab_file_dir)
-        # deployment_mgr = False
-        if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] != 0 and \
-                conf_server.ssh_conn.exec_cmd(cmd1, rm_date=False)[0] != 0:
-            LOG.info("No deployment-config file exist for lab {} in specified path: {}".format(lab_name, lab_file_dir))
-            return None
+    if conf_server and conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
         vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
-        dm_file = "deployment-config.yaml" if vswitch_type == 'none' else "deployment-config_avs.yaml"
+        dm_file = "{}-deploy-standard.yaml".format(subcloud) if subcloud \
+            else ("deployment-config.yaml" if vswitch_type == 'none' else "deployment-config_avs.yaml")
+
         dm_file_path = "{}/{}".format(lab_file_dir, dm_file)
-        try:
+        cmd = "test -e {}".format(dm_file_path)
+        if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0:
+            try:
 
-            with pysftp.Connection(host=conf_server.name, username=TestFileServer.get_user(),
-                                   password=TestFileServer.get_password()) as sftp:
-                dm_file = sftp.open(dm_file_path)
-                docs = yaml.load_all(dm_file)
-                for document in docs:
-                    if document:
-                        if document['kind'] == 'Secret' and document['metadata']['name'] == 'bmc-secret':
-                            lab_bmc_info['username'] = base64.b64decode(document['data']['username']).decode()
-                            lab_bmc_info['password'] = base64.b64decode(document['data']['password']).decode()
-                        elif document['kind'] == 'Host':
-                            if 'boardManagement' in document['spec']['overrides']:
-                                lab_bmc_info[document['metadata']['name']] = \
-                                    document['spec']['overrides']['boardManagement']['address']
+                with pysftp.Connection(host=conf_server.name, username=TestFileServer.get_user(),
+                                       password=TestFileServer.get_password()) as sftp:
+                    dm_file = sftp.open(dm_file_path)
+                    docs = yaml.load_all(dm_file)
+                    for document in docs:
+                        if document:
+                            if document['kind'] == 'Secret' and document['metadata']['name'] == 'bmc-secret':
+                                lab_bmc_info['username'] = base64.b64decode(document['data']['username']).decode()
+                                lab_bmc_info['password'] = base64.b64decode(document['data']['password']).decode()
+                            elif document['kind'] == 'Host':
+                                if 'boardManagement' in document['spec']['overrides']:
+                                    lab_bmc_info[document['metadata']['name']] = \
+                                        document['spec']['overrides']['boardManagement']['address']
 
-        except IOError as e:
-            LOG.info("Fail to open  deployment-config file {} for lab {}: {}".format(lab_file_dir, lab_name, e.message))
+            except IOError as e:
+                LOG.info("Fail to open  deployment-config file {} for lab {}: {}".format(lab_file_dir, lab_name, e.message))
+        else:
+            LOG.info("No deployment-config file exist for lab {} in specified path: {}".format(lab_name, dm_file_path))
 
     return lab_bmc_info
 

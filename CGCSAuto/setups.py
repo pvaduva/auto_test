@@ -324,9 +324,9 @@ def is_lab_subcloud(lab, ipv6=False):
                 if ipv6:
                     convert_to_ipv6(dc_lab)
                     dc_float_ip = dc_lab['floating ip']
-                return True, subcloud, dc_float_ip
+                return True, subcloud, dc_float_ip, dc_lab['name']
 
-    return False, None, None
+    return False, None, None, None
 
 
 def get_natbox_dict(natboxname, user=None, password=None, prompt=None):

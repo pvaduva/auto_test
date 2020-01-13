@@ -87,8 +87,11 @@ def pytest_configure(config):
         is_subcloud = False
         sublcoud_name = None
         dc_float_ip = None
+        dc_lab_name = None
     else:
-        is_subcloud, sublcoud_name, dc_float_ip = setups.is_lab_subcloud(lab_dict, ipv6=ipv6_oam)
+        is_subcloud, sublcoud_name, dc_float_ip, dc_lab_name = setups.is_lab_subcloud(lab_dict, ipv6=ipv6_oam)
+        if is_subcloud and 'yow' in dc_lab_name:
+            dc_lab_name = dc_lab_name[4:]
 
     if resume_install is True:
         resume_install = fresh_install_helper.get_resume_step(lab_dict)
@@ -122,7 +125,8 @@ def pytest_configure(config):
             if not os.path.isabs(lab_file_dir):
                 lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_file_dir)
         else:
-            lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '')
+            lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '') \
+                if not is_subcloud else "{}/lab/yow/{}".format(host_build_dir_path, dc_lab_name if dc_lab_name else '')
 
         if not heat_templates:
             if BuildServerPath.BldsDirNames.TC_19_05_BUILD in host_build_dir_path:
