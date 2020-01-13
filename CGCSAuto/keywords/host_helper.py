@@ -786,8 +786,8 @@ def _wait_for_simplex_reconnect(con_ssh=None,
             con_ssh = ControllerClient.get_active_controller(name=con_name)
 
         con_ssh.wait_for_disconnect(check_interval=10, timeout=300)
-        time.sleep(30)
-        con_ssh.connect(retry=True, retry_timeout=timeout)
+        time.sleep(180)
+        con_ssh.connect(retry=True, retry_timeout=timeout, retry_interval=20)
         ControllerClient.set_active_controller(con_ssh)
     else:
         if not con_telnet:
@@ -1212,6 +1212,11 @@ def unlock_hosts(hosts, timeout=HostTimeout.CONTROLLER_UNLOCK, fail_ok=True,
         res[host] = 4, "Host is in degraded state after unlocked."
     for host in hosts_other:
         res[host] = 3, "Host is not in available or degraded state."
+
+    from keywords import container_helper
+    if not container_helper.is_stx_openstack_deployed(con_telnet=con_telnet, con_ssh=con_ssh,
+                                                      auth_info=auth_info):
+        check_hypervisor_up = False
 
     if hosts_avail and (check_hypervisor_up or check_webservice_up):
 

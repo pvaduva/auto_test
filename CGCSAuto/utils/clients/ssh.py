@@ -140,7 +140,7 @@ class SSHClient:
 
         return logpath
 
-    def connect(self, retry=False, retry_interval=3, retry_timeout=300,
+    def connect(self, retry=False, retry_interval=10, retry_timeout=300,
                 prompt=None,
                 use_current=True, timeout=None):
 
@@ -160,6 +160,7 @@ class SSHClient:
         # Connect to host
         LOG.info("Attempt to connect to host - {}".format(self.host))
         end_time = time.time() + retry_timeout
+        permission_err_count = 0
         while time.time() < end_time:
             # LOG into remote host
             # print(str(self.searchwindowsize))
@@ -230,10 +231,12 @@ class SSHClient:
 
                 # don't retry if login credentials incorrect
                 if "permission denied" in e.__str__():
-                    LOG.error(
-                        "Login credentials denied by {}. User: {} Password: "
-                        "{}".format(self.host, self.user, self.password))
-                    raise
+                    permission_err_count += 1
+                    if permission_err_count > 1:
+                        LOG.error(
+                            "Login credentials denied by {}. User: {} Password: "
+                            "{}".format(self.host, self.user, self.password))
+                        raise
 
                 # print out error for more info before retrying
                 LOG.debug("Login failed due to error: {}".format(e.__str__()))
@@ -1250,6 +1253,7 @@ class SSHFromSSH(SSHClient):
                                                               self.parent.host))
         start_time = time.time()
         end_time = start_time + retry_timeout
+        permission_err_count = 0
         while time.time() < end_time:
             self.send(self.ssh_cmd)
             try:
@@ -1270,8 +1274,7 @@ class SSHFromSSH(SSHClient):
                     if not use_password:
                         retry = False
                         raise exceptions.SSHException(
-                            'password prompt appeared. Non-password auth '
-                            'failed.')
+                            'password prompt appeared. Non-password auth failed.')
 
                     self.send(self.password)
                     search_size = 1000 if ' -v' in self.ssh_cmd else None
@@ -1297,10 +1300,12 @@ class SSHFromSSH(SSHClient):
                     raise
                 # don't retry if login credentials incorrect
                 if "permission denied" in e.__str__().lower():
-                    LOG.error(
-                        "Login credentials denied by {}. User: {} Password: "
-                        "{}".format(self.host, self.user, self.password))
-                    raise
+                    permission_err_count += 1
+                    if permission_err_count > 1:
+                        LOG.error(
+                            "Login credentials denied by {}. User: {} Password: "
+                            "{}".format(self.host, self.user, self.password))
+                        raise
 
             LOG.info("Retry in {} seconds".format(retry_interval))
             time.sleep(retry_interval)
