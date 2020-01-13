@@ -1,0 +1,38 @@
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: controller-oam-if-gnp-10
+  resourceVersion: "1539"
+  selfLink: /apis/crd.projectcalico.org/v1/globalnetworkpolicies/controller-oam-if-gnp-10
+  uid: f98340db-d19d-4c54-99ac-cda1fc9225c2
+spec:
+  applyOnForward: false
+  egress:
+  - action: Allow
+    ipVersion: 6
+    protocol: TCP
+  - action: Allow
+    ipVersion: 6
+    protocol: UDP
+  - action: Allow
+    protocol: ICMPv6
+  ingress:
+  - action: Deny
+    destination:
+      ports:
+      - 8080
+    ipVersion: 6
+    protocol: TCP
+  - action: Deny
+    destination:
+      ports:
+      - 8080
+    ipVersion: 4
+    protocol: TCP
+  - action: Allow
+    protocol: ICMPv6
+  order: 10
+  selector: has(iftype) && iftype == 'oam'
+  types:
+  - Ingress
+  - Egress
