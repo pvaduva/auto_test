@@ -254,7 +254,7 @@ def wait_for_apps_status(apps, status, timeout=360, check_interval=5, fail_ok=Fa
     raise exceptions.ContainerError(msg)
 
 
-def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=300, check_interval=10,
+def apply_app(app_name, check_first=False, fail_ok=False, applied_timeout=600, check_interval=10,
               wait_for_alarm_gone=True, con_ssh=None, auth_info=Tenant.get('admin_platform')):
     """
     Apply/Re-apply application via system application-apply. Check for status reaches 'applied'.
