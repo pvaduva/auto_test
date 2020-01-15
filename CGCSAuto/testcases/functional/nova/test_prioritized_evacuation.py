@@ -84,16 +84,16 @@ class TestPrioritizedVMEvacuation:
     @mark.trylast
     @mark.reboot
     @mark.parametrize(('operation', 'set_on_boot', 'prioritizing', 'vcpus', 'mem', 'root_disk', 'swap_disk'), [
-        ('reboot', False, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        ('reboot', False, 'same_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'no_swap_disk'),
+        ('reboot', False, 'diff_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
+        ('force_reboot', False, 'same_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'no_swap_disk'),
         ('reboot', True, 'same_priority', 'same_vcpus', 'diff_mem', 'diff_root_disk', 'same_swap_disk'),
         ('reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'diff_root_disk', 'diff_swap_disk'),
-        ('reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'diff_swap_disk'),
+        ('force_reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'diff_swap_disk'),
         # ('reboot', True, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        ('reboot', True, 'diff_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'no_swap_disk'),
-        ('reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'diff_root_disk', 'diff_swap_disk'),
-        ('force_reboot', False, 'same_priority', 'same_vcpus', 'diff_mem', 'diff_root_disk', 'diff_swap_disk'),
-        ('force_reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
+        # ('reboot', True, 'diff_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'no_swap_disk'),
+        # ('reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'diff_root_disk', 'diff_swap_disk'),
+        # ('force_reboot', False, 'same_priority', 'same_vcpus', 'diff_mem', 'diff_root_disk', 'diff_swap_disk'),
+        # ('force_reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
     ])
     def test_prioritized_vm_evacuations(self, operation, set_on_boot, prioritizing, vcpus, mem,
                                         root_disk, swap_disk, setup_quota_and_hosts):
