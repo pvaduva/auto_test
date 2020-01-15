@@ -1,9 +1,9 @@
 import time
 from pytest import mark
 from utils.tis_log import LOG
-from consts.timeout import HostTimeout, VMTimeout
+from consts.timeout import HostTimeout
 from consts.auth import Tenant
-from keywords import system_helper, vlm_helper, dc_helper, vm_helper
+from keywords import system_helper, vlm_helper, dc_helper
 from testfixtures.vlm_fixtures import reserve_unreserve_all_hosts_module_central, unreserve_hosts_module_central
 
 
@@ -16,15 +16,11 @@ def test_dc_dead_office_recovery_central(reserve_unreserve_all_hosts_module_cent
         - Reserve all nodes for central cloud in vlm
 
     Test Steps:
-        - Launch various types of VMs in primary clouds.
         - Power off all nodes in vlm using multi-processing to simulate a power outage
         - Power on all nodes
         - Wait for nodes to become online/available
         - Check all the subclouds are syncs as start of the test.
-        - check all the VMs are up in subclouds which are launched.
     """
-    LOG.tc_step("Boot 5 vms with various boot_source, disks, etc")
-    vms = vm_helper.boot_vms_various_types()
     central_auth = Tenant.get('admin_platform', dc_region='SystemController')
     hosts = system_helper.get_hosts(auth_info=central_auth)
     managed_subclouds = dc_helper.get_subclouds(mgmt='managed', avail='online')
@@ -34,7 +30,7 @@ def test_dc_dead_office_recovery_central(reserve_unreserve_all_hosts_module_cent
     LOG.tc_step("Powering off hosts in multi-processes to simulate power outage: {}".format(hosts))
     try:
         vlm_helper.power_off_hosts_simultaneously(hosts, region='central_region')
-    except:
+    except Exception:
         raise
     finally:
         LOG.tc_step("Wait for 60 seconds and power on hosts: {}".format(hosts))
@@ -47,10 +43,3 @@ def test_dc_dead_office_recovery_central(reserve_unreserve_all_hosts_module_cent
     current_managed_subclouds = dc_helper.get_subclouds(mgmt='managed', avail='online')
     assert managed_subclouds == current_managed_subclouds, 'current managed subclouds are diffrent from \
                                             origin {} current {}'.format(current_managed_subclouds, managed_subclouds)
-
-    LOG.tc_step("Check vms are recovered after dead office recovery")
-    vm_helper.wait_for_vms_values(vms, fail_ok=False, timeout=600)
-
-    LOG.tc_step("Check vms are reachable after central clouds DOR test")
-    for vm in vms:
-        vm_helper.wait_for_vm_pingable_from_natbox(vm_id=vm, timeout=VMTimeout.DHCP_RETRY)
