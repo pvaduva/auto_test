@@ -33,13 +33,13 @@ def change_network_policy(filepath, rules):
     Modifies the give network policy yaml file and returns the modified file
     Args:
         filepath(str): location of the yaml file to change
-        rules(list): list of dicts
+        rules(list): list of dicts which each dict has the following keys
             flow(str): ingress or egress
             protocol(str): protocol to match for condition
             origin(str): source or destination
             port(int): port number
             add(boolean): "True" to add, "False" to remove
-    Return(json):
+    Return(str):
         returns the modified network policy file path
     """
     try:
