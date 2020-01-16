@@ -632,10 +632,15 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
                 lab_file_dir += '/{}'.format(lab_name)
             else:
                 lab_file_dir += '/{}/{}'.format(dc_lab_name, subcloud[:8] + '-' + subcloud[8:])
-        elif os.path.basename(lab_file_dir) == lab_name and '/lab/yow/' in lab_file_dir:
-            if subcloud:
-                lab_file_dir = "{}/{}/{}".format(os.path.dirname(lab_file_dir), dc_lab_name,
-                                                 subcloud[:8] + '-' + subcloud[8:])
+
+        elif subcloud and os.path.basename(lab_file_dir) == dc_lab_name and '/lab/yow/' in lab_file_dir:
+            lab_file_dir = "{}/{}/{}".format(os.path.dirname(lab_file_dir), dc_lab_name,
+                                             subcloud[:8] + '-' + subcloud[8:])
+
+        # elif os.path.basename(lab_file_dir) == lab_name and '/lab/yow/' in lab_file_dir:
+        #     if subcloud:
+        #         lab_file_dir = "{}/{}/{}".format(os.path.dirname(lab_file_dir), dc_lab_name,
+        #                                          subcloud[:8] + '-' + subcloud[8:])
 
         # script_path = lab_file_dir
         if '/lab/yow/' in lab_file_dir:

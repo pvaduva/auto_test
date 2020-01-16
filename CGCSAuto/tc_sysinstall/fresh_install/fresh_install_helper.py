@@ -2499,7 +2499,8 @@ def wait_for_mtc_to_power_on_hosts(hosts, lab=None, timeout=120, fail_ok=False):
             status, output = install_helper.get_bmc_power_status(host, lab=lab, fail_ok=True)
             if status == 'on':
                 LOG.info("The mtcAgent has power on {}: {}".format(host, output))
-                powered_on_hosts.append(host)
+                if host not in powered_on_hosts:
+                    powered_on_hosts.append(host)
 
         if len(powered_on_hosts) == len(hosts):
             LOG.info("The mtcAgent has power on all hosts: {}".format(powered_on_hosts))
