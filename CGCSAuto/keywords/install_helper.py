@@ -4,6 +4,7 @@ import re
 import threading
 import time
 import socket
+
 from urllib.request import urlopen
 
 import setups
@@ -288,7 +289,7 @@ def bring_node_console_up(node, boot_device,
             LOG.info("Powering on {}".format(node.name))
             if bmc_power:
                 set_bmc_boot_to_pxe(node.name, lab=lab)
-            power_on_hosts(node.name, lab=lab, wait_for_hosts_state_=False)
+            power_on_hosts_(node.name, lab=lab, wait_for_hosts_state_=False)
 
         install_node(node, boot_device_dict=boot_device, low_latency=low_latency,
                      small_footprint=small_footprint,
@@ -2506,7 +2507,8 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
     return 0, None
 
 
-def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None, skip_cfg=False):
+def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None, skip_cfg=False,
+                          set_default_manu=False):
     """
     Sets the network feed for controller-0 in default taxlab
     Args:
@@ -2572,6 +2574,10 @@ def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None
         LOG.info("Changing pxeboot.cfg symlink to pxeboot.cfg.gpt")
         tuxlab_conn.exec_cmd("ln -s pxeboot.cfg.gpt pxeboot.cfg")
 
+    if set_default_manu:
+         if set_default_kickstart_menu(tuxlab_conn, tuxlab_barcode_dir, lab=lab):
+             LOG.info("Default kickstart menu label set for {}/{}".format(tuxlab_barcode_dir, cfg_link))
+
     # LOG.info("Installing Centos load to feed path: {}".format(feed_path))
     # bld_server_conn.exec_cmd("cd " + load_path)
     pre_opts = 'sshpass -p "{0}"'.format(TestFileServer.get_password())
@@ -2598,6 +2604,67 @@ def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None
     tuxlab_conn.close()
 
     return True
+
+def set_default_kickstart_menu(boot_server_conn, tuxlab_barcode_dir, lab=None):
+    if lab is None:
+        lab = InstallVars.get_install_var('LAB')
+
+    tuxlab_server = InstallVars.get_install_var("BOOT_SERVER")
+    boot_device_dict = lab.get('boot_device_dict')
+    boot_device = boot_device_dict.get("controller-0")
+    sys_type = ProjVar.get_var('SYS_TYPE')
+    low_lat = ProjVar.get_var('LOW_LATENCY')
+    install_tags = {"Console": "Serial", "type": "Controller", "os": "CenstOS"}
+    if "AIO" in sys_type:
+        install_tags["type"] = "CPE|All-in-one"
+    if low_lat:
+        install_tags["lowlat"] = True
+    else:
+        install_tags["lowlat"] = False
+
+    if boot_server_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
+        err_msg = "Cannot find the pxeboot.cfg file in subdir: {}".format(tuxlab_barcode_dir)
+        raise exceptions.InstallError(err_msg)
+    # get available menu labels from pxeboot.cfg file
+    cfg_link = boot_server_conn.exec_cmd("readlink -f pxeboot.cfg")[1]
+    selection = None
+    label_num = None
+    if cfg_link:
+        rc, menu_lines = boot_server_conn.exec_cmd("grep ' menu label' {}".format(cfg_link))
+
+        if rc == 0:
+
+            matching_labels = []
+            for line in menu_lines.splitlines():
+                label = line.replace('^', '').split(')')
+                if re.search(install_tags["Console"], label) and  re.search(install_tags["type"], label) and re.search(install_tags["os"], label):
+                        matching_labels.append(label)
+
+            if len(matching_labels) > 0:
+                selection = matching_labels[0]
+                if install_tags["lowlat"]:
+                    for match_label in matching_labels:
+                        if re.search("lowlatency") in match_label:
+                            selection = match_label
+
+
+            if selection:
+                label_num = selection.split(')')[0].split(" ")[2]
+
+        if label_num:
+            default_line = boot_server_conn.exec_cmd("grep '^default' {}".format(cfg_link) )[1]
+            current_label = default_line.split(' ')[1]
+            cmd = "sed -i '0,/default /s/default {}/default {}/' {}".format(current_label, label_num, cfg_link)
+            result = boot_server_conn.exec_cmd(cmd)[0]
+            if result == 0:
+                return True
+
+    return False
+
+
+
+
+
 
 
 def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False,
@@ -3984,10 +4051,12 @@ def select_install_option(node_obj, boot_menu, index=None, low_latency=False, se
 
 
 def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=None, security=None,
-                 usb=None,
-                 pxe_host='controller-0'):
+                 usb=None, pxe_host='controller-0', lab=None):
 
-    bmc_power = InstallVars.get_install_var("USE_BMC")
+    if lab is None:
+        InstallVars.get_install_var("Lab")
+    #bmc_power = InstallVars.get_install_var("USE_BMC")
+    bmc_power = is_bmc(node_obj.name, lab=lab)
 
     bios_menu = menu.BiosMenu(lab_name=node_obj.host_name)
     bios_option = bios_menu.get_boot_option()
@@ -4961,6 +5030,17 @@ def use_bmc(hosts, lab=None):
         return False
 
 
+def is_bmc(host, lab=None):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    bmc_info = lab.get("bmc_info")
+    bmc_ok = bmc_info.get("bmc_ok") if bmc_info else None
+    if bmc_ok and host in bmc_ok:
+        return True
+    else:
+        return False
+
+
 def power_off_hosts(lab):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
@@ -4989,6 +5069,40 @@ def power_off_hosts(lab):
         vlm_helper.power_off_hosts(lab["hosts"], lab=lab, count=2)
 
 
+def power_off_hosts_(lab):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    bmc_info = lab.get("bmc_info")
+    bmc_ok = bmc_info.get("bmc_ok") if bmc_info else None
+    if not bmc_ok:
+        vlm_helper.power_off_hosts(lab["hosts"], lab=lab, count=2)
+    else:
+        LOG.info("Powering off nodes uisng bmc impitool ... ")
+        test_client = test_server_client()
+        vlm_power_off = []
+        for host in lab["hosts"]:
+            if host in bmc_ok:
+                LOG.info("Checking current power status for host {} uisng bmc impitool".format(host))
+                status, out = get_bmc_power_status(host, lab=lab)
+                if status == "off":
+                    LOG.info("Current Power status is off; Do nothing".format(host))
+
+                elif status == "on":
+                    LOG.info("Current Power status is on; Powering off host {} uisng bmc impitool".format(host))
+                    code, output = bmc_helper.set_server_chassis_power(bmc_info[host], test_client, action="off",
+                                                                       user=bmc_info['username'],
+                                                                       password=bmc_info['password'])
+                    if code == 0:
+                        LOG.info(" Host {}  {}".format(host, output))
+                    else:
+                        vlm_power_off.append(host)
+            else:
+                vlm_power_off.append(host)
+
+        if len (vlm_power_off) > 0:
+            vlm_helper.power_off_hosts(vlm_power_off, lab=lab, count=2)
+
+
 def power_on_hosts(hosts, lab=None, wait_for_hosts_state_=False):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
@@ -5015,12 +5129,44 @@ def power_on_hosts(hosts, lab=None, wait_for_hosts_state_=False):
         power_on_host(hosts, lab=lab, wait_for_hosts_state_=wait_for_hosts_state_)
 
 
+def power_on_hosts_(hosts, lab=None, wait_for_hosts_state_=False):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    bmc_info = lab.get("bmc_info")
+    bmc_ok = bmc_info.get("bmc_ok") if bmc_info else None
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+    if not bmc_ok:
+        power_on_host(hosts, lab=lab, wait_for_hosts_state_=wait_for_hosts_state_)
+
+    else:
+        action = 'on'
+        test_client = test_server_client()
+        vlm_power_on = []
+        for host in hosts:
+            if host in bmc_ok:
+                LOG.info("Powering on node {} uisng bmc impitool ... ".format(host))
+                status, out = get_bmc_power_status(host, lab=lab)
+                if status == 'on' or status == 'unknown':
+                    action ='reset'
+                rc, output = bmc_helper.set_server_chassis_power(bmc_info[host], test_client, action=action,
+                                                                 user=bmc_info['username'], password=bmc_info['password'])
+                if rc == 0:
+                    LOG.info(" Host {}  {}".format(host, output))
+                else:
+                    vlm_power_on.append(host)
+
+        if len(vlm_power_on) > 0:
+            power_on_host(vlm_power_on, lab=lab, wait_for_hosts_state_=wait_for_hosts_state_)
+
+
 def get_bmc_power_status(host, lab=None, fail_ok=False):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
     bmc_info = lab.get("bmc_info")
-
-    if use_bmc(host, lab=lab):
+    if host in bmc_info["bmc_ok"]:
+    # if use_bmc(host, lab=lab):
         test_client = test_server_client()
         LOG.info("Getting Power status of node {} uisng bmc impitool ... ".format(host))
         rc, output = bmc_helper.set_server_chassis_power(bmc_info[host], test_client,  action="status",

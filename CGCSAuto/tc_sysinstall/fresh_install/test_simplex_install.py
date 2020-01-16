@@ -116,14 +116,13 @@ def test_simplex_install(install_setup):
         controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
     install_helper.update_auth_url(ssh_con=controller0_node.ssh_conn)
 
-    container_helper.wait_for_apps_status(apps='platform-integ-apps', timeout=1800,
-                                          con_ssh=controller0_node.ssh_conn, status='applied')
+    fresh_install_helper.wait_for_platform_integ_app_applied(controller0_node, lab=lab)
     fresh_install_helper.run_lab_setup(controller0_node.ssh_conn)
 
     if lab.get("floating ip"):
         setup_tis_ssh(lab)
 
-    fresh_install_helper.wait_for_hosts_ready(controller0_node.name, lab=lab)
+    fresh_install_helper.wait_for_deployed_hosts_ready(controller0_node.name, lab=lab)
 
     # fresh_install_helper.check_heat_resources(con_ssh=controller0_node.ssh_conn)
     if not deploy_mgr:
@@ -133,5 +132,3 @@ def test_simplex_install(install_setup):
         fresh_install_helper.wait_for_subcloud_to_be_managed(install_subcloud, install_setup["dc_system_controller"],
                                                              lab=lab)
     fresh_install_helper.attempt_to_run_post_install_scripts()
-
-    fresh_install_helper.reset_global_vars()
