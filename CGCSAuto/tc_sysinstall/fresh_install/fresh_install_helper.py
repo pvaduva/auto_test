@@ -8,10 +8,10 @@ import pexpect
 from pytest import skip
 
 import setups
-from utils import cli, local_host
+from utils import cli
 from utils.tis_log import LOG, exceptions
 from utils.node import Node
-from utils.clients.ssh import ControllerClient, NATBoxClient, SSHFromSSH, SSHClient
+from utils.clients.ssh import ControllerClient, NATBoxClient, SSHFromSSH
 from consts.lab import NatBoxes
 from consts.auth import Tenant, HostLinuxUser, TestFileServer
 from consts.timeout import InstallTimeout, HostTimeout, DCTimeout
@@ -539,7 +539,7 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
                                             dest_password=HostLinuxUser.get_password(),
                                             pre_opts=pre_opts)
 
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -599,7 +599,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
             host_helper.unlock_hosts(hostnames, con_ssh=con_ssh, fail_ok=False,
                                      check_nodes_ready=False)
 
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -649,7 +649,7 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None):
         LOG.info("running lab_setup.sh")
         install_helper.run_setup_script(config=True, conf_file=conf_file, con_ssh=con_ssh,
                                         timeout=7200, fail_ok=False)
-    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+    if str(str(LOG.test_step)) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -664,7 +664,7 @@ def check_heat_resources(con_ssh, sys_type=None, final_step=None):
         install_helper.setup_heat(con_ssh=con_ssh)
         if sys_type != SysType.AIO_SX:
             clear_post_install_alarms(con_ssh=con_ssh)
-    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+    if str(str(LOG.test_step)) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -1409,7 +1409,6 @@ def wait_for_deployed_hosts_ready(hosts, lab=None, final_step=None):
     Args:
         hosts:
         lab:
-        fail_ok:
 
     Returns:
 
@@ -1420,7 +1419,7 @@ def wait_for_deployed_hosts_ready(hosts, lab=None, final_step=None):
     if do_step(test_step):
         wait_for_hosts_ready(hosts, lab=lab)
 
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -1503,7 +1502,7 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
                 return False
             raise exceptions.HostTimeout(msg)
 
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -1514,7 +1513,6 @@ def wait_for_subcloud_to_be_managed(subcloud, dc_system_controller, lab=None, fi
         subcloud:
         dc_system_controller:
         lab:
-        fail_ok:
 
     Returns:
 
@@ -1563,7 +1561,7 @@ def wait_for_subcloud_to_be_managed(subcloud, dc_system_controller, lab=None, fi
                                                timeout=DCTimeout.SUBCLOUD_MANAGE,
                                                con_ssh=dc_system_controller.ssh_conn)
 
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -1630,7 +1628,7 @@ def add_ceph_ceph_mon_to_host(active_controller_node, host, final_step=None):
         active_controller_node.ssh_conn.exec_cmd(
             "touch {}/.lab_setup.done.group0.ceph-mon".format(
                 HostLinuxUser.get_home()))
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -1702,7 +1700,7 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf', final_step
 
         storage_helper.wait_for_ceph_health_ok()
 
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -1873,7 +1871,7 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                         controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(
                             last_file, HostLinuxUser.get_home()))
 
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -1973,7 +1971,7 @@ def wait_for_deployment_mgr_to_bulk_add_hosts(lab=None, final_step=None, fail_ok
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def validate_deployment_mgr_install(controller0_node, lab, fail_ok=False):
+def validate_deployment_mgr_install(controller0_node, lab):
 
     if not lab:
         lab = InstallVars.get_install_var('LAB')
@@ -2174,7 +2172,6 @@ def wait_for_deploy_mgr_data_networks_config(controller0_node, lab=None, timeout
     LOG.info("Waiting for Deploy Mgr to configure {} data networks ...".format(
         configured_data_nets))
 
-    debug_msg = "Waiting for {} data networks insync=true".format(configured_data_nets)
     end_time = time.time() + timeout
 
     while time.time() < end_time:
@@ -2226,7 +2223,6 @@ def wait_for_deploy_mgr_platform_networks_config(controller0_node, lab=None, tim
     LOG.info("Waiting for Deploy Mgr to configure {} data networks ...".format(
         configured_data_nets))
 
-    debug_msg = "Waiting for {} data networks insync=true".format(configured_data_nets)
     end_time = time.time() + timeout
 
     while time.time() < end_time:
@@ -2371,7 +2367,7 @@ def restore_boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_st
                                             dest_password=HostLinuxUser.get_password(),
                                             pre_opts=pre_opts)
 
-    if str(LOG.test_step) == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -2539,6 +2535,6 @@ def wait_for_platform_integ_app_applied(controller0_node, lab=None, fail_ok=Fals
     if do_step(test_step):
         container_helper.wait_for_apps_status(apps='platform-integ-apps', timeout=1800,
                                               con_ssh=controller0_node.ssh_conn, status='applied', fail_ok=fail_ok)
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
