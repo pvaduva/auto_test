@@ -2667,11 +2667,6 @@ def set_default_kickstart_menu(boot_server_conn, tuxlab_barcode_dir, lab=None):
     return False
 
 
-
-
-
-
-
 def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False,
                     low_latency=None,
                     small_footprint=None, security=None, clone_install=False, system_restore=False,
@@ -4874,6 +4869,13 @@ def download_stx_helm_charts(lab, server, stx_helm_charts_path=None):
     server.ssh_conn.rsync(stx_helm_charts_path,
                           lab['controller-0 ip'],
                           dest_path, pre_opts=pre_opts)
+
+    stx_monitor_path = os.path.join(os.path.dirname(stx_helm_charts_path), BuildServerPath.STX_MONITOR_TGX)
+    dest_path = '{}stx-monitor.tgz'.format(HostLinuxUser.get_home())
+    if server.ssh_conn.exec_cmd('test -f {}'.format(stx_monitor_path), rm_date=False)[0] == 0:
+        server.ssh_conn.rsync(stx_monitor_path,
+                              lab['controller-0 ip'],
+                              dest_path, pre_opts=pre_opts)
 
 
 def analyze_ansible_output(output):

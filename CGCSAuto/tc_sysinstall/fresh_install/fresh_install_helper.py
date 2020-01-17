@@ -1087,7 +1087,7 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
                                  fail_ok=True)
                 con_ssh.exec_cmd('kubectl -n {} describe pods'.format(dm_namespace), fail_ok=True)
 
-            from keywords import container_helper
+            #from keywords import container_helper
             container_helper.get_apps(con_ssh=con_ssh)
             system_helper.get_alarms(con_ssh=con_ssh)
             system_helper.get_build_info(con_ssh=con_ssh)
