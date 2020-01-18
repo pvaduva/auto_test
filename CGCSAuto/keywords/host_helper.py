@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2016 Wind River Systems, Inc.
+# Copyright (c) 2016-2020 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -2812,7 +2812,6 @@ def assign_host_labels(host, labels, default_value='enabled', check_first=True,
     if code > 0:
         return 1, output
 
-    LOG.info("{} label(s) assigned: {}".format(host, labels))
     if unlock:
         unlock_host(host, con_ssh=con_ssh, auth_info=auth_info)
 
@@ -2823,7 +2822,7 @@ def assign_host_labels(host, labels, default_value='enabled', check_first=True,
             raise exceptions.SysinvError(
                 'Unexpected value for {} label {}'.format(host, label_))
 
-    LOG.info("{} label(s) removed: {}".format(host, labels))
+    LOG.info("{} label(s) assigned: {}".format(host, labels))
 
     return 0, labels
 

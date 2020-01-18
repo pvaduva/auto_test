@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
 import os
 import time
 import yaml
@@ -540,6 +546,32 @@ def tag_docker_image(source_image, target_name, source_tag=None, target_tag=None
 
     LOG.info('docker image {} successfully tagged as {}.'.format(source_args, target_args))
     return 0, target_args
+
+
+def remove_docker_images_with_pattern(pattern, con_ssh=None, timeout=300):
+    """
+    Remove docker image(s) via docker image rm matching 'pattern'
+    Args:
+        pattern:
+        con_ssh:
+        timeout:
+
+    Returns (tuple):
+        (0, <std_out>)
+        (1, <std_err>)
+
+    """
+
+    LOG.info("Remove docker images matching pattern: {}".format(pattern))
+
+    args = " | grep " + pattern + " | awk '{print $3}' "
+    code, out = exec_docker_cmd("images", args, timeout=timeout, fail_ok=True, con_ssh=con_ssh)
+
+    if out:
+        image_list = out.splitlines()
+        code, out = remove_docker_images(image_list, force=True, con_ssh=con_ssh)
+
+    return code, out
 
 
 def remove_docker_images(images, force=False, con_ssh=None, timeout=300, fail_ok=False):
