@@ -1,31 +1,13 @@
-import requests
 import yaml
 
 from pytest import mark, skip, fixture, raises
 
 from utils.tis_log import LOG
+from utils import rest
 
 from consts.proj_vars import ProjVar
 from consts.auth import HostLinuxUser
 from keywords import system_helper, kube_helper, common
-
-
-def check_url(url, fail=False, secure=False):
-    """
-    Checks the access to the given url and returns True or False based on fail condition
-    Args:
-        url(str): url to check the access
-        fail(boolean): True or False
-        secure(boolean): default is False for
-                        both http and https protocol
-    Return(boolean):
-        returns True or False based on expected behaviour
-    """
-    try:
-        r = requests.get(url, timeout=10, verify=secure)
-        return True if r.status_code == 200 and fail is False else False
-    except requests.exceptions.Timeout:
-        return True if fail else False
 
 
 def change_network_policy(filepath, rules):
@@ -77,7 +59,7 @@ def get_protocol():
         url = "{}://{}:{}".format(i["protocol"],
                                   ip[0], i["port"])
         LOG.info("Check {} is accessible".format(url))
-        if check_url(url, fail=False):
+        if rest.check_url(url, fail=False):
             LOG.info("return {},{},{}".format(ip, i["protocol"], i["port"]))
             return ip, i["protocol"], i["port"]
     skip("Horizon is not accessible on both http and https,hence skiping the test")
@@ -165,7 +147,7 @@ def test_calico_network_policy(get_data):
     for ip in iplist:
         url = "{}://{}:{}".format(protocol, ip, port)
         LOG.info("Check {} is not accessible".format(url))
-        assert check_url(url, fail=True) is True
+        assert rest.check_url(url, fail=True) is True
 
     LOG.tc_step("Modify the service to new port number")
     LOG.info("Modify the service {} port to {}".format(
@@ -183,7 +165,7 @@ def test_calico_network_policy(get_data):
     for ip in iplist:
         url = "{}://{}:{}".format(protocol, ip, obj2["port"])
         LOG.info("Check {} is accessible".format(url))
-        assert check_url(url, fail=False) is True
+        assert rest.check_url(url, fail=False) is True
 
     LOG.tc_step("Modify the service to the previous port number")
     LOG.info("Modify the service {} port to {}".format(
@@ -203,7 +185,7 @@ def test_calico_network_policy(get_data):
     for ip in iplist:
         url = "{}://{}:{}".format(protocol, ip, obj1["port"])
         LOG.info("Check {} is accessible".format(url))
-        assert check_url(url, fail=False) is True
+        assert rest.check_url(url, fail=False) is True
 
 
 @fixture
@@ -253,7 +235,7 @@ def test_calico_deny_policy(get_deny_policy):
     for ip in iplist:
         url = "{}://{}:{}".format(protocol, ip, port)
         LOG.info("Check {} is not accessible".format(url))
-        assert check_url(url, fail=True) is True
+        assert rest.check_url(url, fail=True) is True
 
     LOG.tc_step("Delete the deny policy")
     kube_helper.exec_kube_cmd(
@@ -264,4 +246,4 @@ def test_calico_deny_policy(get_deny_policy):
     for ip in iplist:
         url = "{}://{}:{}".format(protocol, ip, port)
         LOG.info("Check {} is accessible".format(url))
-        assert check_url(url, fail=False) is True
+        assert rest.check_url(url, fail=False) is True

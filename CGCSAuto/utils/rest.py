@@ -25,6 +25,7 @@ class Rest:
             put                      perform HTTP PUT
             post                     perform HTTP POST
     """
+
     def __init__(self, serviceName, platform=False):
         """
         Initiate an object for handling REST calls.
@@ -32,7 +33,8 @@ class Rest:
             serviceName - 
 
         """
-        auth_info = Tenant.get('admin_platform') if platform else Tenant.get('admin')
+        auth_info = Tenant.get(
+            'admin_platform') if platform else Tenant.get('admin')
         self.token = ""
         self.token_payload = ""
         self.region = ProjVar.get_var('REGION')
@@ -49,7 +51,8 @@ class Rest:
         self.is_https = CliAuth.get_var('HTTPS')
         if self.is_https:
             self.verify = False
-            cert_path = os.path.join(ProjVar.get_var('TEMP_DIR'), 'server-with-key.pem')
+            cert_path = os.path.join(ProjVar.get_var(
+                'TEMP_DIR'), 'server-with-key.pem')
             if not os.path.exists(cert_path):
                 cert_path = security_helper.fetch_cert_file(scp_to_local=True)
             self.cert_path = cert_path
@@ -91,14 +94,16 @@ class Rest:
                           data=token_request, verify=verify)
         req = r.request
         print("teststestst \n{} {}\n{}\n\n{}".format(req.method, req.url,
-                                                     '\n'.join('{}: {}'.format(k, v) for k, v in req.headers.items()),
+                                                     '\n'.join('{}: {}'.format(
+                                                         k, v) for k, v in req.headers.items()),
                                                      req.body,))
 
         if r.status_code != 201:
             self.token = "THISTOKENDOESNOTEXIST"
         else:
             self.token = r.headers['X-Subject-Token']
-        LOG.info('token retrieval status: {} text: {}'.format(r.status_code, r.text))
+        LOG.info('token retrieval status: {} text: {}'.format(
+            r.status_code, r.text))
         return r.status_code, r.text
 
     def auth_header_select(self, auth=True):
@@ -150,7 +155,7 @@ class Rest:
         headers = self.auth_header_select(auth)
         message = "baseURL: {} resource: {} headers: {} data: {}"
         LOG.debug(message.format(self.baseURL, resource,
-                                headers, json_data))
+                                 headers, json_data))
         if verify is None:
             verify = self.verify
         kpi = KPI()
@@ -164,11 +169,11 @@ class Rest:
         headers = self.auth_header_select(auth)
         message = "baseURL: {} resource: {} headers: {} data: {}"
         LOG.debug(message.format(self.baseURL, resource,
-                                headers, json_data))
+                                 headers, json_data))
         if verify is None:
             verify = self.verify
         kpi = KPI()
-        r = requests.put(self.baseURL + resource, 
+        r = requests.put(self.baseURL + resource,
                          headers=headers, data=json_data,
                          verify=verify)
         kpi.stop()
@@ -178,7 +183,7 @@ class Rest:
         headers = self.auth_header_select(auth)
         message = "baseURL: {} resource: {} headers: {} data: {}"
         LOG.debug(message.format(self.baseURL, resource,
-                                headers, json_data))
+                                 headers, json_data))
         kpi = KPI()
         if verify is None:
             verify = self.verify
@@ -187,3 +192,21 @@ class Rest:
                           verify=verify)
         kpi.stop()
         return r.status_code, r.json()
+
+
+def check_url(url, fail=False, secure=False):
+    """
+    Checks the access to the given url and returns True or False based on fail condition
+    Args:
+        url(str): url to check the access
+        fail(boolean): True or False
+        secure(boolean): default is False for
+                        both http and https protocol
+    Return(boolean):
+        returns True or False based on expected behaviour
+    """
+    try:
+        r = requests.get(url, timeout=10, verify=secure)
+        return True if r.status_code == 200 and fail is False else False
+    except requests.exceptions.Timeout:
+        return True if fail else False

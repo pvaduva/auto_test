@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server-pod
+spec:
+  selector:
+    matchLabels:
+      run: load-balancer-1
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        run: load-balancer-1
+    spec:
+      containers:
+        - name: server-container
+          image: gcr.io/google-samples/node-hello:1.0
+          ports:
+            - containerPort: 8080
+              protocol: TCP
