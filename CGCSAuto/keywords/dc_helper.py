@@ -556,7 +556,7 @@ def add_subcloud(subcloud, subcloud_controller_node, system_controller_node, boo
         '--bootstrap-values': bootstrap_values_path,
         '--deploy-playbook': deploy_play_book_path,
         '--deploy-values': deploy_values_path,
-        '--subcloud-password': HostLinuxUser.get_password()
+        '--sysadmin-password': HostLinuxUser.get_password()
     }
 
     opt_args = ''
