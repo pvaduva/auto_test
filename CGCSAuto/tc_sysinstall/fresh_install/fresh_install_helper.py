@@ -2406,7 +2406,9 @@ def get_bmc_info(lab, conf_server=None, lab_file_dir=None, subcloud=None):
     if conf_server and conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
         vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
         dm_file = "{}-deploy-standard.yaml".format(subcloud) if subcloud \
-            else ("deployment-config.yaml" if vswitch_type == 'none' else "deployment-config_avs.yaml")
+            else ("deployment-config-avs.yaml" if vswitch_type == 'avs'
+                  else ("deployment-config-ovs-dpdk.yaml" if vswitch_type == 'ovs_dpdk'
+                        else "deployment-config.yaml"))
 
         dm_file_path = "{}/{}".format(lab_file_dir, dm_file)
         cmd = "test -e {}".format(dm_file_path)
