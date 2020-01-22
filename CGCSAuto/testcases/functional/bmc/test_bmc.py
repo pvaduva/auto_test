@@ -11,7 +11,7 @@ from utils.clients.ssh import ControllerClient
 import ipaddress
 import json
 import pytest
-import setups
+from testfixtures.recover_hosts import HostsToRecover
 
 REFRESH_TIME = 130  # seconds to wait for mtce refresh bm settings
 initial_host_state = []
@@ -27,36 +27,6 @@ class HostState:
     def __init__(self):
         self.admin_state = ''
         self.node = ''
-
-
-def setup_module(module):
-    LOG.info('%s' % module)
-    nodes = system_helper.get_hosts()
-    fields = ['administrative']
-    for node in nodes:
-        host_state = HostState()
-        host_state.node = node
-        host_state.admin_state = system_helper.get_host_values(node, fields=fields)[0]
-        LOG.info('%s %s' % (node, host_state.admin_state))
-        initial_host_state.append(host_state)
-
-
-def teardown_module(module):
-    LOG.info('bmc test cases teardown.')
-    for host_state in initial_host_state:
-        admin_state = system_helper.get_host_values(host_state.node, 'administrative')[0]
-        LOG.info('%s %s %s' % (host_state.node, host_state.admin_state, admin_state))
-        if admin_state != host_state.admin_state:
-            if host_state.admin_state == HostAdminState.UNLOCKED and admin_state == HostAdminState.LOCKED:
-                ret = host_helper.unlock_host(host_state.node, fail_ok=True)
-                if not ret:
-                    LOG.warn('%s failed unlocking' % host_state.node)
-
-            elif host_state.admin_state == HostAdminState.LOCKED and admin_state == HostAdminState.UNLOCKED:
-                ret = host_helper.lock_host(host_state.node, fail_ok=True)
-                if not ret:
-                    LOG.warn('%s failed locking' % host_state.node)
-    LOG.info('bmc test cases teardown has completed')
 
 
 @fixture(autouse=True)
@@ -96,10 +66,12 @@ class BMTestCase:
         self.bm_type = bm_type
         self.bm_ip = bm_ip
         self.bm_username = bm_username
+        self.bm_password = None
         self.init_bm_type = bm_type
         self.init_bm_ip = bm_ip
         self.init_bm_username = bm_username
         self.redfish_supported = False
+
         if bm_type is None or bm_ip is None or bm_username is None:
             self.bm_provisioned = False
         else:
@@ -130,6 +102,19 @@ class BMTestCase:
         LOG.info('Applied new bm_type %s to %s' % (values, self.node))
         self.bm_type = bm_type
         self.bm_ip = bm_ip
+
+    def reconfig_bm_credential(self, bm_username, bm_password):
+        cli.system("host-update",
+                   positional_args="%s bm_username=%s bm_password=%s" % (self.node, bm_username, bm_password))
+
+        fields = ['bm_type', 'bm_ip', 'bm_username']
+        values = system_helper.get_host_values(self.node, fields=fields)
+
+        assert len(values) == 3
+        assert self.bm_type == values[0]
+        assert self.bm_ip == values[1]
+        assert bm_username == values[2]
+        LOG.info('Applied new bm_settings %s to %s' % (values, self.node))
 
     def check_sensors(self):
         # verify sensors, return sensor array
@@ -182,11 +167,11 @@ class BMTestCase:
         assert ret, "%s is not offline %s seconds after power-off executed" % (self.node, wait_time)
 
     def power_on(self):
-        LOG.tc_step('power on %s' % self.node)
+        LOG.info('power on %s' % self.node)
         cli.system('host-power-on %s' % self.node, ssh_client=self.con_ssh)
 
         wait_time = 120 # wait for power on task complete
-        LOG.tc_step('wait for %s power on action completed (up to %s seconds)' % (self.node, wait_time))
+        LOG.info('wait for %s power on action completed (up to %s seconds)' % (self.node, wait_time))
         ret = system_helper.wait_for_host_values(self.node, wait_time,
                                                  task=['Powering On'])
         if not ret:
@@ -201,16 +186,16 @@ class BMTestCase:
         assert ret, 'wait for %s online %s seconds after power-on timeout' % (self.node, wait_time)
 
     def reset(self):
-        LOG.tc_step('reset %s' % self.node)
+        LOG.info('reset %s' % self.node)
         cli.system('host-reset %s' % self.node, ssh_client=self.con_ssh)
 
         wait_time = HostTimeout.POWER_OFF_OFFLINE
-        LOG.tc_step('wait for %s offline (up to %s seconds)' % (self.node, wait_time))
+        LOG.info('wait for %s offline (up to %s seconds)' % (self.node, wait_time))
         ret = system_helper.wait_for_host_values(self.node, wait_time, availability=[HostAvailState.OFFLINE])
         assert ret, "%s is not offline %s seconds after system host-reset executed" % (self.node, wait_time)
 
         wait_time = HostTimeout.HOST_LOOKED_REBOOT
-        LOG.tc_step('wait for %s online (up to %s seconds)' % (self.node, wait_time))
+        LOG.info('wait for %s online (up to %s seconds)' % (self.node, wait_time))
         ret = system_helper.wait_for_host_values(self.node, wait_time,
                                                  availability=[HostAvailState.ONLINE,
                                                                HostAvailState.DEGRADED,
@@ -239,10 +224,16 @@ class BMTestCase:
                 LOG.info(expected)
                 return 2
 
+            rc = self.check_sensor_data_file()
+            if rc == BMTestCase.SensorFileState.FileNotFound:
+                return 3
+            elif rc == BMTestCase.SensorFileState.FileNotFound.FileIsEmpty:
+                return 4
+
             return 0
 
         wait_timeout = REFRESH_TIME
-        LOG.tc_step('wait for sensor data refresh (up to %s seconds)' % wait_timeout)
+        LOG.info('wait for sensor data refresh (up to %s seconds)' % wait_timeout)
         ret, val = common.wait_for_val_from_func([0], wait_timeout, 5, _check_sensors)
 
         assert ret, 'Timeout (%s seconds) waiting for sensors to be recreated' % wait_timeout
@@ -250,8 +241,12 @@ class BMTestCase:
             assert 0, 'No sensor is enabled/ok'
         elif val == 2:
             assert 0, 'bm type incorrect'
+        elif val == 3:
+            assert 0, 'sensor data file(s) not exists'
+        elif val == 4:
+            assert 0, 'sensor data file(s) empty'
 
-        LOG.tc_step('verify there is no bmc alarms')
+        LOG.info('verify there is no bmc alarms')
         alarms = self.check_bm_alarms(stx.EventLogID.BM_ALARM)
 
         assert len(alarms) == 0, 'Found alarms %s' % alarms
@@ -262,11 +257,8 @@ class BMTestCase:
                         BMProtocols.REDFISH,
                         BMProtocols.DYNAMIC])
 def bm_test_instances(pytestconfig, request):
-    if setups.is_vbox():
-        skip('BMC tests do not apply to VBox labs')
-
     bm_type = request.param
-    con_ssh = ControllerClient.get_active_controller()
+    bmc_password = pytestconfig.getoption("bmc_password")
     target_nodes = pytestconfig.getoption("bmc_target")
     online_nodes = system_helper.get_hosts(availability=[HostAvailState.AVAILABLE,
                                                          HostAvailState.DEGRADED,
@@ -279,9 +271,10 @@ def bm_test_instances(pytestconfig, request):
             if node in online_nodes:
                 nodes.append(node)
             else:
-                LOG.warn('%s is offline, skip it' % node)
+                LOG.info('%s is offline, skip it' % node)
 
     instances = []
+    con_ssh = ControllerClient.get_active_controller()
     for node in nodes:
         test_instance = BMTestCase(node, con_ssh)
         if not test_instance.bm_provisioned:
@@ -290,6 +283,7 @@ def bm_test_instances(pytestconfig, request):
         if bm_type == BMProtocols.REDFISH and not test_instance.redfish_supported:
             LOG.info('Skip %s for redfish, unsupported protocol' % node)
             continue
+        test_instance.bm_password = bmc_password
         alarms = test_instance.check_bm_alarms([stx.EventLogID.BM_ALARM,
                                                 stx.EventLogID.BM_SENSOR_ALARM,
                                                 stx.EventLogID.BM_SENSOR_CFG_ALARM,
@@ -309,7 +303,7 @@ def bm_test_instances(pytestconfig, request):
 
 
 @mark.bmctests
-def test_bmc_tc1(bm_test_instances):
+def test_bmc_verify_bm_type(bm_test_instances):
     """
     TC1: Verify mixed BM types
     Description:
@@ -339,13 +333,8 @@ def test_bmc_tc1(bm_test_instances):
         instance.verify_bm_config()
 
 
-@mark.bmctests_ic
-def test_bmc_tc2(bm_test_instances):
-    skip('This test case has not been implemented')
-
-
 @mark.bmctests
-def test_bmc_tc3(bm_test_instances):
+def test_bmc_incorrect_provision(bm_test_instances):
     """
     *********************************************************************
     TC3: Incorrect provision (username password and/or ip address) for BMC to verify
@@ -394,7 +383,7 @@ def test_bmc_tc3(bm_test_instances):
 
     for instance in bm_test_instances:
         dummy_ip = '127.0.0.1'
-        LOG.tc_step('reconfig %s bm_ip %s' % (instance.node, dummy_ip))
+        LOG.tc_step('reconfigure %s bm_ip %s' % (instance.node, dummy_ip))
         instance.reconfig_bm(bm_ip=dummy_ip)
 
         def _check_alarm():
@@ -414,9 +403,39 @@ def test_bmc_tc3(bm_test_instances):
             ret, num_of_alarms = common.wait_for_val_from_func([0], wait_timeout, 5, _check_alarm)
             assert num_of_alarms == 0, 'Alarm is not cleared after %s seconds' % wait_timeout
 
+    total_tests = 0
+    for instance in bm_test_instances:
+        if instance.bm_password is None:
+            continue
 
-@mark.bmctests5
-def test_bmc_tc5(bm_test_instances):
+        total_tests = total_tests + 1
+        dumy_username = '%s1' % instance.bm_username
+        LOG.tc_step('reconfigure %s bm_username %s' % (instance.node, dumy_username))
+        instance.reconfig_bm_credential(dumy_username, instance.bm_password)
+
+        def _check_alarm():
+            alarms = instance.check_bm_alarms([stx.EventLogID.BM_ALARM])
+            return len(alarms)
+
+        try:
+            wait_timeout = REFRESH_TIME
+            LOG.tc_step('wait for bm config alarm to show up (up to %s seconds)' % wait_timeout)
+            ret, num_of_alarms = common.wait_for_val_from_func([1], wait_timeout, 5, _check_alarm)
+            assert num_of_alarms == 1, 'Expected alarms %s not found' % stx.EventLogID.BM_ALARM
+        finally:
+            LOG.tc_step('restore %s bm settings' % instance.node)
+            instance.reconfig_bm_credential(instance.bm_username, instance.bm_password)
+            wait_timeout = REFRESH_TIME
+            LOG.tc_step('wait for bm config alarm to clear (up to %s seconds)' % wait_timeout)
+            ret, num_of_alarms = common.wait_for_val_from_func([0], wait_timeout, 5, _check_alarm)
+            assert num_of_alarms == 0, 'Alarm is not cleared after %s seconds' % wait_timeout
+
+    if total_tests > 0:
+        LOG.info('Invalid credential verified %s passeed' % total_tests)
+
+
+@mark.bmctests
+def test_bmc_host_power_off(bm_test_instances):
     """
     TC5: Verify hosts power off and power on using BMC.
     Description:
@@ -438,20 +457,25 @@ def test_bmc_tc5(bm_test_instances):
 
     *********************************************************************
     """
+    if system_helper.is_aio_simplex():
+        skip('BMC power on/off tests do not apply to AIO-SX labs')
+
+    active_controller = system_helper.get_active_controller_name(con_ssh=bm_test_instances[0].con_ssh)
+    test_nodes = 0
     for instance in bm_test_instances:
         node = instance.node
-        active_controller = system_helper.get_active_controller_name(con_ssh=instance.con_ssh)
         if active_controller == node:
             continue
 
         admin_state = system_helper.get_host_values(node, 'administrative')
         if HostAdminState.UNLOCKED in admin_state:
-            LOG.info('host %s' % admin_state)
             LOG.tc_step('lock %s' % node)
             ret, val = host_helper.lock_host(node, fail_ok=True)
             if ret != 0:
                 continue  # cannot lock host, we don't care
+            HostsToRecover.add(node, 'module')
         try:
+            LOG.tc_step('power off %s' % node)
             instance.power_off()
         finally:
             avail_status = system_helper.get_host_values(node, 'availability')
@@ -460,27 +484,40 @@ def test_bmc_tc5(bm_test_instances):
                 instance.power_on()
 
         instance.verify_bm_config()
+        test_nodes = test_nodes + 1
+    if test_nodes == 0:
+        skip('No node is suitable for this test')
 
 
 @mark.bmctests
-def test_bmc_tc6(bm_test_instances):
+def test_bmc_host_reset(bm_test_instances):
     """
     TC6: Verify hosts power off and power on using BMC.
     Steps are same as TC5 except change the BMC operation from power-off/on to reset
     *********************************************************************
     """
+    if system_helper.is_aio_simplex():
+        skip('BMC reset test does not apply to AIO-SX labs')
+
+    test_nodes = 0
+    active_controller = system_helper.get_active_controller_name(con_ssh=bm_test_instances[0].con_ssh)
     for instance in bm_test_instances:
         node = instance.node
-        active_controller = system_helper.get_active_controller_name(con_ssh=instance.con_ssh)
         if active_controller == node:
             continue
 
         admin_state = system_helper.get_host_values(node, 'administrative')
         if HostAdminState.UNLOCKED in admin_state:
             LOG.tc_step('lock %s' % node)
+
             ret, val = host_helper.lock_host(node, fail_ok=True)
             if ret != 0:
                 continue  # cannot lock host, we don't care
+            HostsToRecover.add(node, 'module')
 
+        LOG.tc_step('reset %s' % node)
         instance.reset()
         instance.verify_bm_config()
+        test_nodes = test_nodes + 1
+    if test_nodes == 0:
+        skip('No node is suitable for this test')
