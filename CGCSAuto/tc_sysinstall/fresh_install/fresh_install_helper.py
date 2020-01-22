@@ -3,7 +3,7 @@ import time
 import yaml
 import pysftp
 import base64
-
+import re
 import pexpect
 from pytest import skip
 
@@ -456,7 +456,11 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
     if hostnames is None:
         hostnames = [hostname for hostname in lab['hosts'] if 'controller-0' not in hostname]
     use_bmc = InstallVars.get_install_var("USE_BMC")
-    test_step = " Wait for mtcAgent to boot" if use_bmc else "Boot"
+
+    bmc_ok = lab['bmc_info']['bmc_ok']
+    if 'controller-0' in bmc_ok:
+        bmc_ok.remove('controller-0')
+    test_step = " Wait for mtcAgent to boot" if use_bmc and len(bmc_ok) > 0 else "Boot"
     if boot_device_dict is None:
         lab = InstallVars.get_install_var('LAB')
         boot_device_dict = lab.get('boot_device_dict')
@@ -495,12 +499,11 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
     LOG.tc_step(test_step)
     if do_step(test_step):
         hosts_online = False
-        if not use_bmc:
-            LOG.info("Wait for 2 minutes before power on other hosts")
-            time.sleep(120)
-        else:
-            LOG.info("Wait for 2 minutes for mtcAgent to power on hosts: {}".format(hostnames))
-            wait_for_mtc_to_power_on_hosts(hostnames, lab=lab)
+        LOG.info("Wait for 2 minutes for power on hosts: {}".format(hostnames))
+        time.sleep(120)
+
+        if any(h for h in hostnames if h in bmc_ok):
+            wait_for_mtc_to_power_on_hosts(bmc_ok, lab=lab, timeout=60)
 
         for hostname in hostnames:
             threads.append(install_helper.open_vlm_console_thread(hostname, lab=lab,
@@ -1097,6 +1100,7 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
             as e_:
         LOG.error(e_.__str__())
         unreserve_lab_hosts(lab, dist_cloud=dist_cloud)
+    #install_helper.reset_kickstart_default(lab=lab)
     unreserve_lab_hosts(lab, dist_cloud=dist_cloud)
     # LOG.fixture_step("unreserving hosts")
     # if dist_cloud:
@@ -1229,16 +1233,15 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
         elif 'iso_feed' in boot["boot_type"] and 'feed' not in skip_list:
             skip_cfg = "pxeboot" in skip_list
+            set_default_menu = True if "grizzly" in lab["controller-0"].host_name else False
+            LOG.info("Need to set default menu {} for {}".format(set_default_menu, lab["controller-0"].host_name))
             install_helper.set_up_feed_from_boot_server_iso(iso_host_obj, lab_dict=lab_dict, iso_path=iso_path,
-                                                            skip_cfg=skip_cfg)
+                                                            skip_cfg=skip_cfg, set_default_menu=set_default_menu)
 
         elif 'feed' in boot["boot_type"] and 'feed' not in skip_list:
             load_path = directories["build"]
             skip_cfg = "pxeboot" in skip_list
-            set_default_manu = True if "grizzly" in lab["controller-0"].host_name else False
-            LOG.fixture_step("Need to set default menu {}".format(set_default_manu))
-            install_helper.set_network_boot_feed(bs_obj.ssh_conn, load_path, lab=lab_dict, skip_cfg=skip_cfg,
-                                                 set_default_manu=set_default_manu)
+            install_helper.set_network_boot_feed(bs_obj.ssh_conn, load_path, lab=lab_dict, skip_cfg=skip_cfg)
 
         if InstallVars.get_install_var("WIPEDISK"):
             LOG.fixture_step("Attempting to wipe disks")
@@ -2406,8 +2409,8 @@ def get_bmc_info(lab, conf_server=None, lab_file_dir=None, subcloud=None):
     if conf_server and conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
         vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
         dm_file = "{}-deploy-standard.yaml".format(subcloud) if subcloud \
-            else ("deployment-config-avs.yaml" if vswitch_type == 'avs'
-                  else ("deployment-config-ovs-dpdk.yaml" if vswitch_type == 'ovs_dpdk'
+            else ("deployment-config_avs.yaml" if vswitch_type == VSwitchType.AVS
+                  else ("deployment-config_ovs-dpdk.yaml" if vswitch_type == VSwitchType.OVS_DPDK
                         else "deployment-config.yaml"))
 
         dm_file_path = "{}/{}".format(lab_file_dir, dm_file)
@@ -2442,7 +2445,6 @@ def check_bmc_config(lab):
         lab = InstallVars.get_install_var("LAB")
     bmc_info = lab.get("bmc_info")
     bmc_ok = []
-    #use_bmc = install_helper.use_bmc(lab['hosts'], lab=lab)
     use_bmc = False
     if "username" in bmc_info and "password" in bmc_info:
         bmc_hosts = [host for host in lab["hosts"] if host in bmc_info]
@@ -2504,7 +2506,7 @@ def wait_for_mtc_to_power_on_hosts(hosts, lab=None, timeout=120, fail_ok=False):
             LOG.info("The mtcAgent has power on all hosts: {}".format(powered_on_hosts))
             return 0, None
         else:
-            time.sleep(30)
+            time.sleep(20)
     else:
         msg = "Timed out waiting for mtcAgent to power on hosts {};  powered on hosts: {}".format(hosts, powered_on_hosts)
         if fail_ok:
@@ -2539,4 +2541,3 @@ def wait_for_platform_integ_app_applied(controller0_node, lab=None, fail_ok=Fals
                                               con_ssh=controller0_node.ssh_conn, status='applied', fail_ok=fail_ok)
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
-

@@ -4,6 +4,7 @@ import re
 import threading
 import time
 import socket
+import pysftp
 
 from urllib.request import urlopen
 
@@ -282,12 +283,15 @@ def bring_node_console_up(node, boot_device,
     if node.telnet_conn is None:
         node.telnet_conn = open_telnet_session(node)
     bmc_power = InstallVars.get_install_var("USE_BMC")
-    if bmc_power and node.name != 'controller-0':
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    bmc_ok = lab["bmc_info"]["bmc_ok"]
+    if bmc_power and node.name != 'controller-0' and node.name in bmc_ok:
         vlm_power_on = False
     try:
         if vlm_power_on:
             LOG.info("Powering on {}".format(node.name))
-            if bmc_power:
+            if bmc_power and node.name in bmc_ok:
                 set_bmc_boot_to_pxe(node.name, lab=lab)
             power_on_hosts_(node.name, lab=lab, wait_for_hosts_state_=False)
 
@@ -731,14 +735,26 @@ def download_lab_config_files(lab, server, load_path, conf_server=None, lab_file
                                pre_opts=pre_opts if not isinstance(conf_server, Node) else '')
 
     vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
-    if vswitch_type == VSwitchType.AVS:
-        LOG.info("The vswitch type is avs; attempting to download the avs deployment config yaml"
-                 " file if exists")
-        avs_yaml_path = os.path.join(lab_file_dir, "deployment-config_avs.yaml")
-        if conf_server.ssh_conn.exec_cmd('test -e {}'.format(avs_yaml_path), rm_date=False)[0] == 0:
+    # if vswitch_type == VSwitchType.AVS:
+    #
+    #     LOG.info("The vswitch type is avs; attempting to download the avs deployment config yaml"
+    #              " file if exists")
+    #     dm_yaml_path = os.path.join(lab_file_dir, "deployment-config_avs.yaml")
+    #
+
+    if vswitch_type != VSwitchType.NONE:
+        dm_yaml_path = os.path.join(lab_file_dir, "deployment-config_avs.yaml") if vswitch_type == VSwitchType.AVS \
+            else os.path.join(lab_file_dir, "deployment-config_ovs-dpdk.yaml")
+        LOG.info("The vswitch type is {}; attempting to download the {} file if exists"
+                 .format(vswitch_type, dm_yaml_path))
+
+        if conf_server.ssh_conn.exec_cmd('test -e {}'.format(dm_yaml_path), rm_date=False)[0] == 0:
             dest_path = '{}deployment-config.yaml'.format(HostLinuxUser.get_home())
-            conf_server.ssh_conn.rsync(avs_yaml_path,
+            conf_server.ssh_conn.rsync(dm_yaml_path,
                                        lab['controller-0 ip'], dest_path, pre_opts=pre_opts)
+        else:
+            LOG.warning("The vswitch type is set to {}, but no corresponding {} file was found; using the default "
+                        "deployment config yaml instead. Please check lab config ".format(vswitch_type, dm_yaml_path))
 
     # openstack_lab_files_dir = os.path.split(script_path)[0] + "/yow/openstack"
     #
@@ -2513,7 +2529,7 @@ def export_image(image_id, backup_dest='usb', backup_dest_path=BackupRestore.USB
 
 
 def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None, skip_cfg=False,
-                          set_default_manu=False):
+                          set_default_menu=False):
     """
     Sets the network feed for controller-0 in default taxlab
     Args:
@@ -2579,9 +2595,9 @@ def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None
         LOG.info("Changing pxeboot.cfg symlink to pxeboot.cfg.gpt")
         tuxlab_conn.exec_cmd("ln -s pxeboot.cfg.gpt pxeboot.cfg")
 
-    if set_default_manu:
-         if set_default_kickstart_menu(tuxlab_conn, tuxlab_barcode_dir, lab=lab):
-             LOG.info("Default kickstart menu label set for {}/{}".format(tuxlab_barcode_dir, cfg_link))
+    if set_default_menu:
+         set_default_kickstart_menu(tuxlab_conn, tuxlab_barcode_dir, lab=lab)
+         LOG.info("Default kickstart menu label set for {}/{}".format(tuxlab_barcode_dir, cfg_link))
 
     # LOG.info("Installing Centos load to feed path: {}".format(feed_path))
     # bld_server_conn.exec_cmd("cd " + load_path)
@@ -2610,6 +2626,7 @@ def set_network_boot_feed(bld_server_conn, load_path, lab=None, boot_server=None
 
     return True
 
+
 def set_default_kickstart_menu(boot_server_conn, tuxlab_barcode_dir, lab=None):
     if lab is None:
         lab = InstallVars.get_install_var('LAB')
@@ -2618,53 +2635,171 @@ def set_default_kickstart_menu(boot_server_conn, tuxlab_barcode_dir, lab=None):
     boot_device_dict = lab.get('boot_device_dict')
     boot_device = boot_device_dict.get("controller-0")
     sys_type = ProjVar.get_var('SYS_TYPE')
-    low_lat = ProjVar.get_var('LOW_LATENCY')
-    install_tags = {"Console": "Serial", "type": "Controller", "os": "CenstOS"}
     if "AIO" in sys_type:
-        install_tags["type"] = "CPE|All-in-one"
-    if low_lat:
-        install_tags["lowlat"] = True
-    else:
-        install_tags["lowlat"] = False
+        sys_type = 'cpe'
+    if "Storage" in sys_type:
+        sys_type = 'standard'
+    if InstallVars.get_install_var('LOW_LATENCY'):
+        sys_type = 'lowlat'
 
-    if boot_server_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
-        err_msg = "Cannot find the pxeboot.cfg file in subdir: {}".format(tuxlab_barcode_dir)
-        raise exceptions.InstallError(err_msg)
-    # get available menu labels from pxeboot.cfg file
-    cfg_link = boot_server_conn.exec_cmd("readlink -f pxeboot.cfg")[1]
+    security = InstallVars.get_install_var("SECURITY")
+    tag = {"os": "centos", "security": security, "type": sys_type, "console": "serial"}
+    uefi = True if "UEFI" in boot_device else False
+    pxe_file = "efi_pxeboot.cfg" if uefi else "pxeboot.cfg"
+    pxe_file_path = os.path.join(tuxlab_barcode_dir, pxe_file)
+
+    kickstart, options = parse_kickstart_menu(pxe_file_path, boot_server=tuxlab_server)
     selection = None
-    label_num = None
-    if cfg_link:
-        rc, menu_lines = boot_server_conn.exec_cmd("grep ' menu label' {}".format(cfg_link))
-
-        if rc == 0:
-
-            matching_labels = []
-            for line in menu_lines.splitlines():
-                label = line.replace('^', '').split(')')
-                if re.search(install_tags["Console"], label) and  re.search(install_tags["type"], label) and re.search(install_tags["os"], label):
-                        matching_labels.append(label)
-
-            if len(matching_labels) > 0:
-                selection = matching_labels[0]
-                if install_tags["lowlat"]:
-                    for match_label in matching_labels:
-                        if re.search("lowlatency") in match_label:
-                            selection = match_label
+    LOG.info("Selection tag: {}".format(tag))
+    for option in options:
+        LOG.info("Menu option: {} {} tag: {}".format(option.index, option.name, option.tag))
+        #if isinstance(option, menu.KickstartOption):
+            #LOG.info("Menu option: {} {}".format(option.index, option.name))
+        LOG.info("Menu option: {} {}".format(option.index, option.name))
+        if option.tag == tag:
+            LOG.info("Matching option is: {}".format(option.name))
+            selection = option
+            break
+    if selection:
+        current_default = kickstart.get("DEFAULT") if "DEFAULT" in kickstart.keys() else kickstart.get("default")
+        if current_default != selection.index:
+            cmd = "sed -i --follow-symlinks '0,/default={}/s/default={}/default={}/' {}".format(current_default, current_default, selection.index, pxe_file_path) if uefi \
+                else "sed -i --follow-symlinks '0,/default {}/s/default {}/default {}/1' {}".format(current_default, current_default, selection.index, pxe_file_path)
+            boot_server_conn.exec_cmd(cmd)
 
 
-            if selection:
-                label_num = selection.split(')')[0].split(" ")[2]
+def reset_kickstart_default(lab=None, boot_server=None):
 
-        if label_num:
-            default_line = boot_server_conn.exec_cmd("grep '^default' {}".format(cfg_link) )[1]
-            current_label = default_line.split(' ')[1]
-            cmd = "sed -i '0,/default /s/default {}/default {}/' {}".format(current_label, label_num, cfg_link)
-            result = boot_server_conn.exec_cmd(cmd)[0]
-            if result == 0:
-                return True
+    if not lab:
+        lab = InstallVars.get_install_var("LAB")
 
-    return False
+    boot_device_dict = lab.get('boot_device_dict')
+    boot_device = boot_device_dict.get("controller-0")
+
+    tuxlab_server = boot_server if boot_server else InstallVars.get_install_var("BOOT_SERVER")
+    controller0 = lab["controller-0"]
+    LOG.info("Reseting menu default to boot from hard drive .....")
+
+    tuxlab_prompt = r'{}@{}\:(.*)\$ '.format(TestFileServer.get_user(), tuxlab_server)
+
+    tuxlab_conn = establish_ssh_connection(tuxlab_server, user=TestFileServer.get_user(),
+                                           password=TestFileServer.get_password(),
+                                           initial_prompt=tuxlab_prompt)
+    tuxlab_conn.deploy_ssh_key()
+
+    tuxlab_barcode_dir = TUXLAB_BARCODES_DIR + str(controller0.barcode)
+
+    if tuxlab_conn.exec_cmd("cd " + tuxlab_barcode_dir)[0] != 0:
+        msg = "Failed to cd to {}; Unable to reset to menu default.. ".format(tuxlab_barcode_dir)
+        LOG.error(msg)
+        return False
+
+    uefi = True if "UEFI" in boot_device else False
+    pxe_file = "efi_pxeboot.cfg" if uefi else "pxeboot.cfg"
+    pxe_file_path = os.path.join(tuxlab_barcode_dir, pxe_file)
+
+    cmd = "sed -i --follow-symlinks '/default=/ c default=1' {}".format(pxe_file_path) if uefi \
+        else "sed -i --follow-symlinks '/default / c default menu.c32' {}".format(pxe_file_path)
+    if tuxlab_conn.exec_cmd(cmd)[0] != 0:
+        LOG.info("Failed to reseting menu default .....")
+        return False
+
+    return True
+
+
+def parse_kickstart_menu(pxe_file_path, boot_server="yow-tuxlab2"):
+
+    if not pxe_file_path or not os.path.abspath(pxe_file_path):
+        raise ValueError("The full path to the pxe boot file must be specified")
+
+    with pysftp.Connection(host=boot_server, username=TestFileServer.get_user(),
+                           password=TestFileServer.get_password()) as sftp:
+
+        pxe_file_dir = os.path.dirname(pxe_file_path)
+        pxe_file = os.path.basename(pxe_file_path)
+        try:
+            sftp.chdir(pxe_file_dir)
+            pxe_f = sftp.open(pxe_file)
+        except IOError as e:
+            msg = "Fail to read file: {}".format(e.message)
+            raise exceptions.InstallError(msg)
+
+        doc = pxe_f.readlines()
+        kickstart_menu = {"menu_options": []}
+        itr = iter(doc)
+        for l in itr:
+            if l.startswith("label "):
+                label = l.strip().split(' ')[1]
+                next_line = next(itr)
+                title = next_line.strip().split("menu label ")[1]
+                match = re.search(r'[0-9]', title)
+                if match:
+                    index = match.group(0)
+                    option_name = title.split('{})'.format(index))[1].strip()
+                else:
+                    print(label)
+                    index = label
+                    option_name = title.strip()
+                menu_ = {"label": label, "index": index, "option": option_name}
+                kickstart_menu["menu_options"].append(menu_)
+
+            elif l.startswith("menuentry ") and re.search(r'[0-9]', l):
+                menu_items = l[9:].strip().replace("'", "").split(')')
+                menu_ = {"label": menu_items[0].strip(), "index": menu_items[0].strip(),
+                        "option": menu_items[1].replace("}", '').strip()}
+                kickstart_menu["menu_options"].append(menu_)
+            elif l.startswith("menu begin"):
+                #print(l)
+                next_line = next(itr)
+                menu_title = ''
+                while not next_line.startswith("menu end"):
+                    if next_line.strip().startswith("menu title "):
+                        menu_title = next_line.strip().split("menu title ")[1].strip()
+                    elif next_line.strip().startswith("label "):
+                        label = next_line.strip().split(' ')[1]
+                        label_title = ''
+                        next_label_item = next(itr)
+                        while not next_label_item.strip().startswith("menu label "):
+                            next_label_item = next(itr)
+
+                        label_title = next_label_item.strip().split("menu label ")[1]
+                        match = re.search(r'[0-9]', label_title)
+                        if match:
+                            index = match.group(0)
+                            label_title = label_title.split('{})'.format(index))[1].strip()
+                        else:
+                            index = label
+                            label_title = label_title.strip()
+
+                        option_name = menu_title + " " + label_title
+                        menu_ = {"label": label, "index": index, "option": option_name}
+                        kickstart_menu["menu_options"].append(menu_)
+
+                    next_line = next(itr)
+            elif re.search(r'^MENU\s+\w+\s+\d+', l):
+                configs = l.split(' ')
+                if len(configs) > 2:
+                    kickstart_menu[configs[1].strip().upper()] = configs[2].strip()
+            elif re.search(r'^(?!MENU\s+)\w+\s', l):
+                config_pair = l.strip().split(' ')
+                if len(config_pair) == 2:
+                    kickstart_menu[config_pair[0].strip()] = config_pair[1].strip()
+            elif re.search(r'^(?!MENU\s+)\w+=', l):
+                config_pair = l.strip().split('=')
+                if len(config_pair) == 2:
+                    kickstart_menu[config_pair[0].strip()] = config_pair[1].strip()
+
+    options = []
+    if "menu_options" in kickstart_menu.keys():
+        menu_options = kickstart_menu["menu_options"]
+        for m in menu_options:
+            kickstart_option = menu.KickstartOption(m["option"], m["label"])
+            print(kickstart_option.name)
+            print(kickstart_option.tag)
+            options.append(kickstart_option)
+
+    return kickstart_menu, options
+
 
 
 def boot_controller(lab=None, bld_server_conn=None, patch_dir_paths=None, boot_usb=False,
@@ -4127,7 +4262,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
 
     else:
         if bmc_power:
-            if node_obj.name == pxe_host and boot_type != 'pxe_iso':
+            if node_obj.name == pxe_host and boot_type != 'pxe_iso' and "grizzly" not in node_obj.host_name:
                 expt_prompts.append(kickstart_menu.prompt)
                 expt_prompts.append("\x1b.*\*{56,60}")
                 if len(expt_prompts) > 0:
@@ -4161,7 +4296,7 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
 
                         telnet_conn.read_until(kickstart_menu.prompt, timeout=360)
 
-            if node_obj.name == pxe_host and boot_type != 'pxe_iso':
+            if node_obj.name == pxe_host and boot_type != 'pxe_iso' and "grizzly" not in node_obj.host_name:
                 select_install_option(node_obj, kickstart_menu, small_footprint=small_footprint,
                                       low_latency=low_latency,
                                       security=security, usb=usb, expect_prompt=False)
@@ -4450,7 +4585,7 @@ def mount_boot_server_iso(lab_dict=None, tuxlab_conn=None):
 
 
 def set_up_feed_from_boot_server_iso(server, lab_dict=None, tuxlab_conn=None, iso_path=None,
-                                     skip_cfg=False):
+                                     skip_cfg=False, set_default_menu=False):
     if lab_dict is None:
         lab_dict = InstallVars.get_install_var("LAB")
     if iso_path is None:
@@ -4545,6 +4680,10 @@ def set_up_feed_from_boot_server_iso(server, lab_dict=None, tuxlab_conn=None, is
 
     LOG.info("Updating pxeboot kickstart files")
     update_pxeboot_ks_files(lab_dict, tuxlab_conn, feed_path)
+
+    if set_default_menu:
+        set_default_kickstart_menu(tuxlab_conn, tuxlab_barcode_dir, lab=lab_dict)
+        LOG.info("Default kickstart menu label set for {}/{}".format(tuxlab_barcode_dir, cfg_link))
 
     tuxlab_conn.close()
 
@@ -5144,28 +5283,28 @@ def power_on_hosts_(hosts, lab=None, wait_for_hosts_state_=False):
 
     if isinstance(hosts, str):
         hosts = [hosts]
-    if not bmc_ok:
-        power_on_host(hosts, lab=lab, wait_for_hosts_state_=wait_for_hosts_state_)
+    vlm_hosts = [h for h in hosts if h not in bmc_ok]
+    if len(vlm_hosts) > 0:
+        power_on_host(vlm_hosts, lab=lab, wait_for_hosts_state_=wait_for_hosts_state_)
 
-    else:
-        action = 'on'
-        test_client = test_server_client()
-        vlm_power_on = []
-        for host in hosts:
-            if host in bmc_ok:
-                LOG.info("Powering on node {} uisng bmc impitool ... ".format(host))
-                status, out = get_bmc_power_status(host, lab=lab)
-                if status == 'on' or status == 'unknown':
-                    action ='reset'
-                rc, output = bmc_helper.set_server_chassis_power(bmc_info[host], test_client, action=action,
-                                                                 user=bmc_info['username'], password=bmc_info['password'])
-                if rc == 0:
-                    LOG.info(" Host {}  {}".format(host, output))
-                else:
-                    vlm_power_on.append(host)
+    action = 'on'
+    test_client = test_server_client()
+    vlm_power_on = []
+    for host in hosts:
+        if host in bmc_ok:
+            LOG.info("Powering on node {} uisng bmc impitool ... ".format(host))
+            status, out = get_bmc_power_status(host, lab=lab)
+            if status == 'on' or status == 'unknown':
+                action ='reset'
+            rc, output = bmc_helper.set_server_chassis_power(bmc_info[host], test_client, action=action,
+                                                             user=bmc_info['username'], password=bmc_info['password'])
+            if rc == 0:
+                LOG.info(" Host {}  {}".format(host, output))
+            else:
+                vlm_power_on.append(host)
 
-        if len(vlm_power_on) > 0:
-            power_on_host(vlm_power_on, lab=lab, wait_for_hosts_state_=wait_for_hosts_state_)
+    if len(vlm_power_on) > 0:
+        power_on_host(vlm_power_on, lab=lab, wait_for_hosts_state_=wait_for_hosts_state_)
 
 
 def get_bmc_power_status(host, lab=None, fail_ok=False):
