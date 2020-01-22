@@ -1,6 +1,6 @@
 import yaml
 
-from pytest import mark, skip, fixture
+from pytest import mark, xfail, fixture
 
 from utils.tis_log import LOG
 from utils import rest
@@ -52,6 +52,7 @@ def deploy_test_pods():
         - Copy the deployment files from localhost to active controller
         - Deploy server pod
         - Deploy client pod
+        - Get the server pods and client pods and check status
         - Get the ip address of the server pods
         - Delete the service
         - Delete the server pod deployment
@@ -94,12 +95,16 @@ def deploy_test_pods():
     LOG.fixture_step("Deploy client pod {}".format(client_pod))
     kube_helper.exec_kube_cmd(sub_cmd="create -f ", args=client_pod)
 
-    state, _ = kube_helper.wait_for_pods_status(namespace="default")
+    LOG.fixture_step("Get the server pods and client pods and check status")
+    get_server_pods = kube_helper.get_pods(labels="run=load-balancer-1")
+    get_server_pods.append(client_pod_name)
+    state, output = kube_helper.wait_for_pods_status(
+        pod_names=get_server_pods, namespace="default")
 
     if not state:
-        skip("Pods are not in running state,Hence skip this test")
+        xfail("Pods has the following error {},Hence failing this test".format(output))
+
     LOG.fixture_step("Get the ip address of the server pods")
-    get_server_pods = kube_helper.get_pods(labels="run=load-balancer-1")
     server_ips = []
     for i in get_server_pods:
         server_ips.append(kube_helper.get_pod_value_jsonpath(
@@ -120,7 +125,7 @@ def deploy_test_pods():
             computes[1]), args="test-")
 
 
-@mark.podtopod
+@mark.networking
 class TestPodtoPod:
     def test_pod_to_pod_ping(self, deploy_test_pods):
         """
