@@ -792,7 +792,8 @@ def _check_disk_size(vm_ssh, disk_name, expt_size):
     assert actual_size == expt_size, "Expected disk size: {}M. Actual: {}M".format(expt_size, actual_size)
 
 
-def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin_platform'), con_ssh=None, fail_ok=False):
+def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin_platform'), con_ssh=None,
+                 fail_ok=False):
     after_alarms = system_helper.get_alarms(auth_info=auth_info, con_ssh=con_ssh)
     new_alarms = []
     check_interval = 5
