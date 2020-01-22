@@ -97,9 +97,10 @@ def deploy_test_pods():
 
     LOG.fixture_step("Get the server pods and client pods and check status")
     get_server_pods = kube_helper.get_pods(labels="run=load-balancer-1")
-    get_server_pods.append(client_pod_name)
+    all_pods = get_server_pods.append(client_pod_name)
+
     state, output = kube_helper.wait_for_pods_status(
-        pod_names=get_server_pods, namespace="default")
+        pod_names=all_pods, namespace="default")
 
     if not state:
         xfail("Pods has the following error {},Hence failing this test".format(output))
