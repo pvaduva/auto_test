@@ -4,7 +4,6 @@ import re
 import threading
 import time
 import socket
-import pysftp
 
 from urllib.request import urlopen
 
@@ -2712,6 +2711,7 @@ def parse_kickstart_menu(pxe_file_path, boot_server="yow-tuxlab2"):
     if not pxe_file_path or not os.path.abspath(pxe_file_path):
         raise ValueError("The full path to the pxe boot file must be specified")
 
+    import pysftp
     with pysftp.Connection(host=boot_server, username=TestFileServer.get_user(),
                            password=TestFileServer.get_password()) as sftp:
 
