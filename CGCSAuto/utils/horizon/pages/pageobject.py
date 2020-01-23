@@ -26,20 +26,19 @@ class PageObject(basewebobject.BaseWebObject):
     @property
     def base_url(self):
         from consts.auth import CliAuth
+        domain = ProjVar.get_var("LAB")['floating ip']
+        prefix = 'http'
         if CliAuth.get_var('HTTPS'):
             prefix = 'https'
-            lab_name = ProjVar.get_var('LAB').get('name')
-            if not lab_name:
-                skip('Skip https testing on unknown lab')
-            domain = '{}.cumulus.wrs.com'.format(lab_name.split('yow-')[-1].replace('_', '-'))
+            # lab_name = ProjVar.get_var('LAB').get('name')
+            # if not lab_name:
+            #     skip('Skip https testing on unknown lab')
+            # domain = '{}.cumulus.wrs.com'.format(lab_name.split('yow-')[-1].replace('_', '-'))
             if self.port and self.port == 31000:
                 domain = ProjVar.get_var('OPENSTACK_DOMAIN')
                 if not domain:
                     skip('OpenStack endpoint domain not found in service parameters. Skip '
                          'OpenStack horizon test with https.')
-        else:
-            prefix = 'http'
-            domain = ProjVar.get_var("LAB")['floating ip']
 
         if ProjVar.get_var('IPV6_OAM'):
             domain = '[{}]'.format(domain)
