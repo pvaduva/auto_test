@@ -493,6 +493,8 @@ def pytest_addoption(parser):
     tag_help = "Tag to be used for uploading logs to the test results database."
     telnetlog_help = "Collect telnet logs throughout the session"
     remote_cli_help = 'Run testcases using remote CLI'
+    bmc_target_help = 'BMC test target'
+    bmc_password_help = 'BMC access password'
 
     # Test session options on installed and configured STX system:
     parser.addoption('--testcase-config', action='store',
@@ -562,6 +564,14 @@ def pytest_addoption(parser):
     parser.addoption('--subcloud', action='store', metavar='subcloud',
                      default='subcloud1', help=subcloud_help)
 
+    parser.addoption("--bmc_target",
+                     action="append",
+                     default=[],
+                     help=bmc_target_help)
+    parser.addoption("--bmc_password",
+                     action="store",
+                     default=None,
+                     help=bmc_password_help)
     ##################################
     # Lab fresh_install or upgrade options #
     ##################################

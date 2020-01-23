@@ -29,6 +29,8 @@ class HostTimeout:
     CONFIG_CONTROLLER_TIMEOUT = 1800
     CEPH_MON_ADD_CONFIG_TIMEOUT = 300
     NODES_STATUS_READY = 7200
+    POWER_OFF_OFFLINE = 150  # seconds for node becoming offline after power off command is issued.
+    HOST_LOOKED_REBOOT = 1200  # a locked host becomes online after reboot
 
 
 class InstallTimeout:

@@ -255,6 +255,19 @@ class BMCPath:
     SENSOR_DATA_DIR = '/var/run/ipmitool/'
     # need to provide dir and host
     SENSOR_DATA_FILE_PATH = '{}/hwmond_{}_sensor_data'
+    @staticmethod
+    def get_ipmi_sensor_data_files(node):
+        IMPI_SENSOR_DATA_DIR = '/var/run/bmc/ipmitool/'
+        file = 'hwmond_%s_sensor_data' % node
+        return [os.path.join(IMPI_SENSOR_DATA_DIR, file)]
+
+    @staticmethod
+    def get_redfish_sensor_data_files(node):
+        REDFISH_SENSOR_DATA_DIR = '/var/run/bmc/redfishtool/'
+        thermal_sensor_file = 'hwmond_%s_thermal_sensor_data' % node
+        power_sensor_file = 'hwmond_%s_power_sensor_data' % node
+        return [os.path.join(REDFISH_SENSOR_DATA_DIR, thermal_sensor_file),
+                os.path.join(REDFISH_SENSOR_DATA_DIR, power_sensor_file)]
 
 
 class SecurityPath:

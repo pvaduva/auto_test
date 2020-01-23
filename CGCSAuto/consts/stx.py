@@ -427,6 +427,10 @@ class EventLogID:
     FS_THRESHOLD_EXCEEDED = '100.104'
     CPU_USAGE_HIGH = '100.101'
     MNFA_MODE = '200.020'
+    BM_ALARM = '200.010'
+    BM_SENSOR_ALARM = '200.007'
+    BM_SENSOR_CFG_ALARM = '200.014'
+    BM_SERSORGRP_CFG_ALARM = '200.015'
 
 
 class NetworkingVmMapping:
