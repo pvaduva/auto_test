@@ -1,4 +1,5 @@
 import yaml
+import copy
 
 from pytest import mark, xfail, fixture
 
@@ -10,7 +11,6 @@ from consts.auth import HostLinuxUser
 from consts.stx import PodStatus
 from keywords import system_helper, kube_helper, common
 
-client_pod_name = "client-pod"
 server_dep = "server-pod"
 service_name = "test-app"
 
@@ -44,30 +44,40 @@ def write_to_file(data, filename):
 
 
 @fixture(scope="class")
-def deploy_test_pods():
+def deploy_test_pods(request):
     """
-    Fixture to deploy the server app,client app and yeild server pod ips
+    Fixture to deploy the server app,client app and returns serverips & client pods
         - Label the nodes and add node selector to the deployment files
             if not simplex system
         - Copy the deployment files from localhost to active controller
         - Deploy server pod
-        - Deploy client pod
+        - Deploy client pods
         - Get the server pods and client pods and check status
         - Get the ip address of the server pods
         - Delete the service
         - Delete the server pod deployment
-        - Delete the client pod
+        - Delete the client pods
         - Remove the labels on the nodes if not simplex
     """
     server_pod = "server_pod.yaml"
-    client_pod = "client_pod.yaml"
+    client_pod_template = "client_pod.yaml"
     home_dir = HostLinuxUser.get_home()
+    client_pod1_name = "client-pod1"
+    client_pod2_name = "client-pod2"
 
     server_pod_path = "utils/test_files/{}".format(server_pod)
-    client_pod_path = "utils/test_files/{}".format(client_pod)
+    client_pod_path = "utils/test_files/{}".format(client_pod_template)
+
+    server_pod_data = get_yaml_data(server_pod_path)
+    client_pod1_data = get_yaml_data(client_pod_path)
+    client_pod2_data = copy.deepcopy(client_pod1_data)
+
+    client_pod1_data['metadata']['name'] = client_pod1_name
+    client_pod2_data['metadata']['name'] = client_pod2_name
 
     computes = system_helper.get_hypervisors(
         operational="enabled", availability="available")
+
     if len(computes) > 1:
         LOG.fixture_step("Label the nodes and add node selector to the deployment files\
         if not simplex system")
@@ -75,13 +85,16 @@ def deploy_test_pods():
             computes[0]), args="test=server")
         kube_helper.exec_kube_cmd(sub_cmd="label nodes {}".format(
             computes[1]), args="test=client")
-        data = get_yaml_data(server_pod_path)
-        data['spec']['template']['spec']['nodeSelector'] = {'test': 'server'}
-        server_pod_path = write_to_file(data, server_pod)
+        server_pod_data['spec']['template']['spec']['nodeSelector'] = {
+            'test': 'server'}
+        client_pod1_data['spec']['nodeSelector'] = {'test': 'server'}
+        client_pod2_data['spec']['nodeSelector'] = {'test': 'client'}
 
-        data = get_yaml_data(client_pod_path)
-        data['spec']['nodeSelector'] = {'test': 'client'}
-        client_pod_path = write_to_file(data, client_pod)
+    server_pod_path = write_to_file(server_pod_data, server_pod)
+    client_pod1_path = write_to_file(
+        client_pod1_data, "{}.yaml".format(client_pod1_name))
+    client_pod2_path = write_to_file(
+        client_pod2_data, "{}.yaml".format(client_pod2_name))
 
     LOG.fixture_step(
         "Copy the deployment files from localhost to active controller")
@@ -89,15 +102,24 @@ def deploy_test_pods():
         source_path=server_pod_path, dest_path=home_dir)
 
     common.scp_from_localhost_to_active_controller(
-        source_path=client_pod_path, dest_path=home_dir)
+        source_path=client_pod1_path, dest_path=home_dir)
+
+    common.scp_from_localhost_to_active_controller(
+        source_path=client_pod2_path, dest_path=home_dir)
+
     LOG.fixture_step("Deploy server pods {}".format(server_pod))
     kube_helper.exec_kube_cmd(sub_cmd="create -f ", args=server_pod)
-    LOG.fixture_step("Deploy client pod {}".format(client_pod))
-    kube_helper.exec_kube_cmd(sub_cmd="create -f ", args=client_pod)
+    LOG.fixture_step("Deploy client pod {}.yaml & client pod {}.yaml".format(
+        client_pod1_name, client_pod2_name))
+    kube_helper.exec_kube_cmd(sub_cmd="create -f ",
+                              args="{}.yaml".format(client_pod1_name))
+
+    kube_helper.exec_kube_cmd(sub_cmd="create -f ",
+                              args="{}.yaml".format(client_pod2_name))
 
     LOG.fixture_step("Get the server pods and client pods and check status")
     get_server_pods = kube_helper.get_pods(labels="run=load-balancer-1")
-    all_pods = get_server_pods.append(client_pod_name)
+    all_pods = get_server_pods+[client_pod1_name, client_pod2_name]
 
     state, output = kube_helper.wait_for_pods_status(
         pod_names=all_pods, namespace="default")
@@ -111,19 +133,28 @@ def deploy_test_pods():
         server_ips.append(kube_helper.get_pod_value_jsonpath(
             "pod {}".format(i), "{.status.podIP}"))
 
-    yield server_ips
-    LOG.fixture_step("Delete the service {}".format(service_name))
-    kube_helper.exec_kube_cmd(sub_cmd="delete service  ", args=service_name)
-    LOG.fixture_step("Delete the deployment {}".format(server_dep))
-    kube_helper.exec_kube_cmd(sub_cmd="delete deployment  ", args=server_dep)
-    LOG.fixture_step("Delete the pod {}".format(client_pod_name))
-    kube_helper.exec_kube_cmd(sub_cmd="delete pod  ", args=client_pod_name)
-    if len(computes) > 1:
-        LOG.fixture_step("Remove the labels on the nodes if not simplex")
-        kube_helper.exec_kube_cmd(sub_cmd="label nodes {}".format(
-            computes[0]), args="test-")
-        kube_helper.exec_kube_cmd(sub_cmd="label nodes {}".format(
-            computes[1]), args="test-")
+    def teardown():
+        LOG.fixture_step("Delete the service {}".format(service_name))
+        kube_helper.exec_kube_cmd(
+            sub_cmd="delete service  ", args=service_name)
+        LOG.fixture_step("Delete the deployment {}".format(server_dep))
+        kube_helper.exec_kube_cmd(
+            sub_cmd="delete deployment  ", args=server_dep)
+        LOG.fixture_step("Delete the client pods {} & {}".format(
+            client_pod1_name, client_pod2_name))
+        kube_helper.exec_kube_cmd(
+            sub_cmd="delete pod  ", args=client_pod1_name)
+        kube_helper.exec_kube_cmd(
+            sub_cmd="delete pod  ", args=client_pod2_name)
+        if len(computes) > 1:
+            LOG.fixture_step("Remove the labels on the nodes if not simplex")
+            kube_helper.exec_kube_cmd(sub_cmd="label nodes {}".format(
+                computes[0]), args="test-")
+            kube_helper.exec_kube_cmd(sub_cmd="label nodes {}".format(
+                computes[1]), args="test-")
+
+    request.addfinalizer(teardown)
+    return server_ips, [client_pod1_name, client_pod2_name]
 
 
 @mark.networking
@@ -132,45 +163,91 @@ class TestPodtoPod:
         """
         Verify Ping test between pods
         Args:
-            deploy_test_pods(fixture): yields the pod ips list
+            deploy_test_pods(fixture): returns server ips & clientpod list
+        Setup:
+            - Label the nodes and add node selector to the deployment files
+                if not simplex system
+            - Copy the deployment files from localhost to active controller
+            - Deploy server pod
+            - Deploy client pod
+            - Get the server pods and client pods and check status
+            - Get the ip address of the server pods
         Steps:
             - Ping the server pod ip from the client pod
+        Teardown:
+            - Delete the service
+            - Delete the server pod deployment
+            - Delete the client pod
+            - Remove the labels on the nodes if not simplex
 
         """
-        for ip in deploy_test_pods:
-            LOG.tc_step("Ping the server pod ip {} from the client pod {}".format(
-                ip, client_pod_name))
-            cmd = "ping -c 3 {} -w 5".format(ip)
-            code, _ = kube_helper.exec_cmd_in_container(
-                cmd=cmd, pod=client_pod_name)
-            assert code == 0
+        server_ips, client_pods = deploy_test_pods
+        for client_pod in client_pods:
+            for ip in server_ips:
+                LOG.tc_step("Ping the server pod ip {} from the client pod {}".format(
+                    ip, client_pod))
+                cmd = "ping -c 3 {} -w 5".format(ip)
+                code, _ = kube_helper.exec_cmd_in_container(
+                    cmd=cmd, pod=client_pod)
+                assert code == 0
 
     def test_pod_to_service_endpoints(self, deploy_test_pods):
         """
         Verify client pod to service  multiple endpoints access
         Args:
-            deploy_test_pods(fixture): yields the pod ips list
+            deploy_test_pods(fixture): returns server ips & clientpod list
+        Setup:
+            - Label the nodes and add node selector to the deployment files
+                if not simplex system
+            - Copy the deployment files from localhost to active controller
+            - Deploy server pod
+            - Deploy client pod
+            - Get the server pods and client pods and check status
+            - Get the ip address of the server pods
         Steps:
             - Curl the server pod ip from the client pod
+        Teardown:
+            - Delete the service
+            - Delete the server pod deployment
+            - Delete the client pod
+            - Remove the labels on the nodes if not simplex
 
         """
-        for ip in deploy_test_pods:
-            if ProjVar.get_var('IPV6_OAM'):
-                ip = "[{}]".format(ip)
-            cmd = "curl -Is {}:8080".format(ip)
-            LOG.tc_step("Curl({}) the server pod ip {} from the client pod {}".format(
-                cmd, ip, client_pod_name))
-            code, _ = kube_helper.exec_cmd_in_container(
-                cmd=cmd, pod=client_pod_name)
-            assert code == 0
+        server_ips, client_pods = deploy_test_pods
+        for client_pod in client_pods:
+            for ip in server_ips:
+                if ProjVar.get_var('IPV6_OAM'):
+                    ip = "[{}]".format(ip)
+                cmd = "curl -Is {}:8080".format(ip)
+                LOG.tc_step("Curl({}) the server pod ip {} from the client pod {}".format(
+                    cmd, ip, client_pod))
+                code, _ = kube_helper.exec_cmd_in_container(
+                    cmd=cmd, pod=client_pod)
+                assert code == 0
 
-    def test_local_host_to_service(self):
+    def test_local_host_to_service(self, deploy_test_pods):
         """
         Verify the service connectivity from external network
+        Args:
+            deploy_test_pods(fixture): returns server ips & clientpod list
+        Setup:
+            - Label the nodes and add node selector to the deployment files
+                if not simplex system
+            - Copy the deployment files from localhost to active controller
+            - Deploy server pod
+            - Deploy client pod
+            - Get the server pods and client pods and check status
+            - Get the ip address of the server pods
         Steps:
             - Expose the service with NodePort
             - Check the service access from local host
+        Teardown:
+            - Delete the service
+            - Delete the server pod deployment
+            - Delete the client pod
+            - Remove the labels on the nodes if not simplex
         """
+
         LOG.tc_step("Expose the service {} with NodePort".format(service_name))
         kube_helper.expose_the_service(
             deployment_name=server_dep, type="NodePort", service_name=service_name)

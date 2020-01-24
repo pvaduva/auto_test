@@ -1,4 +1,5 @@
 import yaml
+import copy
 
 from pytest import mark, skip, fixture, raises
 
@@ -130,7 +131,7 @@ def test_calico_network_policy(get_data):
         - Check the link is accessible with previous port
     """
     (iplist, protocol, port), obj2 = get_data
-    obj1 = dict(obj2)
+    obj1 = copy.deepcopy(obj2)
     obj1["port"], obj1["add"] = port, False
 
     np_file = "np_new.yaml"
