@@ -169,7 +169,7 @@ class TestPodtoPod:
                 if not simplex system
             - Copy the deployment files from localhost to active controller
             - Deploy server pod
-            - Deploy client pod
+            - Deploy client pods
             - Get the server pods and client pods and check status
             - Get the ip address of the server pods
         Steps:
@@ -177,7 +177,7 @@ class TestPodtoPod:
         Teardown:
             - Delete the service
             - Delete the server pod deployment
-            - Delete the client pod
+            - Delete the client pods
             - Remove the labels on the nodes if not simplex
 
         """
@@ -201,7 +201,7 @@ class TestPodtoPod:
                 if not simplex system
             - Copy the deployment files from localhost to active controller
             - Deploy server pod
-            - Deploy client pod
+            - Deploy client pods
             - Get the server pods and client pods and check status
             - Get the ip address of the server pods
         Steps:
@@ -209,7 +209,7 @@ class TestPodtoPod:
         Teardown:
             - Delete the service
             - Delete the server pod deployment
-            - Delete the client pod
+            - Delete the client pods
             - Remove the labels on the nodes if not simplex
 
         """
@@ -235,7 +235,7 @@ class TestPodtoPod:
                 if not simplex system
             - Copy the deployment files from localhost to active controller
             - Deploy server pod
-            - Deploy client pod
+            - Deploy client pods
             - Get the server pods and client pods and check status
             - Get the ip address of the server pods
         Steps:
@@ -244,7 +244,7 @@ class TestPodtoPod:
         Teardown:
             - Delete the service
             - Delete the server pod deployment
-            - Delete the client pod
+            - Delete the client pods
             - Remove the labels on the nodes if not simplex
         """
 
