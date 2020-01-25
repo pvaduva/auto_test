@@ -794,12 +794,14 @@ def _check_disk_size(vm_ssh, disk_name, expt_size):
 
 def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin_platform'), con_ssh=None,
                  fail_ok=False):
-    after_alarms = system_helper.get_alarms(auth_info=auth_info, con_ssh=con_ssh)
+    after_alarms = system_helper.get_alarms(fields=('Alarm ID', 'Entity ID', 'Severity'),
+                                            auth_info=auth_info,
+                                            con_ssh=con_ssh)
     new_alarms = []
     check_interval = 5
     for item in after_alarms:
         if item not in before_alarms:
-            alarm_id, entity_id = item.split('::::')
+            alarm_id, entity_id, severity = item.split('::::')
             if alarm_id == EventLogID.CPU_USAGE_HIGH:
                 check_interval = 45
             elif alarm_id == EventLogID.NTP_ALARM:
