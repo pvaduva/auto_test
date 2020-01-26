@@ -49,8 +49,8 @@ def test_system_alarms(pre_alarms_session):
     LOG.info("No new alarms found after test session.")
 
 
-IGNOIRE_ALARMS = ["400.003::::host=controller-0::::minor",
-                  "400.003::::host=controller-1::::minor"]
+IGNOIRED_ALARMS = ["400.003::::host=controller-0::::minor",
+                   "400.003::::host=controller-1::::minor"]
 
 
 @mark.absfirst
@@ -61,5 +61,5 @@ def test_system_health_pre_session():
         "{} is not {}".format(PLATFORM_APP, AppStatus.APPLIED)
 
     LOG.tc_step("Check system alarms")
-    check_helper.check_alarms(before_alarms=IGNOIRE_ALARMS, timeout=60)
+    check_helper.check_alarms(before_alarms=IGNOIRED_ALARMS, timeout=60)
     LOG.info("No new alarms found.")
