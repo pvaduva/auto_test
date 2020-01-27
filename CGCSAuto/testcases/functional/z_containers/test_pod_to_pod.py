@@ -1,7 +1,7 @@
 import yaml
 import copy
 
-from pytest import mark, xfail, fixture
+from pytest import mark, fixture
 
 from utils.tis_log import LOG
 from utils import rest
@@ -121,11 +121,8 @@ def deploy_test_pods(request):
     get_server_pods = kube_helper.get_pods(labels="run=load-balancer-1")
     all_pods = get_server_pods+[client_pod1_name, client_pod2_name]
 
-    state, output = kube_helper.wait_for_pods_status(
+    kube_helper.wait_for_pods_status(
         pod_names=all_pods, namespace="default")
-
-    if not state:
-        xfail("Pods has the following error {},Hence failing this test".format(output))
 
     LOG.fixture_step("Get the ip address of the server pods")
     server_ips = []
