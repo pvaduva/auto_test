@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2016 Wind River Systems, Inc.
+# Copyright (c) 2016-2020 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -442,8 +442,16 @@ def pytest_configure(config):
                       horizon_visible=horizon_visible)
 
     if lab.get('central_region'):
-        ProjVar.set_var(IS_DC=True,
-                        PRIMARY_SUBCLOUD=config.getoption('subcloud'))
+        default_subloud = config.getoption('subcloud')
+        subcloud_list = config.getoption('subcloud_list')
+        if subcloud_list:
+            if default_subloud not in subcloud_list:
+                msg = ("default subcloud --subcloud=%s not in --subcloud_list=%s" %
+                       (default_subloud, subcloud_list))
+                LOG.error(msg)
+                pytest.exit(msg)
+
+        ProjVar.set_var(IS_DC=True, PRIMARY_SUBCLOUD=default_subloud, SUBCLOUD_LIST=subcloud_list)
 
     if setups.is_vbox():
         ProjVar.set_var(IS_VBOX=True)
@@ -489,6 +497,9 @@ def pytest_addoption(parser):
                   "e.g., creating vm on RegionTwo from RegionOne"
     subcloud_help = "Default subcloud used for automated test when boot vm, " \
                     "etc. 'subcloud1' if unspecified."
+    subcloud_list_help = "Specifies subclouds for DC labs, e.g. --subcloud_list=subcloud1," \
+                         "subcloud2. If unspecified the lab's subclouds from lab.py will " \
+                         "be used."
     report_help = "Upload results and logs to the test results database."
     tag_help = "Tag to be used for uploading logs to the test results database."
     telnetlog_help = "Collect telnet logs throughout the session"
@@ -563,6 +574,8 @@ def pytest_addoption(parser):
                      default=None, help=region_help)
     parser.addoption('--subcloud', action='store', metavar='subcloud',
                      default='subcloud1', help=subcloud_help)
+    parser.addoption("--subcloud_list", action="store", default=None,
+                     help=subcloud_list_help)
 
     parser.addoption("--bmc_target",
                      action="append",

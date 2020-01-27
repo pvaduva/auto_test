@@ -46,6 +46,12 @@ def get_subclouds(field='name', name=None, avail=None, sync=None, mgmt=None, dep
     # Filter out the Subclouds that are not in the lab.py file
     filtered_subclouds = [_cloud for _cloud in subclouds if _cloud in ProjVar.get_var('LAB')]
 
+    # Filter out the Subclouds that are not in the --subcloud_list arg
+    subcloud_list = ProjVar.get_var('SUBCLOUD_LIST')
+    if subcloud_list:
+        filtered_subclouds = [_cloud for _cloud in filtered_subclouds if _cloud in subcloud_list]
+
+    LOG.info("filtered_subclouds: {}".format(filtered_subclouds))
     return filtered_subclouds
 
 
