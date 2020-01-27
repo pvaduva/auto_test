@@ -55,6 +55,7 @@ def pytest_configure(config):
     extract_deploy_config = config.getoption('extract_deploy_config')
     vswitch_type = config.getoption('vswitch_type')
     ipv6_oam = config.getoption('ipv6_oam')
+    subcloud_host = config.getoption('subcloud_host')
 
     # Restore parameters
     backup_src_path = config.getoption('backup_path')
@@ -82,7 +83,15 @@ def pytest_configure(config):
     if 'yow' in lab_name:
         lab_name = lab_name[4:]
 
-    is_subcloud, sublcoud_name, dc_float_ip = setups.is_lab_subcloud(lab_dict, ipv6=ipv6_oam)
+    if subcloud_host:
+        is_subcloud = False
+        sublcoud_name = None
+        dc_float_ip = None
+        dc_lab_name = None
+    else:
+        is_subcloud, sublcoud_name, dc_float_ip, dc_lab_name = setups.is_lab_subcloud(lab_dict, ipv6=ipv6_oam)
+        if is_subcloud and 'yow' in dc_lab_name:
+            dc_lab_name = dc_lab_name[4:]
 
     if resume_install is True:
         resume_install = fresh_install_helper.get_resume_step(lab_dict)
@@ -116,7 +125,8 @@ def pytest_configure(config):
             if not os.path.isabs(lab_file_dir):
                 lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_file_dir)
         else:
-            lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '')
+            lab_file_dir = "{}/lab/yow/{}".format(host_build_dir_path, lab_name if lab_name else '') \
+                if not is_subcloud else "{}/lab/yow/{}".format(host_build_dir_path, dc_lab_name if dc_lab_name else '')
 
         if not heat_templates:
             if BuildServerPath.BldsDirNames.TC_19_05_BUILD in host_build_dir_path:
@@ -165,7 +175,7 @@ def pytest_configure(config):
             no_openstack=no_openstack, dc_ipv6=dc_ipv6,
             helm_chart_path=helm_chart_path, no_manage=no_manage,
             deploy_openstack_from_controller_1=deploy_openstack_from_controller_1,
-            extract_deploy_config=extract_deploy_config)
+            extract_deploy_config=extract_deploy_config, subcloud_host=subcloud_host)
 
     frame_str = '*'*len('Install Arguments:')
     args = "\n\n{}\nInstall Arguments:\n{}\n".format(frame_str, frame_str)

@@ -322,7 +322,7 @@ def pytest_configure(config):
     elif stress_count > 0:
         count = stress_count
 
-    # neccesary install params if --lab is not given
+    # necessary install params if --lab is not given
     controller_arg = config.getoption('controller')
     compute_arg = config.getoption('compute')
     storage_arg = config.getoption('storage')
@@ -488,11 +488,13 @@ def pytest_addoption(parser):
                   "different than region to test. " \
                   "e.g., creating vm on RegionTwo from RegionOne"
     subcloud_help = "Default subcloud used for automated test when boot vm, " \
-                    "etc. 'subcloud-1' if unspecified."
+                    "etc. 'subcloud1' if unspecified."
     report_help = "Upload results and logs to the test results database."
     tag_help = "Tag to be used for uploading logs to the test results database."
     telnetlog_help = "Collect telnet logs throughout the session"
     remote_cli_help = 'Run testcases using remote CLI'
+    bmc_target_help = 'BMC test target'
+    bmc_password_help = 'BMC access password'
 
     # Test session options on installed and configured STX system:
     parser.addoption('--testcase-config', action='store',
@@ -560,8 +562,16 @@ def pytest_addoption(parser):
     parser.addoption('--region', action='store', metavar='region',
                      default=None, help=region_help)
     parser.addoption('--subcloud', action='store', metavar='subcloud',
-                     default='subcloud-1', help=subcloud_help)
+                     default='subcloud1', help=subcloud_help)
 
+    parser.addoption("--bmc_target",
+                     action="append",
+                     default=[],
+                     help=bmc_target_help)
+    parser.addoption("--bmc_password",
+                     action="store",
+                     default=None,
+                     help=bmc_password_help)
     ##################################
     # Lab fresh_install or upgrade options #
     ##################################
@@ -684,6 +694,8 @@ def pytest_addoption(parser):
                         'ovs-dpdk: a default value \n' \
                         'avs \n' \
                         'none'
+    subcloud_host_help = 'flag to indicate the lab will be used for subclouds host; default is false.'
+
 
     # Custom install options
     parser.addoption('--lab_file_dir', '--lab-file-dir', dest='file_dir',
@@ -735,6 +747,9 @@ def pytest_addoption(parser):
                      help=vswitch_type_help)
     parser.addoption('--ipv6-oam', '--ipv6', dest='ipv6_oam', action='store_true', default=False,
                      help=ipv6_install_help)
+
+    parser.addoption('--subclouds-host', '--subcloud-host', dest='subcloud_host', action='store_true', default=False,
+                     help=subcloud_host_help)
 
     # DC Options:
     parser.addoption('--dc-float-ip', '--dc_float_ip', '--dcfip',

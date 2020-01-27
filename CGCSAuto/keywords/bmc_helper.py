@@ -25,9 +25,14 @@ from consts.auth import Tenant, HostLinuxUser
 from consts.filepaths import BMCPath
 from keywords import system_helper
 from utils import table_parser, cli, exceptions
-from utils.clients.ssh import ControllerClient
+from utils.clients.ssh import ControllerClient, SSHClient
 from utils.tis_log import LOG
 
+IPMITOOL_POWER_CMD = "ipmitool -I lanplus -H {} -U {} -P {} chassis power {}"
+IPMITOOL_SET_BOOTDEV_CMD = "ipmitool -I lanplus -H {} -U {} -P {} chassis bootdev {}"
+
+CHASSIS_POWER_OPTIONS = ['on', 'off', 'status', 'reset', 'cycle', 'soft']
+BOOTDEV_OPTIONS = ['none', 'pxe', 'disk', 'safe', 'floppy', 'cdrom']
 
 def suppress_sensor(sensorgroup_name, host):
     """Suppress a sensor."""
@@ -505,3 +510,103 @@ def backup_sensor_data_files(hosts=None, con_ssh=None):
     LOG.info("Sensor data files for {} are copied to {}".format(
         hosts, HostLinuxUser.get_home()))
     return hosts
+
+
+def set_server_chassis_power(server_bmc_address, local_client, action='status', user='root', password='root',
+                             fail_ok=False):
+    """
+    Set bmc chassis power commands (on/off/status/reset) using ipmitool.
+    Args:
+        server_bmc_address (str): host bmc address
+        local_client(SSHClient): the ssh session from which the ipmi commands are executed. Default is Test Server
+        action (str): chasssis power command to execute; Supported options: [on, off, reset, status, cycle, soft].
+        user(str): bmc username
+        password(str): bmc password
+        fail_ok:
+
+    Returns(tuple):
+    0 - success
+    1 - Failure
+
+    """
+
+    if action  not in CHASSIS_POWER_OPTIONS:
+        raise ValueError("Chassis power action  values must be  one of {}".format(CHASSIS_POWER_OPTIONS))
+
+    cmd = IPMITOOL_POWER_CMD.format(server_bmc_address, user, password, action)
+    code, output = local_client.exec_cmd(cmd, fail_ok=True)
+    if code != 0:
+        msg = 'Fail to execute BMC chassis power command {}: {}'.format(action, output)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.InstallError(msg)
+
+    LOG.info("Executed IPMI chassis power {} for server with bmc address {}".format(action, server_bmc_address))
+    return 0, output
+
+
+def set_bootdev(server_bmc_address, local_client, bootdev='pxe', user='root', password='root', fail_ok=False,
+                **options):
+    """
+    Sets the boot device on next reboot. Default is pxe.
+    Args:
+        server_bmc_address(str): host bmc address
+        local_client(SSHClient): the ssh session from which the ipmi commands are executed. Default is Test Server
+        bootdev (str): The boot device the boots from. Supported choices are:
+            default is pxe
+          none  : Do not change boot device order
+          pxe   : Force PXE boot
+          disk  : Force boot from default Hard-drive
+          safe  : Force boot from default Hard-drive, request Safe Mode
+          cdrom : Force boot from CD/DVD
+          floppy: Force boot from Floppy/primary removable media
+
+        user(str): bmc username
+        password(str): bmc password
+        fail_ok:
+        **options(key/value) :  additional options in  setting  boot device. Legal options settings are:
+            help:   print this message
+            valid:  Boot flags valid
+            persistent:     Changes are persistent for all future boots
+            efiboot:        Extensible Firmware Interface Boot (EFI)
+            clear-cmos:     CMOS clear
+            lockkbd:        Lock Keyboard
+            screenblank:    Screen Blank
+            lockoutreset:   Lock out Resetbuttons
+            lockout_power:  Lock out (power off/sleep request) via Power Button
+            verbose=default:        Request quiet BIOS display
+            verbose=no:     Request quiet BIOS display
+            verbose=yes:    Request verbose BIOS display
+            force_pet:      Force progress event traps
+            upw_bypass:     User password bypass
+            lockout_sleep:  Log Out Sleep Button
+            cons_redirect=default:  Console redirection occurs per BIOS configuration setting
+            cons_redirect=skip:     Suppress (skip) console redirection if enabled
+            cons_redirect=enable:   Suppress (skip) console redirection if enabled
+
+
+   Returns(tuple):
+    0 - success
+    1 - Failure
+    """
+
+    if bootdev  not in BOOTDEV_OPTIONS:
+        raise ValueError("The bootdev values must be  one of {}".format(BOOTDEV_OPTIONS))
+
+    cmd = IPMITOOL_SET_BOOTDEV_CMD.format(server_bmc_address, user, password, bootdev)
+    opts =''
+    for k, v in options.items():
+        opts += ' {}={} '.format(k, v)
+    cmd += opts
+    code, output = local_client.exec_cmd(cmd, fail_ok=True)
+    if code != 0:
+        msg = 'Fail to set boot device {} on next reboot for address {} : {}'\
+            .format(bootdev, server_bmc_address, output)
+        if fail_ok:
+            return 1, msg
+        else:
+            raise exceptions.InstallError(msg)
+
+    LOG.info("Bootdev = {} set for bmc address {}".format(bootdev, server_bmc_address))
+    return 0, output

@@ -134,21 +134,21 @@ def test_distributed_cloud_install(install_setup):
     if controller0_node.ssh_conn is None:
         controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
-    fresh_install_helper.wait_for_deployment_mgr_to_bulk_add_hosts(controller0_node, lab=central_region_lab)
+    fresh_install_helper.wait_for_deployment_mgr_to_bulk_add_hosts(lab=central_region_lab)
 
     LOG.info("Booting standby controller host...")
 
     # TODO: get controller-1 hostname
     fresh_install_helper.boot_hosts(boot_device, hostnames=['controller-1'], lab=central_region_lab,
                                     wait_for_online=False)
-    host_helper.wait_for_hosts_ready([host for host in hosts if controller0_node.name not in host],
-                                     con_ssh=controller0_node.ssh_conn)
+
+    # host_helper.wait_for_hosts_ready([host for host in hosts if controller0_node.name not in host],
+    #                                  con_ssh=controller0_node.ssh_conn)
 
     fresh_install_helper.wait_for_deploy_mgr_lab_config(controller0_node, lab=central_region_lab)
 
-    fresh_install_helper.wait_for_hosts_ready(["controller-1"], lab=central_region_lab)
-    container_helper.wait_for_apps_status(apps='platform-integ-apps', timeout=1800,
-                                          con_ssh=controller0_node.ssh_conn, status='applied')
+    fresh_install_helper.wait_for_deployed_hosts_ready(["controller-1"], lab=central_region_lab)
+    fresh_install_helper.wait_for_platform_integ_app_applied(controller0_node, lab=central_region_lab)
     LOG.info("Running lab setup script ...")
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
@@ -156,10 +156,9 @@ def test_distributed_cloud_install(install_setup):
         collect_sys_net_info(dc_lab)
         setup_tis_ssh(dc_lab)
 
-    fresh_install_helper.wait_for_hosts_ready(controller0_node.name, lab=central_region_lab)
+    fresh_install_helper.wait_for_deployed_hosts_ready(controller0_node.name, lab=central_region_lab)
 
     fresh_install_helper.attempt_to_run_post_install_scripts(controller0_node=controller0_node)
 
-    fresh_install_helper.reset_global_vars()
     fresh_install_helper.verify_install_uuid(lab=central_region_lab)
     fresh_install_helper.validate_deployment_mgr_install(controller0_node, central_region_lab)

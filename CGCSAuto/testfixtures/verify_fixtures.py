@@ -156,7 +156,7 @@ def pre_alarms_function():
 def __get_alarms(scope):
     LOG.fixture_step("({}) Gathering system health info before test {} "
                      "begins.".format(scope, scope))
-    alarms = system_helper.get_alarms()
+    alarms = system_helper.get_alarms(fields=('Alarm ID', 'Entity ID', 'Severity'))
     return alarms
 
 

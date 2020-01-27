@@ -1,6 +1,9 @@
 import os
 import time
-
+import yaml
+import pysftp
+import base64
+import re
 import pexpect
 from pytest import skip
 
@@ -17,7 +20,7 @@ from consts.stx import SysType, SubcloudStatus, HostAdminState, HostAvailState, 
 from consts.filepaths import BuildServerPath, TuxlabServerPath
 from consts.proj_vars import ProjVar, InstallVars
 from keywords import install_helper, system_helper, vlm_helper, host_helper, dc_helper, \
-    kube_helper, storage_helper, keystone_helper, common
+    kube_helper, storage_helper, keystone_helper, common, container_helper
 
 DEPLOY_TOOL = 'deploy'
 DEPLOY_SOUCE_PATH = '/folk/cgts/lab/bin/'
@@ -153,7 +156,7 @@ def install_controller(security=None, low_latency=None, lab=None, sys_type=None,
     test_step = "Install Controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
-        vlm_helper.power_off_hosts(lab["hosts"], lab=lab, count=2)
+        install_helper.power_off_hosts_(lab)
         install_helper.boot_controller(lab=lab, small_footprint=is_cpe, boot_usb=usb,
                                        security=security,
                                        low_latency=low_latency, patch_dir_paths=patch_dir,
@@ -234,15 +237,15 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
             else:
                 install_helper.setup_ipv6_oam(lab['controller-0'])
 
+        if not InstallVars.get_install_var("DEPLOY_OPENSTACK"):
+            controller0_node = lab['controller-0']
+            # controller0_node.telnet_conn.set_prompt(r'-[\d]+((:~\$)|( ~\(keystone_admin\)\]\$ ))')
+            controller0_node.telnet_conn.set_prompt(r'(.*:~\$\s?)|(\[.*\(keystone_admin\)\]\$ )')
+            controller0_node.telnet_conn.exec_cmd("touch .no_openstack_install")
+
     if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
-
-    if not InstallVars.get_install_var("DEPLOY_OPENSTACK"):
-        controller0_node = lab['controller-0']
-        #controller0_node.telnet_conn.set_prompt(r'-[\d]+((:~\$)|( ~\(keystone_admin\)\]\$ ))')
-        controller0_node.telnet_conn.set_prompt(r'(.*:~\$\s?)|(\[.*\(keystone_admin\)\]\$ )')
-        controller0_node.telnet_conn.exec_cmd("touch .no_openstack_install")
 
 
 def set_license_var(sys_version=None, sys_type=None):
@@ -394,7 +397,7 @@ def configure_controller_dc(controller0_node, config_file='TiS_config.ini_centos
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
-def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='subcloud-1',
+def configure_subcloud(subcloud_controller0_node, main_cloud_node, subcloud='subcloud1',
                        lab=None, final_step=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
@@ -447,12 +450,17 @@ def bulk_add_hosts(lab=None, con_ssh=None, final_step=None):
 def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
                wait_for_online=True):
     final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
-    test_step = "Boot"
 
     if lab is None:
         lab = InstallVars.get_install_var('LAB')
     if hostnames is None:
         hostnames = [hostname for hostname in lab['hosts'] if 'controller-0' not in hostname]
+    use_bmc = InstallVars.get_install_var("USE_BMC")
+
+    bmc_ok = lab['bmc_info']['bmc_ok']
+    if 'controller-0' in bmc_ok:
+        bmc_ok.remove('controller-0')
+    test_step = " Wait for mtcAgent to boot" if use_bmc and len(bmc_ok) > 0 else "Boot"
     if boot_device_dict is None:
         lab = InstallVars.get_install_var('LAB')
         boot_device_dict = lab.get('boot_device_dict')
@@ -490,9 +498,13 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
 
     LOG.tc_step(test_step)
     if do_step(test_step):
-        LOG.info("Wait for 2 minutes before power on other hosts")
-        time.sleep(120)
         hosts_online = False
+        LOG.info("Wait for 2 minutes for power on hosts: {}".format(hostnames))
+        time.sleep(120)
+
+        if any(h for h in hostnames if h in bmc_ok):
+            wait_for_mtc_to_power_on_hosts(bmc_ok, lab=lab, timeout=60)
+
         for hostname in hostnames:
             threads.append(install_helper.open_vlm_console_thread(hostname, lab=lab,
                                                                   boot_interface=boot_device_dict,
@@ -530,7 +542,7 @@ def boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_step=None,
                                             dest_password=HostLinuxUser.get_password(),
                                             pre_opts=pre_opts)
 
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -590,7 +602,7 @@ def unlock_hosts(hostnames=None, lab=None, con_ssh=None, final_step=None):
             host_helper.unlock_hosts(hostnames, con_ssh=con_ssh, fail_ok=False,
                                      check_nodes_ready=False)
 
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -640,7 +652,7 @@ def run_lab_setup(con_ssh, conf_file=None, final_step=None):
         LOG.info("running lab_setup.sh")
         install_helper.run_setup_script(config=True, conf_file=conf_file, con_ssh=con_ssh,
                                         timeout=7200, fail_ok=False)
-    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+    if str(str(LOG.test_step)) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -655,7 +667,7 @@ def check_heat_resources(con_ssh, sys_type=None, final_step=None):
         install_helper.setup_heat(con_ssh=con_ssh)
         if sys_type != SysType.AIO_SX:
             clear_post_install_alarms(con_ssh=con_ssh)
-    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+    if str(str(LOG.test_step)) == final_step or test_step.lower().replace(' ', '_') == final_step:
         reset_global_vars()
         skip("stopping at install step: {}".format(LOG.test_step))
 
@@ -671,16 +683,18 @@ def clear_post_install_alarms(con_ssh=None):
         assert rc == 0, msg
 
 
-def attempt_to_run_post_install_scripts(controller0_node=None):
+def attempt_to_run_post_install_scripts(controller0_node=None, final_step=None):
+
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Attempt to run post install scripts"
     LOG.tc_step(test_step)
-    LOG.info("Skipping step")
-    # if do_step(test_step):
-    #     rc, msg = install_helper.post_install(controller0_node=controller0_node)
-    #     LOG.info(msg)
-    #     assert rc >= 0, msg
-
-    reset_global_vars()
+    if do_step(test_step):
+        # rc, msg = install_helper.post_install(controller0_node=controller0_node)
+        # LOG.info(msg)
+        # assert rc >= 0, msg
+        reset_global_vars()
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        skip("stopping at install step: {}".format(LOG.test_step))
 
 
 def get_resume_step(lab=None, install_progress_path=None):
@@ -1076,7 +1090,7 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
                                  fail_ok=True)
                 con_ssh.exec_cmd('kubectl -n {} describe pods'.format(dm_namespace), fail_ok=True)
 
-            from keywords import container_helper
+            #from keywords import container_helper
             container_helper.get_apps(con_ssh=con_ssh)
             system_helper.get_alarms(con_ssh=con_ssh)
             system_helper.get_build_info(con_ssh=con_ssh)
@@ -1086,6 +1100,7 @@ def install_teardown(lab, active_controller_node, dist_cloud=False):
             as e_:
         LOG.error(e_.__str__())
         unreserve_lab_hosts(lab, dist_cloud=dist_cloud)
+    #install_helper.reset_kickstart_default(lab=lab)
     unreserve_lab_hosts(lab, dist_cloud=dist_cloud)
     # LOG.fixture_step("unreserving hosts")
     # if dist_cloud:
@@ -1151,6 +1166,13 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         InstallVars.set_install_var(dc_lab=dc_lab)
         LOG.info("Instal DC lab  = {}".format(InstallVars.get_install_var('DC_LAB')['name']))
     ProjVar.set_var(SOURCE_OPENRC=True)
+    bmc_config_server = servers_map.get(file_server, bs_obj)
+    bmc_info = get_bmc_info(lab, bmc_config_server,
+                            subcloud=InstallVars.get_install_var("INSTALL_SUBCLOUD") if subcloud else None)
+    lab['bmc_info'] = bmc_info
+    check_bmc_config(lab=lab)
+    LOG.info("Lab bmc info  = {}".format(InstallVars.get_install_var("LAB")['bmc_info']))
+
 
     boot_type = InstallVars.get_install_var("BOOT_TYPE")
     if "usb" in boot_type:
@@ -1211,8 +1233,10 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
         elif 'iso_feed' in boot["boot_type"] and 'feed' not in skip_list:
             skip_cfg = "pxeboot" in skip_list
+            set_default_menu = True if "grizzly" in lab["controller-0"].host_name else False
+            LOG.info("Need to set default menu {} for {}".format(set_default_menu, lab["controller-0"].host_name))
             install_helper.set_up_feed_from_boot_server_iso(iso_host_obj, lab_dict=lab_dict, iso_path=iso_path,
-                                                            skip_cfg=skip_cfg)
+                                                            skip_cfg=skip_cfg, set_default_menu=set_default_menu)
 
         elif 'feed' in boot["boot_type"] and 'feed' not in skip_list:
             load_path = directories["build"]
@@ -1233,7 +1257,7 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
     return _install_setup
 
 
-def verify_install_uuid(lab=None):
+def verify_install_uuid(lab=None, final_step=None):
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
 
@@ -1242,25 +1266,33 @@ def verify_install_uuid(lab=None):
     if not controller0_node.ssh_conn:
         controller0_node.ssh_conn = install_helper.ssh_to_controller(controller0_node.host_ip)
 
-    LOG.info("Getting the install uuid from controller-0")
-    install_uuid = install_helper.get_host_install_uuid(controller0_node.name,
-                                                        controller0_node.ssh_conn)
-    LOG.info("The install uuid from controller-0 = {}".format(install_uuid))
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
+    test_step = "Verify install uuid"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
 
-    LOG.info("Verify all hosts have the same install uuid {}".format(install_uuid))
-    hosts = lab['hosts']
-    try:
-        hosts.remove('controller-0')
-    except ValueError:
-        pass
-    for host in hosts:
-        with host_helper.ssh_to_host(host) as host_ssh:
-            host_install_uuid = install_helper.get_host_install_uuid(host, host_ssh)
-            assert host_install_uuid == install_uuid, \
-                "The host {} install uuid {} is not same with controller-0 " \
-                "uuid {}".format(host, host_install_uuid, install_uuid)
-            LOG.info("Host {} install uuid verified".format(host))
-    LOG.info("Installation UUID {} verified in all lab hosts".format(install_uuid))
+        LOG.info("Getting the install uuid from controller-0")
+        install_uuid = install_helper.get_host_install_uuid(controller0_node.name,
+                                                            controller0_node.ssh_conn)
+        LOG.info("The install uuid from controller-0 = {}".format(install_uuid))
+
+        LOG.info("Verify all hosts have the same install uuid {}".format(install_uuid))
+        hosts = lab['hosts']
+        try:
+            hosts.remove('controller-0')
+        except ValueError:
+            pass
+        for host in hosts:
+            with host_helper.ssh_to_host(host) as host_ssh:
+                host_install_uuid = install_helper.get_host_install_uuid(host, host_ssh)
+                assert host_install_uuid == install_uuid, \
+                    "The host {} install uuid {} is not same with controller-0 " \
+                    "uuid {}".format(host, host_install_uuid, install_uuid)
+                LOG.info("Host {} install uuid verified".format(host))
+        LOG.info("Installation UUID {} verified in all lab hosts".format(install_uuid))
+
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        skip("stopping at install step: {}".format(LOG.test_step))
 
     return True
 
@@ -1374,7 +1406,27 @@ def wait_for_hosts_to_be_online(hosts, lab=None, fail_ok=True):
             raise exceptions.HostTimeout(msg)
 
 
-def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=False):
+def wait_for_deployed_hosts_ready(hosts, lab=None, final_step=None):
+    """
+    Waiting for deployed hosts to be ready.
+    Args:
+        hosts:
+        lab:
+
+    Returns:
+
+    """
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
+    test_step = "Wait for deployed hosts ready"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+        wait_for_hosts_ready(hosts, lab=lab)
+
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        skip("stopping at install step: {}".format(LOG.test_step))
+
+
+def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=False, final_step=None):
     """
 
     Args:
@@ -1391,7 +1443,7 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
     if controller0_node is None:
         controller0_node = lab['controller-0']
     subcloud = InstallVars.get_install_var("INSTALL_SUBCLOUD")
-
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Wait for Deployment Mgr to configure active controller"
     LOG.tc_step(test_step)
     if do_step(test_step):
@@ -1453,15 +1505,17 @@ def wait_for_deploy_mgr_controller_config(controller0_node, lab=None, fail_ok=Fa
                 return False
             raise exceptions.HostTimeout(msg)
 
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        skip("stopping at install step: {}".format(LOG.test_step))
 
-def wait_for_subcloud_to_be_managed(subcloud, dc_system_controller, lab=None, fail_ok=True):
+
+def wait_for_subcloud_to_be_managed(subcloud, dc_system_controller, lab=None, final_step=None):
     """
 
     Args:
         subcloud:
         dc_system_controller:
         lab:
-        fail_ok:
 
     Returns:
 
@@ -1481,6 +1535,7 @@ def wait_for_subcloud_to_be_managed(subcloud, dc_system_controller, lab=None, fa
     else:
         dc_system_controller.ssh_conn = install_helper.ssh_to_controller(dc_system_controller.host_ip)
 
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Wait for subcloud to be managed"
     LOG.tc_step(test_step)
     if do_step(test_step):
@@ -1508,6 +1563,9 @@ def wait_for_subcloud_to_be_managed(subcloud, dc_system_controller, lab=None, fa
                                                sync=SubcloudStatus.SYNCED,
                                                timeout=DCTimeout.SUBCLOUD_MANAGE,
                                                con_ssh=dc_system_controller.ssh_conn)
+
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        skip("stopping at install step: {}".format(LOG.test_step))
 
 
 def get_host_ceph_osd_devices_from_conf(active_controller_node, host, conf_file='lab_setup.conf'):
@@ -1573,7 +1631,7 @@ def add_ceph_ceph_mon_to_host(active_controller_node, host, final_step=None):
         active_controller_node.ssh_conn.exec_cmd(
             "touch {}/.lab_setup.done.group0.ceph-mon".format(
                 HostLinuxUser.get_home()))
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -1645,7 +1703,7 @@ def add_ceph_osds_to_controller(lab=None, conf_file='lab_setup.conf', final_step
 
         storage_helper.wait_for_ceph_health_ok()
 
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -1816,7 +1874,7 @@ def collect_lab_config_yaml(lab, server, stage=DEPLOY_LAST, final_step=None):
                         controller0_node.ssh_conn.exec_cmd("mv {} {}deploy_yaml_files/".format(
                             last_file, HostLinuxUser.get_home()))
 
-    if LOG.test_step == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -1879,7 +1937,7 @@ def use_ansible(controller0_node):
     return ansible_config
 
 
-def wait_for_deployment_mgr_to_bulk_add_hosts(controller0_node, lab, fail_ok=False):
+def wait_for_deployment_mgr_to_bulk_add_hosts(lab=None, final_step=None, fail_ok=False):
 
     if not lab:
         lab = InstallVars.get_install_var('LAB')
@@ -1887,7 +1945,7 @@ def wait_for_deployment_mgr_to_bulk_add_hosts(controller0_node, lab, fail_ok=Fal
     hosts_ = [host for host in lab["hosts"] if host != 'controller-0']
 
     con_ssh = lab["controller-0"].ssh_conn
-
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
     test_step = "Wait for Deployment Mgr to bulk add hosts"
     LOG.tc_step(test_step)
     if do_step(test_step):
@@ -1912,8 +1970,11 @@ def wait_for_deployment_mgr_to_bulk_add_hosts(controller0_node, lab, fail_ok=Fal
                 return False
             raise exceptions.HostTimeout(msg)
 
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        skip("stopping at install step: {}".format(LOG.test_step))
 
-def validate_deployment_mgr_install(controller0_node, lab, fail_ok=False):
+
+def validate_deployment_mgr_install(controller0_node, lab):
 
     if not lab:
         lab = InstallVars.get_install_var('LAB')
@@ -2114,7 +2175,6 @@ def wait_for_deploy_mgr_data_networks_config(controller0_node, lab=None, timeout
     LOG.info("Waiting for Deploy Mgr to configure {} data networks ...".format(
         configured_data_nets))
 
-    debug_msg = "Waiting for {} data networks insync=true".format(configured_data_nets)
     end_time = time.time() + timeout
 
     while time.time() < end_time:
@@ -2166,7 +2226,6 @@ def wait_for_deploy_mgr_platform_networks_config(controller0_node, lab=None, tim
     LOG.info("Waiting for Deploy Mgr to configure {} data networks ...".format(
         configured_data_nets))
 
-    debug_msg = "Waiting for {} data networks insync=true".format(configured_data_nets)
     end_time = time.time() + timeout
 
     while time.time() < end_time:
@@ -2311,7 +2370,7 @@ def restore_boot_hosts(boot_device_dict=None, hostnames=None, lab=None, final_st
                                             dest_password=HostLinuxUser.get_password(),
                                             pre_opts=pre_opts)
 
-    if str(LOG.test_step) == final_step or test_step == final_step:
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
         skip("stopping at install step: {}".format(LOG.test_step))
 
 
@@ -2327,3 +2386,158 @@ def unreserve_lab_hosts(lab, dist_cloud=False):
                                        lab=lab[subcloud])
     else:
         vlm_helper.unreserve_hosts(vlm_helper.get_hostnames_from_consts(lab))
+
+
+def get_bmc_info(lab, conf_server=None, lab_file_dir=None, subcloud=None):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    if not lab_file_dir:
+        lab_file_dir = InstallVars.get_install_var("LAB_SETUP_PATH")
+    if subcloud:
+        lab_file_dir = "{}/{}".format(lab_file_dir, subcloud[:-1] + '-' + subcloud[-1:])
+
+    if not os.path.isabs(lab_file_dir):
+        raise ValueError("Abs path required for {}".format(lab_file_dir))
+
+    lab_name = lab['name']
+    lab_name = lab_name.split('yow-', maxsplit=1)[-1]
+
+    lab_bmc_info = {}
+    LOG.info("Getting lab config file from specified path: {}".format(lab_file_dir))
+    cmd = "test -e " + lab_file_dir
+    if conf_server and conf_server.ssh_conn.exec_cmd(cmd, rm_date=False, fail_ok=True)[0] == 0:
+        vswitch_type = InstallVars.get_install_var("VSWITCH_TYPE")
+        dm_file = "{}-deploy-standard.yaml".format(subcloud) if subcloud \
+            else ("deployment-config_avs.yaml" if vswitch_type == VSwitchType.AVS
+                  else ("deployment-config_ovs-dpdk.yaml" if vswitch_type == VSwitchType.OVS_DPDK
+                        else "deployment-config.yaml"))
+
+        dm_file_path = "{}/{}".format(lab_file_dir, dm_file)
+        cmd = "test -e {}".format(dm_file_path)
+        if conf_server.ssh_conn.exec_cmd(cmd, rm_date=False)[0] == 0:
+            try:
+
+                with pysftp.Connection(host=conf_server.name, username=TestFileServer.get_user(),
+                                       password=TestFileServer.get_password()) as sftp:
+                    dm_file = sftp.open(dm_file_path)
+                    docs = yaml.load_all(dm_file)
+                    for document in docs:
+                        if document:
+                            if document['kind'] == 'Secret' and document['metadata']['name'] == 'bmc-secret':
+                                lab_bmc_info['username'] = base64.b64decode(document['data']['username']).decode()
+                                lab_bmc_info['password'] = base64.b64decode(document['data']['password']).decode()
+                            elif document['kind'] == 'Host':
+                                if 'boardManagement' in document['spec']['overrides']:
+                                    lab_bmc_info[document['metadata']['name']] = \
+                                        document['spec']['overrides']['boardManagement']['address']
+
+            except IOError as e:
+                LOG.info("Fail to open  deployment-config file {} for lab {}: {}".format(lab_file_dir, lab_name, e.message))
+        else:
+            LOG.info("No deployment-config file exist for lab {} in specified path: {}".format(lab_name, dm_file_path))
+
+    return lab_bmc_info
+
+
+def check_bmc_config(lab):
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+    bmc_info = lab.get("bmc_info")
+    bmc_ok = []
+    use_bmc = False
+    if "username" in bmc_info and "password" in bmc_info:
+        bmc_hosts = [host for host in lab["hosts"] if host in bmc_info]
+        if len(bmc_hosts) > 0:
+            LOG.info("Using BMC to power on/off hosts; Ensure BMC hosts {} are VLM powered on ...".format(bmc_hosts))
+            vlm_helper.power_on_hosts(bmc_hosts, post_check=False)
+            time.sleep(60)
+            test_client = install_helper.test_server_client()
+            for host in bmc_hosts:
+                code, output = test_client.ping_server(bmc_info[host], fail_ok=True)
+                if code != 0:
+                    msg = 'Unable to ping BMC address {} from Test Server: {}'.format(bmc_info[host], output)
+                    LOG.info(msg)
+                    use_bmc = False
+                else:
+                    bmc_ok.append(host)
+            if "controller-0" in bmc_ok:
+                use_bmc = True
+
+    bmc_info['bmc_ok'] = bmc_ok
+    lab["bmc_info"] = bmc_info
+
+    # if not use_bmc:
+    #     lab["bmc_info"].clear()
+
+    InstallVars.set_install_var(lab=lab)
+    InstallVars.set_install_var(use_bmc=use_bmc)
+
+
+def wait_for_mtc_to_power_on_hosts(hosts, lab=None, timeout=120, fail_ok=False):
+    """
+    Waits for mtcAgent to power on hosts
+    Args:
+        hosts:
+        lab:
+        timeout:
+        fail_ok:
+
+    Returns:
+
+    """
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    if isinstance(hosts, str):
+        hosts = [hosts]
+    powered_on_hosts = []
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+
+        for host in hosts:
+            status, output = install_helper.get_bmc_power_status(host, lab=lab, fail_ok=True)
+            if status == 'on':
+                LOG.info("The mtcAgent has power on {}: {}".format(host, output))
+                if host not in powered_on_hosts:
+                    powered_on_hosts.append(host)
+
+        if len(powered_on_hosts) == len(hosts):
+            LOG.info("The mtcAgent has power on all hosts: {}".format(powered_on_hosts))
+            return 0, None
+        else:
+            time.sleep(20)
+    else:
+        msg = "Timed out waiting for mtcAgent to power on hosts {};  powered on hosts: {}".format(hosts, powered_on_hosts)
+        if fail_ok:
+            LOG.warning(msg)
+            return False
+        raise exceptions.HostTimeout(msg)
+
+
+def wait_for_platform_integ_app_applied(controller0_node, lab=None, fail_ok=False, final_step=None):
+    """
+
+    Args:
+        controller0_node:
+        lab:
+        fail_ok:
+        final_step:
+
+    Returns:
+
+    """
+    if lab is None:
+        lab = InstallVars.get_install_var("LAB")
+
+    if controller0_node is None:
+        controller0_node = lab['controller-0']
+
+    final_step = InstallVars.get_install_var("STOP") if not final_step else final_step
+    test_step = "Wait for platform integ app applied"
+    LOG.tc_step(test_step)
+    if do_step(test_step):
+        container_helper.wait_for_apps_status(apps='platform-integ-apps', timeout=1800,
+                                              con_ssh=controller0_node.ssh_conn, status='applied', fail_ok=fail_ok)
+    if str(LOG.test_step) == final_step or test_step.lower().replace(' ', '_') == final_step:
+        skip("stopping at install step: {}".format(LOG.test_step))

@@ -126,7 +126,7 @@ def test_storage_install(install_setup):
     if not deploy_mgr:
         fresh_install_helper.bulk_add_hosts(lab=lab, con_ssh=controller0_node.ssh_conn)
     else:
-        fresh_install_helper.wait_for_deployment_mgr_to_bulk_add_hosts(controller0_node, lab=lab)
+        fresh_install_helper.wait_for_deployment_mgr_to_bulk_add_hosts(lab=lab)
 
     fresh_install_helper.boot_hosts(boot_device)
     fresh_install_helper.collect_lab_config_yaml(lab, build_server, stage=fresh_install_helper.DEPLOY_INTERIM)
@@ -146,9 +146,8 @@ def test_storage_install(install_setup):
     else:
         fresh_install_helper.wait_for_deploy_mgr_lab_config(controller0_node, lab=lab)
 
-    fresh_install_helper.wait_for_hosts_ready(hosts, lab=lab, timeout=900)
-    container_helper.wait_for_apps_status(apps='platform-integ-apps', timeout=1200,
-                                          con_ssh=controller0_node.ssh_conn, status='applied')
+    fresh_install_helper.wait_for_deployed_hosts_ready(hosts, lab=lab)
+    fresh_install_helper.wait_for_platform_integ_app_applied(controller0_node, lab=lab)
     fresh_install_helper.run_lab_setup(con_ssh=controller0_node.ssh_conn)
 
     if lab.get("floating ip"):
@@ -164,7 +163,6 @@ def test_storage_install(install_setup):
                                                              lab=lab)
     fresh_install_helper.attempt_to_run_post_install_scripts()
 
-    fresh_install_helper.reset_global_vars()
     fresh_install_helper.verify_install_uuid(lab)
     if deploy_mgr:
         fresh_install_helper.validate_deployment_mgr_install(controller0_node, lab)

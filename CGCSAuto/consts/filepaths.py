@@ -113,6 +113,7 @@ class BuildServerPath:
     PLAY_BOOKS_PATH = LAB_CONF_DIR + "/playbooks"
     DEFAULT_CUMULUS_DOCKER_REGISTRY_CERT_PATH = LAB_CONF_DIR + '/pki/cumulus-docker-registry-ca-cert.pem'
     TITANIUM_DEPLOYMENT_MGR_TGZ = "wind-river-cloud-platform-deployment-manager-2.0.0.tgz"
+    STX_MONITOR_TGX = "stx-monitor-1.0-1.tgz"
 
     HEAT_TEMPLATES_EXTS = {'16.10': HEAT_TEMPLATES_PREV,
                            '17.06': HEAT_TEMPLATES_PREV,
@@ -192,8 +193,8 @@ class BuildServerPath:
                   '/folk/cgts/lab/R6-EAR1-AIO-DX-eval.lic',
                   '/folk/cgts/lab/R6-EAR1-AIO-SX-eval.lic'],
         '19.10': ['/folk/cgts/lab/licenses/wrslicense-wrcp-1910.lic',
-                    '/folk/cgts/lab/licenses/wrslicense-wrcp-1910.lic',
-                    '/folk/cgts/lab/licenses/wrslicense-wrcp-1910.lic'],
+                  '/folk/cgts/lab/licenses/wrslicense-wrcp-1910.lic',
+                  '/folk/cgts/lab/licenses/wrslicense-wrcp-1910.lic'],
         'default': ['/folk/cgts/lab/R6-full.lic',
                     '/folk/cgts/lab/R6-AIO-DX-full.lic',
                     '/folk/cgts/lab/R6-AIO-SX-full.lic'],
@@ -254,6 +255,19 @@ class BMCPath:
     SENSOR_DATA_DIR = '/var/run/ipmitool/'
     # need to provide dir and host
     SENSOR_DATA_FILE_PATH = '{}/hwmond_{}_sensor_data'
+    @staticmethod
+    def get_ipmi_sensor_data_files(node):
+        IMPI_SENSOR_DATA_DIR = '/var/run/bmc/ipmitool/'
+        file = 'hwmond_%s_sensor_data' % node
+        return [os.path.join(IMPI_SENSOR_DATA_DIR, file)]
+
+    @staticmethod
+    def get_redfish_sensor_data_files(node):
+        REDFISH_SENSOR_DATA_DIR = '/var/run/bmc/redfishtool/'
+        thermal_sensor_file = 'hwmond_%s_thermal_sensor_data' % node
+        power_sensor_file = 'hwmond_%s_power_sensor_data' % node
+        return [os.path.join(REDFISH_SENSOR_DATA_DIR, thermal_sensor_file),
+                os.path.join(REDFISH_SENSOR_DATA_DIR, power_sensor_file)]
 
 
 class SecurityPath:

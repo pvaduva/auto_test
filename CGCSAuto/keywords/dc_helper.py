@@ -258,7 +258,7 @@ def wait_for_sync_audit(subclouds, con_ssh=None, fail_ok=False, filters_regex=No
 
     LOG.info("Waiting for sync audit in dcmanager.log for: {}".format(subclouds))
     if not filters_regex:
-        filters_regex = ['platform', 'volume', 'compute', 'network', 'patching', 'identity']
+        filters_regex = ['platform', 'patching', 'identity']
     elif isinstance(filters_regex, str):
         filters_regex = [filters_regex]
 
@@ -556,7 +556,7 @@ def add_subcloud(subcloud, subcloud_controller_node, system_controller_node, boo
         '--bootstrap-values': bootstrap_values_path,
         '--deploy-playbook': deploy_play_book_path,
         '--deploy-values': deploy_values_path,
-        '--subcloud-password': HostLinuxUser.get_password()
+        '--sysadmin-password': HostLinuxUser.get_password()
     }
 
     opt_args = ''

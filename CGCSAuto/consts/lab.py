@@ -16,6 +16,7 @@ class Labs:
         'compute_nodes': [21770, 21771],
         'ixia_ports': [{'port': (3, 15), 'range': (504, 535)},
                        {'port': (3, 16), 'range': (536, 567)}],
+        'default_pxe_menu': [4]
     }
 
     IP_1_4 = {
@@ -160,11 +161,12 @@ class Labs:
         'storage_nodes': [23954, 23955, 23916, 22717, 22718, 22721],
         'ixia_ports': [{'port': (5, 1), 'range': (1852, 1884)},
                        {'port': (5, 2), 'range': (1918, 1951)}],
+        'default_pxe_menu': [2]
     }
 
     PV0_AIO_Plus = {
         'short_name': 'pv0_aio_plus',
-        'name': 'yow-cgcs-pv-0_aio_plus',
+        'name': 'yow-cgcs-pv-0-aio_plus',
         'floating ip': '128.224.150.73',
         'controller-0 ip': '128.224.150.26',
         'controller-1 ip': '128.224.150.28',
@@ -175,11 +177,12 @@ class Labs:
         'unused_nodes': [23954, 23955, 23916, 22717, 22718, 22721],
         'ixia_ports': [{'port': (5, 1), 'range': (1852, 1884)},
                        {'port': (5, 2), 'range': (1918, 1951)}],
+        'default_pxe_menu': [4]
     }
 
     PV0_AIO_Plus_10 = {
         'short_name': 'pv0_aio_plus_10',
-        'name': 'yow-cgcs-pv-0_aio_plus_10',
+        'name': 'yow-cgcs-pv-0-aio_plus_10',
         'floating ip': '128.224.150.73',
         'controller-0 ip': '128.224.150.26',
         'controller-1 ip': '128.224.150.28',
@@ -189,6 +192,7 @@ class Labs:
         'compute_nodes': [22719, 22720, 23915, 22722, 23954, 23955, 23916, 22717, 22718, 22721],
         'ixia_ports': [{'port': (5, 1), 'range': (1852, 1884)},
                        {'port': (5, 2), 'range': (1918, 1951)}],
+        'default_pxe_menu': [4]
     }
 
     PV1 = {
@@ -1051,7 +1055,7 @@ def update_lab(lab_dict_name=None, lab_name=None, floating_ip=None, **kwargs):
         lab_name (str|None): lab short_name. This is used only if
         lab_dict_name is not specified
         floating_ip (str|None):
-        **kwargs: Some possible keys: subcloud-1, name, etc
+        **kwargs: Some possible keys: subcloud1, name, etc
 
     Returns (dict): updated lab dict
 

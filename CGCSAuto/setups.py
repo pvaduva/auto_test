@@ -324,9 +324,9 @@ def is_lab_subcloud(lab, ipv6=False):
                 if ipv6:
                     convert_to_ipv6(dc_lab)
                     dc_float_ip = dc_lab['floating ip']
-                return True, subcloud, dc_float_ip
+                return True, subcloud, dc_float_ip, dc_lab['name']
 
-    return False, None, None
+    return False, None, None, None
 
 
 def get_natbox_dict(natboxname, user=None, password=None, prompt=None):
@@ -712,7 +712,7 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False,
                        no_openstack=False, dc_ipv6=False,
                        helm_chart_path=None, no_manage=False,
                        deploy_openstack_from_controller_1=False,
-                       extract_deploy_config=False, ipv6_oam=False):
+                       extract_deploy_config=False, ipv6_oam=False, subcloud_host=False):
 
     if not lab and not installconf_path:
         raise ValueError("Either --lab=<lab_name> or --install-conf=<full path "
@@ -1052,7 +1052,8 @@ def set_install_params(installconf_path, lab=None, skip=None, resume=False,
         helm_chart_path=helm_chart_path,
         helm_chart_server=helm_chart_server,
         no_manage=no_manage,
-        extract_deploy_config=extract_deploy_config
+        extract_deploy_config=extract_deploy_config,
+        subcloud_host=subcloud_host
     )
 
 

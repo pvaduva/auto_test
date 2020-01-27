@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2016 Wind River Systems, Inc.
+# Copyright (c) 2016-2020 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -37,6 +37,8 @@ def exec_kube_cmd(sub_cmd, args=None, con_ssh=None, fail_ok=False, grep=None):
         con_ssh = ControllerClient.get_active_controller()
     cmd = 'kubectl {} {}'.format(sub_cmd.strip(),
                                  args.strip() if args else '').strip()
+
+    LOG.info("exec_kube_cmd:%s" % cmd)
 
     get_exit_code = True
     if cmd.endswith(';echo'):

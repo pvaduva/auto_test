@@ -47,6 +47,7 @@ def compose_new_dns_servers(scenario, prev_dns_servers):
         if scenario == 'change_order':
             dns_servers.append(dns_servers.pop(0))
         elif scenario == 'remove_one_server':
+            dns_servers.append(dns_servers.pop(0))
             dns_servers.pop()
         else:
             raise ValueError("Unknown scenario: {}".format(scenario))

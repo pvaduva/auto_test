@@ -353,6 +353,9 @@ class TestMutiPortsPCI:
         base_vm_pci, flavor, base_nics, avail_sriov_net, avail_pcipt_net, pcipt_seg_ids, \
             extra_pcipt_net = base_setup_pci
 
+        if 'virtio' in '.'.join(vifs) and not system_helper.is_avs():
+            skip('ovs-agent bug: virtio and sriov ports cannot be configured on same datanetwork')
+
         pcipt_included = sriov_included = False
         internal_net_id = None
         for vif in vifs:

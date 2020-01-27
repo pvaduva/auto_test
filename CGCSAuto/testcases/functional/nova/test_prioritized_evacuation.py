@@ -10,7 +10,7 @@ from keywords import vm_helper, nova_helper, common, host_helper
 from testfixtures.fixture_resources import ResourceCleanup
 from utils.tis_log import LOG
 
-NUM_VM = 5
+NUM_VM = 3
 DEF_PRIORITY = 3
 DEF_MEM_SIZE = 1024
 DEF_DISK_SIZE = 1
@@ -84,16 +84,16 @@ class TestPrioritizedVMEvacuation:
     @mark.trylast
     @mark.reboot
     @mark.parametrize(('operation', 'set_on_boot', 'prioritizing', 'vcpus', 'mem', 'root_disk', 'swap_disk'), [
-        ('reboot', False, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        ('reboot', False, 'same_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'no_swap_disk'),
+        ('reboot', False, 'diff_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
+        ('force_reboot', False, 'same_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'no_swap_disk'),
         ('reboot', True, 'same_priority', 'same_vcpus', 'diff_mem', 'diff_root_disk', 'same_swap_disk'),
         ('reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'diff_root_disk', 'diff_swap_disk'),
-        ('reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'diff_swap_disk'),
+        ('force_reboot', True, 'same_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'diff_swap_disk'),
         # ('reboot', True, 'diff_priority', 'same_vcpus', 'same_mem', 'same_root_disk', 'same_swap_disk'),
-        ('reboot', True, 'diff_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'no_swap_disk'),
-        ('reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'diff_root_disk', 'diff_swap_disk'),
-        ('force_reboot', False, 'same_priority', 'same_vcpus', 'diff_mem', 'diff_root_disk', 'diff_swap_disk'),
-        ('force_reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
+        # ('reboot', True, 'diff_priority', 'diff_vcpus', 'same_mem', 'same_root_disk', 'no_swap_disk'),
+        # ('reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'diff_root_disk', 'diff_swap_disk'),
+        # ('force_reboot', False, 'same_priority', 'same_vcpus', 'diff_mem', 'diff_root_disk', 'diff_swap_disk'),
+        # ('force_reboot', True, 'diff_priority', 'diff_vcpus', 'diff_mem', 'same_root_disk', 'same_swap_disk'),
     ])
     def test_prioritized_vm_evacuations(self, operation, set_on_boot, prioritizing, vcpus, mem,
                                         root_disk, swap_disk, setup_quota_and_hosts):
@@ -330,7 +330,7 @@ class TestPrioritizedVMEvacuation:
             self.vcpus = [DEF_NUM_VCPU] * NUM_VM
 
         if 'diff' in mem:
-            self.mem = list(range(DEF_MEM_SIZE + 512 * NUM_VM, DEF_MEM_SIZE, -512))
+            self.mem = list(range(DEF_MEM_SIZE * NUM_VM, 0, -DEF_MEM_SIZE))
             random.shuffle(self.mem, random.random)
         else:
             self.mem = [DEF_MEM_SIZE] * NUM_VM
