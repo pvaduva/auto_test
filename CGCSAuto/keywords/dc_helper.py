@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2020 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
 import time
 import copy
 
@@ -36,7 +42,11 @@ def get_subclouds(field='name', name=None, avail=None, sync=None, mgmt=None, dep
     arg_dict = {'name': name, 'availability': avail, 'sync': sync, 'management': mgmt, 'deploy status': deploy}
     kwargs = {key: val for key, val in arg_dict.items() if val is not None}
     subclouds = table_parser.get_values(table_, target_header=field, **kwargs)
-    return subclouds
+
+    # Filter out the Subclouds that are not in the lab.py file
+    filtered_subclouds = [_cloud for _cloud in subclouds if _cloud in ProjVar.get_var('LAB')]
+
+    return filtered_subclouds
 
 
 def get_subcloud_status(subcloud, field='availability', auth_info=Tenant.get('admin_platform', 'RegionOne'), con_ssh=None,
