@@ -227,7 +227,7 @@ class BMTestCase:
             rc = self.check_sensor_data_file()
             if rc == BMTestCase.SensorFileState.FileNotFound:
                 return 3
-            elif rc == BMTestCase.SensorFileState.FileNotFound.FileIsEmpty:
+            elif rc == BMTestCase.SensorFileState.FileIsEmpty:
                 return 4
 
             return 0
