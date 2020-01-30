@@ -41,6 +41,17 @@ outputs_restore_system_conf = ("Enter 'reboot' to reboot controller: ",
 lab_ini_info = {}
 __local_client = None
 __test_server_client = None
+__default_kickstart_menu_option_set = False
+
+
+def is_default_kickstart_option_set():
+    global __default_kickstart_menu_option_set
+    return __default_kickstart_menu_option_set
+
+def set_default_kickstart_option():
+    global __default_kickstart_menu_option_set
+    __default_kickstart_menu_option_set = True
+
 
 def local_client():
     global __local_client
@@ -284,7 +295,8 @@ def bring_node_console_up(node, boot_device,
     bmc_power = InstallVars.get_install_var("USE_BMC")
     if lab is None:
         lab = InstallVars.get_install_var("LAB")
-    bmc_ok = lab["bmc_info"]["bmc_ok"]
+    bmc_info = lab.get("bmc_info")
+    bmc_ok = bmc_info["bmc_ok"] if bmc_info else []
     if bmc_power and node.name != 'controller-0' and node.name in bmc_ok:
         vlm_power_on = False
     try:
@@ -293,6 +305,7 @@ def bring_node_console_up(node, boot_device,
             if bmc_power and node.name in bmc_ok:
                 set_bmc_boot_to_pxe(node.name, lab=lab)
             power_on_hosts_(node.name, lab=lab, wait_for_hosts_state_=False)
+            time.sleep(30)
 
         install_node(node, boot_device_dict=boot_device, low_latency=low_latency,
                      small_footprint=small_footprint,
@@ -2634,16 +2647,16 @@ def set_default_kickstart_menu(boot_server_conn, tuxlab_barcode_dir, lab=None):
     boot_device_dict = lab.get('boot_device_dict')
     boot_device = boot_device_dict.get("controller-0")
     sys_type = ProjVar.get_var('SYS_TYPE')
-    if "AIO" in sys_type:
-        sys_type = 'cpe'
-    if "Storage" in sys_type:
-        sys_type = 'standard'
-    if InstallVars.get_install_var('LOW_LATENCY'):
+    if "AIO" in sys_type and InstallVars.get_install_var('LOW_LATENCY'):
         sys_type = 'lowlat'
+    elif "AIO" in sys_type:
+        sys_type = 'cpe'
+    else:
+        sys_type = 'standard'
 
     security = InstallVars.get_install_var("SECURITY")
     tag = {"os": "centos", "security": security, "type": sys_type, "console": "serial"}
-    uefi = True if "UEFI" in boot_device else False
+    uefi = True if boot_device and "UEFI" in boot_device else False
     pxe_file = "efi_pxeboot.cfg" if uefi else "pxeboot.cfg"
     pxe_file_path = os.path.join(tuxlab_barcode_dir, pxe_file)
 
@@ -2662,9 +2675,14 @@ def set_default_kickstart_menu(boot_server_conn, tuxlab_barcode_dir, lab=None):
     if selection:
         current_default = kickstart.get("DEFAULT") if "DEFAULT" in kickstart.keys() else kickstart.get("default")
         if current_default != selection.index:
-            cmd = "sed -i --follow-symlinks '0,/default={}/s/default={}/default={}/' {}".format(current_default, current_default, selection.index, pxe_file_path) if uefi \
-                else "sed -i --follow-symlinks '0,/default {}/s/default {}/default {}/1' {}".format(current_default, current_default, selection.index, pxe_file_path)
-            boot_server_conn.exec_cmd(cmd)
+            cmd = "sed -i --follow-symlinks '0,/default={}/s/default={}/default={}/' {}"\
+                .format(current_default, current_default, selection.index, pxe_file_path) if uefi \
+                else "sed -i --follow-symlinks '0,/default {}/s/default {}/default {}/1' {}"\
+                .format(current_default, current_default, selection.index, pxe_file_path)
+            if boot_server_conn.exec_cmd(cmd)[0] == 0:
+                set_default_kickstart_option()
+        else:
+            set_default_kickstart_option()
 
 
 def reset_kickstart_default(lab=None, boot_server=None):
@@ -3896,9 +3914,9 @@ def controller_system_config_subcloud(subcloud, system_controller_node, con_teln
         deploy_play_book_path = "{}wind-river-cloud-platform-deployment-manager-playbook.yaml"\
             .format(HostLinuxUser.get_home())
         deploy_values_path = "{}{}-deploy-values.yaml".format(HostLinuxUser.get_home(), subcloud.replace('-', ''))
-
+        bmc_password = lab["bmc_info"]['password']
         dc_helper.add_subcloud(subcloud, controller0, system_controller_node, bootstrap_values_path,
-                               deploy_play_book_path, deploy_values_path)
+                               deploy_play_book_path, deploy_values_path, bmc_password=bmc_password)
 
         wait_for_subcloud_deploy_complete(subcloud, con_ssh=system_controller_node.ssh_conn)
 
@@ -4243,22 +4261,26 @@ def install_node(node_obj, boot_device_dict, small_footprint=None, low_latency=N
 
     expt_prompts = []
     if "hp" in node_obj.host_name:
-        if node_obj.name == pxe_host:
-            expt_prompts.append(kickstart_menu.prompt)
-            LOG.info('In Kickstart menu expected prompts = {}'.format(expt_prompts))
+        if bmc_power and is_default_kickstart_option_set():
+            LOG.info('Kickstart menu already set by default')
+            telnet_conn.flush()
+        else:
+            if node_obj.name == pxe_host:
+                expt_prompts.append(kickstart_menu.prompt)
+                LOG.info('In Kickstart menu expected prompts = {}'.format(expt_prompts))
 
-            output = telnet_conn.read_until(b'Kickstart Boot', timeout=120)
-            if b"Kickstart Boot" in output:
-                hp380_menu = menu.HP380BootMenu()
-                select_install_option(node_obj, hp380_menu, small_footprint=small_footprint,
-                                      low_latency=low_latency,
-                                      security=security, usb=usb, expect_prompt=False)
-            else:
-                msg = "{} not found after 300 seconds. Output = {}".format(kickstart_menu.prompt,
-                                                                           output)
-                raise exceptions.InstallError(msg)
+                output = telnet_conn.read_until(b'Kickstart Boot', timeout=120)
+                if b"Kickstart Boot" in output:
+                    hp380_menu = menu.HP380BootMenu()
+                    select_install_option(node_obj, hp380_menu, small_footprint=small_footprint,
+                                          low_latency=low_latency,
+                                          security=security, usb=usb, expect_prompt=False)
+                else:
+                    msg = "{} not found after 300 seconds. Output = {}".format(kickstart_menu.prompt,
+                                                                               output)
+                    raise exceptions.InstallError(msg)
 
-            LOG.info('Kick start option selected')
+                LOG.info('Kick start option selected')
 
     else:
         if bmc_power:
@@ -5312,7 +5334,6 @@ def get_bmc_power_status(host, lab=None, fail_ok=False):
         lab = InstallVars.get_install_var("LAB")
     bmc_info = lab.get("bmc_info")
     if host in bmc_info["bmc_ok"]:
-    # if use_bmc(host, lab=lab):
         test_client = test_server_client()
         LOG.info("Getting Power status of node {} uisng bmc impitool ... ".format(host))
         rc, output = bmc_helper.set_server_chassis_power(bmc_info[host], test_client,  action="status",
@@ -5338,6 +5359,11 @@ def set_bmc_boot_to_pxe(host, lab=None):
         lab = InstallVars.get_install_var("LAB")
     bmc_info = lab.get("bmc_info")
     local_client = test_server_client()
+    if get_bmc_power_status(host, lab=lab)[0] == 'on':
+        bmc_helper.set_server_chassis_power(bmc_info[host], local_client, action="off",
+                                            user=bmc_info['username'],
+                                            password=bmc_info['password'])
+        time.sleep(30)
     return bmc_helper.set_bootdev(bmc_info[host], local_client, bootdev='pxe', user=bmc_info['username'],
                                   password=bmc_info['password'] )
 

@@ -366,17 +366,26 @@ class Labs:
                        {'port': (5, 6), 'range': (2318, 2350)}],
     }
 
-    WCP_7_12 = {
-        'short_name': 'wcp_7_12',
-        'name': 'yow-cgcs-wildcat-7_12',
+    WCP_7_10 = {
+        'short_name': 'wcp_7_10',
+        'name': 'yow-cgcs-wildcat-7_10',
         'floating ip': '128.224.151.228',
         'controller-0 ip': '128.224.150.220',
         'controller-1 ip': '128.224.150.231',
         'controller_nodes': [23202, 23203],
-        'compute_nodes': [23206, 23207],
-        'storage_nodes': [23204, 23205],
+        'compute_nodes': [23204, 23205],
         'ixia_ports': [{'port': (5, 11), 'range': (2352, 2384)},
                        {'port': (5, 12), 'range': (2418, 2451)}],
+    }
+
+    WCP_11 = {
+        'short_name': 'wcp_11',
+        'name': 'yow-cgcs-wildcat-11',
+        'floating ip': '128.224.151.19',
+        'controller-0 ip': '128.224.151.19',
+        'controller_nodes': [23206],
+        'system_type': 'CPE',
+        'system_mode': 'simplex',
     }
 
     WCP_13_14 = {

@@ -213,7 +213,7 @@ def download_lab_files(lab_files_server, build_server, guest_server, sys_version
             lab['controller-0 ip'] = con0_v4_ip
 
         LOG.info("Downloading heat templates with best effort")
-        install_helper.download_heat_templates(lab, build_server, load_path, heat_path=heat_path)
+        #install_helper.download_heat_templates(lab, build_server, load_path, heat_path=heat_path)
         LOG.info("Downloading guest image")
         install_helper.download_image(lab, guest_server, guest_path)
         LOG.info("Copying license")
@@ -1167,11 +1167,28 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
         LOG.info("Instal DC lab  = {}".format(InstallVars.get_install_var('DC_LAB')['name']))
     ProjVar.set_var(SOURCE_OPENRC=True)
     bmc_config_server = servers_map.get(file_server, bs_obj)
-    bmc_info = get_bmc_info(lab, bmc_config_server,
+    bmc_lab = lab if not dist_cloud else lab["central_region"]
+    bmc_info = get_bmc_info(bmc_lab, bmc_config_server,
                             subcloud=InstallVars.get_install_var("INSTALL_SUBCLOUD") if subcloud else None)
-    lab['bmc_info'] = bmc_info
-    check_bmc_config(lab=lab)
-    LOG.info("Lab bmc info  = {}".format(InstallVars.get_install_var("LAB")['bmc_info']))
+    bmc_lab['bmc_info'] = bmc_info
+    if dist_cloud:
+        lab["central_region"] = bmc_lab
+
+    bmc_info["bmc_ok"] = check_bmc_config(lab=bmc_lab)
+
+    if dist_cloud:
+        lab["central_region"] = bmc_lab
+    else:
+        lab = bmc_lab
+    InstallVars.set_install_var(lab=lab)
+    use_bmc = True if "controller-0" in bmc_info["bmc_ok"] else False
+    InstallVars.set_install_var(use_bmc=use_bmc)
+
+    # check_bmc_config(lab=lab)
+    if dist_cloud:
+        LOG.info("Lab bmc info  = {}".format(InstallVars.get_install_var("LAB")['central_region']['bmc_info']))
+    else:
+        LOG.info("Lab bmc info  = {}".format(InstallVars.get_install_var("LAB")['bmc_info']))
 
 
     boot_type = InstallVars.get_install_var("BOOT_TYPE")
@@ -1233,7 +1250,8 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
         elif 'iso_feed' in boot["boot_type"] and 'feed' not in skip_list:
             skip_cfg = "pxeboot" in skip_list
-            set_default_menu = True if "grizzly" in lab["controller-0"].host_name else False
+            set_default_menu = True if "grizzly" in lab["controller-0"].host_name \
+                                       or "hp" in lab["controller-0"].host_name else False
             LOG.info("Need to set default menu {} for {}".format(set_default_menu, lab["controller-0"].host_name))
             install_helper.set_up_feed_from_boot_server_iso(iso_host_obj, lab_dict=lab_dict, iso_path=iso_path,
                                                             skip_cfg=skip_cfg, set_default_menu=set_default_menu)
@@ -2390,8 +2408,7 @@ def unreserve_lab_hosts(lab, dist_cloud=False):
 
 def get_bmc_info(lab, conf_server=None, lab_file_dir=None, subcloud=None):
     if lab is None:
-        lab = InstallVars.get_install_var("LAB")
-
+        raise ValueError("Lab dictionary must be provided")
     if not lab_file_dir:
         lab_file_dir = InstallVars.get_install_var("LAB_SETUP_PATH")
     if subcloud:
@@ -2442,7 +2459,9 @@ def get_bmc_info(lab, conf_server=None, lab_file_dir=None, subcloud=None):
 
 def check_bmc_config(lab):
     if lab is None:
-        lab = InstallVars.get_install_var("LAB")
+        raise ValueError("Lab dictionary must be provided")
+    # dc_lab = True if "central_region" in lab else False
+    # bmc_lab = lab["central_region"] if dc_lab else lab
     bmc_info = lab.get("bmc_info")
     bmc_ok = []
     use_bmc = False
@@ -2463,15 +2482,16 @@ def check_bmc_config(lab):
                     bmc_ok.append(host)
             if "controller-0" in bmc_ok:
                 use_bmc = True
-
-    bmc_info['bmc_ok'] = bmc_ok
-    lab["bmc_info"] = bmc_info
-
-    # if not use_bmc:
-    #     lab["bmc_info"].clear()
-
-    InstallVars.set_install_var(lab=lab)
-    InstallVars.set_install_var(use_bmc=use_bmc)
+    return bmc_ok
+    # bmc_info['bmc_ok'] = bmc_ok
+    # bmc_lab["bmc_info"] = bmc_info
+    #
+    # # if not use_bmc:
+    # #     lab["bmc_info"].clear()
+    # if dc_lab:
+    #     lab["central_region"] = bmc_lab
+    # InstallVars.set_install_var(lab=lab)
+    # InstallVars.set_install_var(use_bmc=use_bmc)
 
 
 def wait_for_mtc_to_power_on_hosts(hosts, lab=None, timeout=120, fail_ok=False):
