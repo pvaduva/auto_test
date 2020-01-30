@@ -51,16 +51,11 @@ def get_protocol():
             {"protocol": "https", "port": 8443}]
     ip = []
     if system_helper.is_aio_simplex():
-        if ProjVar.get_var('IPV6_OAM'):
-            ip.append("[{}]".format(out["oam_ip"]))
-        else:
-            ip.append(out["oam_ip"])
+        ip.append(out["oam_ip"])
     else:
-        if ProjVar.get_var('IPV6_OAM'):
-            ip.extend(["[{}]".format(out["oam_floating_ip"]),
-                      "[{}]".format(out["oam_c0_ip"]), "[{}]".format(out["oam_c1_ip"])])
-        else:
-            ip.extend([out["oam_floating_ip"], out["oam_c0_ip"], out["oam_c1_ip"]])
+        ip.append(out["oam_floating_ip"])
+        ip.append(out["oam_c0_ip"])
+        ip.append(out["oam_c1_ip"])
     for i in data:
         url = "{}://{}:{}".format(i["protocol"],
                                   ip[0], i["port"])
