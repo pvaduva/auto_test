@@ -93,7 +93,8 @@ def _scp_from_remote_to_active_controller(source_server, source_path,
     if dest_name is None and not is_dir:
         dest_name = source_path.split(sep='/')[-1]
 
-    dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
+    dest_path = dest_dir if not dest_name else os.path.join(
+        dest_dir, dest_name)
 
     LOG.info('Check if file already exists on TiS')
     if not is_dir and con_ssh.file_exists(file_path=dest_path):
@@ -215,7 +216,8 @@ def scp_from_active_controller_to_test_server(source_path, dest_dir,
     dest_user = TestFileServer.get_user()
     dest_password = TestFileServer.get_password()
 
-    dest_path = dest_dir if not dest_name else os.path.join(dest_dir, dest_name)
+    dest_path = dest_dir if not dest_name else os.path.join(
+        dest_dir, dest_name)
 
     LOG.info("scp file(s) from tis server to test server")
     con_ssh.scp_on_source(source_path=source_path, dest_user=dest_user,
@@ -241,7 +243,8 @@ def scp_from_active_controller_to_localhost(source_path, dest_path,
                                             src_password=None,
                                             timeout=900, is_dir=False):
     active_cont_ip = ControllerClient.get_active_controller().host
-
+    if ProjVar.get_var('IPV6_OAM'):
+        active_cont_ip = "[{}]".format(active_cont_ip)
     if not src_user:
         src_user = HostLinuxUser.get_user()
     if not src_password:
@@ -318,7 +321,8 @@ def scp_to_local(dest_path, source_path, source_server=None,
         ipv6_arg = '-6 '
     cmd = 'scp {}-oStrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ' \
           '{}{}@{}:{} {}'.\
-        format(ipv6_arg, dir_option, source_user, source_server, source_path, dest_path)
+        format(ipv6_arg, dir_option, source_user,
+               source_server, source_path, dest_path)
 
     _scp_on_local(cmd, remote_password=source_password, timeout=timeout)
 
@@ -807,7 +811,8 @@ def search_log(file_path, ssh_client, pattern, extended_regex=False,
     extended_regex = '-E ' if extended_regex else ''
     base_cmd = '' if top_down else '|tac'
     cmd = 'zgrep --color=never {}"{}" {}|grep -v grep{}{}{}'.\
-        format(extended_regex, pattern, file_path, init_filter, base_cmd, count)
+        format(extended_regex, pattern, file_path,
+               init_filter, base_cmd, count)
     if sudo:
         out = ssh_client.exec_sudo_cmd(cmd, fail_ok=True,
                                        prefix_space=prefix_space)[1]
@@ -907,7 +912,8 @@ def convert_to_ipv6(lab):
             ipv4_ip = lab[ip_type]
             if get_ip_version(ipv4_ip) == 4:
                 lab[ip_type] = convert_ipv4_to_ipv6(ipv4_ip)
-    LOG.info('{} IPv6 OAM ip: {}'.format(lab['short_name'], lab['floating ip']))
+    LOG.info('{} IPv6 OAM ip: {}'.format(
+        lab['short_name'], lab['floating ip']))
     return lab
 
 
