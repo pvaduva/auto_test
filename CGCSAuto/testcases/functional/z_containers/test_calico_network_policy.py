@@ -56,9 +56,9 @@ def get_protocol():
         ip.append(out["oam_ip"])
     else:
         if ProjVar.get_var('IPV6_OAM'):
-            ip.extend("[{}]".format(out["oam_floating_ip"]),
-                      "[{}]".format(out["oam_c0_ip"]), "[{}]".format(out["oam_c1_ip"]))
-        ip.extend(out["oam_floating_ip"], out["oam_c0_ip"], out["oam_c1_ip"])
+            ip.extend(["[{}]".format(out["oam_floating_ip"]),
+                      "[{}]".format(out["oam_c0_ip"]), "[{}]".format(out["oam_c1_ip"])])
+        ip.extend([out["oam_floating_ip"], out["oam_c0_ip"], out["oam_c1_ip"]])
     for i in data:
         url = "{}://{}:{}".format(i["protocol"],
                                   ip[0], i["port"])
