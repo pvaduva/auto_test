@@ -154,7 +154,7 @@ def deploy_test_pods(request):
     return server_ips, [client_pod1_name, client_pod2_name]
 
 
-@mark.networking1
+@mark.networking
 class TestPodtoPod:
     def test_pod_to_pod_ping(self, deploy_test_pods):
         """
