@@ -253,11 +253,17 @@ class TestPodtoPod:
         out = system_helper.get_oam_values()
         ip = []
         if system_helper.is_aio_simplex():
-            ip.append(out["oam_ip"])
+            if ProjVar.get_var('IPV6_OAM'):
+                ip.append("[{}]".format(out["oam_ip"]))
+            else:
+                ip.append(out["oam_ip"])
         else:
-            ip.append(out["oam_floating_ip"])
-            ip.append(out["oam_c0_ip"])
-            ip.append(out["oam_c1_ip"])
+            if ProjVar.get_var('IPV6_OAM'):
+                ip.extend(["[{}]".format(out["oam_floating_ip"]),
+                           "[{}]".format(out["oam_c0_ip"]), "[{}]".format(out["oam_c1_ip"])])
+            else:
+                ip.extend([out["oam_floating_ip"],
+                           out["oam_c0_ip"], out["oam_c1_ip"]])
         for i in ip:
             url = "http://{}:{}".format(i, node_port)
             LOG.tc_step(
