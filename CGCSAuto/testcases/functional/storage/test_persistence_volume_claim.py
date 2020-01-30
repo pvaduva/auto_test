@@ -238,7 +238,7 @@ def is_rbd_provisoner_healthy():
         skip("stx-rbd-provisioner is not installed")
 
 
-@fixture(scope="module", autouse=True)
+@fixture(scope="function", autouse=True)
 def update_helm_repo():
     con_ssh = ControllerClient.get_active_controller()
     con_ssh.exec_cmd("helm repo update", fail_ok=False)
