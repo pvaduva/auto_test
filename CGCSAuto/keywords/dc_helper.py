@@ -532,7 +532,7 @@ def wait_for_subcloud_keypair(subcloud=None, subcloud_ssh=None, expected_keypair
 
 
 def add_subcloud(subcloud, subcloud_controller_node, system_controller_node, bootstrap_values_path,
-                 deploy_play_book_path, deploy_values_path,  fail_ok=False,
+                 deploy_play_book_path, deploy_values_path,  bmc_password=None, fail_ok=False,
                  auth_info=Tenant.get('admin_platform', 'RegionOne'),  source_openrc=None):
     """
 
@@ -572,7 +572,8 @@ def add_subcloud(subcloud, subcloud_controller_node, system_controller_node, boo
         '--bootstrap-values': bootstrap_values_path,
         '--deploy-playbook': deploy_play_book_path,
         '--deploy-values': deploy_values_path,
-        '--sysadmin-password': HostLinuxUser.get_password()
+        '--sysadmin-password': HostLinuxUser.get_password(),
+        '--bmc-password': bmc_password
     }
 
     opt_args = ''
