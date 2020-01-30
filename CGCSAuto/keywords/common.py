@@ -245,6 +245,7 @@ def scp_from_active_controller_to_localhost(source_path, dest_path,
     active_cont_ip = ControllerClient.get_active_controller().host
     if ProjVar.get_var('IPV6_OAM'):
         active_cont_ip = "[{}]".format(active_cont_ip)
+    print(active_cont_ip, "sssssssssssssssssssssssssssssssssssssssss")
     if not src_user:
         src_user = HostLinuxUser.get_user()
     if not src_password:
