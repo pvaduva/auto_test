@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   containers:
-  - image: mantri425/wind-test:latest
+  - image: tis-lab-registry.cumulus.wrs.com:9001/pv-test
     command: ["/bin/sh","-c"]
     args: ["sleep 60m"]
     imagePullPolicy: IfNotPresent
