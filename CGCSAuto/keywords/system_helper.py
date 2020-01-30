@@ -24,7 +24,8 @@ from testfixtures.fixture_resources import ResourceCleanup
 from keywords import common
 
 
-def get_sys_type(con_ssh=None, use_telnet=False, con_telnet=None):
+def get_sys_type(con_ssh=None, use_telnet=False, con_telnet=None,
+                 auth_info=Tenant.get('admin_platform')):
     """
     Please do NOT call this function in testcase/keyword. This is used to set
     global variable SYS_TYPE in ProjVar.
@@ -33,11 +34,12 @@ def get_sys_type(con_ssh=None, use_telnet=False, con_telnet=None):
         con_ssh:
         use_telnet:
         con_telnet:
+        auth_info:
+
 
     Returns:
 
     """
-    auth_info = Tenant.get('admin_platform')
     is_aio = is_aio_system(controller_ssh=con_ssh,
                            use_telnet=use_telnet, con_telnet=con_telnet,
                            auth_info=auth_info)
@@ -47,9 +49,9 @@ def get_sys_type(con_ssh=None, use_telnet=False, con_telnet=None):
                                use_telnet=use_telnet, con_telnet=con_telnet,
                                auth_info=auth_info)) == 1:
             sys_type = SysType.AIO_SX
-        elif get_computes(con_ssh=con_ssh):
+        elif get_computes(con_ssh=con_ssh, auth_info=auth_info):
             sys_type = SysType.AIO_PLUS
-    elif get_storage_nodes(con_ssh=con_ssh):
+    elif get_storage_nodes(con_ssh=con_ssh, auth_info=auth_info):
         sys_type = SysType.STORAGE
     else:
         sys_type = SysType.REGULAR
@@ -94,7 +96,7 @@ def is_aio_duplex(con_ssh=None, use_telnet=False, con_telnet=None,
             return SysType.AIO_DX == sys_type
     else:
         return is_aio_system(controller_ssh=con_ssh,
-                             use_telnet=use_telnet, con_telnet=con_telnet) \
+                             use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info) \
                and len(get_controllers(con_ssh=con_ssh,
                                        use_telnet=use_telnet,
                                        con_telnet=con_telnet)) == 2
@@ -357,7 +359,6 @@ def get_host_list_data(columns=None, con_ssh=None,
                               con_telnet=con_telnet, auth_info=auth_info, source_openrc=source_rc)
 
     if code == 0:
-        LOG.debug('Get hosts data {}'.format(output))
         return yaml.safe_load(output)
     else:
         LOG.error("Error with CLI command")
