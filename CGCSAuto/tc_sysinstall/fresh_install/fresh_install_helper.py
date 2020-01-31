@@ -1250,9 +1250,9 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
         elif 'iso_feed' in boot["boot_type"] and 'feed' not in skip_list:
             skip_cfg = "pxeboot" in skip_list
-            set_default_menu = True if "grizzly" in lab["controller-0"].host_name \
-                                       or "hp" in lab["controller-0"].host_name else False
-            LOG.info("Need to set default menu {} for {}".format(set_default_menu, lab["controller-0"].host_name))
+            host_name = lab["controller-0"].host_name
+            set_default_menu = True if "grizzly" in host_name or "hp" in host_name else False
+            LOG.info("Need to set default menu {} for {}".format(set_default_menu, host_name))
             install_helper.set_up_feed_from_boot_server_iso(iso_host_obj, lab_dict=lab_dict, iso_path=iso_path,
                                                             skip_cfg=skip_cfg, set_default_menu=set_default_menu)
 
