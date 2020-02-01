@@ -789,7 +789,8 @@ def _check_disk_size(vm_ssh, disk_name, expt_size):
     partition = vm_ssh.exec_sudo_cmd('cat /proc/partitions | grep --color=never "{}$"'.format(disk_name))[1]
     actual_size = int(int(partition.split()[-2].strip())/1024) if partition else 0
     expt_size = int(expt_size)
-    assert actual_size == expt_size, "Expected disk size: {}M. Actual: {}M".format(expt_size, actual_size)
+    assert actual_size == expt_size, "Expected disk size: {}M. Actual: {}M".format(expt_size,
+                                                                                   actual_size)
 
 
 def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin_platform'), con_ssh=None,
@@ -803,13 +804,26 @@ def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin_platfor
         if item not in before_alarms:
             alarm_id, entity_id, severity = item.split('::::')
             if alarm_id == EventLogID.CPU_USAGE_HIGH:
+                # If cpu usage is high, ensure automation does not query alarms too frequently
                 check_interval = 45
             elif alarm_id == EventLogID.NTP_ALARM:
                 # NTP alarm handling
                 LOG.info("NTP alarm found, checking ntpq stats")
                 host = entity_id.split('host=')[1].split('.ntp')[0]
-                system_helper.wait_for_ntp_sync(host=host, fail_ok=False, auth_info=auth_info, con_ssh=con_ssh)
+                system_helper.wait_for_ntp_sync(host=host, fail_ok=False, auth_info=auth_info,
+                                                con_ssh=con_ssh)
+                # NTPQ status confirmed, alarm is valid, don't add it to new alarm list
                 continue
+            elif alarm_id == EventLogID.CON_DRBD_SYNC and not system_helper.is_aio_system(
+                    controller_ssh=con_ssh, auth_info=auth_info):
+                # DRBD alarm handling - wait for up to 10 minutes with best effort
+                res = system_helper.wait_for_alarm_gone(alarm_id=EventLogID.CON_DRBD_SYNC,
+                                                        fail_ok=True,
+                                                        timeout=600, check_interval=20,
+                                                        con_ssh=con_ssh, auth_info=auth_info)[0]
+                if res:
+                    # Alarm cleared, don't add it to new alarm list
+                    continue
 
             new_alarms.append((alarm_id, entity_id))
 
@@ -817,9 +831,11 @@ def check_alarms(before_alarms, timeout=300, auth_info=Tenant.get('admin_platfor
     remaining_alarms = None
     if new_alarms:
         LOG.info("New alarms detected. Waiting for new alarms to clear.")
-        res, remaining_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True, timeout=timeout,
+        res, remaining_alarms = system_helper.wait_for_alarms_gone(new_alarms, fail_ok=True,
+                                                                   timeout=timeout,
                                                                    check_interval=check_interval,
-                                                                   auth_info=auth_info, con_ssh=con_ssh)
+                                                                   auth_info=auth_info,
+                                                                   con_ssh=con_ssh)
 
     if not res:
         msg = "New alarm(s) found and did not clear within {} seconds. Alarm IDs and Entity IDs: {}".\

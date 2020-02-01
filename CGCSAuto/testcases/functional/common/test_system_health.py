@@ -61,5 +61,5 @@ def test_system_health_pre_session():
         "{} is not {}".format(PLATFORM_APP, AppStatus.APPLIED)
 
     LOG.tc_step("Check system alarms")
-    check_helper.check_alarms(before_alarms=IGNOIRED_ALARMS, timeout=60)
+    check_helper.check_alarms(before_alarms=IGNOIRED_ALARMS, timeout=300)
     LOG.info("No new alarms found.")
