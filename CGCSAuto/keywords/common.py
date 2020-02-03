@@ -9,6 +9,7 @@
 # DO NOT import anything from helper modules to this module #
 #############################################################
 
+import yaml
 import os
 import re
 import time
@@ -946,3 +947,31 @@ def ssh_to_stx(lab=None, set_client=False):
         ControllerClient.set_active_controller(con_ssh)
 
     return con_ssh
+
+
+def get_yaml_data(filepath):
+    """
+    Returns the yaml data in json
+    Args:
+        filepath(str): location of the yaml file to load
+    Return(json):
+        returns the json data
+    """
+    with open(filepath, 'r') as f:
+        data = yaml.safe_load(f)
+    return data
+
+
+def write_data_to_file(data, filename):
+    """
+    Writes data to a file in yaml format
+    Args:
+        data(json): data in json format
+        filename(str): filename
+    Return(str):
+        returns the location of the yaml file
+    """
+    src_path = "{}/{}".format(ProjVar.get_var('LOG_DIR'), filename)
+    with open(src_path, 'w') as f:
+        yaml.dump(data, f)
+    return src_path

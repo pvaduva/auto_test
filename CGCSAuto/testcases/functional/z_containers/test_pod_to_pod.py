@@ -15,34 +15,6 @@ server_dep = "server-pod"
 service_name = "test-app"
 
 
-def get_yaml_data(filepath):
-    """
-    Returns the yaml data in json
-    Args:
-        filepath(str): location of the yaml file to load
-    Return(json):
-        returns the json data
-    """
-    with open(filepath, 'r') as f:
-        data = yaml.safe_load(f)
-    return data
-
-
-def write_to_file(data, filename):
-    """
-    Writes data to a file in yaml format
-    Args:
-        data(json): data in json format
-        filename(str): filename
-    Return(str):
-        returns the location of the yaml file
-    """
-    src_path = "{}/{}".format(ProjVar.get_var('LOG_DIR'), filename)
-    with open(src_path, 'w') as f:
-        yaml.dump(data, f)
-    return src_path
-
-
 @fixture(scope="class")
 def deploy_test_pods(request):
     """
@@ -68,8 +40,8 @@ def deploy_test_pods(request):
     server_pod_path = "utils/test_files/{}".format(server_pod)
     client_pod_path = "utils/test_files/{}".format(client_pod_template)
 
-    server_pod_data = get_yaml_data(server_pod_path)
-    client_pod1_data = get_yaml_data(client_pod_path)
+    server_pod_data = common.get_yaml_data(server_pod_path)
+    client_pod1_data = common.get_yaml_data(client_pod_path)
     client_pod2_data = copy.deepcopy(client_pod1_data)
 
     client_pod1_data['metadata']['name'] = client_pod1_name
@@ -90,10 +62,10 @@ def deploy_test_pods(request):
         client_pod1_data['spec']['nodeSelector'] = {'test': 'server'}
         client_pod2_data['spec']['nodeSelector'] = {'test': 'client'}
 
-    server_pod_path = write_to_file(server_pod_data, server_pod)
-    client_pod1_path = write_to_file(
+    server_pod_path = common.write_data_to_file(server_pod_data, server_pod)
+    client_pod1_path = common.write_data_to_file(
         client_pod1_data, "{}.yaml".format(client_pod1_name))
-    client_pod2_path = write_to_file(
+    client_pod2_path = common.write_data_to_file(
         client_pod2_data, "{}.yaml".format(client_pod2_name))
 
     LOG.fixture_step(
@@ -250,21 +222,7 @@ class TestPodtoPod:
             deployment_name=server_dep, type="NodePort", service_name=service_name)
         node_port = kube_helper.get_pod_value_jsonpath(
             "service {}".format(service_name), "{.spec.ports[0].nodePort}")
-        out = system_helper.get_oam_values()
-        ip = []
-        if system_helper.is_aio_simplex():
-            if ProjVar.get_var('IPV6_OAM'):
-                ip.append("[{}]".format(out["oam_ip"]))
-            else:
-                ip.append(out["oam_ip"])
-        else:
-            if ProjVar.get_var('IPV6_OAM'):
-                ip.extend(["[{}]".format(out["oam_floating_ip"]),
-                           "[{}]".format(out["oam_c0_ip"]), "[{}]".format(out["oam_c1_ip"])])
-            else:
-                ip.extend([out["oam_floating_ip"],
-                           out["oam_c0_ip"], out["oam_c1_ip"]])
-        for i in ip:
+        for i in system_helper.get_system_iplist():
             url = "http://{}:{}".format(i, node_port)
             LOG.tc_step(
                 "Check the service access {} from local host".format(url))

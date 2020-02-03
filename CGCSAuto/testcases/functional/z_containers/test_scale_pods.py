@@ -60,6 +60,6 @@ def test_scale_pods(get_yaml):
             "Scale the resource consumer app to {}* no of worker nodes".format(replicas))
         kube_helper.exec_kube_cmd(
             "scale deployment --namespace={} resource-consumer --replicas={}".format(ns, replicas))
-        kube_helper.wait_for_pods_status(namespace=ns)
+        kube_helper.wait_for_pods_status(namespace=ns, timeout=180)
     else:
         skip("resource consumer deployment failed")

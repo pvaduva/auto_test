@@ -97,9 +97,9 @@ def is_aio_duplex(con_ssh=None, use_telnet=False, con_telnet=None,
     else:
         return is_aio_system(controller_ssh=con_ssh,
                              use_telnet=use_telnet, con_telnet=con_telnet, auth_info=auth_info) \
-               and len(get_controllers(con_ssh=con_ssh,
-                                       use_telnet=use_telnet,
-                                       con_telnet=con_telnet)) == 2
+            and len(get_controllers(con_ssh=con_ssh,
+                                    use_telnet=use_telnet,
+                                    con_telnet=con_telnet)) == 2
 
 
 def is_aio_simplex(con_ssh=None, use_telnet=False, con_telnet=None,
@@ -1098,7 +1098,8 @@ def wait_for_alarm_gone(alarm_id, entity_id=None, reason_text=None,
         time.sleep(check_interval)
 
     else:
-        err_msg = "Timed out waiting for alarm {} to disappear".format(alarm_id)
+        err_msg = "Timed out waiting for alarm {} to disappear".format(
+            alarm_id)
         if fail_ok:
             LOG.warning(err_msg)
             return False
@@ -1524,7 +1525,7 @@ def get_vm_topology_tables(*table_names, con_ssh=None, combine_multiline=False,
                            auth_info=Tenant.get('admin')):
     if con_ssh is None:
         con_name = auth_info.get('region') if (
-                auth_info and ProjVar.get_var('IS_DC')) else None
+            auth_info and ProjVar.get_var('IS_DC')) else None
         con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     show_args = ','.join(table_names)
@@ -1788,7 +1789,8 @@ def modify_service_parameter(service, section, name, value, apply=False,
                                                 check_first=False)
             return -1, msg
         if val[0] == value:
-            msg = "The service parameter value is already set to {}".format(val)
+            msg = "The service parameter value is already set to {}".format(
+                val)
             return -1, msg
 
     LOG.info("Modifying service parameter")
@@ -2440,7 +2442,8 @@ def delete_snmp_comm(comms, check_first=True, fail_ok=False, con_ssh=None,
                 undeleted_comms))
 
     if code == 0:
-        msg = 'SNMP community string "{}" is deleted successfully'.format(comms)
+        msg = 'SNMP community string "{}" is deleted successfully'.format(
+            comms)
     else:
         msg = 'SNMP community string "{}" failed to delete'.format(comms)
 
@@ -2698,7 +2701,8 @@ def modify_spectre_meltdown_version(version='spectre_meltdown_all',
                                          ' to {}'.format(check_val, version)
         else:
             assert check_val not in options, '{} in cmdline options after set' \
-                                             ' to {}'.format(check_val, version)
+                                             ' to {}'.format(
+                                                 check_val, version)
 
     msg = 'System spectre meltdown version is successfully modified to: ' \
           '{}'.format(version)
@@ -3482,7 +3486,7 @@ def get_host_values(host, fields, rtn_dict=False, merge_lines=True,
     table_ = table_parser.table(cli.system(
         'host-show', host, ssh_client=con_ssh, auth_info=auth_info,
         use_telnet=use_telnet, con_telnet=con_telnet)[1],
-                                combine_multiline_entry=merge_lines)
+        combine_multiline_entry=merge_lines)
     return table_parser.get_multi_values_two_col_table(table_, fields,
                                                        rtn_dict=rtn_dict,
                                                        evaluate=True)
@@ -3603,7 +3607,7 @@ def wait_for_ntp_sync(host, timeout=MiscTimeout.NTPQ_UPDATE, fail_ok=False,
     msg = ntp_alarms = None
     if not con_ssh:
         con_name = auth_info.get('region') if (
-                    auth_info and ProjVar.get_var('IS_DC')) else None
+            auth_info and ProjVar.get_var('IS_DC')) else None
         con_ssh = ControllerClient.get_active_controller(name=con_name)
 
     mgmt_cidr = get_system_network_cidr('mgmt', con_ssh=con_ssh,
@@ -3836,3 +3840,20 @@ def is_active_controller(host, con_ssh=None, use_telnet=False, con_telnet=None,
 def is_lowlatency_host(host):
     subfuncs = get_host_values(host=host, fields='subfunctions')[0]
     return 'lowlatency' in subfuncs
+
+
+def get_system_iplist():
+    """
+     Checks the ipv4 or ipv6 simplex or other and returns the ip list accordingly
+     Return: returns the system ipv4/ipv6 list
+    """
+    ip = []
+    out = get_oam_values()
+    if is_aio_simplex():
+        ip.append(out["oam_ip"])
+    else:
+        ip.extend([out["oam_floating_ip"], out["oam_c0_ip"], out["oam_c1_ip"]])
+    if ProjVar.get_var('IPV6_OAM'):
+        iplist = ["[{}]".format(i) for i in ip]
+        ip = iplist
+    return ip
