@@ -836,3 +836,4 @@ class VSwitchType:
 
 class Container:
     LOCAL_DOCKER_REG = 'registry.local:9001'
+    CENTRAL_DOCKER_REG = 'registry.central:9001'
