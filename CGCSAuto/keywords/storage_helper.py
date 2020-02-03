@@ -7,6 +7,7 @@ Including:
 
 """
 
+import ast
 import re
 import time
 
@@ -975,6 +976,9 @@ def check_controllerfs(**kwargs):
         elif fs == "glance":
             fs_name = "cgcs-lv"
             expected_size = int(kwargs[fs])
+        elif fs == "docker-distribution":
+            fs_name = "dockerdistribution-lv"
+            expected_size = int(kwargs[fs])
         else:
             fs_name = fs + "-lv"
             expected_size = int(kwargs[fs])
@@ -1369,6 +1373,34 @@ def get_hostfs_values(host, filesystem, fields='size', rtn_dict=False,
                                                        evaluate=True)
 
 
+def modify_hostfs(host, fail_ok=False, auth_info=Tenant.get('admin_platform'),
+                  con_ssh=None, **kwargs):
+    """
+    Modifies the specified host filesystem, e.g. backup, docker, kubelet and etc.
+
+    Arguments:
+        host (str): hostname
+        fail_ok(bool):
+        auth_info (dict) - auth dict
+        con_ssh (SSHClient):
+        kwargs (dict): pair(s) of key and value
+
+    Returns (tuple): (<code>(int), <msg>(str))
+    """
+
+    attr_values_ = ['{}="{}"'.format(attr, value) for attr, value in kwargs.items()]
+    args_ = ' '.join(attr_values_)
+
+    rc, out = cli.system('host-fs-modify {}'.format(host), args_, fail_ok=fail_ok,
+                         ssh_client=con_ssh, auth_info=auth_info)
+    if rc > 0:
+        return 1, out
+
+    msg = "Filesystem update succeeded"
+    LOG.info(msg)
+    return 0, msg
+
+
 def get_controllerfs_list(field='Size in GiB', fs_name=None, con_ssh=None,
                           auth_info=Tenant.get('admin_platform'), **filters):
     table_ = table_parser.table(cli.system('controllerfs-list --nowrap', ssh_client=con_ssh,
@@ -1535,3 +1567,17 @@ def clear_local_storage_cache(host, con_ssh=None):
         with host_ssh.login_as_root() as root_ssh:
             root_ssh.exec_cmd('rm -rf /var/lib/nova/instances/_base/*', fail_ok=True)
             root_ssh.exec_cmd('sync;echo 3 > /proc/sys/vm/drop_caches', fail_ok=True)
+
+
+def get_system_free_space():
+    """
+    Get system free disk space
+
+    Returns (float): value of free disk space
+    """
+    con_ssh = ControllerClient.get_active_controller()
+
+    cmd = 'vgdisplay -C --noheadings --nosuffix -o vg_free --units g cgts-vg'
+    rc, out = con_ssh.exec_sudo_cmd(cmd)
+    free_space = ast.literal_eval(out.strip())
+    return free_space
