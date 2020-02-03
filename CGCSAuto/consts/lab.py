@@ -940,14 +940,38 @@ class Labs:
         'system_mode': 'simplex',
     }
 
+    VBOX_CENTRAL = {
+        'short_name': 'sys_cont',
+        'name': 'SystemController',
+        'floating ip': '10.10.10.3',
+        'controller-0 ip': '10.10.10.4',
+        'controller-1 ip': '10.10.10.5',
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
+        'tpm_installed': True,
+        'ixia_ports': [{'port': (7, 15), 'range': (301, 350)},
+                       {'port': (7, 16), 'range': (401, 450)}],
+    }
+
+    SUB1 = {
+         'short_name': 'sub1',
+        'name': 'subcloud1',
+        'floating ip': '10.10.50.3',
+        'controller-0 ip': '10.10.50.4',
+        'controller-1 ip': '10.10.50.5',
+        'system_type': 'CPE',
+        'system_mode': 'duplex',
+        'tpm_installed': True,
+        'ixia_ports': [{'port': (7, 15), 'range': (301, 350)},
+                       {'port': (7, 16), 'range': (401, 450)}],
+    }
+
     VBOX = {
         'short_name': 'vbox',
         'name': 'vbox',
-        'floating ip': '10.10.10.2',
-        'controller-0 ip': '10.10.10.3',
-        'controller-1 ip': '10.10.10.4',
-        'controller_nodes': [0, 1],
-        'compute_nodes': [0, 1]
+        'floating ip': VBOX_CENTRAL['floating ip'],
+        'central_region': VBOX_CENTRAL,
+        'subcloud1': SUB1
     }
 
     VBOX_1 = {
