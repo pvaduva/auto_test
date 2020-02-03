@@ -3,18 +3,19 @@ This is for gathering key performance metrics related to installation.
 """
 import re
 import time
+from datetime import datetime
 
 from pytest import fixture, skip, mark
 
-from consts.stx import TIMESTAMP_PATTERN
+from consts.stx import TIMESTAMP_PATTERN, DM_LOGS_TIMESTAMP_PATTERN
 from consts.proj_vars import ProjVar
 from consts.kpi_vars import DRBDSync, ConfigController, LabSetup, HeatStacks, SystemInstall, \
     NodeInstall, Idle
-from keywords import system_helper, host_helper, vm_helper, common, container_helper
+from keywords import system_helper, host_helper, common, container_helper, kube_helper
+from utils import exceptions
 from utils.clients.ssh import ControllerClient
 from utils.kpi import kpi_log_parser
 from utils.tis_log import LOG
-from testfixtures.pre_checks_and_configs import no_simplex
 
 
 @fixture(scope='session')
@@ -75,9 +76,10 @@ def test_config_controller_kpi(collect_kpi):
 
 
 @mark.kpi
+@mark.usefixtures("heat_precheck")
 def test_lab_setup_kpi(collect_kpi):
     """
-    This test extracts the time required to run lab_setup.sh only.
+    This test extracts the time required to run lab_setup.sh. Only applies to openstack
     """
 
     if not collect_kpi:
@@ -98,35 +100,35 @@ def test_lab_setup_kpi(collect_kpi):
 
 
 # Taken out since we no longer use heat to configure labs.
-@mark.kpi
-@mark.usefixtures("heat_precheck")
-def _test_heat_kpi(collect_kpi):
-    """
-    Time to launch heat stacks.  Only applies to labs where .heat_resources is
-    present.
-    """
-
-    if not collect_kpi:
-        skip("KPI only test. Skip due to kpi collection is not enabled")
-
-    lab_name = ProjVar.get_var("LAB_NAME")
-    log_path = HeatStacks.LOG_PATH
-    kpi_name = HeatStacks.NAME
-    host = "controller-0"
-    start_pattern = HeatStacks.START
-    end_pattern = HeatStacks.END
-
-    kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
-                              log_path=log_path, lab_name=lab_name, host=host,
-                              start_pattern=start_pattern,
-                              end_pattern=end_pattern, sudo=True, topdown=True,
-                              start_pattern_init=True, uptime=15, fail_ok=False)
+# @mark.kpi
+# @mark.usefixtures("heat_precheck")
+# def _test_heat_kpi(collect_kpi):
+#     """
+#     Time to launch heat stacks.  Only applies to labs where .heat_resources is
+#     present.
+#     """
+#
+#     if not collect_kpi:
+#         skip("KPI only test. Skip due to kpi collection is not enabled")
+#
+#     lab_name = ProjVar.get_var("LAB_NAME")
+#     log_path = HeatStacks.LOG_PATH
+#     kpi_name = HeatStacks.NAME
+#     host = "controller-0"
+#     start_pattern = HeatStacks.START
+#     end_pattern = HeatStacks.END
+#
+#     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
+#                               log_path=log_path, lab_name=lab_name, host=host,
+#                               start_pattern=start_pattern,
+#                               end_pattern=end_pattern, sudo=True, topdown=True,
+#                               start_pattern_init=True, uptime=15, fail_ok=False)
 
 
 @mark.kpi
 def test_system_install_kpi(collect_kpi):
     """
-    This is the time to install the full system from beginning to end.
+    This is the time to install the full system from beginning to end by deployment manager.
 
     Caveat is that it is designed to work with auto-install due to the way the
     end_pattern is constructed.
@@ -135,18 +137,56 @@ def test_system_install_kpi(collect_kpi):
     if not collect_kpi:
         skip("KPI only test. Skip due to kpi collection is not enabled")
 
+    def _get_deployment_manager_logs():
+        with host_helper.ssh_to_host('controller-0') as con0_ssh:
+            LOG.info("Get deployment manager namespace")
+            dm_namespace = \
+                con0_ssh.exec_cmd("kubectl get namespaces | grep deployment-manager | awk '{print $1}'")[1].strip()
+            if not dm_namespace:
+                skip("Namespace {} is not found".format(dm_namespace))
+
+            LOG.info("Get deployment manager pod")
+            dm_pod = con0_ssh.exec_cmd(
+                "kubectl get pods --all-namespaces -o wide | grep deployment-manager | awk '{print $2}'")[1].strip()
+            if not dm_pod:
+                skip("DM pod {} is not started".format(dm_pod))
+
+            LOG.info("Get deployment manager pod status")
+            rc, dm_output = kube_helper.exec_kube_cmd(
+                'get pods', '--all-namespaces -o wide | grep {}'.format(dm_namespace), con_ssh=con0_ssh, fail_ok=True)
+            if 'Running' not in dm_output:
+                skip("Pod {} is not in running state".format(dm_pod))
+
+            LOG.info("Get deployment manager logs with insync state")
+            namespace = '-n {}'.format(dm_namespace)
+            container = 'manager'
+            args = '{} {} {} | grep "{}" | tail -n 1'.format(namespace, dm_pod, container, SystemInstall.END)
+            rc, dm_log = kube_helper.exec_kube_cmd('logs', args, con_ssh=con0_ssh, fail_ok=True)
+            print(dm_log)
+            if not dm_log:
+                raise exceptions.KubeError("No kubectl log found with args : {}".format(args))
+            return dm_log.strip()
+
+    def _get_log_timestamp(end_output_):
+        end_time = re.findall(DM_LOGS_TIMESTAMP_PATTERN, end_output_)[0]
+        pre_date = end_time.split(' ')[0].replace('I', '')
+        t_date = '{}-{}-{}'.format(datetime.now().year, pre_date[:2], pre_date[2:4])
+        t_time = end_time.split(' ')[1].split('.')[0]
+        end_t = '{}T{}'.format(t_date, t_time)
+        return end_t
+
     lab_name = ProjVar.get_var("LAB_NAME")
     host = "controller-0"
     kpi_name = SystemInstall.NAME
-    log_path = SystemInstall.LOG_PATH
     start_pattern = SystemInstall.START
     start_path = SystemInstall.START_PATH
-    end_pattern = SystemInstall.END
+    dm_output = _get_deployment_manager_logs()
+    end_time = _get_log_timestamp(dm_output)
 
     kpi_log_parser.record_kpi(local_kpi_file=collect_kpi, kpi_name=kpi_name,
-                              log_path=log_path, lab_name=lab_name, host=host,
+                              lab_name=lab_name, host=host,
                               start_pattern=start_pattern,
-                              end_pattern=end_pattern, start_path=start_path,
+                              end_pattern=end_time, start_path=start_path,
                               sudo=True, topdown=True, start_pattern_init=True, fail_ok=False)
 
 
@@ -204,9 +244,6 @@ def test_node_install_kpi(collect_kpi):
 def test_idle_kpi(collect_kpi):
     if not collect_kpi:
         skip("KPI only test. Skip due to kpi collection is not enabled")
-
-    LOG.tc_step("Delete vms and volumes on system if any")
-    vm_helper.delete_vms()
 
     is_aio = system_helper.is_aio_system()
     active_con = system_helper.get_active_controller_name()

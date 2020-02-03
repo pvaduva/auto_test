@@ -54,6 +54,7 @@ CINDER_VOLUME_BACKUP_FILE_PATTERN = r'volume\-{}(.*)\.tgz'.format(UUID)
 BACKUP_FILE_DATE_STR = "%Y%m%d-%H%M%S"
 TIS_BLD_DIR_REGEX = r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
 TIMESTAMP_PATTERN = r'\d{4}-\d{2}-\d{2}[T| ]\d{2}:\d{2}:\d{2}'
+DM_LOGS_TIMESTAMP_PATTERN = r'[I|E]\d{2}\d{2}[ ]\d{2}:\d{2}:\d{2}.\d{6}'
 PREFIX_CLONED_IMAGE_FILE = 'titanium_aio_clone'
 
 PLATFORM_AFFINE_INCOMPLETE = '/etc/platform/.task_affining_incomplete'
