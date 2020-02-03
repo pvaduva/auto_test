@@ -9,6 +9,7 @@
 # DO NOT import anything from helper modules to this module #
 #############################################################
 
+import pdb
 import os
 import re
 import time
@@ -178,45 +179,46 @@ def _scp_from_remote_to_active_controllers(source_server, source_path,
     LOG.info('Create destination directory on tis server if not already exists')
     cmd = 'mkdir -p {}'.format(dest_dir)
     for con_ssh in cons_ssh:
-        con_ssh.exec_cmd(cmd, fail_ok=False)
-    
-        nat_name = ProjVar.get_var('NATBOX')
-        if nat_name:
-            nat_name = nat_name.get('name')
-        if nat_name and (
-                nat_name == 'localhost' or nat_name.startswith('128.224.')):
-            LOG.info('VBox detected, performing intermediate scp')
-    
-            nat_dest_path = '/tmp/{}'.format(dest_name)
-            nat_ssh = NATBoxClient.get_natbox_client()
-    
-            if not nat_ssh.file_exists(nat_dest_path):
-                LOG.info("scp file from {} to NatBox: {}".format(nat_name,
-                                                                 source_server))
-                nat_ssh.scp_on_dest(source_user=source_user,
-                                    source_ip=source_server,
+        if not con_ssh.file_exists(dest_path):
+            con_ssh.exec_cmd(cmd, fail_ok=False)
+        
+            nat_name = ProjVar.get_var('NATBOX')
+            if nat_name:
+                nat_name = nat_name.get('name')
+            if nat_name and (
+                    nat_name == 'localhost' or nat_name.startswith('128.224.')):
+                LOG.info('VBox detected, performing intermediate scp')
+        
+                nat_dest_path = '/tmp/{}'.format(dest_name)
+                nat_ssh = NATBoxClient.get_natbox_client()
+        
+                if not nat_ssh.file_exists(nat_dest_path):
+                    LOG.info("scp file from {} to NatBox: {}".format(nat_name,
+                                                                     source_server))
+                    nat_ssh.scp_on_dest(source_user=source_user,
+                                        source_ip=source_server,
+                                        source_path=source_path,
+                                        dest_path=nat_dest_path,
+                                        source_pswd=source_password, timeout=timeout,
+                                        is_dir=is_dir)
+        
+                LOG.info(
+                    'scp file from natbox {} to active controller'.format(nat_name))
+                dest_user = HostLinuxUser.get_user()
+                dest_pswd = HostLinuxUser.get_password()
+                dest_ip = con_ssh.host
+                nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user,
+                                      dest_ip=dest_ip, dest_path=dest_path,
+                                      dest_password=dest_pswd, timeout=timeout,
+                                      is_dir=is_dir)
+        
+            else:  # if not a VBox lab, scp from remote server directly to TiS server
+                LOG.info("scp file(s) from {} to tis".format(source_server))
+                con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server,
                                     source_path=source_path,
-                                    dest_path=nat_dest_path,
-                                    source_pswd=source_password, timeout=timeout,
-                                    is_dir=is_dir)
-    
-            LOG.info(
-                'scp file from natbox {} to active controller'.format(nat_name))
-            dest_user = HostLinuxUser.get_user()
-            dest_pswd = HostLinuxUser.get_password()
-            dest_ip = ProjVar.get_var('LAB').get('floating ip')
-            nat_ssh.scp_on_source(source_path=nat_dest_path, dest_user=dest_user,
-                                  dest_ip=dest_ip, dest_path=dest_path,
-                                  dest_password=dest_pswd, timeout=timeout,
-                                  is_dir=is_dir)
-    
-        else:  # if not a VBox lab, scp from remote server directly to TiS server
-            LOG.info("scp file(s) from {} to tis".format(source_server))
-            con_ssh.scp_on_dest(source_user=source_user, source_ip=source_server,
-                                source_path=source_path,
-                                dest_path=dest_path, source_pswd=source_password,
-                                timeout=timeout, is_dir=is_dir, ipv6=ipv6)
-    
+                                    dest_path=dest_path, source_pswd=source_password,
+                                    timeout=timeout, is_dir=is_dir, ipv6=ipv6)
+        
     return dest_path
 
 def scp_from_test_server_to_active_controller(source_path, dest_dir,
