@@ -962,7 +962,7 @@ def get_yaml_data(filepath):
     return data
 
 
-def write_data_to_file(data, filename):
+def write_yaml_data_to_file(data, filename):
     """
     Writes data to a file in yaml format
     Args:

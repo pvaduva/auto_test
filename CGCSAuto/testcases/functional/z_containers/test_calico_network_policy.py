@@ -1,5 +1,5 @@
-import yaml
 import copy
+import yaml
 
 from pytest import mark, fixture, raises
 
@@ -10,8 +10,8 @@ from consts.proj_vars import ProjVar
 from consts.auth import HostLinuxUser
 from keywords import system_helper, kube_helper, common
 
-controller_path = HostLinuxUser.get_home()
-localhost_path = ProjVar.get_var('LOG_DIR')
+CONTROLLER_PATH = HostLinuxUser.get_home()
+LOCALHOST_PATH = ProjVar.get_var('LOG_DIR')
 
 
 def change_network_policy(filepath, rules):
@@ -87,13 +87,13 @@ def get_data(request):
 
     kube_helper.exec_kube_cmd(
         "get globalnetworkpolicies.crd.projectcalico.org controller-oam-if-gnp -o yaml \
-        > {}/{}".format(controller_path, policy_backup_file))
+        > {}/{}".format(CONTROLLER_PATH, policy_backup_file))
 
     LOG.fixture_step(
         "Scp the {} file from controller to localhost".format(policy_backup_file))
 
     common.scp_from_active_controller_to_localhost(
-        source_path="{}/{}".format(controller_path, policy_backup_file), dest_path=localhost_path)
+        source_path="{}/{}".format(CONTROLLER_PATH, policy_backup_file), dest_path=LOCALHOST_PATH)
 
     def teardown():
         if port != system_helper.get_service_parameter_values(name=service_name)[0]:
@@ -111,24 +111,24 @@ def get_data(request):
             policy_backup_file, resource_ver))
 
         data = common.get_yaml_data(
-            "{}/{}".format(localhost_path, policy_backup_file))
+            "{}/{}".format(LOCALHOST_PATH, policy_backup_file))
         data["metadata"]["resourceVersion"] = resource_ver
 
         LOG.fixture_step(
             "Write the modified network data to the file {}".format(policy_backup_file))
 
-        filepath = common.write_data_to_file(data, policy_backup_file)
+        filepath = common.write_yaml_data_to_file(data, policy_backup_file)
 
         LOG.fixture_step(
             "Scp the {} file from localhost to the controller".format(filepath))
 
         common.scp_from_localhost_to_active_controller(
-            source_path=filepath, dest_path=controller_path)
+            source_path=filepath, dest_path=CONTROLLER_PATH)
 
         LOG.fixture_step(
             "Apply the original globalnetworkpolicy values with new resourceVersion")
         kube_helper.exec_kube_cmd(
-            "apply -f {}/{}".format(controller_path, policy_backup_file))
+            "apply -f {}/{}".format(CONTROLLER_PATH, policy_backup_file))
 
         LOG.fixture_step(
             "Check the link is accessible with original port {}".format(port))
@@ -141,14 +141,11 @@ def get_data(request):
     return ip, protocol, port, service_name, policy_obj
 
 
-def apply_network_policy(controller_path, localhost_path, np_filename,
-                         rule_list):
+def apply_network_policy(np_filename, rule_list):
     """
     This method is called from testcase test_calico_network_policy to execute the list of
     repeated commands
     Args:
-        controller_path(str): file location of controller
-        localhost_path(str): file location of local host
         np_filename(str): deployment file name
         rule_list: policy rules to edit the deployment filename(np_filename)
     """
@@ -156,22 +153,22 @@ def apply_network_policy(controller_path, localhost_path, np_filename,
         "Copy the contents of globalnetworkpolicy to file {}".format(np_filename))
     kube_helper.exec_kube_cmd(
         "get globalnetworkpolicies.crd.projectcalico.org controller-oam-if-gnp -o yaml \
-        > {}/{}".format(controller_path, np_filename))
+        > {}/{}".format(CONTROLLER_PATH, np_filename))
     LOG.info(
         "Scp the {} file from controller to localhost".format(np_filename))
     common.scp_from_active_controller_to_localhost(
-        source_path="{}/{}".format(controller_path, np_filename), dest_path=localhost_path)
+        source_path="{}/{}".format(CONTROLLER_PATH, np_filename), dest_path=LOCALHOST_PATH)
     LOG.info(
         "Change the contents of the file {} with new rules".format(np_filename))
     change_network_policy(
-        "{}/{}".format(localhost_path, np_filename), rule_list)
+        "{}/{}".format(LOCALHOST_PATH, np_filename), rule_list)
     LOG.info(
         "Scp the {} file from localhost to the controller".format(np_filename))
     common.scp_from_localhost_to_active_controller(
-        source_path="{}/{}".format(localhost_path, np_filename), dest_path=controller_path)
+        source_path="{}/{}".format(LOCALHOST_PATH, np_filename), dest_path=CONTROLLER_PATH)
     LOG.info("Apply the new globalpolicyrules")
     kube_helper.exec_kube_cmd(
-        "apply -f {}/{}".format(controller_path, np_filename))
+        "apply -f {}/{}".format(CONTROLLER_PATH, np_filename))
 
 
 @mark.networking
@@ -214,7 +211,7 @@ def test_calico_network_policy(get_data):
 
     LOG.tc_step("Remove the port and apply the new network policy")
     LOG.info("Remove the port {} from {}".format(obj1["port"], np_file))
-    apply_network_policy(controller_path, localhost_path, np_file, [obj1])
+    apply_network_policy(np_file, [obj1])
 
     LOG.tc_step(
         "Check the link is not accessible('curl -Is <url>' should not return code '200')")
@@ -233,7 +230,7 @@ def test_calico_network_policy(get_data):
     obj2["add"] = True
     LOG.tc_step("Change the network policy with the new port and apply")
     LOG.info("Add the port {} to {}".format(obj2["port"], np_file))
-    apply_network_policy(controller_path, localhost_path, np_file, [obj2])
+    apply_network_policy(np_file, [obj2])
 
     LOG.tc_step(
         "Check the link is accessible('curl -Is <url>' should return code '200')")
@@ -263,7 +260,7 @@ def get_deny_policy(request):
     LOG.fixture_step("Copy the policy file from localhost to controller")
     LOG.info("Copy the policy file {} from localhost to controller".format(filename))
     common.scp_from_localhost_to_active_controller(
-        source_path="utils/test_files/{}".format(filename), dest_path=controller_path)
+        source_path="utils/test_files/{}".format(filename), dest_path=CONTROLLER_PATH)
 
     def teardown():
         LOG.fixture_step("Delete the deny policy")

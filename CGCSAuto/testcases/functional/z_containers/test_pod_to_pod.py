@@ -1,4 +1,3 @@
-import yaml
 import copy
 
 from pytest import mark, fixture
@@ -8,11 +7,10 @@ from utils import rest
 
 from consts.proj_vars import ProjVar
 from consts.auth import HostLinuxUser
-from consts.stx import PodStatus
 from keywords import system_helper, kube_helper, common
 
-server_dep = "server-pod"
-service_name = "test-app"
+SERVER_DEP = "server-pod"
+SERVICE_NAME = "test-app"
 
 
 @fixture(scope="class")
@@ -62,10 +60,10 @@ def deploy_test_pods(request):
         client_pod1_data['spec']['nodeSelector'] = {'test': 'server'}
         client_pod2_data['spec']['nodeSelector'] = {'test': 'client'}
 
-    server_pod_path = common.write_data_to_file(server_pod_data, server_pod)
-    client_pod1_path = common.write_data_to_file(
+    server_pod_path = common.write_yaml_data_to_file(server_pod_data, server_pod)
+    client_pod1_path = common.write_yaml_data_to_file(
         client_pod1_data, "{}.yaml".format(client_pod1_name))
-    client_pod2_path = common.write_data_to_file(
+    client_pod2_path = common.write_yaml_data_to_file(
         client_pod2_data, "{}.yaml".format(client_pod2_name))
 
     LOG.fixture_step(
@@ -103,12 +101,12 @@ def deploy_test_pods(request):
             "pod {}".format(i), "{.status.podIP}"))
 
     def teardown():
-        LOG.fixture_step("Delete the service {}".format(service_name))
+        LOG.fixture_step("Delete the service {}".format(SERVICE_NAME))
         kube_helper.exec_kube_cmd(
-            sub_cmd="delete service  ", args=service_name)
-        LOG.fixture_step("Delete the deployment {}".format(server_dep))
+            sub_cmd="delete service  ", args=SERVICE_NAME)
+        LOG.fixture_step("Delete the deployment {}".format(SERVER_DEP))
         kube_helper.exec_kube_cmd(
-            sub_cmd="delete deployment  ", args=server_dep)
+            sub_cmd="delete deployment  ", args=SERVER_DEP)
         LOG.fixture_step("Delete the client pods {} & {}".format(
             client_pod1_name, client_pod2_name))
         kube_helper.exec_kube_cmd(
@@ -217,11 +215,11 @@ class TestPodtoPod:
             - Remove the labels on the nodes if not simplex
         """
 
-        LOG.tc_step("Expose the service {} with NodePort".format(service_name))
+        LOG.tc_step("Expose the service {} with NodePort".format(SERVICE_NAME))
         kube_helper.expose_the_service(
-            deployment_name=server_dep, type="NodePort", service_name=service_name)
+            deployment_name=SERVER_DEP, type="NodePort", service_name=SERVICE_NAME)
         node_port = kube_helper.get_pod_value_jsonpath(
-            "service {}".format(service_name), "{.spec.ports[0].nodePort}")
+            "service {}".format(SERVICE_NAME), "{.spec.ports[0].nodePort}")
         for i in system_helper.get_system_iplist():
             url = "http://{}:{}".format(i, node_port)
             LOG.tc_step(
