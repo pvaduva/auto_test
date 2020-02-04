@@ -3842,7 +3842,6 @@ def is_lowlatency_host(host):
     return 'lowlatency' in subfuncs
 
 
-<<<<<<< HEAD
 def get_system_iplist():
     """
      Checks the ipv4 or ipv6 simplex or other and returns the ip list accordingly
@@ -3858,7 +3857,7 @@ def get_system_iplist():
         iplist = ["[{}]".format(i) for i in ip]
         ip = iplist
     return ip
-=======
+    
 def get_certificate_signature(con_ssh=None, auth_info=Tenant.get('admin_platform')):
     uuid_list = get_certificates(field="uuid", auth_info=auth_info, con_ssh=con_ssh)
     assert uuid_list, "There is no certificate installed on this region"
@@ -3923,4 +3922,3 @@ def get_certificates(field='uuid', con_ssh=None, auth_info=Tenant.get('admin_pla
                                            evaluate=True, regex=regex, **kwargs)
 
     return values
->>>>>>> d1dc9d231694e89bcf0ccbd2cb35877a67e2cc06
