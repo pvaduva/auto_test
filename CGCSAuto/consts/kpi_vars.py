@@ -29,10 +29,9 @@ class ConfigController:
 
 class SystemInstall:
     NAME = 'system_install'
-    LOG_PATH = '/var/log/bash.log'
     START = 'setting system clock to'
     START_PATH = '/var/log/anaconda/journal.log'
-    END = '/etc/build.info'
+    END = 'synchronization has changed to: true'
 
 
 class NodeInstall:

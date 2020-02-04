@@ -530,6 +530,30 @@ def wait_for_subcloud_keypair(subcloud=None, subcloud_ssh=None, expected_keypair
                                     check_interval=check_interval, strict_order=False, **func_kwargs)
 
 
+def wait_for_subcloud_certificate(subcloud=None, subcloud_auth_info=None, expected_certificate=None, fail_ok=False,
+                                  timeout=DCTimeout.SYNC, check_interval=30):
+    """
+    Wait for certificate configuration to reach expected value
+    Args:
+        subcloud (str|None):
+        subcloud_auth_info (None|auth_info):
+        expected_certificate (list):
+        fail_ok (bool):
+        timeout (int):
+        check_interval (int):
+
+    Returns (tuple):
+        (0, <subcloud_certificate>)     # same as expected
+        (1, <subcloud_certificate>)     # did not update within timeout
+        (2, <subcloud_certificate>)     # updated to unexpected value
+
+    """
+    func = system_helper.get_certificate_signature
+    func_kwargs = {'auth_info': subcloud_auth_info} if subcloud_auth_info else {}
+    return wait_for_subcloud_config(subcloud=subcloud, func=func, config_name='Name',
+                                    expected_value=expected_certificate, fail_ok=fail_ok, timeout=timeout,
+                                    check_interval=check_interval, strict_order=False, **func_kwargs)
+
 
 def add_subcloud(subcloud, subcloud_controller_node, system_controller_node, bootstrap_values_path,
                  deploy_play_book_path, deploy_values_path,  bmc_password=None, fail_ok=False,

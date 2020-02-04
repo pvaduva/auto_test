@@ -1250,9 +1250,9 @@ def setup_fresh_install(lab, dist_cloud=False, subcloud=None):
 
         elif 'iso_feed' in boot["boot_type"] and 'feed' not in skip_list:
             skip_cfg = "pxeboot" in skip_list
-            set_default_menu = True if "grizzly" in lab["controller-0"].host_name \
-                                       or "hp" in lab["controller-0"].host_name else False
-            LOG.info("Need to set default menu {} for {}".format(set_default_menu, lab["controller-0"].host_name))
+            host_name = lab["controller-0"].host_name
+            set_default_menu = True if "grizzly" in host_name or "hp" in host_name else False
+            LOG.info("Need to set default menu {} for {}".format(set_default_menu, host_name))
             install_helper.set_up_feed_from_boot_server_iso(iso_host_obj, lab_dict=lab_dict, iso_path=iso_path,
                                                             skip_cfg=skip_cfg, set_default_menu=set_default_menu)
 
@@ -2512,23 +2512,23 @@ def wait_for_mtc_to_power_on_hosts(hosts, lab=None, timeout=120, fail_ok=False):
     if isinstance(hosts, str):
         hosts = [hosts]
     powered_on_hosts = []
+    host_to_power = hosts
     end_time = time.time() + timeout
     while time.time() < end_time:
-
-        for host in hosts:
+        for host in host_to_power:
             status, output = install_helper.get_bmc_power_status(host, lab=lab, fail_ok=True)
             if status == 'on':
                 LOG.info("The mtcAgent has power on {}: {}".format(host, output))
                 if host not in powered_on_hosts:
                     powered_on_hosts.append(host)
-
         if len(powered_on_hosts) == len(hosts):
             LOG.info("The mtcAgent has power on all hosts: {}".format(powered_on_hosts))
             return 0, None
         else:
+            host_to_power = list(set(hosts) - set(powered_on_hosts))
             time.sleep(20)
     else:
-        msg = "Timed out waiting for mtcAgent to power on hosts {};  powered on hosts: {}".format(hosts, powered_on_hosts)
+        msg = "Timed out waiting for mtcAgent to power on hosts {};  powered on hosts: {}".format(host_to_power, powered_on_hosts)
         if fail_ok:
             LOG.warning(msg)
             return False

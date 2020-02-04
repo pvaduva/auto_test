@@ -3842,6 +3842,7 @@ def is_lowlatency_host(host):
     return 'lowlatency' in subfuncs
 
 
+<<<<<<< HEAD
 def get_system_iplist():
     """
      Checks the ipv4 or ipv6 simplex or other and returns the ip list accordingly
@@ -3857,3 +3858,69 @@ def get_system_iplist():
         iplist = ["[{}]".format(i) for i in ip]
         ip = iplist
     return ip
+=======
+def get_certificate_signature(con_ssh=None, auth_info=Tenant.get('admin_platform')):
+    uuid_list = get_certificates(field="uuid", auth_info=auth_info, con_ssh=con_ssh)
+    assert uuid_list, "There is no certificate installed on this region"
+
+    certificate_signature_list = []
+    for uuid in uuid_list:
+        signature = get_certificate_values(uuid, fields="signature", auth_info=auth_info, con_ssh=con_ssh)
+        certificate_signature_list.append(signature)
+
+    region = ''
+    if isinstance(auth_info, dict):
+        region = auth_info.get('region', None)
+        region = ' for {}'.format(region) if region else ''
+    certificate_signature_list.sort()
+    LOG.info('Currently{}, certificate signature list is {} '.format(region, certificate_signature_list))
+
+    return certificate_signature_list
+
+
+def get_certificate_values(uuid, fields, con_ssh=None, auth_info=Tenant.get('admin_platform')):
+    """
+    Get certificate values for given fields via system certificate-show
+    Args:
+        uuid:
+        fields (str|list|tuple):
+        con_ssh:
+        auth_info:
+
+    Returns (list):
+
+    """
+    args = uuid
+    table_ = table_parser.table(
+        cli.system('certificate-show', args, ssh_client=con_ssh,
+                   auth_info=auth_info)[1])
+
+    return table_parser.get_value_two_col_table(table_, fields)
+
+
+def get_certificates(field='uuid', con_ssh=None, auth_info=Tenant.get('admin_platform'), strict=True,
+                     regex=False, **kwargs):
+    """
+    Get the parsed version of the output from system certificate-list
+    Args:
+        field (str|list|tuple): field name to return value for
+        con_ssh (SSHClient):
+        auth_info (dict):
+        strict (bool): whether to perform strict search on filter
+        regex (bool): whether to use regular expression to search the value in
+            kwargs
+        kwargs: key-value pairs to filter the table
+
+    Returns (list): output of system certificate-list parsed by
+        table_parser
+
+    """
+    param = '--nowrap'
+    table_ = table_parser.table(
+        cli.system('certificate-list {}'.format(param), ssh_client=con_ssh, auth_info=auth_info)[1])
+
+    values = table_parser.get_multi_values(table_, field, strict=strict,
+                                           evaluate=True, regex=regex, **kwargs)
+
+    return values
+>>>>>>> d1dc9d231694e89bcf0ccbd2cb35877a67e2cc06
