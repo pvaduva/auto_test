@@ -3858,6 +3858,7 @@ def get_system_iplist():
         ip = iplist
     return ip
     
+
 def get_certificate_signature(con_ssh=None, auth_info=Tenant.get('admin_platform')):
     uuid_list = get_certificates(field="uuid", auth_info=auth_info, con_ssh=con_ssh)
     assert uuid_list, "There is no certificate installed on this region"
